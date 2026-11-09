@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  # Pull requests into develop only: a push run would re-check the commit its PR
+  # just checked (~/.claude/CLAUDE.md, "CI runs on pull requests only").
+  pull_request:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # The organisation's self-hosted runners, not GitHub's hosted ones.
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 30
+    # Everything comes from this workflow, nothing from the runner's own
+    # environment. Browser tests never run in CI.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache folder
+        run: echo "BUN_INSTALL_CACHE_DIR=$HOME/.cache/nxgt/bun-install" >> "$GITHUB_ENV"
+      # Node for the tools that run under node (graphql-codegen and its
+      # dependencies use the regex `v` flag): the runners' system Node is 18.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - id: bun-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/nxgt/bun-install
+          key: bun-install-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-install-${{ runner.os }}-${{ runner.arch }}-
+      - run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+      - uses: actions/cache/save@v4
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/nxgt/bun-install
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
+      # lint, typecheck, tests (with generate first)
+      - run: bun run verify
+      # The bundle production runs (dist/server.js).
+      - run: bun run build

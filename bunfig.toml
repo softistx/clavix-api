@@ -1,0 +1,6 @@
+# @softistx packages come from GitHub Packages; GITHUB_TOKEN needs read:packages.
+[install.scopes]
+"@softistx" = { url = "https://npm.pkg.github.com/", token = "$GITHUB_TOKEN" }
+
+[test]
+preload = ["./test/setup.ts"]
