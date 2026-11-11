@@ -1,5 +1,6 @@
 import { defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
+import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
 // The app's Redis, for the tenant cache, at `uri`. It never waits for Redis:
@@ -20,6 +21,7 @@ export async function openAppRedis(
     defineRedis({
       client,
       prefix: "clavix",
+      caches: { tenantHost: tenantHostCache },
       background: {
         onDown: () => log("redis unavailable: tenant cache degraded"),
         onUp: () => log("redis is back"),
