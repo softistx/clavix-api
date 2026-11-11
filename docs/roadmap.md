@@ -26,6 +26,18 @@ nxgt-janus release says which.
 - **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
 - **Clients registered by script** — until the console exists (1.7, with the UI).
 
+**M5, access rules (ADR-0031)**
+- **Access rules (M5, ADR-0031)** — an application publishes its OpenAPI and SDL from CI
+  ([#34](https://github.com/softistx/clavix-api/issues/34)); a tenant drafts, publishes,
+  versions and rolls back the access rules of a resource, with coverage and a simulator
+  ([#35](https://github.com/softistx/clavix-api/issues/35)); Clavix serves them signed, with a
+  `policy.published` event ([#36](https://github.com/softistx/clavix-api/issues/36)); and a guide
+  goes from schema publication to enforced rules
+  ([#37](https://github.com/softistx/clavix-api/issues/37)). The SDK part
+  (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
+  and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
+  Waits on `@softistx/security` `remotePolicy`.
+
 ## Later
 
 **M2, console**
