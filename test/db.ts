@@ -1,7 +1,10 @@
 import { mongo } from "@/config/db";
 
-// The collections `clearDatabase` keeps: the migrations' own records.
+// The collections `clearDatabase` keeps: the migrations' own records and the
+// `tenants` they seed (the `clavix` tenant). A spec that creates tenants
+// removes its own.
 export const keptCollectionNames: readonly string[] = [
+  "tenants",
   "nxgt_migrations",
   "nxgt_migrations_lock",
 ];
