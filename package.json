@@ -10,6 +10,8 @@
     "start": "NODE_ENV=production bun dist/server.js",
     "test": "bun test --timeout=30000",
     "typecheck": "bun check",
+    "db:sync": "bun src/scripts/db-sync.ts",
+    "db:migrate": "bun src/scripts/db-migrate.ts",
     "lint": "biome lint",
     "format": "biome format --write",
     "fix": "biome check --write",
@@ -24,8 +26,11 @@
     "@graphql-tools/merge": "^10.0.6",
     "@nxgt/graphql-scalars": "^0.7.1",
     "@nxgt/graphql-validation": "^0.8.1",
+    "@softistx/mongo": "~0.28.0",
+    "@softistx/redis": "~0.18.0",
     "graphql": "^17.0.2",
     "graphql-yoga": "^5.24.2",
+    "mongodb": "^7",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -38,6 +43,7 @@
     "@graphql-typed-document-node/core": "^3.2.0",
     "@nxgt/graphql-codegen-zod": "^0.4.0",
     "@types/bun": "^1.4.4",
+    "mongodb-memory-server-core": "^11.3.0",
     "typescript": "^7.0.2"
   }
 }
