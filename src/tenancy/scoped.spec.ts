@@ -6,6 +6,7 @@ import {
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
+import { tenants } from "@/modules/collections";
 import { clearDatabase } from "~/db";
 import { notes } from "~/notes";
 import { scoped } from "./scoped";
@@ -18,6 +19,23 @@ const a = scoped(collection, tenantA);
 const b = scoped(collection, tenantB);
 
 beforeEach(clearDatabase);
+
+describe("scoped types", () => {
+  test("a collection without tenantId cannot be scoped", () => {
+    const placeholder = getCollection(mongo.db, tenants);
+    // @ts-expect-error `tenants` is not TenantOwned
+    const bad = () => scoped(placeholder, tenantA);
+    expect(bad).toBeFunction();
+  });
+
+  test("a tenantId in a create or update argument is a type error", () => {
+    // @ts-expect-error the scope sets tenantId
+    const create = () => a.create({ text: "x", tenantId: tenantB });
+    // @ts-expect-error tenantId is immutable
+    const update = () => a.update(new ObjectId(), { tenantId: tenantB });
+    expect([create, update]).toHaveLength(2);
+  });
+});
 
 describe("scoped", () => {
   test("create stamps the scope's tenant", async () => {

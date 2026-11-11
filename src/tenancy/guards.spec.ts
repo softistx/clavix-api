@@ -15,6 +15,16 @@ const startsWithTenantId = (index: { key: IndexDescription["key"] }) =>
     : Object.keys(index.key)[0]) === "tenantId";
 
 describe("tenant-owned collections", () => {
+  // `isTenantOwned` reads `schema.shape`: a definition whose schema has none
+  // (a wrapped or non-object schema) would be dropped from the guards without
+  // a word, so it fails here instead.
+  test("every definition has an object schema with a shape", () => {
+    const shapeless = Object.entries(definitions)
+      .filter(([, definition]) => !("shape" in definition.schema))
+      .map(([key]) => key);
+    expect(shapeless).toEqual([]);
+  });
+
   test("the guard sees the collections it is meant to guard", () => {
     expect(owned.map((c) => c.name)).toContain("notes");
   });
@@ -39,25 +49,54 @@ describe("tenant-owned collections", () => {
 
 // Where platform code may touch a tenant-owned collection directly.
 const allowed = ["src/tenancy/", "src/migrations/", "src/modules/tenants/"];
-const direct = (names: string[]) =>
-  new RegExp(`\\bmongo\\.db\\.(${names.join("|")})\\b`);
+// Every way platform code reaches a tenant-owned collection without
+// `scoped()`: `mongo.db.<name>` (also after `const { db } = mongo`),
+// `db["<name>"]`, `getCollection(…<name>…)` and `<name>.raw`.
+const direct = (names: string[]) => {
+  const any = names.join("|");
+  return [
+    new RegExp(`\\bdb\\.(${any})\\b`),
+    new RegExp(`\\bdb\\[\\s*["'\`](${any})["'\`]\\s*\\]`),
+    new RegExp(`\\bgetCollection\\([^)]*\\b(${any})\\b`),
+    new RegExp(`\\b(${any})\\.raw\\b`),
+  ];
+};
+const reaches = (patterns: RegExp[], text: string) =>
+  patterns.some((pattern) => pattern.test(text));
 
 describe("source scan", () => {
-  test("mongo.db.<tenant-owned> appears only where it is allowed", async () => {
-    const pattern = direct(owned.map((c) => c.name));
+  test("tenant-owned collections are reached only where it is allowed", async () => {
+    const patterns = direct(owned.map((c) => c.name));
     const offenders: string[] = [];
     for await (const path of new Glob("src/**/*.ts").scan(".")) {
       if (path.endsWith(".spec.ts")) continue;
       if (allowed.some((prefix) => path.startsWith(prefix))) continue;
-      if (pattern.test(await Bun.file(path).text())) offenders.push(path);
+      if (reaches(patterns, await Bun.file(path).text())) offenders.push(path);
     }
     expect(offenders).toEqual([]);
   });
 
   test("the scan sees what it is meant to refuse", () => {
-    const pattern = direct(["notes"]);
-    expect(pattern.test("await mongo.db.notes.findMany()")).toBe(true);
-    expect(pattern.test("scoped(mongo.db.notes, tenantId)")).toBe(true);
-    expect(pattern.test("mongo.db.tenants.findMany()")).toBe(false);
+    const patterns = direct(["notes"]);
+    for (const refused of [
+      "await mongo.db.notes.findMany()",
+      "scoped(mongo.db.notes, tenantId)",
+      "const { db } = mongo; db.notes.findMany()",
+      'mongo.db["notes"].findMany()',
+      "mongo.db['notes']",
+      "getCollection(mongo.db, notes)",
+      "getCollection(db, notes, { autoSync: true })",
+      "notes.raw.find()",
+    ]) {
+      expect(reaches(patterns, refused)).toBe(true);
+    }
+    for (const fine of [
+      "mongo.db.tenants.findMany()",
+      'mongo.db["tenants"]',
+      "getCollection(mongo.db, tenants)",
+      "tenants.raw.find()",
+    ]) {
+      expect(reaches(patterns, fine)).toBe(false);
+    }
   });
 });

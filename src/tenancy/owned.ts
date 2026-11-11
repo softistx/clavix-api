@@ -1,5 +1,7 @@
 import type { AnyCollectionDefinition } from "@softistx/mongo";
 
+// Reads `schema.shape`: guards/specs check that every definition has one
+// (guards.spec.ts), since a schema without it would be silently not-owned.
 // Whether a collection definition declares `tenantId` (spread from
 // `tenantField`): it is then tenant-owned and read through `scoped()`.
 export const isTenantOwned = (definition: AnyCollectionDefinition) =>
