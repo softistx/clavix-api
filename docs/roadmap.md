@@ -21,7 +21,7 @@ nxgt-janus release says which.
 - **An authorization server per issuer** — authorization code with PKCE, refresh,
   revocation and discovery for each tenant (1.3). Waits on janus: several issuers in one process.
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
-  (RFC 9068) and introspection (1.4). Waits on janus: the new OIDC package.
+  (RFC 9068) and introspection (1.4). Waits on `@softistx/janus-oidc`.
 - **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
 - **Clients registered by script** — until the console exists (1.7, with the UI).
 
