@@ -37,6 +37,19 @@ describe(id, () => {
     expect(found[0]?._id).toEqual(first?._id);
   });
 
+  test("a rerun keeps the name an operator gave the platform tenant", async () => {
+    await migrate(db, [clavixTenant]);
+    await getCollection(db, tenants).raw.updateOne(
+      { slug: "clavix" },
+      { $set: { name: "Renamed" } },
+    );
+    await db.collection("nxgt_migrations").deleteMany({});
+    await migrate(db, [clavixTenant]);
+    const found = await platform();
+    expect(found).toHaveLength(1);
+    expect(found[0]?.name).toBe("Renamed");
+  });
+
   test("down removes it", async () => {
     await migrate(db, [clavixTenant]);
     await rollback(db, [clavixTenant], {});

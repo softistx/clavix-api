@@ -1,5 +1,6 @@
 import { defineMongo, type MongoOf, openMongo } from "@softistx/mongo";
 import * as collections from "../modules/collections";
+import { tenantHooks } from "../modules/tenants/tenants.hooks";
 import { env } from "./env";
 
 const autoSync = Bun.env.NODE_ENV !== "production";
@@ -10,6 +11,7 @@ const autoSync = Bun.env.NODE_ENV !== "production";
 export const mongoConfig = defineMongo({
   uri: env.MONGO_URI,
   collections,
+  optionsFor: { tenants: { hooks: tenantHooks } },
   autoSync,
 });
 

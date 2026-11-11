@@ -1,6 +1,7 @@
 import {
   ConflictError,
   type IdOf,
+  OptimisticLockError,
   type TypedCollection,
 } from "@softistx/mongo";
 import { env } from "@/config/env";
@@ -17,16 +18,22 @@ export interface TenantsServiceOptions {
   /** The apex tenants' hosts hang under. Default `CLAVIX_DOMAIN`. */
   domain?: string;
   /**
-   * Called with the hosts whose resolution may have changed, after a write
+   * Called with the hosts whose resolution may have changed, after the write
    * (the resolver's cache drops them from step 3 of slice 1.1). Default: none.
+   * Contract: it runs after the write is stored; an error it throws is logged
+   * (`log`) and swallowed, never reaching the caller, so the write stands. A
+   * cache that failed to drop a host heals by its TTL.
    */
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
+  /** Where a hook failure is logged. Default `console.warn`. */
+  log?: (message: string) => void;
 }
 
 /** The platform's tenants: create, suspend, reactivate, delete. The slug never changes. */
 export class TenantsService {
   private readonly domain: string;
   private readonly onHostsChanged: (hosts: string[]) => void | Promise<void>;
+  private readonly log: (message: string) => void;
 
   constructor(
     private readonly collection: TypedCollection<typeof tenants>,
@@ -34,6 +41,7 @@ export class TenantsService {
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
+    this.log = options.log ?? ((message) => console.warn(message));
   }
 
   async create(input: { slug: string; name: string }): Promise<Tenant> {
@@ -71,16 +79,30 @@ export class TenantsService {
     return deleted;
   }
 
+  // The version read is the version expected: a write that raced ours is not
+  // overwritten. On a conflict the tenant is read again once; a second
+  // conflict is the caller's error.
   private async setStatus(
     id: IdOf<typeof tenants> | string,
     status: Tenant["status"],
   ): Promise<Tenant> {
-    const tenant = await this.collection.getById(id);
-    if (status === "suspended") this.refuseIfPlatform(tenant, "suspended");
-    if (tenant.status === status) return tenant;
-    const updated = await this.collection.update(tenant._id, { status });
-    await this.changed(updated);
-    return updated;
+    for (let attempt = 1; ; attempt++) {
+      const tenant = await this.collection.getById(id);
+      if (status === "suspended") this.refuseIfPlatform(tenant, "suspended");
+      if (tenant.status === status) return tenant;
+      try {
+        const updated = await this.collection.update(tenant._id, {
+          status,
+          version: tenant.version,
+        });
+        await this.changed(updated);
+        return updated;
+      } catch (error) {
+        if (!(error instanceof OptimisticLockError) || attempt === 2) {
+          throw error;
+        }
+      }
+    }
   }
 
   private refuseIfPlatform(tenant: Tenant, what: string) {
@@ -91,7 +113,16 @@ export class TenantsService {
     }
   }
 
-  private changed(tenant: Tenant) {
-    return this.onHostsChanged([hostOf(tenant.slug, this.domain)]);
+  private async changed(tenant: Tenant) {
+    const hosts = [hostOf(tenant.slug, this.domain)];
+    try {
+      await this.onHostsChanged(hosts);
+    } catch (error) {
+      this.log(
+        `tenants: onHostsChanged failed for ${hosts.join(", ")}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 }
