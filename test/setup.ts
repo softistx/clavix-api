@@ -13,10 +13,14 @@ Bun.env["MONGO_URI"] = replSet.getUri("clavix-test");
 delete Bun.env["REDIS_URL"];
 
 // Every collection and its indexes, before any spec (autoSync would create one
-// on first use, which a transaction cannot do).
+// on first use, which a transaction cannot do), then the migrations.
 {
   const { mongo } = await import("@/config/db");
   await mongo.sync();
+  // The seed, once for the run (`clearDatabase` keeps what it wrote).
+  const { migrate } = await import("@softistx/mongo/migrations");
+  const { migrations } = await import("@/migrations");
+  await migrate(mongo.db, migrations);
 }
 
 afterAll(async () => {
