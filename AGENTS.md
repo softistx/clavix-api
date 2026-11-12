@@ -122,16 +122,15 @@ registration"). janus passkeys are the first factor (`passkeys.firstFactor: true
 `@softistx/janus-passkeys`), rpId and origin from `src/users/rp.ts`; janus-graphql's passkey SDL is
 not used: its resolvers bind to one janus instance and it has no first-factor sign-in, and ours is
 per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
-- `signInWithPasskey` maps every janus refusal (not `STORE_FAILED`) to one `PASSKEY_INVALID` 401.
+- The passkey sign-in is janus-graphql's `passkeyResolvers({ auth, firstFactor: true })`, called from
+  our own `passkeySignInOptions` (a Mutation, behind the throttle) and `signInWithPasskey`: our SDL keeps
+  its names, arguments and errors, so the janus refusals (`CREDENTIALS_INVALID`, `TOKEN_*`, a non-JSON
+  response) are answered as one `PASSKEY_INVALID` 401 (`asPasskeyInvalid`; `STORE_FAILED` stays 503).
   Registration lets janus's errors through (`janusMasking`). Cookie as `verifySignInCode`.
-- janus's `secondFactor` block must still be configured for `firstFactor`: its sealing key is
-  derived from `CLAVIX_KEYS_MASTER_KEY` (`src/users/sealing-key.ts`); no TOTP is offered.
-- Typing gaps (janus, narrowed in `tenant-janus.ts`, never worked around further): the types hide
-  `auth.passkeys` for a user type without a password login (`TenantJanus` adds `PasskeysApi`),
-  and `createMongoStores` is typed without the `passkeys` slot. janus takes https origins only:
-  `passkeysOn(tenant)` is false over `http`, and the module answers `NOT_FOUND`.
-- Specs use the software authenticator copied from janus-passkeys' own tests
-  (`test/passkey-authenticator.ts`, `test/passkey-cbor.ts`): copy again when that one changes.
+- No `secondFactor` is configured (no TOTP is offered). janus takes https origins (and
+  `http://localhost`) only: `passkeysOn(tenant)` is false over `http`, the module answers `NOT_FOUND`,
+  and the tenant's janus carries a placeholder `localhost` relying party it never uses.
+- Specs use `softwareAuthenticator` from `@softistx/janus-passkeys/testing`.
 - The anonymous `passkeySignInOptions` has its own limits (`src/modules/passkeys/throttle.ts`, README
   "Passkey sign-in and registration"): per IP and tenant (60 / 10 min) and per tenant (600 / hour),
   `CLAVIX_PASSKEY_*`, over the shared core `createThrottle` / `ipAndTenantLimits` of
