@@ -31,14 +31,14 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable               | Default / rule                                                   |
-| ---------------------- | ---------------------------------------------------------------- |
-| `PORT`                 | 3000                                                             |
-| `MONGO_URI`            | required; a replica set (transactions)                           |
-| `REDIS_URL`            | required in production; unset elsewhere, the tenant cache is off |
-| `CLAVIX_DOMAIN`        | required in production; `clavix.localhost` elsewhere             |
-| `CLAVIX_PUBLIC_SCHEME` | `https`; `http` is refused in production                         |
-| `CLAVIX_PUBLIC_PORT`   | optional; set when issuers are not on the scheme's own port      |
+| Variable                 | Default / rule                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `PORT`                   | 3000                                                                              |
+| `MONGO_URI`              | required; a replica set (transactions)                                            |
+| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                  |
+| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                              |
+| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                          |
+| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                       |
 | `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere |
 
 ## Signing keys
@@ -47,7 +47,6 @@ Each tenant has its own signing keys (ADR-0010), kept in the `oauthSigningKeys` 
 `@softistx/janus-oauth-mongo`: the private JWK is encrypted with `CLAVIX_KEYS_MASTER_KEY`
 (AES-256-GCM) and the store of a tenant, partitioned by its id, cannot read another's. Janus signs;
 Clavix adds no `jose`.
-
 - `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (`src/config/keys.ts`; `tenantId` is the
   tenant's id in hex, `partitionOf`) give the OAuth endpoints the `SigningKeyStore` and the public JWKS.
 - A tenant gets its first key when it is created (`TenantsService.create`). If that call fails it is
