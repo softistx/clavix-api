@@ -155,10 +155,14 @@ export async function registerClient(
   }
 
   const confidential = type === "confidential";
-  const keepsSecret =
-    confidential &&
-    existing?.secretHash !== undefined &&
-    input.rotateSecret !== true;
+  if (!confidential && existing?.secretHash !== undefined) {
+    throw new ClientInputError(
+      `"${clientId}" is a confidential client: re-run with --confidential, or use another client id (a client keeps its type)`,
+    );
+  }
+  const keptHash =
+    input.rotateSecret === true ? undefined : existing?.secretHash;
+  const keepsSecret = confidential && keptHash !== undefined;
   const clientSecret = confidential && !keepsSecret ? mintOAuthSecret() : null;
   const record: OAuthClientRecord = {
     id: clientId,
@@ -172,7 +176,7 @@ export async function registerClient(
           tokenEndpointAuthMethod: "client_secret_basic" as const,
           secretHash:
             clientSecret === null
-              ? (existing?.secretHash as string)
+              ? (keptHash as string)
               : hashOAuthSecret(clientSecret),
         }
       : {}),

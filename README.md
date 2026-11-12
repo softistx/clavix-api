@@ -94,6 +94,11 @@ bun run clients:create --tenant acme --name "Web app" \
   and creates nothing new. The output (JSON) says `created: true | false`.
 - **A confidential client's secret is printed once**, in `clientSecret`; janus keeps only its
   SHA-256. A re-run prints `clientSecret: null` and keeps the secret; `--rotate-secret` mints another.
+- **A client keeps its type**: re-running a confidential client without `--confidential` is
+  refused (the secret is never dropped silently); a public client re-run with `--confidential`
+  becomes confidential and gets a secret.
+- The output also carries `issuer`, `tenant`, `redirectUris` and `type`. `--help` prints the
+  usage; bad input prints the message and the usage and exits 1.
 - **Grants**: janus-oauth 0.8 has no per-client grant list; every client may use the authorization
   code and refresh grants. `--grants` refuses any other (device code, token exchange, client
   credentials) until janus offers them per client.

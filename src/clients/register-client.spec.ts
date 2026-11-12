@@ -178,6 +178,25 @@ describe("registerClient", () => {
     );
   });
 
+  test("a confidential client is not turned public by a re-run without --confidential", async () => {
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Keeps type",
+      redirectUris: [REDIRECT],
+      type: "confidential",
+    });
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Keeps type",
+        redirectUris: [REDIRECT],
+      }),
+    ).rejects.toBeInstanceOf(ClientInputError);
+    expect(
+      (await (await storeOf("regalpha")).findClient("keeps-type"))?.secretHash,
+    ).toBeString();
+  });
+
   test("an unknown slug and a suspended tenant are refused", async () => {
     const input = { name: "App", redirectUris: [REDIRECT] };
     await expect(
