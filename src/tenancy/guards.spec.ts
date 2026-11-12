@@ -49,7 +49,13 @@ describe("tenant-owned collections", () => {
 });
 
 // Where platform code may touch a tenant-owned collection directly.
-const allowed = ["src/tenancy/", "src/migrations/", "src/modules/tenants/"];
+const allowed = [
+  "src/tenancy/",
+  "src/migrations/",
+  "src/modules/tenants/",
+  "src/modules/resources/",
+  "src/config/resources.ts",
+];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.
 const tenantsAllowed = [
@@ -106,9 +112,61 @@ async function offendersOf(
   return offenders;
 }
 
+/** Whether a source exposes a tenant-owned collection through an export. */
+function exposesOwned(text: string) {
+  const names = ownedNames.join("|");
+  const owned = new RegExp(`\\bdb\\.(?:${names})\\b`);
+  // A call argument (`bind(db.notes)`) is a binding, not an exposure.
+  const bound = new RegExp(`\\(\\s*(?:\\w+\\.)*db\\.(?:${names})\\s*[,)]`, "g");
+  const exposed = (code: string) => owned.test(code.replace(bound, "("));
+  const lines = text.split("\n");
+  if (lines.some((line) => /^\s*export\b/.test(line) && exposed(line))) {
+    return true;
+  }
+  const locals = [...text.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*([^;]*)/g)]
+    .filter(([, , value]) => exposed(value ?? ""))
+    .map(([, name]) => name);
+  return [...text.matchAll(/export\s*\{([^}]*)\}/g)].some(([, list]) =>
+    (list ?? "")
+      .split(",")
+      .some((item) => locals.includes(item.trim().split(/\s+/)[0] ?? "")),
+  );
+}
+
 describe("source scan", () => {
   test("tenant-owned collections are reached only where it is allowed", async () => {
     expect(await offendersOf(direct(ownedNames), allowed, true)).toEqual([]);
+  });
+
+  test("no allowed module exports a tenant-owned collection", async () => {
+    // Exporting `mongo.db.resources` (bare, `.raw`, in an arrow, or through a
+    // local and `export { x }`) hands the unscoped collection to any importer,
+    // past the scan above: export a function bound to the scope instead.
+    const offenders: string[] = [];
+    for await (const path of new Glob("src/**/*.ts").scan(".")) {
+      if (path.endsWith(".spec.ts")) continue;
+      if (exposesOwned(await Bun.file(path).text())) offenders.push(path);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("the export scan sees what it is meant to refuse", () => {
+    for (const refused of [
+      "export const c = mongo.db.notes;",
+      "export const c = mongo.db.notes.raw;",
+      "export const c = () => db.notes;",
+      "export const c = () => mongo.db.notes.raw;",
+      "const x = db.notes;\nexport { x };",
+      "const x = mongo.db.notes.raw;\nexport { x as y, z };",
+    ]) {
+      expect(exposesOwned(refused), refused).toBe(true);
+    }
+    for (const allowed of [
+      "export const f = bind(mongo.db.notes);",
+      "const x = bind(db.notes);\nexport { x };",
+    ]) {
+      expect(exposesOwned(allowed), allowed).toBe(false);
+    }
   });
 
   test("the tenants collection is reached only by its module, its wiring and the migrations", async () => {

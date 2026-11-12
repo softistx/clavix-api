@@ -5,6 +5,7 @@ import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
 import { createSchema } from "graphql-yoga";
 import { resolvers } from "../modules";
+import { consentResolvers, consentTypeDefs } from "../modules/consent";
 import type { Context } from "./context";
 
 // Every src/**/*.graphqls, one per module, merged into one schema: each file
@@ -15,6 +16,7 @@ const bundled = basename(import.meta.dir) === "dist";
 const typeDefs = mergeTypeDefs([
   scalarTypeDefs,
   constraintTypeDefs,
+  consentTypeDefs,
   ...loadFilesSync(
     join(import.meta.dir, bundled ? ".." : join("..", ".."), "src"),
     { extensions: ["graphqls"] },
@@ -24,6 +26,6 @@ const typeDefs = mergeTypeDefs([
 export const schema = withValidation(
   createSchema<Context>({
     typeDefs,
-    resolvers: [scalarResolvers, resolvers],
+    resolvers: [scalarResolvers, resolvers, consentResolvers],
   }),
 );

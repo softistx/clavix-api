@@ -5,6 +5,8 @@ import { createBase } from "./context";
 const tenant = {
   tenantId: "t1",
   slug: "acme",
+  name: "Acme",
+  signUp: false,
   issuer: "https://acme.clavix.test",
   partition: "t1",
   version: 1,

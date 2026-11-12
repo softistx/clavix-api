@@ -5,7 +5,7 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import { env } from "@/config/env";
-import { hostOf } from "./identity";
+import { hostOf, partitionOf } from "./identity";
 import { PLATFORM_TENANT_SLUG, slugProblem } from "./slug";
 import {
   InvalidSlugError,
@@ -25,6 +25,13 @@ export interface TenantsServiceOptions {
    * cache that failed to drop a host heals by its TTL.
    */
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
+  /**
+   * Called with the tenant's id (hex, the janus partition) once it is created,
+   * to give it its first signing key before any token. Same contract as
+   * `onHostsChanged`: an error is logged and swallowed, the tenant stands, and
+   * the rotation job creates the key within the hour.
+   */
+  onCreated?: (tenantId: string) => void | Promise<void>;
   /** Where a hook failure is logged. Default `console.warn`. */
   log?: (message: string) => void;
 }
@@ -33,6 +40,7 @@ export interface TenantsServiceOptions {
 export class TenantsService {
   private readonly domain: string;
   private readonly onHostsChanged: (hosts: string[]) => void | Promise<void>;
+  private readonly onCreated: (tenantId: string) => void | Promise<void>;
   private readonly log: (message: string) => void;
 
   constructor(
@@ -41,17 +49,26 @@ export class TenantsService {
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
+    this.onCreated = options.onCreated ?? (() => {});
     this.log = options.log ?? ((message) => console.warn(message));
   }
 
-  async create(input: { slug: string; name: string }): Promise<Tenant> {
+  async create(input: {
+    slug: string;
+    name: string;
+    signUp?: boolean;
+  }): Promise<Tenant> {
     const problem = slugProblem(input.slug);
     if (problem !== undefined) throw new InvalidSlugError(problem);
     const name = input.name.trim();
     if (name === "") throw new TypeError("A tenant needs a name");
     let created: Tenant;
     try {
-      created = await this.collection.create({ slug: input.slug, name });
+      created = await this.collection.create({
+        slug: input.slug,
+        name,
+        ...(input.signUp === undefined ? {} : { signUp: input.signUp }),
+      });
     } catch (error) {
       if (error instanceof ConflictError) {
         throw new SlugTakenError(`The slug "${input.slug}" is taken`);
@@ -59,7 +76,25 @@ export class TenantsService {
       throw error;
     }
     await this.changed(created);
+    const tenantId = partitionOf(created._id);
+    try {
+      await this.onCreated(tenantId);
+    } catch (error) {
+      this.log(
+        `tenants: onCreated failed for ${tenantId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     return created;
+  }
+
+  /** The ids (hex, the janus partition) of the active tenants: the ones that sign. */
+  async activeIds(): Promise<string[]> {
+    const active = await this.collection.findMany({
+      filter: { status: "active" },
+    });
+    return active.map((tenant) => partitionOf(tenant._id));
   }
 
   suspend(id: IdOf<typeof tenants> | string): Promise<Tenant> {

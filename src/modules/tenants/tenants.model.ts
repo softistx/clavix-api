@@ -14,6 +14,10 @@ export const tenants = defineCollection({
     slug: z.string(),
     name: z.string(),
     status: z.enum(["active", "suspended"]).default("active"),
+    // Whether an unknown e-mail may open an account by signing in with a code.
+    // Closed by default (and for a tenant stored before the flag existed): the
+    // users come in by invitation. The `clavix` tenant stays closed.
+    signUp: z.boolean().default(false),
   }),
   indexes: [
     {

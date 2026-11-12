@@ -11,12 +11,25 @@ Bun.env["MONGO_URI"] = replSet.getUri("clavix-test");
 // Specs never cache through a Redis of the developer's .env: they inject their
 // own (the Redis specs start theirs).
 delete Bun.env["REDIS_URL"];
+// One proxy in front, as in production: specs pick the client address with X-Forwarded-For.
+Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
 
 // Every collection and its indexes, before any spec (autoSync would create one
 // on first use, which a transaction cannot do), then the migrations.
 {
   const { mongo } = await import("@/config/db");
   await mongo.sync();
+  // The janus OAuth collections (partitioned per tenant) and their indexes.
+  const { oauthDb } = await import("@/config/oauth-db");
+  const { syncMongoOAuthPartitioned } = await import(
+    "@softistx/janus-oauth-mongo"
+  );
+  await syncMongoOAuthPartitioned(oauthDb);
+  // The janus user stores and invitations, partitioned per tenant too.
+  const { syncMongoInvitationsPartitioned, syncMongoStoresPartitioned } =
+    await import("@softistx/janus-mongo");
+  await syncMongoStoresPartitioned(oauthDb);
+  await syncMongoInvitationsPartitioned(oauthDb);
   // The seed, once for the run (`clearDatabase` keeps what it wrote).
   const { migrate } = await import("@softistx/mongo/migrations");
   const { migrations } = await import("@/migrations");

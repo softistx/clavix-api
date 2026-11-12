@@ -1,33 +1,15 @@
 # Roadmap
 
 What clavix-api does and what comes next, from the point of view of the applications and
-tenants that use it. The spec is in `../spec/`; the slices are `../spec/milestones.md`'s.
+tenants that use it. The spec is in `../spec/`.
 A "Next" entry says what the effort will cover, not how. An effort that waits on an
 nxgt-janus release says which.
 
 ## Now
 
-**M1, dogfooding: our applications sign in through Clavix**
-- **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
-  a schedule, published as a JWKS per issuer ([#2](https://github.com/softistx/clavix-api/issues/2)).
-- **An authorization server per issuer** — authorization code with PKCE, refresh,
-  revocation and discovery for each tenant ([#3](https://github.com/softistx/clavix-api/issues/3)).
-- **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
-  (RFC 9068) and introspection ([#4](https://github.com/softistx/clavix-api/issues/4)).
-- **Users and sessions per tenant** — passkey and e-mail code sign-in
-  ([#5](https://github.com/softistx/clavix-api/issues/5)). Users per tenant wait on janus
-  partitioned user stores.
-- **Clients registered by script** — until the console exists
-  ([#6](https://github.com/softistx/clavix-api/issues/6)).
-
 ## Next
 
-**M1, dogfooding (continued)**
-- **A migration guide** — for an application moving from embedded janus sessions to Clavix
-  as a relying party ([#7](https://github.com/softistx/clavix-api/issues/7)).
-
-**M5, access rules (ADR-0031)**
-- **Access rules (M5, ADR-0031)** — an application publishes its OpenAPI and SDL from CI
+- **Access rules** — an application publishes its OpenAPI and SDL from CI
   ([#34](https://github.com/softistx/clavix-api/issues/34)); a tenant drafts, publishes,
   versions and rolls back the access rules of a resource, with coverage and a simulator
   ([#35](https://github.com/softistx/clavix-api/issues/35)); Clavix serves them signed, with a
@@ -37,36 +19,73 @@ nxgt-janus release says which.
   (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
   and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
   Waits on `@softistx/security` `remotePolicy`.
+- **Magic-link sign-in (toggleable)** — a user signs in from a link sent by e-mail, behind a
+  `CLAVIX_MAGIC_LINK` switch that is off by default
+  ([#89](https://github.com/softistx/clavix-api/issues/89)). The second factor is still
+  required after the link, the answer is the same for any address, and requests are throttled.
+  A per-tenant toggle comes later with sign-in methods per tenant
+  ([#12](https://github.com/softistx/clavix-api/issues/12)).
 
 ## Later
 
-**M2, console**
-- Platform: tenants, plans and quotas, usage counters (2.2).
-- Tenant: clients, resources, scopes, end-user roles and memberships (2.3).
-- Branding: a theme per tenant, with a live preview and an AA contrast check (2.4).
-- Custom domains: DNS TXT verification and automatic TLS (2.5).
-- Sign-in methods and social providers per tenant (2.6).
+**Console**
+- Platform: tenants, plans and quotas, usage counters.
+- Tenant: clients, resources, scopes, end-user roles and memberships.
+- Branding: a theme per tenant, with a live preview and an AA contrast check.
+- Custom domains: DNS TXT verification and automatic TLS.
+- Sign-in methods and social providers per tenant.
 
-**M3, advanced protocols**
-- PAR mandatory by default (3.1); DPoP-bound tokens (3.2).
-- Device authorization and its verification page (3.3); token exchange (3.4).
-- Rich authorization requests and their consent (3.5).
-- MCP and agents: dynamic registration policy, RFC 9728, consent per agent (3.6).
+**Advanced protocols**
+- PAR mandatory by default; DPoP-bound tokens.
+- Device authorization and its verification page; token exchange.
+- Rich authorization requests and their consent.
+- MCP and agents: dynamic registration policy, RFC 9728, consent per agent.
 
-**M4, federation, step-up and events**
-- Enterprise OIDC connections and home-realm discovery (4.1).
-- MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`) (4.2).
-- Audit log, viewer and export (4.3); webhooks per tenant (4.4); telemetry (4.5).
+**Federation, step-up and events**
+- Enterprise OIDC connections and home-realm discovery.
+- MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
+- Audit log, viewer and export; webhooks per tenant; telemetry.
 
-**M5, authorization (after v1)**
-- Roles, permissions and relations authored per tenant in Clavix, published as signed
-  rules that each API pulls and evaluates locally, with no remote decision point
-  (5.1–5.10).
+**Authorization authoring**
+- Roles, permissions and relations defined per tenant in the console, as the vocabulary
+  the access rules refer to.
 
 ## Shipped
 
-- **M0, skeleton** — the repository builds, lints, type checks and tests in CI: a `health`
-  query and `GET /healthz`.
+- **Skeleton** — the repository builds, lints, type checks and tests: a `health` query and
+  `GET /healthz`.
 - **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and
   cached in Redis, a suspension applying within 60 s at worst), a repository that cannot
-  read another tenant's data, slugs reserved for good, and the `clavix` tenant seeded (1.1).
+  read another tenant's data, slugs reserved for good, and the `clavix` tenant seeded.
+- **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
+  a schedule (90 days, published 48 h ahead, retired 24 h), published as a JWKS per issuer
+  ([#2](https://github.com/softistx/clavix-api/issues/2)); adopted from janus-oauth 0.8.
+- **An authorization server per issuer** — authorization code with PKCE, refresh with
+  rotation, revocation and discovery for each tenant. A request with no `resource` is for
+  the userinfo resource, the tenant's `defaultResource`; an API audience needs a registered
+  resource. A consent API on `/graphql` serves the hosted consent page.
+- **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
+  (RFC 9068) and introspection ([#4](https://github.com/softistx/clavix-api/issues/4)): each
+  tenant host serves its own discovery, JWKS, userinfo and introspection, with user claims
+  from the tenant's own user pool. The `roles` claim waits for the console.
+- **Users and sessions per tenant** — one partitioned user pool per tenant, a host-only
+  `__Host-` session cookie (14 days sliding, 30-day absolute cap), e-mail code sign-in
+  (`requestSignInCode`, `verifySignInCode`, `signOut`, `currentUser`), per-tenant `signUp`
+  (closed on `clavix`, invitation only, no account enumeration), and passwordless passkey
+  sign-in and registration (`passkeySignInOptions`, `signInWithPasskey`,
+  `passkeyRegistrationOptions`, `registerPasskey`, `myPasskeys`, `removePasskey`)
+  ([#5](https://github.com/softistx/clavix-api/issues/5)).
+- **Clients registered by script** — `bun run clients:create` registers or updates a public
+  (PKCE) or confidential client on a tenant, idempotently, the secret shown once
+  ([#6](https://github.com/softistx/clavix-api/issues/6)). Grants other than code and
+  refresh wait on a per-client grant list in janus-oauth.
+- **Tenants created by script** — `bun run tenants:create` creates a tenant (slug rules,
+  reserved and deleted slugs refused, first signing key) idempotently and prints its issuer
+  ([#74](https://github.com/softistx/clavix-api/issues/74)).
+- **Resources registered by script** — `bun run resources:create` stores a tenant's API
+  (audience URI and scopes), idempotently; an app's own API gets access tokens with its `aud`,
+  isolated per tenant ([#75](https://github.com/softistx/clavix-api/issues/75)). Scopes are a
+  plain list until the console.
+- **Migration guide** — how an application moves from embedded janus to Clavix as an OIDC
+  relying party ([#7](https://github.com/softistx/clavix-api/issues/7)):
+  [written](guide/migrating-from-embedded-janus.md).

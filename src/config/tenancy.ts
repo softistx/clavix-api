@@ -10,19 +10,27 @@ import {
 } from "@/tenancy/tenant-cache";
 import { mongo } from "./db";
 import { env } from "./env";
+import { ensureSigningKeyOf } from "./keys";
 import { redis } from "./redis";
 
 export interface TenancyOptions {
   tenants: TypedCollection<typeof tenants>;
   cache: TenantCache;
   config: PublicOrigin;
+  /** Gives a new tenant its first signing key. Default: none. */
+  onCreated?: (tenantId: string) => void | Promise<void>;
 }
 
 /**
  * The tenancy wiring: the resolver reads the tenants collection through the
  * cache, and every tenant write drops the hosts it touched from that cache.
  */
-export function createTenancy({ tenants, cache, config }: TenancyOptions) {
+export function createTenancy({
+  tenants,
+  cache,
+  config,
+  onCreated,
+}: TenancyOptions) {
   const tenantResolver = createTenantResolver({
     lookup: (slug) => tenants.findFirst({ slug }),
     cache,
@@ -30,6 +38,7 @@ export function createTenancy({ tenants, cache, config }: TenancyOptions) {
   });
   const tenantsService = new TenantsService(tenants, {
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+    ...(onCreated === undefined ? {} : { onCreated }),
   });
   return { tenantResolver, tenantsService };
 }
@@ -37,6 +46,7 @@ export function createTenancy({ tenants, cache, config }: TenancyOptions) {
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
 export const { tenantResolver, tenantsService } = createTenancy({
   tenants: mongo.db.tenants,
+  onCreated: ensureSigningKeyOf,
   cache:
     redis === undefined
       ? noTenantCache
@@ -47,3 +57,10 @@ export const { tenantResolver, tenantsService } = createTenancy({
     port: env.CLAVIX_PUBLIC_PORT,
   },
 });
+
+/** A stored tenant by slug (suspended ones included), for the operator scripts. */
+export const tenantBySlug = (slug: string) =>
+  mongo.db.tenants.findFirst({ slug });
+
+/** The tenants collection, for the operator scripts (this module is the wiring allowed to reach it). */
+export const tenantsCollection = mongo.db.tenants;

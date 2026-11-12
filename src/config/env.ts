@@ -17,6 +17,9 @@ const optionalOutsideProduction = <T>(schema: z.ZodType<T, string>) =>
         .pipe(schema.optional())
         .optional();
 
+const trustedProxiesRequired =
+  "CLAVIX_TRUSTED_PROXIES is required in production: set the number of reverse proxies in front of the app (0 if none)";
+
 const redisUrl = z
   .string()
   .regex(/^rediss?:\/\/[^/]/, "not a redis:// or rediss:// URL");
@@ -28,6 +31,26 @@ const domain = z
     /^(?=.{3,253}$)[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)+$/,
     "not a lowercase DNS name with at least two labels",
   );
+
+// 32 bytes in standard base64 (44 characters): the master key that encrypts the
+// signing keys at rest.
+const masterKey = z
+  .string()
+  .regex(/^[A-Za-z0-9+/]{43}=$/, "not 32 bytes in base64")
+  .refine(
+    (value) => Buffer.from(value, "base64").length === 32,
+    "not 32 bytes in base64",
+  );
+
+const smtpUrl = z
+  .string()
+  .regex(/^smtps?:\/\/[^/]/, "not an smtp:// or smtps:// URL");
+
+// Development and tests only: public, so it protects nothing. Production
+// refuses to start without its own CLAVIX_KEYS_MASTER_KEY.
+export const DEV_KEYS_MASTER_KEY = Buffer.from(
+  "clavix-dev-only-keys-master-key!",
+).toString("base64");
 
 // Read once, at import: a malformed variable stops the process before it
 // listens. `.env.example` lists them; Bun loads `.env` on every command.
@@ -41,6 +64,15 @@ export const env = defineEnv({
   REDIS_URL: optionalOutsideProduction(redisUrl),
   // The apex every tenant issuer hangs under: `<slug>.<CLAVIX_DOMAIN>`.
   CLAVIX_DOMAIN: inProduction(domain, "clavix.localhost"),
+  // Encrypts every tenant's signing keys at rest (AES-256-GCM): 32 random
+  // bytes in base64, e.g. `openssl rand -base64 32`. Required in production;
+  // a public development default elsewhere. Losing it makes the stored keys
+  // unreadable: keep it in a secret manager, apart from the database.
+  CLAVIX_KEYS_MASTER_KEY: inProduction(masterKey, DEV_KEYS_MASTER_KEY),
+  // The SMTP server of the platform sender, `no-reply@<CLAVIX_DOMAIN>`
+  // (`smtps://user:pass@smtp.example:465`). Required in production; unset
+  // elsewhere, the e-mails stay in a memory mailer (src/config/mail.ts).
+  CLAVIX_SMTP_URL: optionalOutsideProduction(smtpUrl),
   // The scheme of the issuers built from it; http is refused in production.
   CLAVIX_PUBLIC_SCHEME: z
     .enum(production ? ["https"] : ["https", "http"])
@@ -51,4 +83,36 @@ export const env = defineEnv({
     .transform((value) => (value === "" ? undefined : Number(value)))
     .pipe(z.int().min(1).max(65535).optional())
     .optional(),
+  // Sign-in code requests (`requestSignInCode`), on top of janus's 5 per address
+  // per 10 min. Per client address and tenant, and per tenant. They need
+  // Redis (REDIS_URL): without it there is no such limit.
+  CLAVIX_CODE_IP_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_CODE_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_CODE_TENANT_LIMIT: z.coerce.number().int().min(1).default(200),
+  CLAVIX_CODE_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // Passkey sign-in options (`passkeySignInOptions`, anonymous, one token per
+  // call), per client address and tenant, and per tenant. Redis only, as above.
+  CLAVIX_PASSKEY_IP_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_PASSKEY_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_PASSKEY_TENANT_LIMIT: z.coerce.number().int().min(1).default(600),
+  CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // How many reverse proxies stand in front of the app. 0 (default): the
+  // client address is the connection's. N: it is the entry N places from the
+  // right of X-Forwarded-For, which the proxies append to. Required in
+  // production, where a wrong 0 behind a proxy rate-limits the proxy's address
+  // for everyone (and a wrong N lets a client forge its own): say it, even if 0.
+  CLAVIX_TRUSTED_PROXIES: production
+    ? z
+        .string({ error: trustedProxiesRequired })
+        .regex(/^\d+$/, trustedProxiesRequired)
+        .transform(Number)
+    : z.coerce.number().int().min(0).default(0),
 });
