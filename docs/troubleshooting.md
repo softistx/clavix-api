@@ -174,3 +174,21 @@ mutation {
 }
 # 403 EMAIL_UNVERIFIED -> sign in with the e-mailed code, then repeat
 ```
+
+## `EMAIL_CHANGE_NEEDS_PROOF` (409) when changing a user's e-mail
+
+**When:** server code calls janus `update` with a new `email` for a user who holds a passkey or a
+second factor, and it throws `EMAIL_CHANGE_NEEDS_PROOF` (HTTP 409, nothing written).
+
+**Why:** since janus 0.58, `update` no longer moves the e-mail of such a user, so a factor cannot
+silently follow an address nobody proved. Clearing an optional e-mail is still allowed. clavix-api
+itself never changes a user's e-mail through `update`; the code is stable and, as a janus error,
+passes through unchanged (409).
+
+**Fix:** use `changeEmail`, which proves the new address and keeps the factor.
+
+```ts
+const { token } = await auth.changeEmail.send(user, "new@example.test");
+// the user follows the e-mailed link, then:
+await auth.changeEmail.confirm(token);
+```

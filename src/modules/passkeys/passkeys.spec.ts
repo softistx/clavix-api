@@ -480,3 +480,21 @@ describe("development over http", () => {
     expect(originOf({ issuer })).toBe(issuer);
   });
 });
+
+describe("e-mail change", () => {
+  test("update refuses to move the e-mail of a user who holds a passkey", async () => {
+    const holder = await enroll("acme", "ivy@example.test");
+    const auth = await janusOf("acme");
+    // janus 0.58: `changeEmail` proves the new address; `update` is refused.
+    const refused = await auth
+      .update(holder.id, { email: "ivy.new@example.test" })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect((refused as { code?: string } | undefined)?.code).toBe(
+      "EMAIL_CHANGE_NEEDS_PROOF",
+    );
+    expect((await auth.findUser(holder.id))?.email).toBe("ivy@example.test");
+  });
+});
