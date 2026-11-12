@@ -11,7 +11,7 @@ import {
   signInWithPasskey,
 } from "./passkeys";
 
-// janus-graphql ships a passkey SDL and `passkeyResolvers`, but they bind to
+// Temporary, until @softistx/janus-graphql#667: janus-graphql ships a passkey SDL and `passkeyResolvers`, but they bind to
 // one janus instance and know no first-factor sign-in: ours is per tenant, so
 // the operations are written here on `auth.passkeys` (docs/guide/passkeys.md
 // of @softistx/janus).
