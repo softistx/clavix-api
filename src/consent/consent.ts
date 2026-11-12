@@ -1,4 +1,5 @@
 import {
+  denial,
   janusMaskError,
   janusTypeDefs,
   useJanus,
@@ -32,20 +33,27 @@ const base = /* GraphQL */ `
  * (`STEP_UP_REQUIRED`, 403, otherwise); `authTime` is the session's sign-in
  * time. janus-oauth's resolvers pass no `amr` or `acr`.
  */
+// The request Yoga puts on every context; a context without one has no host to pick a tenant by.
+const requestOf = (ctx: unknown): Request => {
+  const { request } = ctx as { request?: Request };
+  if (request === undefined) throw denial("NOT_FOUND");
+  return request;
+};
+
 export function consentGraphQL({ issuers, janusIssuers }: ConsentOptions) {
   return {
     typeDefs: [janusTypeDefs, oauthTypeDefs, base],
-    resolvers: [
-      oauthResolvers({
+    resolvers: {
+      ...oauthResolvers({
         oauth: async (ctx) => {
-          const server = await issuers.serverFor(ctx.request);
+          const server = await issuers.serverFor(requestOf(ctx));
           if (server === null) throw denial("NOT_FOUND");
           return server;
         },
       }),
-    ],
+    },
     plugins: [
-      useJanus({ auth: (ctx) => janusIssuers.forRequest(ctx.request) }),
+      useJanus({ auth: (ctx) => janusIssuers.forRequest(requestOf(ctx)) }),
     ],
     maskedErrors: { maskError: janusMaskError() },
   };
