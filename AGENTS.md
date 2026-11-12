@@ -34,7 +34,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`), and without `resourcesFor`
-  no `/authorize` succeeds. `/consent` is the hosted page of a later UI slice. `bun run
+  no `/authorize` succeeds. `/consent` is the hosted page of a later UI slice (its API is built, see Consent). `bun run
   db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
@@ -95,6 +95,17 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
   `@softistx/mail-smtp` when `CLAVIX_SMTP_URL` is set (required in production), else the memory
   mailer. Links point at the tenant issuer. Mails are English: users have no locale yet.
 - Specs: `src/modules/auth/auth.spec.ts` (flow, closed sign-up, invitation, isolation A/B).
+
+## Consent
+
+`src/modules/consent/` is the API of the hosted `/consent` page, served on E1's `/graphql`
+(janus-oauth's `oauthResolvers` and `oauthTypeDefs`, merged in `src/http/schema.ts`). `oauthContext`
+(a Yoga plugin added in `createApp` when `oauth.serverFor` exists) puts the issuers in the context, and
+the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
+`ownsRequest` is the same-origin guard (a foreign Origin or a non-JSON POST sees `NOT_FOUND`).
+`approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
+not worked around). Passkeys (slice E3) wait on janus: its passkeys are a second factor beside TOTP
+only, with no passwordless sign-in yet.
 
 ## Signing keys
 

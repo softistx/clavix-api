@@ -136,8 +136,82 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Passkeys and consent come with slice E2, and no `/authorize`
+  `src/server.ts`. Consent is below, passkeys wait on janus (slice E3), and no `/authorize`
   succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
+
+## Consent (the hosted page's API)
+
+`/authorize` redirects a user to `/consent?request_id=<id>` on the tenant's host: a page of clavix-ui,
+which calls `POST /graphql` (the same API as the e-mail code sign-in) with the tenant's session cookie
+(`__Host-clavix-session`, same host: send the request with credentials). Served by
+`src/modules/consent` (janus-oauth's `oauthResolvers`; the OAuth server and the signed-in user are both
+the request host's tenant's, so a request id or a session of another tenant is `NOT_FOUND` /
+`UNAUTHENTICATED`).
+
+```graphql
+query Consent($id: ID!) {
+  oauthRequest(id: $id) {
+    id
+    client {
+      id
+      name
+      url
+      host
+    } # show id and host, not only the self-declared name
+    redirectHost # and the host the user is sent back to
+    resource
+    redirectUri
+    expiresAt
+    scopes {
+      name
+      label
+    }
+  }
+  connectedApps {
+    id
+    client {
+      id
+      name
+    }
+    scopes {
+      label
+    }
+    createdAt
+  }
+}
+mutation Allow($id: ID!, $scopes: [String!]) {
+  # scopes: a subset, omit for all
+  approveOAuthRequest(id: $id, scopes: $scopes) {
+    redirectTo
+    grantId
+  }
+}
+mutation Refuse($id: ID!) {
+  denyOAuthRequest(id: $id) {
+    redirectTo
+  } # redirectTo carries error=access_denied
+}
+mutation Revoke($id: ID!) {
+  revokeConnectedApp(id: $id)
+}
+```
+
+The page sends the user agent to `redirectTo` (the client's redirect URI with `code` or the error,
+`state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
+code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
+request, a host with no tenant, or a request that is not same-origin JSON), `BAD_USER_INPUT` (a
+scope not asked for), `STEP_UP_REQUIRED` (403).
+- **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
+  (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
+  again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
+  the request stays pending. `denyOAuthRequest` and the read do not ask. janus's `auth.stepUp.*`
+  mutations are not exposed.
+- **Same origin, JSON only**: a consent read or decision whose `Origin` is not the tenant's own, or
+  that is a POST other than `application/json` (a CORS "simple" form post), sees no such request
+  (`NOT_FOUND`); the cookie is the credential and a sibling tenant host is same-site.
+- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No `amr` or
+  `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL surface does not), and
+  M1 needs neither.
 
 ## E-mail code sign-in
 

@@ -14,7 +14,8 @@ export const OAUTH_PATHS = [
 ] as const;
 
 /** The slice of `OAuthIssuers` the app mounts. */
-export type OAuthHandle = Pick<OAuthIssuers, "handle">;
+export type OAuthHandle = Pick<OAuthIssuers, "handle"> &
+  Partial<Pick<OAuthIssuers, "serverFor">>;
 
 /**
  * Mounts the OAuth endpoints on an app: each path hands the plain `Request`

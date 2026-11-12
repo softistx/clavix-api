@@ -2,6 +2,7 @@ import { graphql } from "@alxia/graphql";
 import { createBase } from "./http/context";
 import { schema } from "./http/schema";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
+import { oauthContext } from "./modules/consent";
 import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
@@ -24,7 +25,12 @@ export function createApp(options: { oauth?: OAuthHandle } = {}) {
     graphql(app, {
       schema,
       ide: "apollo-sandbox",
-      plugins: [janusPlugin()],
+      plugins: [
+        janusPlugin(),
+        ...(options.oauth?.serverFor === undefined
+          ? []
+          : [oauthContext({ serverFor: options.oauth.serverFor })]),
+      ],
       maskedErrors: janusMasking,
     }),
   );
