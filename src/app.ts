@@ -1,10 +1,8 @@
 import { graphql } from "@alxia/graphql";
-import {
-  CONSENT_GRAPHQL_PATH,
-  type ConsentHandle,
-} from "./consent/consent-yoga";
 import { createBase } from "./http/context";
 import { schema } from "./http/schema";
+import { janusMasking, janusPlugin } from "./modules/auth/plugin";
+import { oauthContext } from "./modules/consent";
 import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
@@ -17,23 +15,25 @@ export const BODY_LIMIT = 100 * 1024;
 // middlewares. The body limit is declared before the OAuth routes, since it
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.
-export function createApp(
-  options: { oauth?: OAuthHandle; consent?: ConsentHandle } = {},
-) {
+export function createApp(options: { oauth?: OAuthHandle } = {}) {
   const base = createBase()
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     .bodyLimit(BODY_LIMIT);
-  const withOAuth =
-    options.oauth === undefined ? base : mountOAuth(base, options.oauth);
-  const { consent } = options;
-  // The hosted consent page's API: its own Yoga server until slice E1's /graphql takes its parts in.
   return (
-    consent === undefined
-      ? withOAuth
-      : withOAuth.all(CONSENT_GRAPHQL_PATH, ({ request }) =>
-          consent.fetch(request),
-        )
-  ).plugin((app) => graphql(app, { schema, ide: "apollo-sandbox" }));
+    options.oauth === undefined ? base : mountOAuth(base, options.oauth)
+  ).plugin((app) =>
+    graphql(app, {
+      schema,
+      ide: "apollo-sandbox",
+      plugins: [
+        janusPlugin(),
+        ...(options.oauth?.serverFor === undefined
+          ? []
+          : [oauthContext({ serverFor: options.oauth.serverFor })]),
+      ],
+      maskedErrors: janusMasking,
+    }),
+  );
 }
 
 // The app the server runs.

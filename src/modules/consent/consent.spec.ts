@@ -9,34 +9,26 @@ import { decodeJwt } from "jose";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
+import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
+import { tenantResolver } from "@/config/tenancy";
+import { authFor, claimsFor, janusIssuers } from "@/config/users";
+import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { createTenantResolver } from "@/tenancy/resolver";
-import { noTenantCache } from "@/tenancy/tenant-cache";
-import { createTenantAuth } from "@/users/tenant-auth";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
-import { CONSENT_GRAPHQL_PATH, createConsentYoga } from "./consent-yoga";
 
-const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";
 const REDIRECT = "https://app.example/callback";
 const VERIFIER = "v".repeat(64);
-const config = { scheme: "https", domain: DOMAIN } as const;
-
-const resolver = createTenantResolver({
-  lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
-  cache: noTenantCache,
-  config,
-});
+const origin = {
+  scheme: env.CLAVIX_PUBLIC_SCHEME,
+  domain: env.CLAVIX_DOMAIN,
+  port: env.CLAVIX_PUBLIC_PORT,
+} as const;
 const tenants = new TenantsService(mongo.db.tenants, {
-  domain: DOMAIN,
-  onHostsChanged: (hosts) => resolver.invalidate(hosts),
-});
-const { janusIssuers, authFor, claimsFor } = createTenantAuth({
-  resolver,
-  db: oauthDb,
+  onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
 const keys = new Map<string, SigningKeyStore>();
 const signingKeysFor = (tenantId: string) => {
@@ -48,16 +40,16 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
-  resolver,
+  resolver: tenantResolver,
   db: oauthDb,
   signingKeysFor,
   authFor,
   claimsFor,
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read"] } }),
 });
-const yoga = createConsentYoga({ issuers, janusIssuers });
+const app = createApp({ oauth: issuers });
 
-const url = (slug: string, path = "/") => `https://${slug}.${DOMAIN}${path}`;
+const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 const basic = (id: string, secret: string) =>
   `Basic ${btoa(`${id}:${secret}`)}`;
 
@@ -71,16 +63,14 @@ const gql = async (
   variables: Record<string, unknown>,
   cookie?: string,
 ): Promise<GqlResult> => {
-  const response = await yoga.fetch(
-    new Request(url(slug, CONSENT_GRAPHQL_PATH), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(cookie === undefined ? {} : { cookie }),
-      },
-      body: JSON.stringify({ query, variables }),
-    }),
-  );
+  const response = await app.request(url(slug, "/graphql"), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(cookie === undefined ? {} : { cookie }),
+    },
+    body: JSON.stringify({ query, variables }),
+  });
   return (await response.json()) as GqlResult;
 };
 const codeOf = (result: GqlResult) => result.errors?.[0]?.extensions?.code;
@@ -140,7 +130,7 @@ async function exchange(slug: string, redirectTo: string) {
 beforeAll(async () => {
   for (const slug of ["acme", "globex"]) {
     await tenants.create({ slug, name: slug });
-    const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);
+    const tenant = await tenantResolver.resolveHost(new URL(url(slug)).host);
     if (tenant === null) throw new Error("tenant not resolved");
     await rotateSigningKeys(signingKeysFor(tenant.tenantId), {
       now: new Date(),
@@ -291,15 +281,13 @@ describe("tenant isolation", () => {
 
 describe("a foreign page cannot decide", () => {
   const post = (headers: Record<string, string>, body: string) =>
-    yoga.fetch(
-      new Request(url("acme", CONSENT_GRAPHQL_PATH), {
-        method: "POST",
-        headers: { cookie: cookieOf("acme"), ...headers },
-        body,
-      }),
-    );
+    app.request(url("acme", "/graphql"), {
+      method: "POST",
+      headers: { cookie: cookieOf("acme"), ...headers },
+      body,
+    });
 
-  test("a foreign Origin is refused, with no CORS header", async () => {
+  test("a foreign Origin sees no request and decides nothing", async () => {
     const id = await authorize("acme");
     const response = await post(
       {
@@ -308,13 +296,14 @@ describe("a foreign page cannot decide", () => {
       },
       JSON.stringify({ query: DENY, variables: { id } }),
     );
-    expect(response.status).toBe(403);
+    const body = (await response.json()) as GqlResult;
+    expect(codeOf(body)).toBe("NOT_FOUND");
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
     const still = await gql("acme", REQUEST, { id }, cookieOf("acme"));
     expect(still.errors).toBeUndefined();
   });
 
-  test("a form post is refused", async () => {
+  test("a form post decides nothing", async () => {
     const id = await authorize("acme");
     const response = await post(
       { "content-type": "application/x-www-form-urlencoded" },
@@ -322,34 +311,19 @@ describe("a foreign page cannot decide", () => {
         query: `mutation { denyOAuthRequest(id: "${id}") { redirectTo } }`,
       }).toString(),
     );
-    expect(response.status).toBe(415);
+    const body = (await response.json()) as GqlResult;
+    expect(body.data?.["denyOAuthRequest"] ?? null).toBeNull();
+    const still = await gql("acme", REQUEST, { id }, cookieOf("acme"));
+    expect(still.errors).toBeUndefined();
   });
 
   test("the page's own Origin passes", async () => {
     const id = await authorize("acme");
     const response = await post(
-      {
-        "content-type": "application/json",
-        origin: url("acme", "").replace(/\/$/, ""),
-      },
+      { "content-type": "application/json", origin: issuerOf("acme", origin) },
       JSON.stringify({ query: REQUEST, variables: { id } }),
     );
-    expect(response.status).toBe(200);
-  });
-});
-
-describe("mounted on the app", () => {
-  test("POST /graphql/consent answers on the tenant's host", async () => {
-    const id = await authorize("acme");
-    const app = createApp({ oauth: issuers, consent: yoga });
-    const response = await app.request(url("acme", CONSENT_GRAPHQL_PATH), {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: cookieOf("acme") },
-      body: JSON.stringify({ query: REQUEST, variables: { id } }),
-    });
-    expect(response.status).toBe(200);
     const body = (await response.json()) as GqlResult;
     expect(body.errors).toBeUndefined();
-    expect(body.data?.["oauthRequest"]).toMatchObject({ id });
   });
 });

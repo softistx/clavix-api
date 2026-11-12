@@ -27,10 +27,13 @@ nxgt-janus release says which.
 - **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5,
   [#5](https://github.com/softistx/clavix-api/issues/5)). Slice B built: one janus instance and
   one partitioned user pool per tenant, host-only `__Host-` session cookie (14 days sliding),
-  the passkey rpId (`rpIdOf`) and the real `authFor`/`claimsFor`, served by `server.ts`. Still
-  to come: e-mail code sign-in and the GraphQL sign-in surface (E1); the consent API
-  (E2a, `src/consent`, `POST /graphql/consent`) is built; passkeys (E3) wait on janus passwordless
-  passkey sign-in (its passkeys are a second factor beside TOTP only); and the 30-day absolute session cap (waits on janus).
+  the passkey rpId (`rpIdOf`) and the real `authFor`/`claimsFor`, served by `server.ts`. Slice E1
+  built: e-mail code sign-in with the GraphQL surface for the hosted pages (`requestSignInCode`,
+  `verifySignInCode`, `signOut`, `currentUser`), a platform sender over SMTP, per-tenant `signUp`
+  (closed on `clavix`, invitation only, no account enumeration). Slice E2a built: the consent API
+  on `/graphql` (`src/modules/consent`). Still to come: passkeys (E3, wait on janus passwordless
+  passkey sign-in: its passkeys are a second factor beside TOTP only), and the 30-day absolute
+  session cap (waits on janus).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and

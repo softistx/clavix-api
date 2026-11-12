@@ -1,9 +1,11 @@
 import { alxia } from "@alxia/core";
 import type { GraphQLContext } from "@alxia/graphql";
+import type { JanusContext } from "@softistx/janus-graphql";
 import { env } from "@/config/env";
 import { tenantResolver } from "@/config/tenancy";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
+import type { TenantJanus } from "@/users/tenant-janus";
 
 // The base: what every resolver reads, decorated or derived here.
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for
@@ -26,4 +28,4 @@ export type Base = ReturnType<typeof createBase>;
 
 // A resolver's context: Yoga's and the base's. The generated `Resolvers` takes
 // it (codegen.ts: `contextType`).
-export type Context = Readonly<GraphQLContext<Base>>;
+export type Context = Readonly<GraphQLContext<Base, JanusContext<TenantJanus>>>;

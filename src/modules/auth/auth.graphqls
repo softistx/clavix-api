@@ -1,0 +1,52 @@
+"""
+A sign-in by an e-mailed code, for the hosted pages of the tenant the request's
+host names. Two steps: `requestSignInCode`, then `verifySignInCode`.
+"""
+type SignInChallenge {
+  """
+  A secret that goes back with the code. Keep it where the next request
+  presents it (the hosted page's server session or a short-lived cookie of its
+  own), never in a URL or a log. It is minted for every address, known or not.
+  """
+  challenge: String!
+  "The challenge, and the code with it, can be verified until then."
+  expiresAt: DateTime!
+}
+
+"The user a session belongs to, in the tenant's own user pool."
+type CurrentUser {
+  id: ID!
+  email: EmailAddress!
+  name: String
+  emailVerified: Boolean!
+}
+
+"A sign-in that opened a session; the session cookie is set on the response."
+type SignedIn {
+  user: CurrentUser!
+  "When the session lapses if not used again; it slides."
+  expiresAt: DateTime!
+}
+
+type Query {
+  "The signed-in user of this tenant, or null for an anonymous request."
+  currentUser: CurrentUser
+}
+
+type Mutation {
+  """
+  Asks for a six-digit code by e-mail. The answer is the same for an address
+  with an account, one without and, on a tenant that closed sign-up, one that
+  is not invited: a code is sent only when an account exists (or sign-up is
+  open). Errors: MAIL_THROTTLED (429) past five requests per address and ten
+  minutes.
+  """
+  requestSignInCode(email: EmailAddress!): SignInChallenge!
+  """
+  Checks the code against its challenge and opens the session. Every refusal
+  (wrong, spent, expired or unknown challenge) is the same CODE_INVALID, 401.
+  """
+  verifySignInCode(challenge: String!, code: String!): SignedIn!
+  "Ends the session of the request and clears the cookie. True even when anonymous."
+  signOut: Boolean!
+}

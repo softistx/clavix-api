@@ -30,6 +30,8 @@ function setup(
 const acme: TenantRecord = {
   _id: new ObjectId(),
   slug: "acme",
+  name: "Acme",
+  signUp: false,
   status: "active",
   version: 3,
 };
@@ -40,6 +42,8 @@ describe("resolveHost", () => {
     expect(await resolver.resolveHost("Acme.clavix.test:8443")).toEqual({
       tenantId: acme._id.toHexString(),
       slug: "acme",
+      name: "Acme",
+      signUp: false,
       issuer: "https://acme.clavix.test",
       partition: acme._id.toHexString(),
       version: 3,

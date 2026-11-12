@@ -4,7 +4,7 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider. 
 spec is in `../spec/`; the plan is `docs/roadmap.md`. Rules for contributors:
 [AGENTS.md](AGENTS.md).
 
-Today it is a skeleton: `GET /healthz`, and `health { status version }` on `POST /graphql`.
+Today it serves `GET /healthz`, `health { status version }` and the e-mail code sign-in of the hosted pages (below) on `POST /graphql`.
 
 ## Run
 
@@ -33,15 +33,16 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                 | Default / rule                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `PORT`                   | 3000                                                                              |
-| `MONGO_URI`              | required; a replica set (transactions)                                            |
-| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                  |
-| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                              |
-| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                          |
-| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                       |
-| `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere |
+| Variable                 | Default / rule                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`                   | 3000                                                                                                         |
+| `MONGO_URI`              | required; a replica set (transactions)                                                                       |
+| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                                             |
+| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                                                         |
+| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                                                     |
+| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                                                  |
+| `CLAVIX_SMTP_URL`        | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
+| `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere                            |
 
 ## Signing keys
 
@@ -135,18 +136,17 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Sign-in itself (e-mail code) comes with slice E1, consent is below, passkeys wait on janus (slice E3), and no `/authorize`
+  `src/server.ts`. Consent is below, passkeys wait on janus (slice E3), and no `/authorize`
   succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
 
 ## Consent (the hosted page's API)
 
-`/authorize` redirects a signed-out or not-yet-consented user to `/consent?request_id=<id>` on the
-tenant's host: a page of clavix-ui, which calls the GraphQL API below. It is served by
-`src/consent` (janus-oauth's `oauthResolvers` and `useJanus`, both picking the tenant from the
-request's host) as `POST /graphql/consent`, a Yoga server of its own until slice E1's `/graphql`
-takes its parts in (`consentGraphQL()` returns them). The viewer is the tenant's session cookie
-(`__Host-clavix-session`, same host, so send the request with credentials), never another
-tenant's: a request id or a session of another tenant is `NOT_FOUND` / `UNAUTHENTICATED`.
+`/authorize` redirects a user to `/consent?request_id=<id>` on the tenant's host: a page of clavix-ui,
+which calls `POST /graphql` (the same API as the e-mail code sign-in) with the tenant's session cookie
+(`__Host-clavix-session`, same host: send the request with credentials). Served by
+`src/modules/consent` (janus-oauth's `oauthResolvers`; the OAuth server and the signed-in user are both
+the request host's tenant's, so a request id or a session of another tenant is `NOT_FOUND` /
+`UNAUTHENTICATED`).
 
 ```graphql
 query Consent($id: ID!) {
@@ -197,19 +197,60 @@ mutation Revoke($id: ID!) {
 ```
 
 The page sends the user agent to `redirectTo` (the client's redirect URI with `code` or the error,
-`state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401, go to sign-in and
-come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
-request), `BAD_USER_INPUT` (a scope not asked for), `STEP_UP_REQUIRED` (403).
-- **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5
-  minutes (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page
-  signs the user in again (E1's e-mail code), then repeats the mutation; the request stays
-  pending. `denyOAuthRequest` and the read do not ask.
-- **Same origin only**: the API sets no CORS headers, refuses a request whose `Origin` is not the
-  tenant's own (403) and any POST that is not `application/json` (415). The page is served from
-  the tenant's host. The step-up mutations (`auth.stepUp.*`) are not mounted here until E1.
-- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No
-  `amr` or `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL
-  surface does not), and M1 needs neither.
+`state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
+code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
+request, a host with no tenant, or a request that is not same-origin JSON), `BAD_USER_INPUT` (a
+scope not asked for), `STEP_UP_REQUIRED` (403).
+- **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
+  (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
+  again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
+  the request stays pending. `denyOAuthRequest` and the read do not ask. janus's `auth.stepUp.*`
+  mutations are not exposed.
+- **Same origin, JSON only**: a consent read or decision whose `Origin` is not the tenant's own, or
+  that is a POST other than `application/json` (a CORS "simple" form post), sees no such request
+  (`NOT_FOUND`); the cookie is the credential and a sibling tenant host is same-site.
+- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No `amr` or
+  `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL surface does not), and
+  M1 needs neither.
+
+## E-mail code sign-in
+
+The hosted pages call the GraphQL API on the tenant's own host (`https://<slug>.<CLAVIX_DOMAIN>/graphql`):
+
+```graphql
+mutation {
+  requestSignInCode(email: "ada@example.com") {
+    challenge
+    expiresAt
+  }
+}
+mutation {
+  verifySignInCode(challenge: "...", code: "123456") {
+    user {
+      id
+      email
+    }
+    expiresAt
+  }
+}
+query {
+  currentUser {
+    id
+    email
+    name
+    emailVerified
+  }
+}
+mutation {
+  signOut
+}
+```
+
+A 6-digit code is mailed from `no-reply@<CLAVIX_DOMAIN>` (valid 10 minutes, 5 attempts, 5 mails per
+address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` cookie; a wrong, spent
+or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
+`clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
+come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
 
 ## How a host maps to a tenant
 

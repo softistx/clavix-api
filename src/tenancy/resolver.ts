@@ -12,6 +12,8 @@ import { noTenantCache, type TenantCache } from "./tenant-cache";
 export interface TenantRecord {
   _id: ObjectId;
   slug: string;
+  name: string;
+  signUp: boolean;
   status: "active" | "suspended";
   version: number;
 }
@@ -50,6 +52,8 @@ function toResolved(
     : {
         tenantId: tenant._id.toHexString(),
         slug: tenant.slug,
+        name: tenant.name,
+        signUp: tenant.signUp,
         issuer: issuerOf(tenant.slug, config),
         partition: partitionOf(tenant._id),
         version: tenant.version,
