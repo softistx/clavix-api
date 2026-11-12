@@ -120,7 +120,7 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 - Specs use the software authenticator copied from janus-passkeys' own tests
   (`test/passkey-authenticator.ts`, `test/passkey-cbor.ts`): copy again when that one changes.
 - The anonymous `passkeySignInOptions` is not under the sign-in code limits (`throttle.ts` guards
-  `requestSignInCode` only): a follow-up if the tokens it stores become a problem.
+  `requestSignInCode` only): tracked in clavix-api#64.
 
 ## Consent
 

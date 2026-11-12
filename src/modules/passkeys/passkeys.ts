@@ -27,10 +27,11 @@ export async function signInWithPasskey(
   try {
     return await auth.passkeys.signIn(challenge, parsed(response));
   } catch (error) {
-    if (error instanceof JanusError && error.code !== "STORE_FAILED") {
-      throw passkeyInvalid();
-    }
-    throw error;
+    // Temporary, until the verifier maps every response error to a refusal: a
+    // verifier throw on a known credential must not differ from an unknown one.
+    if (error instanceof JanusError && error.code === "STORE_FAILED")
+      throw error;
+    throw passkeyInvalid();
   }
 }
 

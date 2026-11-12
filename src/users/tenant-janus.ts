@@ -102,7 +102,7 @@ type TenantUser = NonNullable<Awaited<ReturnType<BaseJanus["findUser"]>>>;
 /**
  * janus's types give `passkeys` only to a user type with a password login; ours
  * is passwordless (the runtime has the API: the specs hold it), so it is added
- * to the type here. janus gap, reported upstream.
+ * to the type here. janus gap. Temporary, until the typing gaps in AGENTS.md (Passkeys) are fixed upstream.
  */
 export type TenantJanus = BaseJanus &
   PasskeysApi<TenantUser> &

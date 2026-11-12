@@ -373,6 +373,51 @@ describe("registration", () => {
     const mine = await gql("acme", MINE, {}, cookie);
     expect(field<unknown[]>(mine, "myPasskeys")).toEqual([]);
   });
+
+  test("a non-JSON response is BAD_USER_INPUT, 400", async () => {
+    const { cookie } = await userOf("acme", "ivan@example.test");
+    const asked = field<{ challenge: string }>(
+      await gql("acme", REGISTRATION, {}, cookie),
+      "passkeyRegistrationOptions",
+    );
+    const refused = await gql(
+      "acme",
+      REGISTER,
+      {
+        challenge: asked?.challenge ?? "",
+        response: "not json",
+        name: "Laptop",
+      },
+      cookie,
+    );
+    expect(refused.status).toBe(400);
+    expect(codeOf(refused)).toBe("BAD_USER_INPUT");
+  });
+
+  test("a sign-in challenge is no registration challenge, and the reverse", async () => {
+    const { cookie } = await userOf("acme", "hana@example.test");
+    const signIn = field<{ challenge: string }>(
+      await gql("acme", SIGN_IN_OPTIONS),
+      "passkeySignInOptions",
+    );
+    const crossed = await gql(
+      "acme",
+      REGISTER,
+      { challenge: signIn?.challenge ?? "", response: "{}", name: "Laptop" },
+      cookie,
+    );
+    expect(crossed.errors).toBeDefined();
+    const registration = field<{ challenge: string }>(
+      await gql("acme", REGISTRATION, {}, cookie),
+      "passkeyRegistrationOptions",
+    );
+    const back = await gql("acme", SIGN_IN, {
+      challenge: registration?.challenge ?? "",
+      response: "{}",
+    });
+    expect(back.status).toBe(401);
+    expect(codeOf(back)).toBe("PASSKEY_INVALID");
+  });
 });
 
 // A registration made for another relying party: the tenant's host with a label prepended is a different rpId.

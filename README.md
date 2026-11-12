@@ -353,7 +353,7 @@ extend type Mutation {
 - **Over http** (development): janus refuses `http` origins, so every passkey operation answers
   `NOT_FOUND`; test passkeys over https.
 - **Not yet**: `passkeySignInOptions` is anonymous and stores a token per call; the sign-in code
-  limits do not cover it, so put a rate limit in front. The `amr`/`acr` claims stay unset.
+  limits do not cover it, so put a rate limit in front (clavix-api#64). The `amr`/`acr` claims stay unset.
 
 ## Same origin on /graphql
 
