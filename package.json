@@ -12,6 +12,7 @@
     "typecheck": "bun check",
     "db:sync": "bun src/scripts/db-sync.ts",
     "db:migrate": "bun src/scripts/db-migrate.ts",
+    "tenants:create": "bun src/scripts/tenants-create.ts",
     "clients:create": "bun src/scripts/clients-create.ts",
     "lint": "biome lint",
     "format": "biome format --write",
