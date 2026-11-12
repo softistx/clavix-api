@@ -12,6 +12,7 @@
         "@graphql-tools/merge": "^10.0.6",
         "@nxgt/graphql-scalars": "^0.7.1",
         "@nxgt/graphql-validation": "^0.8.1",
+        "@softistx/janus": "^0.51.0",
         "@softistx/janus-oauth": "^0.8.0",
         "@softistx/janus-oauth-mongo": "^0.8.0",
         "@softistx/mongo": "^0.29.0",

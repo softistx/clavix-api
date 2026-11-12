@@ -31,14 +31,40 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable               | Default / rule                                                   |
-| ---------------------- | ---------------------------------------------------------------- |
-| `PORT`                 | 3000                                                             |
-| `MONGO_URI`            | required; a replica set (transactions)                           |
-| `REDIS_URL`            | required in production; unset elsewhere, the tenant cache is off |
-| `CLAVIX_DOMAIN`        | required in production; `clavix.localhost` elsewhere             |
-| `CLAVIX_PUBLIC_SCHEME` | `https`; `http` is refused in production                         |
-| `CLAVIX_PUBLIC_PORT`   | optional; set when issuers are not on the scheme's own port      |
+| Variable                 | Default / rule                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `PORT`                   | 3000                                                                              |
+| `MONGO_URI`              | required; a replica set (transactions)                                            |
+| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                  |
+| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                              |
+| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                          |
+| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                       |
+| `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere |
+
+## Signing keys
+
+Each tenant has its own signing keys (ADR-0010), kept in the `oauthSigningKeys` collection by
+`@softistx/janus-oauth-mongo`: the private JWK is encrypted with `CLAVIX_KEYS_MASTER_KEY`
+(AES-256-GCM) and the store of a tenant, partitioned by its id, cannot read another's. Janus signs;
+Clavix adds no `jose`.
+- `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (`src/config/keys.ts`; `tenantId` is the
+  tenant's id in hex, `partitionOf`) give the OAuth endpoints the `SigningKeyStore` and the public JWKS.
+- A tenant gets its first key when it is created (`TenantsService.create`). If that call fails it is
+  logged and the tenant stands; the hourly job creates the key within the hour.
+- Any deployment that holds real tenants (staging included) must set `CLAVIX_KEYS_MASTER_KEY`: the
+  default is public. A tenant with no key yet has an empty JWKS: the OAuth endpoints treat it as transient.
+- `CLAVIX_KEYS_MASTER_KEY` is generated with `openssl rand -base64 32`.
+- Rotation: ES256 keys sign for 90 days; the next key is published 48 h before it takes over and
+  a retired key stays published 24 h (`src/keys/policy.ts`). An hourly `key-rotation` job on
+  `@softistx/redis` (cron `0 * * * *`) runs the step over every active tenant, and the server runs
+  one pass at start, which also gives the seeded `clavix` tenant its key. Without `REDIS_URL`
+  (development) only the pass at start runs.
+- **Losing the master key** makes the stored keys unreadable (signing fails; the JWKS still
+  serves, and each hourly pass logs a failure per tenant). Keep it in a secret manager, apart from
+  the database. To recover, drop the tenants' `oauthSigningKeys` documents and let the rotation
+  create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
+  them. Changing the master key is the same; there is no re-encryption in place.
+- `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
 
 ## How a host maps to a tenant
 

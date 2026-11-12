@@ -28,7 +28,10 @@ const clean = {
   CLAVIX_DOMAIN: undefined,
   CLAVIX_PUBLIC_SCHEME: undefined,
   CLAVIX_PUBLIC_PORT: undefined,
+  CLAVIX_KEYS_MASTER_KEY: undefined,
 };
+
+const masterKey = Buffer.alloc(32, 7).toString("base64");
 
 test("outside production the defaults stand in", async () => {
   const { env } = await load(clean);
@@ -89,6 +92,7 @@ test("production requires REDIS_URL and CLAVIX_DOMAIN and refuses http", async (
     REDIS_URL: "redis://redis:6379",
     CLAVIX_DOMAIN: "clavix.example",
     CLAVIX_PUBLIC_SCHEME: "https",
+    CLAVIX_KEYS_MASTER_KEY: masterKey,
   };
   // `production` is read at import, so each case sets NODE_ENV for its load.
   const { env } = await load({ ...clean, ...production });
@@ -102,4 +106,35 @@ test("production requires REDIS_URL and CLAVIX_DOMAIN and refuses http", async (
   await expect(
     load({ ...clean, ...production, CLAVIX_PUBLIC_SCHEME: "http" }),
   ).rejects.toThrow("CLAVIX_PUBLIC_SCHEME");
+});
+
+test("the keys master key: a public default outside production, never in it", async () => {
+  const { env, DEV_KEYS_MASTER_KEY } = await load(clean);
+  expect(env.CLAVIX_KEYS_MASTER_KEY).toBe(DEV_KEYS_MASTER_KEY);
+  expect(Buffer.from(DEV_KEYS_MASTER_KEY, "base64")).toHaveLength(32);
+  const given = await load({ ...clean, CLAVIX_KEYS_MASTER_KEY: masterKey });
+  expect(given.env.CLAVIX_KEYS_MASTER_KEY).toBe(masterKey);
+
+  const production = {
+    ...clean,
+    NODE_ENV: "production",
+    REDIS_URL: "redis://redis:6379",
+    CLAVIX_DOMAIN: "clavix.example",
+  };
+  // Missing, short, long and not base64 are all refused in production...
+  for (const bad of [
+    undefined,
+    "",
+    Buffer.alloc(16, 7).toString("base64"),
+    Buffer.alloc(33, 7).toString("base64"),
+    "not base64 at all, but 44 characters long......",
+  ]) {
+    await expect(
+      load({ ...production, CLAVIX_KEYS_MASTER_KEY: bad }),
+    ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
+  }
+  // ...and a malformed one is refused outside it too, not replaced by the default.
+  await expect(
+    load({ ...clean, CLAVIX_KEYS_MASTER_KEY: "c2hvcnQ=" }),
+  ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
 });

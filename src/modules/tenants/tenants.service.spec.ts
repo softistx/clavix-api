@@ -28,6 +28,34 @@ afterEach(async () => {
   await collection.raw.deleteMany({ slug: { $ne: PLATFORM_TENANT_SLUG } });
 });
 
+describe("TenantsService onCreated", () => {
+  test("is called with the new tenant's hex id; its failure is logged, the tenant stands", async () => {
+    const created: string[] = [];
+    const quiet: string[] = [];
+    const ok = new TenantsService(collection, {
+      domain: "clavix.test",
+      onCreated: (id) => {
+        created.push(id);
+      },
+    });
+    const tenant = await ok.create({ slug: "acme", name: "Acme" });
+    expect(created).toEqual([tenant._id.toHexString()]);
+
+    const failing = new TenantsService(collection, {
+      domain: "clavix.test",
+      onCreated: () => {
+        throw new Error("keys down");
+      },
+      log: (message) => quiet.push(message),
+    });
+    const other = await failing.create({ slug: "beta", name: "Beta" });
+    expect(other.slug).toBe("beta");
+    expect(quiet).toEqual([
+      `tenants: onCreated failed for ${other._id.toHexString()}: keys down`,
+    ]);
+  });
+});
+
 describe("TenantsService", () => {
   test("create makes an active tenant and invalidates its host", async () => {
     const tenant = await service.create({ slug: "acme", name: " Acme " });

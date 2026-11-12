@@ -1,5 +1,6 @@
 import { defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
+import { keyRotation } from "@/keys/queue";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
@@ -22,6 +23,7 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
+      queues: { keyRotation },
       background: {
         onDown: () => log("redis unavailable: tenant cache degraded"),
         onUp: () => log("redis is back"),
