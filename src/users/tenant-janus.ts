@@ -43,7 +43,7 @@ export interface TenantJanusOptions {
   masterKey: string;
 }
 
-// `createMongoStores` is typed `JanusStores`, whose `passkeys` slot is optional,
+// Temporary, until @softistx/janus#669: `createMongoStores` is typed `JanusStores`, whose `passkeys` slot is optional,
 // so janus's types hide `auth.passkeys`. The Mongo adapter does carry the slot
 // (janus refuses a store without it at wiring): janus-mongo gap, narrowed here.
 const passkeyStores = (db: Db, partition: string) =>
@@ -62,13 +62,13 @@ function buildJanus(db: Db, tenant: ResolvedTenant, masterKey: string) {
     // The e-mailed code: 10 minutes, five attempts, five requests per address
     // and 10 minutes (janus's mail throttle, on by default).
     tokens: { signInCode: SIGN_IN_CODE_LIFESPAN },
-    // janus's `firstFactor` passkeys still need a second-factor block, whose
+    // Temporary, until @softistx/janus#668: janus's `firstFactor` passkeys still need a second-factor block, whose
     // sealing key would seal a TOTP secret; no TOTP is offered, the key is
     // derived from the master key for that purpose alone.
     secondFactor: { issuer: tenant.name, keys: [sealingKeyOf(masterKey)] },
     // A passkey as the first factor: the relying party is the tenant's own
     // host (`rp.ts`), so a passkey is unknown to every other tenant. janus
-    // takes https origins only: a development server on http has no passkeys
+    // takes https origins only (Temporary, until @softistx/janus#668): a development server on http has no passkeys
     // (the passkey operations answer NOT_FOUND there).
     ...(passkeysOn(tenant)
       ? {
@@ -102,7 +102,7 @@ type TenantUser = NonNullable<Awaited<ReturnType<BaseJanus["findUser"]>>>;
 /**
  * janus's types give `passkeys` only to a user type with a password login; ours
  * is passwordless (the runtime has the API: the specs hold it), so it is added
- * to the type here. janus gap. Temporary, until the typing gaps in AGENTS.md (Passkeys) are fixed upstream.
+ * to the type here. Temporary, until @softistx/janus#669.
  */
 export type TenantJanus = BaseJanus &
   PasskeysApi<TenantUser> &
