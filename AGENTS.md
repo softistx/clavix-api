@@ -96,6 +96,25 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
   mailer. Links point at the tenant issuer. Mails are English: users have no locale yet.
 - Specs: `src/modules/auth/auth.spec.ts` (flow, closed sign-up, invitation, isolation A/B).
 
+## Passkeys (`src/modules/passkeys`)
+
+Passwordless passkey sign-in and registration on `/graphql` (README, "Passkey sign-in and
+registration"). janus passkeys are the first factor (`passkeys.firstFactor: true`,
+`@softistx/janus-passkeys`), rpId and origin from `src/users/rp.ts`; janus-graphql's passkey SDL is
+not used: its resolvers bind to one janus instance and it has no first-factor sign-in, and ours is
+per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
+- `signInWithPasskey` maps every janus refusal (not `STORE_FAILED`) to one `PASSKEY_INVALID` 401.
+  Registration lets janus's errors through (`janusMasking`). Cookie as `verifySignInCode`.
+- janus's `secondFactor` block must still be configured for `firstFactor`: its sealing key is
+  derived from `CLAVIX_KEYS_MASTER_KEY` (`src/users/sealing-key.ts`); no TOTP is offered.
+- Typing gaps (janus, narrowed in `tenant-janus.ts`, never worked around further): the types hide
+  `auth.passkeys` for a user type without a password login (`TenantJanus` adds `PasskeysApi`),
+  and `createMongoStores` is typed without the `passkeys` slot. janus takes https origins only:
+  `passkeysOn(tenant)` is false over `http`, and the module answers `NOT_FOUND`.
+- Specs use the software authenticator copied from janus-passkeys' own tests
+  (`test/passkey-authenticator.ts`, `test/passkey-cbor.ts`): copy again when that one changes.
+- The anonymous `passkeySignInOptions` has no rate limit until slice #59.
+
 ## Consent
 
 `src/modules/consent/` is the API of the hosted `/consent` page, served on E1's `/graphql`
@@ -104,8 +123,7 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
-not worked around). Passkeys (slice E3) wait on janus: its passkeys are a second factor beside TOTP
-only, with no passwordless sign-in yet.
+not worked around). Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 

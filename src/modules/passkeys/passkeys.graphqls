@@ -1,0 +1,81 @@
+"""
+A passwordless sign-in with a passkey, and the passkeys of the signed-in user,
+for the hosted pages of the tenant the request's host names. The relying party
+is the tenant's own host, so a passkey registered on one tenant is unknown to
+every other. WebAuthn options and responses travel as JSON text.
+"""
+type PasskeySignInChallenge {
+  "JSON text for `navigator.credentials.get({ publicKey })`, after `PublicKeyCredential.parseRequestOptionsFromJSON`."
+  options: String!
+  "A secret that goes back with the assertion; single use. Keep it in the page's server session, never in a URL or a log."
+  challenge: String!
+  "The challenge lapses then."
+  expiresAt: DateTime!
+}
+
+type PasskeyRegistration {
+  "JSON text for `navigator.credentials.create({ publicKey })`, after `PublicKeyCredential.parseCreationOptionsFromJSON`."
+  options: String!
+  "The secret `registerPasskey` spends, once."
+  challenge: String!
+  expiresAt: DateTime!
+}
+
+"A passkey the user registered. Never carries the public key or the counter."
+type Passkey {
+  "The credential id (base64url). Pass it to `removePasskey`."
+  id: ID!
+  name: String!
+  transports: [String!]!
+  backupEligible: Boolean!
+  backedUp: Boolean!
+  createdAt: DateTime!
+  lastUsedAt: DateTime
+}
+
+extend type Query {
+  "The signed-in user's passkeys, oldest first. UNAUTHENTICATED (401) when anonymous."
+  myPasskeys: [Passkey!]!
+}
+
+extend type Mutation {
+  """
+  Makes a sign-in challenge and the options the browser needs. Anonymous, and
+  the same for any visitor: it says nothing about who may sign in.
+  """
+  passkeySignInOptions: PasskeySignInChallenge!
+  """
+  Finishes a passkey sign-in with what `navigator.credentials.get` answered
+  (`credential.toJSON()`, as a JSON string) and opens the session; the cookie is
+  set on the response. Every refusal (unknown credential, wrong tenant, wrong
+  origin or relying party, a user not verified, a spent, lapsed or unknown
+  challenge, an inactive user, a malformed response) is the same
+  PASSKEY_INVALID, 401. The challenge is spent by the first try: ask for new
+  options.
+  """
+  signInWithPasskey(challenge: String!, response: String!): SignedIn!
+  """
+  Makes a registration challenge for the signed-in user. UNAUTHENTICATED (401)
+  when anonymous; EMAIL_UNVERIFIED (403) until the e-mail is proven (signing
+  in with an e-mailed code proves it).
+  """
+  passkeyRegistrationOptions: PasskeyRegistration!
+  """
+  Finishes a registration with `navigator.credentials.create`'s answer
+  (`credential.toJSON()`, as a JSON string) and a name of 1 to 100 characters.
+  Needs a session that signed in within ten minutes (STEP_UP_REQUIRED, 403).
+  PASSKEY_INVALID (400) when the response does not verify, and the challenge is
+  spent: ask for new options. PASSKEY_TAKEN (409), PASSKEY_LIMIT (409, ten per user).
+  """
+  registerPasskey(
+    challenge: String!
+    response: String!
+    name: String!
+  ): Passkey!
+  """
+  Removes one of the user's passkeys: true when this call removed it, false for
+  one that is not theirs or not there. Needs a session that signed in within ten
+  minutes (STEP_UP_REQUIRED, 403).
+  """
+  removePasskey(id: ID!): Boolean!
+}
