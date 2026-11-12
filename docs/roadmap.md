@@ -9,10 +9,6 @@ nxgt-janus release says which.
 
 - **M0, skeleton** — the repository builds, lints, type checks and tests in CI: a `health`
   query and `GET /healthz`.
-- **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and
-  cached in Redis), a repository that cannot read another tenant's data, and the `clavix`
-  tenant seeded (1.1). Done in `feat/tenants`; moves to Shipped when that branch lands in
-  `develop`.
 
 ## Next
 
@@ -48,6 +44,13 @@ nxgt-janus release says which.
 - MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`) (4.2).
 - Audit log, viewer and export (4.3); webhooks per tenant (4.4); telemetry (4.5).
 
+**M5, authorization (after v1)**
+- Roles, permissions and relations authored per tenant in Clavix, published as signed
+  rules that each API pulls and evaluates locally, with no remote decision point
+  (5.1–5.10).
+
 ## Shipped
 
-Nothing yet.
+- **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and
+  cached in Redis, a suspension applying within 60 s at worst), a repository that cannot
+  read another tenant's data, slugs reserved for good, and the `clavix` tenant seeded (1.1).
