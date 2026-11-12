@@ -23,7 +23,10 @@ nxgt-janus release says which.
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
   (RFC 9068) and introspection (1.4). Waits on `@softistx/janus-oidc`.
 - **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
-- **Clients registered by script** — until the console exists (1.7, with the UI).
+- **Clients registered by script** — `bun run clients:create` registers or updates a public
+  (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
+  [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and
+  refresh wait on a per-client grant list in janus-oauth.
 
 **M5, access rules (ADR-0031)**
 - **Access rules (M5, ADR-0031)** — an application publishes its OpenAPI and SDL from CI

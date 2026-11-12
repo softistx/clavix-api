@@ -51,6 +51,16 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 
+## OAuth clients
+
+`src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`
+in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through the janus store of
+the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
+the idempotency key (janus has no lookup by name); a secret is minted with janus's
+`mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
+`tenantBySlug` (`src/config/tenancy.ts`). Grants are not stored: janus-oauth 0.8 has no
+per-client list (the script refuses all but code and refresh).
+
 ## Green bar
 
 `bun run verify` = `generate`, `check:ci` (Biome), `typecheck` (`bun check`), `test`; CI

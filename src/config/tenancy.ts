@@ -57,3 +57,7 @@ export const { tenantResolver, tenantsService } = createTenancy({
     port: env.CLAVIX_PUBLIC_PORT,
   },
 });
+
+/** A stored tenant by slug (suspended ones included), for the operator scripts. */
+export const tenantBySlug = (slug: string) =>
+  mongo.db.tenants.findFirst({ slug });
