@@ -66,6 +66,7 @@ They stop anyone sending codes to many addresses through the shared no-reply sen
   window), under the `clavix` prefix: `clavix:signin-ip:<tenantId>/<ip>`, `clavix:signin-tenant:<tenantId>`.
   Keys carry the tenant id, so a tenant's traffic never spends another's budget, and one address has
   one bucket per tenant. The IP is counted first: a refused address does not spend the tenant's budget.
+- **The anonymous `passkeySignInOptions` follows the same rules** with its own buckets and variables (see "Passkey sign-in and registration").
 - **They need `REDIS_URL`** (required in production). Without it (development) only janus's per-address
   limit applies. If Redis is down or slow (250 ms), the request is let through and a warning is logged;
   janus's per-address limit still holds.
