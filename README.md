@@ -260,10 +260,10 @@ before anything is parsed or run: a foreign `Origin`, `Origin: null`, or a POST 
 `Origin` host is compared with the request host (not the scheme, so it holds behind a TLS-terminating
 proxy); a request with no `Origin` (not a browser) passes, since the cookie is `__Host-`.
 
-| Refused operation                                                                | Answer                                  |
-| -------------------------------------------------------------------------------- | --------------------------------------- |
+| Refused operation                                                                                          | Answer                                  |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | consent (`oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, `connectedApps`, `revokeConnectedApp`) | HTTP 404, `extensions.code` `NOT_FOUND` |
-| any other (`signOut`, `requestSignInCode`, `verifySignInCode`, `currentUser`, ...) | HTTP 403, `extensions.code` `FORBIDDEN`  |
+| any other (`signOut`, `requestSignInCode`, `verifySignInCode`, `currentUser`, ...)                         | HTTP 403, `extensions.code` `FORBIDDEN` |
 
 A request that mixes consent and other root fields gets the 403. A refused request is neither executed nor mailed. Both answers are `{ "errors": [...] }` JSON.
 
