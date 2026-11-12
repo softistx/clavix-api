@@ -478,7 +478,7 @@ extend type Mutation {
   code and one message: it does not say whether the credential or the user exists. At
   registration, janus's own codes pass through: `PASSKEY_INVALID` (400, the response did not
   verify, the challenge is spent), `PASSKEY_TAKEN` (409), `PASSKEY_LIMIT` (409),
-  `EMAIL_UNVERIFIED` (403), `STEP_UP_REQUIRED` (403), `TOKEN_*` for a bad challenge.
+  `EMAIL_UNVERIFIED` (403, also at registration), `STEP_UP_REQUIRED` (403), `TOKEN_*` for a bad challenge.
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
 - **Over http** (development): `http://<slug>.clavix.localhost` tenants have passkeys with their real
   rpId and origin (janus 0.55+ accepts `*.localhost` origins).
