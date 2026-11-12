@@ -35,7 +35,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
-  not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config) and `signing-keys.ts` (the no-key error and the key-store wrapper). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
+  not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
   db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
@@ -68,8 +68,8 @@ accepts. User claims come in through the `ClaimsFor` port (`src/oauth/ports.ts`)
 `claims` only the issuer, which `build` maps back to its tenant (`issuer -> ResolvedTenant`),
 so the lookup is in that tenant's user pool. Introspection (`POST /introspect`, a confidential
 client of the same tenant, `client_secret_basic`) answers only for tokens of the tenant's own
-resources (`resourcesFor`), never for userinfo's. `NoSigningKeyError` is a 503 on these paths
-too. The `roles` claim is M2.
+resources (`resourcesFor`), never for userinfo's. janus-oauth's `NoSigningKeyError` is a 503 `temporarily_unavailable` on these paths
+too (janus answers it itself). The `roles` claim is M2.
 
 ## Users and sessions
 
@@ -153,7 +153,7 @@ not worked around). Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 
-`useSameOriginJson` (`src/http/same-origin.ts`, first Yoga plugin of `createApp`) guards **every**
+`useSameOriginJson` (`src/http/same-origin.ts`, first Yoga plugin of `createApp`; `sameOrigin()` of `@alxia/graphql` with this API's own refusals) guards **every**
 `/graphql` operation once: a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before
 parsing, with no CORS header: consent operations (`CONSENT_FIELDS`) get 404 `NOT_FOUND`, all others 403
 `FORBIDDEN`. Origin and request are compared by host (TLS-terminating proxy); no Origin passes (the cookie
