@@ -16,7 +16,7 @@ import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { originOf, rpIdOf } from "./rp";
 import { createTenantAuth } from "./tenant-auth";
-import { SESSION_COOKIE } from "./tenant-janus";
+import { buildTenantJanus, SESSION_COOKIE } from "./tenant-janus";
 
 const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";
@@ -314,5 +314,13 @@ describe("magic link switch", () => {
     expect(refusal).toBeInstanceOf(JanusError);
     expect((refusal as JanusError).code).toBe("MAGIC_LINK_DISABLED");
     expect(statusOf((refusal as JanusError).code)).toBe(404);
+  });
+
+  test("magicLink: true reaches janus", async () => {
+    const tenant = await tenantOf("acme");
+    expect(buildTenantJanus(oauthDb, tenant, true).magicLink.enabled).toBe(
+      true,
+    );
+    expect(buildTenantJanus(oauthDb, tenant).magicLink.enabled).toBe(false);
   });
 });

@@ -50,6 +50,12 @@ test("CLAVIX_MAGIC_LINK is off by default and reads true / 1", async () => {
   expect(
     (await load({ ...clean, CLAVIX_MAGIC_LINK: "0" })).env.CLAVIX_MAGIC_LINK,
   ).toBe(false);
+  expect(
+    (await load({ ...clean, CLAVIX_MAGIC_LINK: "1" })).env.CLAVIX_MAGIC_LINK,
+  ).toBe(true);
+  await expect(load({ ...clean, CLAVIX_MAGIC_LINK: "yes" })).rejects.toThrow(
+    "CLAVIX_MAGIC_LINK",
+  );
 });
 
 test("the values are read", async () => {
