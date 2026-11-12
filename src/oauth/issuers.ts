@@ -26,7 +26,6 @@ export interface ClavixOAuthOptions {
   clock?: Clock;
 }
 
-// What `resolve` answers: janus's key (the version as a string) and the tenant.
 /** A tenant has no `current` signing key yet (just created, rotation pending). */
 export class NoSigningKeyError extends Error {
   constructor(readonly tenantId: string) {
@@ -69,6 +68,7 @@ const unavailable = () =>
     },
   );
 
+// What `resolve` answers: janus's key (the version as a string) and the tenant.
 type Keyed = OAuthIssuerKey & { tenant: ResolvedTenant };
 
 /**
