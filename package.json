@@ -8,7 +8,7 @@
     "dev": "NODE_ENV=development bun --watch src/server.ts",
     "build": "bun run generate && bun build src/server.ts --target=bun --outdir=dist --minify --sourcemap=linked",
     "start": "NODE_ENV=production bun dist/server.js",
-    "test": "bun test --timeout=30000",
+    "test": "bun test --timeout=30000 && CLAVIX_MAGIC_LINK=true bun test --timeout=30000 src/modules/auth/magic-link.spec.ts",
     "typecheck": "bun check",
     "db:sync": "bun src/scripts/db-sync.ts",
     "db:migrate": "bun src/scripts/db-migrate.ts",

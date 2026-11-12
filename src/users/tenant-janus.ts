@@ -26,6 +26,9 @@ export const SESSION = {
 /** How long a sign-in code, and its challenge, can be confirmed (janus's default, stated). */
 export const SIGN_IN_CODE_LIFESPAN = "10m";
 
+/** How long a sign-in link can be confirmed (janus's default, stated). */
+export const MAGIC_LINK_LIFESPAN = "15m";
+
 export interface TenantJanusOptions {
   /** Host to tenant: unknown and suspended hosts resolve to `null`. */
   resolver: Pick<TenantResolver, "resolveRequest">;
@@ -45,9 +48,13 @@ function buildJanus(db: Db, tenant: ResolvedTenant, magicLink: boolean) {
     session: SESSION,
     // The e-mailed code: 10 minutes, five attempts, five requests per address
     // and 10 minutes (janus's mail throttle, on by default).
-    tokens: { signInCode: SIGN_IN_CODE_LIFESPAN },
-    // janus 0.56 defaults magic-link sign-in to on; Clavix turns it off until
-    // the owner switches it on (CLAVIX_MAGIC_LINK, feature: clavix-api#89).
+    tokens: {
+      signInCode: SIGN_IN_CODE_LIFESPAN,
+      magicLink: MAGIC_LINK_LIFESPAN,
+    },
+    // janus defaults magic-link sign-in to on; Clavix turns it off until the
+    // owner switches it on (CLAVIX_MAGIC_LINK, `requestMagicLink` and
+    // `confirmMagicLink`). Off, both answer 404 MAGIC_LINK_DISABLED.
     magicLink: { enabled: magicLink },
     // A passkey as the first factor: the relying party is the tenant's own
     // host (`rp.ts`), so a passkey is unknown to every other tenant. janus

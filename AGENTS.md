@@ -73,7 +73,7 @@ too (janus answers it itself). The `roles` claim is M2.
 
 ## Users and sessions
 
-Magic-link sign-in is a global switch, `CLAVIX_MAGIC_LINK`, off by default: janus 0.56 defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }`. The feature itself is clavix-api#89.
+Magic-link sign-in is a global switch, `CLAVIX_MAGIC_LINK`, off by default: janus 0.56 defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }`. `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`, README "Magic-link sign-in") answer 404 `MAGIC_LINK_DISABLED` while it is off, checked in the resolver before the throttle. The test script runs `magic-link.spec.ts` twice: off (default, the "off" half) and with `CLAVIX_MAGIC_LINK=true` (the "on" half), because the flag is read once at start.
 
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
@@ -118,6 +118,15 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
   `@softistx/mail-smtp` when `CLAVIX_SMTP_URL` is set (required in production), else the memory
   mailer. Links point at the tenant issuer. Mails are English: users have no locale yet.
 - Specs: `src/modules/auth/auth.spec.ts` (flow, closed sign-up, invitation, isolation A/B).
+
+## Magic-link sign-in (`src/modules/auth/magic-link.ts`)
+
+Same shape as the e-mail code (janus `magicLink.prepare` then, after the answer, `send()` and
+`mail.magicLink`; sign-up creation shared as `createIfOpen`), on the same `signInThrottle`. The link is
+`<issuer>/sign-in/link?token=` (`MAGIC_LINK_PATH`, `src/mail/tenant-mail.ts`), a hosted page that POSTs
+`confirmMagicLink`; never a sign-in on GET. Every confirm refusal is `MAGIC_LINK_INVALID` 401. No second
+factor is configured, so `confirm` always opens a session; janus 0.57 refuses enrolment while the
+e-mail is unproved (janus#693 closed there, no guard of ours).
 
 ## Passkeys (`src/modules/passkeys`)
 
