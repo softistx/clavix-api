@@ -131,8 +131,8 @@ two tenants, and a user id, a session or a token of one tenant is unknown to ano
 or suspended host has no instance.
 - **Session cookie**: `__Host-clavix-session`, host-only (no `Domain`), `Secure`, `HttpOnly`,
   `SameSite=Lax`, `Path=/`: a browser never sends one tenant's session to another host.
-- **Lifetime**: 14 days, sliding (renewed once a day). The 30-day absolute cap is not enforced
-  yet: janus has no such option.
+- **Lifetime**: 14 days, sliding (renewed once a day), and never more than 30 days after sign-in
+  (`session.absolute`): past it the session is anonymous however recently it was used.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in

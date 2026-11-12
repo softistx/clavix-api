@@ -163,6 +163,27 @@ describe("sessions", () => {
     expect(days).toBeLessThanOrEqual(14);
   });
 
+  test("a session opened 30 days and 1 minute ago is anonymous even when used a minute ago", async () => {
+    const acme = await tenantOf("acme");
+    const { user, cookie } = await signedIn("acme", "old@example.test");
+    const request = () => requestWith("acme", cookie);
+    expect((await authFor(acme).authenticate(request()))?.user.id).toBe(
+      user.id,
+    );
+    // Opened 30 days and 1 minute ago, its sliding expiry still 14 days ahead.
+    const opened = new Date(Date.now() - (30 * 86_400_000 + 60_000));
+    const ahead = new Date(Date.now() + 14 * 86_400_000);
+    const sessions = oauthDb.collection("partitionedSessions");
+    const stored = await sessions.find({}).toArray();
+    const mine = stored.filter((row) => String(row["userId"]) === user.id);
+    expect(mine).toHaveLength(1);
+    await sessions.updateOne(
+      { _id: mine[0]?.["_id"] as never },
+      { $set: { createdAt: opened, expiresAt: ahead } },
+    );
+    expect(await authFor(acme).authenticate(request())).toBeNull();
+  });
+
   test("authFor answers the user of a session of the tenant", async () => {
     const acme = await tenantOf("acme");
     const cookie = sessions["acme"]?.cookie ?? "";
