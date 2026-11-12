@@ -25,7 +25,12 @@ nxgt-janus release says which.
   `src/oauth`, janus-oidc 0.3). Built: each tenant host serves its own discovery, JWKS,
   userinfo and introspection; the user claims are a port (`ClaimsFor`) until the users
   (1.5) land. The `roles` claim moved to M2.
-- **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
+- **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5,
+  [#5](https://github.com/softistx/clavix-api/issues/5)). Slice B built: one janus instance and
+  one partitioned user pool per tenant, host-only `__Host-` session cookie (14 days sliding),
+  the passkey rpId (`rpIdOf`) and the real `authFor`/`claimsFor`, served by `server.ts`. Still
+  to come: e-mail code sign-in and the GraphQL sign-in surface (E1), passkeys and consent (E2),
+  and the 30-day absolute session cap (waits on janus).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and

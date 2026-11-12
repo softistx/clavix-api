@@ -8,9 +8,8 @@ import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 export const BODY_LIMIT = 100 * 1024;
 
 // `GET /healthz`, the liveness probe (no dependency is checked), the OAuth
-// endpoints when `oauth` is given (the issuers of src/oauth; no entry point
-// passes them yet: the signing keys 1.2 and the end-user authentication 1.5
-// are still to be wired), then POST and GET /graphql behind the base's
+// endpoints when `oauth` is given (the issuers of src/oauth, which
+// src/server.ts passes), then POST and GET /graphql behind the base's
 // middlewares. The body limit is declared before the OAuth routes, since it
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.

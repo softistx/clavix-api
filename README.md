@@ -118,7 +118,24 @@ A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, 
 `auth_time`, `nonce`, `at_hash`) signed with the tenant's current key. A request with no
 `resource` is for the tenant's userinfo. Introspection answers only for tokens of the tenant's
 own resources. A tenant with no signing key yet answers 503 `temporarily_unavailable`. The
-claims come from the users of the tenant (slice 1.5; the `ClaimsFor` port until then).
+claims come from the users of the tenant (see "Users per tenant").
+
+## Users per tenant
+
+Each tenant has its own user pool (ADR-0008): one `@softistx/janus` instance per tenant
+(`createJanusIssuers`, `src/users`), built on its first request and rebuilt when the tenant's
+`version` moves, over its partition of the janus user stores (`partitioned*` collections,
+partition = the tenant's id in hex; `bun run db:sync` creates them). The same e-mail is two users in
+two tenants, and a user id, a session or a token of one tenant is unknown to another. An unknown
+or suspended host has no instance.
+- **Session cookie**: `__Host-clavix-session`, host-only (no `Domain`), `Secure`, `HttpOnly`,
+  `SameSite=Lax`, `Path=/`: a browser never sends one tenant's session to another host.
+- **Lifetime**: 14 days, sliding (renewed once a day). The 30-day absolute cap is not enforced
+  yet: janus has no such option.
+- **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
+  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
+- `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
+  `src/server.ts`. Sign-in itself (e-mail code, passkeys, consent) comes with slices E1 and E2.
 
 ## How a host maps to a tenant
 

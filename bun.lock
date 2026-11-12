@@ -13,6 +13,7 @@
         "@nxgt/graphql-scalars": "^0.7.1",
         "@nxgt/graphql-validation": "^0.8.1",
         "@softistx/janus": "^0.52.0",
+        "@softistx/janus-mongo": "^0.23.0",
         "@softistx/janus-oauth": "^0.8.1",
         "@softistx/janus-oauth-mongo": "^0.8.1",
         "@softistx/janus-oidc": "^0.3.0",
@@ -264,6 +265,8 @@
     "@softistx/janus": ["@softistx/janus@0.52.0", "https://npm.pkg.github.com/download/@softistx/janus/0.52.0/9cc4b06ebc22793fda9f43ce9d486711f0c4470f", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-sKzUadsjr7Lr0zslOC3ZwpZPhZWUT8pVDq3Efq7XstzX0LT708cx8ghlsohUZJyqQIXgMhib0/wI53No3t3rRg=="],
 
     "@softistx/janus-graphql": ["@softistx/janus-graphql@0.23.0", "https://npm.pkg.github.com/download/@softistx/janus-graphql/0.23.0/6c0bdf1bbd26a11039a846578a5ff46c2db7158c", { "peerDependencies": { "@envelop/core": "^5.0.0", "@graphql-tools/utils": ">=10.0.0 <13", "@softistx/janus": "^0.52.0", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-KgdRwKmKMm4q6sZNK3gCG/M5k9O/6mTDCtfh8BGpRTIdOKtp8TtnwoDepC8WjEUhUuZbhmLfv97p22GgM3JFrA=="],
+
+    "@softistx/janus-mongo": ["@softistx/janus-mongo@0.23.0", "https://npm.pkg.github.com/download/@softistx/janus-mongo/0.23.0/ccbcc133304c2e902f497301db78744327c83b6c", { "peerDependencies": { "@softistx/janus": "^0.52.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-2w1ISTIChwZEFHVLczHXbfCYzl9OZdveeCBcQLoOPzX7Q4EQxFPG/B5v0sK0uvoC6MzQ+d5ZcBFBPZr9fSxqhA=="],
 
     "@softistx/janus-oauth": ["@softistx/janus-oauth@0.8.1", "https://npm.pkg.github.com/download/@softistx/janus-oauth/0.8.1/3aad2b40efe07e1a49ae0f2d62edff068cde6a31", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.52.0", "@softistx/janus-graphql": "^0.23.0", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-Gw4oBhEeshtC0vJh94wQmQf8ZCRgexd00iaSO9uLXQzXvdGFJBEAcX5ORB+PR6JD0IbTvGuIp4FdH2ahDl43VA=="],
 
