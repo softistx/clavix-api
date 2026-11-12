@@ -72,8 +72,29 @@ partitioned: never use them for tenant users.
   the tenant's host and the origin `https://<slug>.<CLAVIX_DOMAIN>`, in one place, `rpIdOf` /
   `originOf` (`src/users/rp.ts`). A custom domain later goes through WebAuthn Related Origins. A
   passkey is scoped to its rpId for good.
-- The per-tenant `signUp` flag (sign-up closed on `clavix`, invitation only) is not in the tenant
-  model yet: slice E1 adds it with the sign-in surface.
+- **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
+  closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
+  Invitations: `createMongoInvitations(db, { partition })`; accepting one has no GraphQL surface
+  until the M2 console.
+
+## E-mail code sign-in (`src/modules/auth`, `src/mail`)
+
+The hosted pages' GraphQL (`auth.graphqls`: `requestSignInCode`, `verifySignInCode`, `signOut`,
+`currentUser`) sits on `useJanus({ auth })`, the auth being `janusIssuers.forRequest(ctx.request)`
+per request (unknown host: `NOT_FOUND`). janus-graphql ships no sign-in-code SDL and no session
+cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.prepare`/`confirm`,
+`cookie.serialize`/`clear`) and `ctx.set.headers`.
+- **No enumeration**: `prepare` mints the challenge before any lookup; user creation, `send()` and the
+  mail run after the answer (`outbox.ts`, `afterAnswer`); a closed tenant creates and mails nothing
+  for an unknown address; every verify refusal is the same `CODE_INVALID` 401. An open tenant creates
+  an unverified user per request (accepted trade-off).
+- The challenge travels in the response body (`cache-control: no-store`), not a cookie: the hosted
+  pages are a BFF. Code: 6 digits, 10 min, 5 attempts; 5 mails per address per 10 min
+  (`MAIL_THROTTLED`, 429), both janus's.
+- **Mail**: one platform sender `no-reply@<CLAVIX_DOMAIN>` (display name = tenant name) over
+  `@softistx/mail-smtp` when `CLAVIX_SMTP_URL` is set (required in production), else the memory
+  mailer. Links point at the tenant issuer. Mails are English: users have no locale yet.
+- Specs: `src/modules/auth/auth.spec.ts` (flow, closed sign-up, invitation, isolation A/B).
 
 ## Signing keys
 

@@ -15,7 +15,11 @@ export const clavixTenant = defineMigration({
     const collection = getCollection(db, tenants).withSession(session);
     if (await collection.exists({ slug: PLATFORM_TENANT_SLUG })) return;
     // The runner's lock keeps a concurrent run out; the unique index backs it.
-    await collection.create({ slug: PLATFORM_TENANT_SLUG, name: "Clavix" });
+    await collection.create({
+      slug: PLATFORM_TENANT_SLUG,
+      name: "Clavix",
+      signUp: false, // invitation only
+    });
   },
   async down({ db, session }) {
     await db

@@ -39,6 +39,10 @@ const masterKey = z
     "not 32 bytes in base64",
   );
 
+const smtpUrl = z
+  .string()
+  .regex(/^smtps?:\/\/[^/]/, "not an smtp:// or smtps:// URL");
+
 // Development and tests only: public, so it protects nothing. Production
 // refuses to start without its own CLAVIX_KEYS_MASTER_KEY.
 export const DEV_KEYS_MASTER_KEY = Buffer.from(
@@ -62,6 +66,10 @@ export const env = defineEnv({
   // a public development default elsewhere. Losing it makes the stored keys
   // unreadable: keep it in a secret manager, apart from the database.
   CLAVIX_KEYS_MASTER_KEY: inProduction(masterKey, DEV_KEYS_MASTER_KEY),
+  // The SMTP server of the platform sender, `no-reply@<CLAVIX_DOMAIN>`
+  // (`smtps://user:pass@smtp.example:465`). Required in production; unset
+  // elsewhere, the e-mails stay in a memory mailer (src/config/mail.ts).
+  CLAVIX_SMTP_URL: optionalOutsideProduction(smtpUrl),
   // The scheme of the issuers built from it; http is refused in production.
   CLAVIX_PUBLIC_SCHEME: z
     .enum(production ? ["https"] : ["https", "http"])

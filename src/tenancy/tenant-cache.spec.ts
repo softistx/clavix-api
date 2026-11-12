@@ -24,6 +24,8 @@ beforeEach(() => server.reset());
 const tenant = {
   tenantId: "65f0000000000000000000aa",
   slug: "acme",
+  name: "Acme",
+  signUp: false,
   issuer: "https://acme.clavix.test",
   partition: "65f0000000000000000000aa",
   version: 1,
