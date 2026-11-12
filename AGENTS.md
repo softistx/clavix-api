@@ -29,6 +29,12 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
   `src/config/` reads the environment once (`defineEnv`); generated code is in
   `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
+- `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
+  mounted on the app by `mountOAuth`. Signing keys, end-user authentication and resources
+  come in as ports (`SigningKeysFor`, `AuthFor`, `ResourcesFor`). The janus adapters
+  partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
+  not the scoped collections. Lifetimes (`src/oauth/lifetimes.ts`): access token 15 min,
+  refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
