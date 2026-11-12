@@ -27,6 +27,10 @@ export function createConsoleAuthenticator({
     const server = await serverOfClavix();
     if (server === null)
       throw new Error("the clavix tenant has no OAuth server");
-    return server.authenticate(request, { resource: audience });
+    const principal = await server.authenticate(request, {
+      resource: audience,
+    });
+    // The `console` scope is the gate: an `openid`-only token is not a console one.
+    return principal?.scopes.includes("console") === true ? principal : null;
   };
 }

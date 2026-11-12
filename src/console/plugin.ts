@@ -48,7 +48,8 @@ export function useConsole({ authenticate, access, directory }: ConsoleDeps) {
       request: Request;
       endResponse: (response: Response) => void;
     }) {
-      // CORS preflights carry no credential; the console is called server to server.
+      // Called server to server: no CORS, so a preflight (no credential) is refused too.
+      // Outside `useSameOriginJson` on purpose: a bearer header is no ambient credential.
       let principal: OAuthPrincipal | null;
       try {
         principal = await authenticate(request);
@@ -58,7 +59,11 @@ export function useConsole({ authenticate, access, directory }: ConsoleDeps) {
         return;
       }
       if (principal === null) {
-        const presented = request.headers.get("authorization") !== null;
+        const presented =
+          request.headers
+            .get("authorization")
+            ?.toLowerCase()
+            .startsWith("bearer ") === true;
         endResponse(
           refusal(401, "UNAUTHENTICATED", "A valid console token is required", {
             "www-authenticate": presented

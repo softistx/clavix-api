@@ -25,6 +25,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { tenants } from "@/modules/tenants/tenants.model";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createConsoleAuthenticator } from "./auth";
+import { onPlatform, onTenant } from "./guard";
 import { CONSOLE_PATH, consoleAudience } from "./identity";
 import { createConsoleSchema } from "./schema";
 
@@ -416,5 +417,115 @@ describe("operators:grant", () => {
       grantOperator(deps, { email: "nobody@console.test", role: "owner" }),
     ).rejects.toThrow();
     expect(() => parseOperatorArgs([])).toThrow();
+  });
+});
+
+describe("the guards over HTTP", () => {
+  const schema = createConsoleSchema({
+    typeDefs: `extend type Query {
+      tenantEdit(id: ID!): String!
+      platformView: String!
+    }`,
+    resolvers: {
+      Query: { tenantEdit: () => "ok", platformView: () => "ok" },
+    },
+    guards: {
+      "Query.tenantEdit": onTenant("edit", (args) => String(args["id"])),
+      "Query.platformView": onPlatform("view"),
+    },
+  });
+  const as = (userId: string, query: string, scopes = ["console"]) =>
+    createApp({
+      oauth: issuers,
+      console: {
+        ...deps,
+        schema,
+        authenticate: async () => ({
+          userId,
+          clientId: "c",
+          grantId: "g",
+          scopes,
+        }),
+      },
+    })
+      .request(`http://localhost${CONSOLE_PATH}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer x",
+        },
+        body: JSON.stringify({ query }),
+      })
+      .then((r) => r.json() as Promise<GqlResult>);
+  const code = (r: GqlResult) => r.errors?.[0]?.extensions?.code;
+
+  test("a tenant admin edits their tenant, not another", async () => {
+    const carol =
+      (
+        await (
+          await janusIssuers.forRequest(
+            new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
+          )
+        )?.create({ email: "carol@console.test" })
+      )?.id ?? "";
+    await access.grantTenant(tenantA, carol, "admin");
+    expect((await as(carol, `{ tenantEdit(id: "${tenantA}") }`)).data).toEqual({
+      tenantEdit: "ok",
+    });
+    expect(code(await as(carol, `{ tenantEdit(id: "${tenantB}") }`))).toBe(
+      "FORBIDDEN",
+    );
+    expect(code(await as(carol, "{ platformView }"))).toBe("FORBIDDEN");
+  });
+
+  test("a viewer cannot edit", async () => {
+    const dan =
+      (
+        await (
+          await janusIssuers.forRequest(
+            new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
+          )
+        )?.create({ email: "dan@console.test" })
+      )?.id ?? "";
+    await access.grantTenant(tenantA, dan, "viewer");
+    expect(code(await as(dan, `{ tenantEdit(id: "${tenantA}") }`))).toBe(
+      "FORBIDDEN",
+    );
+  });
+
+  test("a platform viewer sees the platform field", async () => {
+    expect((await as(bob, "{ platformView }")).data).toEqual({
+      platformView: "ok",
+    });
+  });
+});
+
+describe("authentication failures", () => {
+  const withAuth = (authenticate: () => Promise<never>) =>
+    createApp({ oauth: issuers, console: { ...deps, authenticate } }).request(
+      `http://localhost${CONSOLE_PATH}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer x",
+        },
+        body: JSON.stringify({ query: ME }),
+      },
+    );
+
+  test("a store outage is a 503, not a 401", async () => {
+    expect(
+      (
+        await withAuth(async () => {
+          throw new Error("down");
+        })
+      ).status,
+    ).toBe(503);
+  });
+
+  test("a token without the console scope is a 401", async () => {
+    const token = await tokenFor(ada, AUDIENCE, "openid");
+    expect((await call(ME, token)).status).toBe(401);
   });
 });

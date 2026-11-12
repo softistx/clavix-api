@@ -49,8 +49,9 @@ export const { tenantResolver, tenantsService } = createTenancy({
   tenants: mongo.db.tenants,
   // The first signing key, and the platform link (the console's permissions).
   onCreated: async (tenantId) => {
-    await ensureSigningKeyOf(tenantId);
+    // The link first: cheap and idempotent, so a failing key never leaves a tenant unseen by operators.
     await linkTenantToPlatform(tenantId);
+    await ensureSigningKeyOf(tenantId);
   },
   cache:
     redis === undefined
