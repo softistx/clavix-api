@@ -32,8 +32,8 @@ nxgt-janus release says which.
   `verifySignInCode`, `signOut`, `currentUser`), a platform sender over SMTP, per-tenant `signUp`
   (closed on `clavix`, invitation only, no account enumeration). Slice E2a built: the consent API
   on `/graphql` (`src/modules/consent`). Still to come: passkeys (E3, wait on janus passwordless
-  passkey sign-in: its passkeys are a second factor beside TOTP only), and the 30-day absolute
-  session cap (waits on janus).
+  passkey sign-in: its passkeys are a second factor beside TOTP only). The 30-day absolute
+  session cap is built (janus 0.53).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and

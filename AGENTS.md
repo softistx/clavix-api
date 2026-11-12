@@ -66,8 +66,8 @@ tokens are the tenant's partition (`syncMongoStoresPartitioned` and `syncMongoIn
 (`src/config/users.ts`, wired in `src/server.ts`): both go through the tenant's own instance, so a
 user id or session of another tenant is unknown or anonymous. Relations, API keys and janus-kit are not
 partitioned: never use them for tenant users.
-- **Cookie**: `__Host-clavix-session`, no `Domain`, Secure, SameSite=Lax. Session 14 days sliding;
-  the 30-day absolute cap is a janus gap (no option in 0.52), not worked around.
+- **Cookie**: `__Host-clavix-session`, no `Domain`, Secure, SameSite=Lax. Session 14 days sliding,
+  capped at 30 days after sign-in (`session.absolute`, janus 0.53).
 - **Assumed, not answered (2026-11-12), confirm before first production passkey**: the passkey rpId is
   the tenant's host and the origin `https://<slug>.<CLAVIX_DOMAIN>`, in one place, `rpIdOf` /
   `originOf` (`src/users/rp.ts`). A custom domain later goes through WebAuthn Related Origins. A
