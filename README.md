@@ -135,7 +135,8 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Sign-in itself (e-mail code, passkeys, consent) comes with slices E1 and E2.
+  `src/server.ts`. Sign-in itself (e-mail code, passkeys, consent) comes with slices E1 and E2, and no `/authorize`
+  succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
 
 ## How a host maps to a tenant
 
