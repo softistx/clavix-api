@@ -7,7 +7,6 @@ import type { TenantResolver } from "@/tenancy/resolver";
 import { buildIssuer, userinfoOf } from "./building";
 import type { AuthFor, ClaimsFor, ResourcesFor, SigningKeysFor } from "./ports";
 import { type Keyed, resolveIssuer } from "./resolution";
-import { NoSigningKeyError, unavailable } from "./signing-keys";
 
 export interface ClavixOAuthOptions {
   /** Host to tenant: unknown and suspended hosts resolve to `null`, a 404. */
@@ -32,15 +31,13 @@ export interface ClavixOAuthOptions {
 }
 
 export { userinfoOf } from "./building";
-export { NoSigningKeyError } from "./signing-keys";
 
 /**
  * One OAuth authorization server per tenant (ADR-0003): the issuer is the
  * tenant's, its store is the tenant's partition of the janus collections
  * (ADR-0006) and its signing keys are the tenant's. A server is rebuilt when
  * the tenant's `version` changes, i.e. after any tenant write. Resolution is
- * `resolution.ts`, the server config `building.ts`, the key store wrapper
- * `signing-keys.ts`.
+ * `resolution.ts`, the server config `building.ts`.
  */
 export function createClavixOAuthIssuers(
   options: ClavixOAuthOptions,
@@ -81,18 +78,7 @@ export function createClavixOAuthIssuers(
   const openid = oidc.issuers(issuers, { resource: userinfoOf });
   return {
     ...issuers,
-    handle: async (request) => {
-      try {
-        return (
-          (await openid.handle(request)) ?? (await issuers.handle(request))
-        );
-      } catch (error) {
-        if (error instanceof NoSigningKeyError) {
-          console.warn(`oauth: ${error.message}`);
-          return unavailable();
-        }
-        throw error;
-      }
-    },
+    handle: async (request) =>
+      (await openid.handle(request)) ?? (await issuers.handle(request)),
   };
 }

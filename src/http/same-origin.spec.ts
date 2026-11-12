@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "@/app";
-import { sameOriginJson } from "./same-origin";
 
 const app = createApp();
 const URL_ = "http://acme.clavix.test/graphql";
@@ -117,18 +116,5 @@ describe("the same-origin guard on /graphql", () => {
       const response = await post(headers, { query: "{ health { status } }" });
       expect(response.status).toBe(200);
     }
-  });
-
-  test("the hosts are compared, not the schemes (a TLS-terminating proxy)", () => {
-    const request = new Request("http://acme.clavix.test/graphql", {
-      method: "POST",
-      headers: { ...json, origin: "https://acme.clavix.test" },
-    });
-    expect(sameOriginJson(request)).toBe(true);
-    const sibling = new Request("http://acme.clavix.test/graphql", {
-      method: "POST",
-      headers: { ...json, origin: "https://globex.clavix.test" },
-    });
-    expect(sameOriginJson(sibling)).toBe(false);
   });
 });

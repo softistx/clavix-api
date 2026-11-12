@@ -27,14 +27,8 @@ async function authOf(ctx: Context) {
 }
 
 const janusPasskeys = passkeyResolvers({ auth: authOf, firstFactor: true });
-// Temporary, until @softistx/janus-graphql#682
-// `firstFactor: true` adds both fields; the types keep them optional.
-const present = <T>(field: T | undefined): T => {
-  if (field === undefined) throw new TypeError("janus has no passkey sign-in");
-  return field;
-};
-const signInOptions = present(janusPasskeys.Query.passkeySignInOptions);
-const passkeySignIn = present(janusPasskeys.Mutation.passkeySignIn);
+const signInOptions = janusPasskeys.Query.passkeySignInOptions;
+const passkeySignIn = janusPasskeys.Mutation.passkeySignIn;
 
 export const passkeys: Resolvers = {
   Query: {

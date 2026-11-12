@@ -1,28 +1,5 @@
+import { sameOrigin } from "@alxia/graphql";
 import { parse } from "graphql";
-
-// Temporary, until @alxia/graphql#719
-// The cookie is the credential and a sibling tenant host is same-site (SameSite=Lax does not stop
-// it), so every /graphql request must come from the tenant's own origin and, for a POST, as JSON
-// (not a CORS "simple" form post). `Origin: null` (a sandboxed frame) and other junk have no host:
-// they never match.
-const hostOf = (value: string): string | null => {
-  try {
-    return new URL(value).host;
-  } catch {
-    return null;
-  }
-};
-
-export function sameOriginJson(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  // Hosts, not origins: behind a TLS-terminating proxy `request.url` may say http while the
-  // browser's Origin says https. A request with no Origin (not a browser) passes; the cookie is `__Host-`.
-  if (origin !== null && hostOf(origin) !== hostOf(request.url)) return false;
-  return (
-    request.method !== "POST" ||
-    (request.headers.get("content-type") ?? "").startsWith("application/json")
-  );
-}
 
 /** The root fields of the consent API: a refused request that asks only for these sees `NOT_FOUND`, as if no such request existed. */
 export const CONSENT_FIELDS: ReadonlySet<string> = new Set([
@@ -65,11 +42,13 @@ async function asksOnlyForConsent(request: Request): Promise<boolean> {
   }
 }
 
-const refusal = (status: number, code: string, message: string) =>
+const notFound = () =>
   new Response(
-    JSON.stringify({ errors: [{ message, extensions: { code } }] }),
+    JSON.stringify({
+      errors: [{ message: "Not found", extensions: { code: "NOT_FOUND" } }],
+    }),
     {
-      status,
+      status: 404,
       // No CORS header: a foreign page cannot read the answer either.
       headers: {
         "content-type": "application/json",
@@ -78,25 +57,33 @@ const refusal = (status: number, code: string, message: string) =>
     },
   );
 
+const forbidden = () =>
+  new Response(
+    JSON.stringify({
+      errors: [
+        {
+          message: "Cross-origin requests are not allowed",
+          extensions: { code: "FORBIDDEN" },
+        },
+      ],
+    }),
+    {
+      status: 403,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+    },
+  );
+
 /**
- * A Yoga plugin, applied once to every /graphql operation: a foreign `Origin`, `Origin: null`
- * or a non-JSON POST is answered before anything is parsed or run. A consent operation sees
- * `NOT_FOUND` (404, as no such request); every other operation sees `FORBIDDEN` (403). Neither
- * answer carries a CORS header.
+ * `sameOrigin()` of @alxia/graphql, applied once to every /graphql operation (the cookie is the
+ * credential): a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before anything
+ * is parsed or run. A consent operation sees `NOT_FOUND` (404, as no such request); every other
+ * operation sees `FORBIDDEN` (403). Neither answer carries a CORS header.
  */
-export const useSameOriginJson = () => ({
-  async onRequest({
-    request,
-    endResponse,
-  }: {
-    request: Request;
-    endResponse: (response: Response) => void;
-  }) {
-    if (sameOriginJson(request)) return;
-    endResponse(
-      (await asksOnlyForConsent(request))
-        ? refusal(404, "NOT_FOUND", "Not found")
-        : refusal(403, "FORBIDDEN", "Cross-origin requests are not allowed"),
-    );
-  },
-});
+export const useSameOriginJson = () =>
+  sameOrigin({
+    refuse: async (request) =>
+      (await asksOnlyForConsent(request)) ? notFound() : forbidden(),
+  });

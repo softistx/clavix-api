@@ -456,7 +456,7 @@ extend type Mutation {
 ## Same origin on /graphql
 
 The cookie is the credential and a sibling tenant host is same-site (`SameSite=Lax` does not stop it),
-so one Yoga plugin (`useSameOriginJson`, `src/http/same-origin.ts`) guards every `/graphql` request
+so one Yoga plugin (`useSameOriginJson`, `src/http/same-origin.ts`: `sameOrigin()` of `@alxia/graphql` with a 404 for consent operations) guards every `/graphql` request
 before anything is parsed or run: a foreign `Origin`, `Origin: null`, or a POST other than
 `application/json` (a CORS "simple" form post) is refused, and the answer carries no CORS header. The
 `Origin` host is compared with the request host (not the scheme, so it holds behind a TLS-terminating

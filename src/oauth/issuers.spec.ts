@@ -392,7 +392,6 @@ describe("a tenant without a signing key yet", () => {
     const code = await codeFor("nokey", client.id);
     const failed = await exchange("nokey", client.id, code);
     expect(failed.status).toBe(503);
-    expect(failed.headers.get("retry-after")).toBe("30");
     expect(await failed.json()).toMatchObject({
       error: "temporarily_unavailable",
     });

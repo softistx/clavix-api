@@ -263,7 +263,6 @@ describe("id_token", () => {
     await setUp("nokey", false);
     const failed = await login("nokey", "openid");
     expect(failed.status).toBe(503);
-    expect(failed.headers.get("retry-after")).toBe("30");
     // Discovery needs no key: it announces ES256 until the first one.
     expect(
       (await get("nokey", "/.well-known/openid-configuration")).status,

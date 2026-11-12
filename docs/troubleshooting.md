@@ -8,8 +8,8 @@ Find the message you see, then read when it appears, why, and the fix.
 
 ## `temporarily_unavailable`: the issuer has no signing key yet, retry shortly
 
-**When:** an OAuth endpoint answers `503` with `Retry-After: 30` and the body
-`{"error":"temporarily_unavailable","error_description":"the issuer has no signing key yet, retry shortly"}`.
+**When:** an OAuth endpoint answers `503` with the body
+`{"error":"temporarily_unavailable", ...}` (janus-oauth's `NoSigningKeyError`; the response carries no `Retry-After`).
 It happens right after a tenant is created, or when a tenant has no current key.
 
 **Why:** a tenant signs with its own keys. The first key is created when the tenant is created; if that

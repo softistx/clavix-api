@@ -6,7 +6,6 @@ import type { Db } from "mongodb";
 import { lifetimes } from "./lifetimes";
 import type { AuthFor, SigningKeysFor } from "./ports";
 import type { Keyed } from "./resolution";
-import { requiringCurrentKey } from "./signing-keys";
 
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
 export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
@@ -30,10 +29,7 @@ export interface BuildDeps {
 export const buildIssuer =
   ({ db, signingKeysFor, authFor, oidc, clock }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
-    const keys: SigningKeyStore = requiringCurrentKey(
-      signingKeysFor(tenant.tenantId),
-      tenant.tenantId,
-    );
+    const keys: SigningKeyStore = signingKeysFor(tenant.tenantId);
     const userinfo = userinfoOf(tenant.issuer);
     return {
       auth: authFor(tenant),
