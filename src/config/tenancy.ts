@@ -61,3 +61,6 @@ export const { tenantResolver, tenantsService } = createTenancy({
 /** A stored tenant by slug (suspended ones included), for the operator scripts. */
 export const tenantBySlug = (slug: string) =>
   mongo.db.tenants.findFirst({ slug });
+
+/** The tenants collection, for the operator scripts (this module is the wiring allowed to reach it). */
+export const tenantsCollection = mongo.db.tenants;

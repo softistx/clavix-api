@@ -27,6 +27,7 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `typecheck`               | `bun check`                                                              |
 | `lint`, `fix`, `check:ci` | Biome                                                                    |
 | `db:sync`, `db:migrate`   | collections and indexes; pending migrations (deployment steps)           |
+| `tenants:create`          | create a tenant (see "Tenants")                                          |
 | `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
 
@@ -102,6 +103,30 @@ Clavix adds no `jose`.
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
   them. Changing the master key is the same; there is no re-encryption in place.
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
+
+## Tenants
+
+Until the console exists (M2), a tenant is created by script, through the same `TenantsService` the
+platform uses (slug rules, reserved slugs, the tenant's first signing key). The script prints the
+tenant as JSON, with its issuer, `https://<slug>.<CLAVIX_DOMAIN>`.
+
+```sh
+bun run tenants:create --slug acme --name "Acme"
+bun run tenants:create --slug acme --name "Acme" --sign-up   # open sign-up for unknown e-mails
+```
+
+| Flag        | Meaning                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| `--slug`    | required; 2 to 63 characters, lowercase letters, digits and inner hyphens; never changes |
+| `--name`    | required; the display name                                                               |
+| `--sign-up` | open sign-up; default is closed (invitation only)                                        |
+- **Idempotent**: re-running with the same values creates nothing (`created: false`). An existing
+  slug with another name, or a `--sign-up` that differs from its setting, is refused, not edited.
+  Bad input exits 1 with the usage; `--help` prints it.
+- **Refused**: an invalid or reserved slug (`console`, `www`, `api`, ...) and the slug of a deleted
+  tenant, which stays reserved for good.
+- The first signing key is made at creation; if that fails (logged), the hourly rotation job makes it.
+- Then register its clients with `clients:create`.
 
 ## OAuth clients
 

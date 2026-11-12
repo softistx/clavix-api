@@ -39,6 +39,9 @@ nxgt-janus release says which.
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and
   refresh wait on a per-client grant list in janus-oauth.
+- **Tenants created by script** — `bun run tenants:create` creates a tenant (slug rules, reserved
+  and deleted slugs refused, first signing key) idempotently and prints its issuer, until the
+  console (M2) ([#74](https://github.com/softistx/clavix-api/issues/74)). Built.
 - **Migration guide** — how an application moves from embedded janus to Clavix as an OIDC
   relying party: client registration, the code + PKCE flow, token verification with
   `@alxia/clavix`, user mapping, sessions and sign-out, and the gaps (1.8,
