@@ -9,12 +9,14 @@ nxgt-janus release says which.
 
 - **M0, skeleton** — the repository builds, lints, type checks and tests in CI: a `health`
   query and `GET /healthz`.
+- **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and
+  cached in Redis), a repository that cannot read another tenant's data, and the `clavix`
+  tenant seeded (1.1). Done in `feat/tenants`; moves to Shipped when that branch lands in
+  `develop`.
 
 ## Next
 
 **M1, dogfooding: our applications sign in through Clavix**
-- **Tenants** — a tenant model, the tenant a host belongs to, a repository that cannot
-  read another tenant's data, and the `clavix` tenant seeded (1.1).
 - **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
   a schedule, published as a JWKS per issuer (1.2). Waits on janus: JWT access tokens and
   signing keys.
@@ -30,7 +32,7 @@ nxgt-janus release says which.
 
 **M2, console**
 - Platform: tenants, plans and quotas, usage counters (2.2).
-- Tenant: clients, resources, scopes, users and admin roles (2.3).
+- Tenant: clients, resources, scopes, end-user roles and memberships (2.3).
 - Branding: a theme per tenant, with a live preview and an AA contrast check (2.4).
 - Custom domains: DNS TXT verification and automatic TLS (2.5).
 - Sign-in methods and social providers per tenant (2.6).

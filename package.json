@@ -44,6 +44,7 @@
     "@nxgt/graphql-codegen-zod": "^0.4.0",
     "@types/bun": "^1.4.4",
     "mongodb-memory-server-core": "^11.3.0",
+    "redis-memory-server": "^0.17.1",
     "typescript": "^7.0.2"
   }
 }
