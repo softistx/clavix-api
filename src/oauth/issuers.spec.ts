@@ -61,6 +61,7 @@ const issuers = createClavixOAuthIssuers({
   db: oauthDb,
   signingKeysFor,
   authFor,
+  claimsFor: () => async () => ({}),
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read", "write"] } }),
 });
 

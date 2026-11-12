@@ -55,6 +55,7 @@ const issuers = createClavixOAuthIssuers({
     authenticate: async () => null,
     findUser: async () => null,
   }),
+  claimsFor: () => async () => ({}),
   resourcesFor: () => ({ "https://api.clavix.test/mcp": { scopes: ["read"] } }),
 });
 

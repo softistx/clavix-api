@@ -30,11 +30,11 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `src/config/` reads the environment once (`defineEnv`); generated code is in
   `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
-  mounted on the app by `mountOAuth`. Signing keys, end-user authentication and resources
-  come in as ports (`SigningKeysFor`, `AuthFor`, `ResourcesFor`). The janus adapters
+  mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
+  come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it; no entry point passes it yet
-  (it waits on the end-user authentication 1.5: `createIssuers(authFor)` in `src/config/oauth.ts` is the real wiring, keys included; a tenant with no key yet gets a 503 `temporarily_unavailable`), and without `resourcesFor`
+  (it waits on the end-user authentication 1.5: `createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys included; a tenant with no key yet gets a 503 `temporarily_unavailable`), and without `resourcesFor`
   no `/authorize` succeeds. `/consent` is the hosted page of a later UI slice. `bun run
   db:sync` also syncs the OAuth collections (output `{ app, oauth }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
@@ -42,6 +42,20 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
+
+## OpenID Connect
+
+`src/oauth/issuers.ts` also builds each issuer's `@softistx/janus-oidc` provider (one hook per
+issuer, `tokenResponse({ issuer, keys })`, the same key store as the access tokens) and
+serves discovery and userinfo before the janus routes. The userinfo URL (`userinfoOf(issuer)`,
+`<issuer>/userinfo`) is a resource of every issuer offering `openid`, `profile` and `email`,
+and the issuer's `defaultResource`, so a client that sends no `resource` gets a token userinfo
+accepts. User claims come in through the `ClaimsFor` port (`src/oauth/ports.ts`): janus gives
+`claims` only the issuer, which `build` maps back to its tenant (`issuer -> ResolvedTenant`),
+so the lookup is in that tenant's user pool. Introspection (`POST /introspect`, a confidential
+client of the same tenant, `client_secret_basic`) answers only for tokens of the tenant's own
+resources (`resourcesFor`), never for userinfo's. `NoSigningKeyError` is a 503 on these paths
+too. The `roles` claim is M2.
 
 ## Signing keys
 
