@@ -80,4 +80,19 @@ export const env = defineEnv({
     .transform((value) => (value === "" ? undefined : Number(value)))
     .pipe(z.int().min(1).max(65535).optional())
     .optional(),
+  // Sign-in code requests (`requestSignInCode`), on top of janus's 5 per address
+  // per 10 min. Per client address and tenant, and per tenant. They need
+  // Redis (REDIS_URL): without it there is no such limit.
+  CLAVIX_CODE_IP_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_CODE_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_CODE_TENANT_LIMIT: z.coerce.number().int().min(1).default(200),
+  CLAVIX_CODE_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // How many reverse proxies stand in front of the app. 0 (default): the
+  // client address is the connection's. N: it is the entry N places from the
+  // right of X-Forwarded-For, which the proxies append to.
+  CLAVIX_TRUSTED_PROXIES: z.coerce.number().int().min(0).default(0),
 });

@@ -1,8 +1,14 @@
 import { graphql } from "@alxia/graphql";
+import { signInThrottle } from "./config/throttle";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
-import { janusMasking, janusPlugin } from "./modules/auth/plugin";
+import {
+  janusMasking,
+  janusPlugin,
+  throttleContext,
+} from "./modules/auth/plugin";
+import type { SignInThrottle } from "./modules/auth/throttle";
 import { oauthContext } from "./modules/consent";
 import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
@@ -16,7 +22,14 @@ export const BODY_LIMIT = 100 * 1024;
 // middlewares. The body limit is declared before the OAuth routes, since it
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.
-export function createApp(options: { oauth?: OAuthHandle } = {}) {
+export function createApp(
+  options: {
+    oauth?: OAuthHandle;
+    // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
+    // default (none without REDIS_URL).
+    signInThrottle?: SignInThrottle | undefined;
+  } = {},
+) {
   const base = createBase()
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     .bodyLimit(BODY_LIMIT);
@@ -29,6 +42,9 @@ export function createApp(options: { oauth?: OAuthHandle } = {}) {
       plugins: [
         useSameOriginJson(),
         janusPlugin(),
+        throttleContext(
+          "signInThrottle" in options ? options.signInThrottle : signInThrottle,
+        ),
         ...(options.oauth?.serverFor === undefined
           ? []
           : [oauthContext({ serverFor: options.oauth.serverFor })]),

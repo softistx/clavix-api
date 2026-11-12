@@ -11,6 +11,8 @@ Bun.env["MONGO_URI"] = replSet.getUri("clavix-test");
 // Specs never cache through a Redis of the developer's .env: they inject their
 // own (the Redis specs start theirs).
 delete Bun.env["REDIS_URL"];
+// One proxy in front, as in production: specs pick the client address with X-Forwarded-For.
+Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
 
 // Every collection and its indexes, before any spec (autoSync would create one
 // on first use, which a transaction cannot do), then the migrations.
