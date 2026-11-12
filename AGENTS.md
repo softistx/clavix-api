@@ -127,9 +127,9 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
   its names, arguments and errors, so the janus refusals (`CREDENTIALS_INVALID`, `TOKEN_*`, a non-JSON
   response) are answered as one `PASSKEY_INVALID` 401 (`asPasskeyInvalid`; `STORE_FAILED` stays 503).
   Registration lets janus's errors through (`janusMasking`). Cookie as `verifySignInCode`.
-- No `secondFactor` is configured (no TOTP is offered). janus takes https origins (and
-  `http://localhost`) only: `passkeysOn(tenant)` is false over `http`, the module answers `NOT_FOUND`,
-  and the tenant's janus carries a placeholder `localhost` relying party it never uses.
+- No `secondFactor` is configured (no TOTP is offered). janus (0.55+) accepts
+  `http://<name>.localhost` origins, so a development tenant on http (`<slug>.clavix.localhost`) gets its
+  real rpId and origin like any other: no http special case.
 - Specs use `softwareAuthenticator` from `@softistx/janus-passkeys/testing`.
 - The anonymous `passkeySignInOptions` has its own limits (`src/modules/passkeys/throttle.ts`, README
   "Passkey sign-in and registration"): per IP and tenant (60 / 10 min) and per tenant (600 / hour),
