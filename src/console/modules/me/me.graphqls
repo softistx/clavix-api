@@ -1,0 +1,42 @@
+"""
+A role in the console. On a tenant: what the caller holds there directly. On
+the platform: the caller's operator role.
+"""
+enum Role {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+"A tenant of the platform, as the console names it."
+type Tenant {
+  id: ID!
+  slug: String!
+  name: String!
+}
+
+"A signed-in console user: a user of the `clavix` tenant."
+type ConsoleUser {
+  id: ID!
+  email: EmailAddress!
+  name: String
+}
+
+"A role the caller holds directly on a tenant."
+type Membership {
+  tenant: Tenant!
+  role: Role!
+}
+
+"The caller: who the bearer token belongs to, and where they have a role."
+type Me {
+  user: ConsoleUser!
+  "The caller's platform role, `null` for a tenant member who is not an operator."
+  platformRole: Role
+  "The tenants where the caller holds a role directly. A platform operator is also allowed on every tenant, which `tenants` (platform) lists."
+  memberships: [Membership!]!
+}
+
+type Query {
+  me: Me!
+}

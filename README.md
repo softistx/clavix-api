@@ -45,6 +45,7 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `tenants:create`          | create a tenant (see "Tenants")                                          |
 | `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
 | `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
+| `operators:grant`         | give a clavix-tenant user a platform role for the console (`--email`)    |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
 
 Every script reads `MONGO_URI` and validates the rest of the environment below at start, so with `NODE_ENV=production` a script also needs the production-required variables. What each
@@ -56,6 +57,7 @@ one needs on top:
 | `tenants:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`      | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
+| `operators:grant`       | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users)                                                                                                                     |
 | `start`                 | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
 ## Environment

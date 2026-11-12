@@ -7,6 +7,10 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Console API foundation** — the console's own GraphQL API at `/console/graphql`, behind a
+  bearer token of the `clavix` tenant, with platform and tenant roles (owner, admin, viewer), a
+  deny-by-default guard on every field, and `operators:grant` to name the first operators
+  ([#99](https://github.com/softistx/clavix-api/issues/99)).
 - **Console** — operators and tenant admins manage Clavix from the console instead of scripts:
   tenants, plans and quotas with usage counters
   ([#8](https://github.com/softistx/clavix-api/issues/8)); a tenant's clients, resources, scopes,

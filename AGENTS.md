@@ -188,6 +188,31 @@ M2 console. It only parses flags (`src/modules/tenants/cli.ts`) and calls `regis
 reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
 `created: false`, other values are refused, a deleted tenant's slug stays reserved.
 
+## Console API (`src/console`)
+
+The console's own GraphQL API, `POST /console/graphql`, apart from the hosted pages' `/graphql`
+(`src/http/schema.ts` and `codegen.ts` leave `src/console/**` out; `codegen.console.ts` generates
+`src/generated/console`). No cookie and no Host-based tenant: the credential is a bearer JWT of the
+`clavix` tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, verified in process by
+`server.authenticate(request, { resource })` (`auth.ts`; no crypto of ours, a store outage is a 503,
+every other failure a 401).
+- **Permissions** are a janus `defineModel` (`model.ts`) over the relation store in `oauthDb`
+  (`config/access.ts`; `db:sync` creates its collection): platform and tenant `owner` / `admin` /
+  `viewer`, permits `manage` / `edit` / `view`, a platform role inherited by every tenant through the
+  tenant's `platform` link. The link is written when a tenant is created (`config/tenancy.ts`
+  `onCreated`) and backfilled by the `2026-11-12-console` migration.
+- **Deny by default** (`guard.ts`): every root field is wrapped, and one without an entry in its
+  module's `guards` (`signedIn()`, `onTenant(perm, args => tenantId)`, `onPlatform(perm)`) is refused
+  `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
+- **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards) and lists it
+  in `modules/index.ts`; the SDL lives there, never in `src/modules`.
+- **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
+  resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
+  an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
+  once by the migration (not in tests).
+- **`bun run operators:grant --email <address> [--role owner|admin|viewer]`** gives a user of the
+  `clavix` tenant a platform role (default owner), until the console can. The user must exist.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`

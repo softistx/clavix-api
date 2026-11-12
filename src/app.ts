@@ -1,5 +1,8 @@
 import { graphql } from "@alxia/graphql";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
+import { CONSOLE_PATH } from "./console/identity";
+import { type ConsoleDeps, useConsole } from "./console/plugin";
+import { consoleSchema } from "./console/schema";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
@@ -26,6 +29,9 @@ export function createApp(
     signInThrottle?: Throttle | undefined;
     // The same for `passkeySignInOptions`.
     passkeyThrottle?: Throttle | undefined;
+    // The console API (`/console/graphql`, src/console): bearer token, its own
+    // schema. Off without it, the route does not exist.
+    console?: ConsoleDeps & { schema?: typeof consoleSchema };
   } = {},
 ) {
   const base = createBase(undefined, {
@@ -36,7 +42,7 @@ export function createApp(
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     .bodyLimit(BODY_LIMIT);
-  return (
+  const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)
   ).plugin((app) =>
     graphql(app, {
@@ -52,6 +58,18 @@ export function createApp(
       maskedErrors: janusMasking,
     }),
   );
+  const consoleOptions = options.console;
+  return consoleOptions === undefined
+    ? mounted
+    : mounted.plugin((app) =>
+        graphql(app, {
+          schema: consoleOptions.schema ?? consoleSchema,
+          path: CONSOLE_PATH,
+          ide: false,
+          plugins: [useConsole(consoleOptions)],
+          maskedErrors: janusMasking,
+        }),
+      );
 }
 
 // The app the server runs.
