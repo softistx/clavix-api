@@ -14,8 +14,8 @@ nxgt-janus release says which.
 
 **M1, dogfooding: our applications sign in through Clavix**
 - **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
-  a schedule, published as a JWKS per issuer (1.2). Waits on janus: JWT access tokens and
-  signing keys.
+  a schedule (90 days, published 48 h ahead, retired 24 h), published as a JWKS per issuer
+  (1.2, [#2](https://github.com/softistx/clavix-api/issues/2)); adopted from janus-oauth 0.8.
 - **An authorization server per issuer** — authorization code with PKCE, refresh,
   revocation and discovery for each tenant (1.3). Waits on janus: several issuers in one
   process.

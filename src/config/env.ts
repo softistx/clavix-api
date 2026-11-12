@@ -29,6 +29,22 @@ const domain = z
     "not a lowercase DNS name with at least two labels",
   );
 
+// 32 bytes in standard base64 (44 characters): the master key that encrypts the
+// signing keys at rest.
+const masterKey = z
+  .string()
+  .regex(/^[A-Za-z0-9+/]{43}=$/, "not 32 bytes in base64")
+  .refine(
+    (value) => Buffer.from(value, "base64").length === 32,
+    "not 32 bytes in base64",
+  );
+
+// Development and tests only: public, so it protects nothing. Production
+// refuses to start without its own CLAVIX_KEYS_MASTER_KEY.
+export const DEV_KEYS_MASTER_KEY = Buffer.from(
+  "clavix-dev-only-keys-master-key!",
+).toString("base64");
+
 // Read once, at import: a malformed variable stops the process before it
 // listens. `.env.example` lists them; Bun loads `.env` on every command.
 export const env = defineEnv({
@@ -41,6 +57,11 @@ export const env = defineEnv({
   REDIS_URL: optionalOutsideProduction(redisUrl),
   // The apex every tenant issuer hangs under: `<slug>.<CLAVIX_DOMAIN>`.
   CLAVIX_DOMAIN: inProduction(domain, "clavix.localhost"),
+  // Encrypts every tenant's signing keys at rest (AES-256-GCM): 32 random
+  // bytes in base64, e.g. `openssl rand -base64 32`. Required in production;
+  // a public development default elsewhere. Losing it makes the stored keys
+  // unreadable: keep it in a secret manager, apart from the database.
+  CLAVIX_KEYS_MASTER_KEY: inProduction(masterKey, DEV_KEYS_MASTER_KEY),
   // The scheme of the issuers built from it; http is refused in production.
   CLAVIX_PUBLIC_SCHEME: z
     .enum(production ? ["https"] : ["https", "http"])
