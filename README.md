@@ -58,7 +58,9 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | per client IP, per tenant         | 20 per 10 min | `CLAVIX_CODE_IP_LIMIT`, `CLAVIX_CODE_IP_WINDOW_SECONDS`         |
 | per tenant, all clients           | 200 per hour  | `CLAVIX_CODE_TENANT_LIMIT`, `CLAVIX_CODE_TENANT_WINDOW_SECONDS` |
 
-They stop anyone sending codes to many addresses through the shared no-reply sender (#59).
+They stop anyone sending codes to many addresses through the shared no-reply sender (#59). The `CLAVIX_CODE_*` values are whole numbers of at least 1;
+`CLAVIX_TRUSTED_PROXIES` a whole number of at least 0.
+
 - They use `@softistx/redis` rate limits (GCRA: the bucket starts full and refills evenly over the
   window), under the `clavix` prefix: `clavix:signin-ip:<tenantId>/<ip>`, `clavix:signin-tenant:<tenantId>`.
   Keys carry the tenant id, so a tenant's traffic never spends another's budget, and one address has
