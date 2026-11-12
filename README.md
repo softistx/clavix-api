@@ -46,7 +46,7 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
 
-Every script reads `MONGO_URI` (and the rest of the environment below, validated at start). What each
+Every script reads `MONGO_URI` and validates the rest of the environment below at start, so with `NODE_ENV=production` a script also needs the production-required variables. What each
 one needs on top:
 
 | Script                  | Environment it needs                                                                                                                                                                                         |

@@ -102,6 +102,30 @@ const base: PasskeyLimitConfig = {
   tenantWindowSeconds: 3600,
 };
 
+describe("unknown host", () => {
+  test("is NOT_FOUND and spends no throttle budget", async () => {
+    let checks = 0;
+    const app = createApp({
+      passkeyThrottle: {
+        check: async () => {
+          checks += 1;
+        },
+      },
+    });
+    const host = `http://nobody-here.${env.CLAVIX_DOMAIN}`;
+    const response = await app.request(`${host}/graphql`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: host },
+      body: JSON.stringify({ query: OPTIONS }),
+    });
+    const body = (await response.json()) as {
+      errors?: { extensions: Record<string, unknown> }[];
+    };
+    expect(body.errors?.[0]?.extensions["code"]).toBe("NOT_FOUND");
+    expect(checks).toBe(0);
+  });
+});
+
 describe("per client address", () => {
   test("the request past the limit is PASSKEY_THROTTLED, 429, with Retry-After", async () => {
     const { ask, close } = await setup({ ...base, ipLimit: 3 });

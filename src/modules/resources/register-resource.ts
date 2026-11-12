@@ -10,7 +10,7 @@ import {
   SuspendedTenantError,
   UnknownTenantError,
 } from "@/cli/errors";
-import { userinfoOf } from "@/oauth/issuers";
+import { userinfoOf } from "@/oauth/building";
 import type { ResourcesFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { resources } from "./resources.model";

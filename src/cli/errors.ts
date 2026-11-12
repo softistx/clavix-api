@@ -23,7 +23,7 @@ export class UnknownTenantError extends CliInputError {
   }
 }
 
-/** The tenant is suspended: no client is registered on it. */
+/** The tenant is suspended: nothing is registered on it. */
 export class SuspendedTenantError extends CliInputError {
   constructor(slug: string) {
     super(`tenant "${slug}" is suspended; reactivate it first`);
