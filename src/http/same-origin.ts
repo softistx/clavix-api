@@ -1,5 +1,6 @@
 import { parse } from "graphql";
 
+// Temporary, until @alxia/graphql#719
 // The cookie is the credential and a sibling tenant host is same-site (SameSite=Lax does not stop
 // it), so every /graphql request must come from the tenant's own origin and, for a POST, as JSON
 // (not a CORS "simple" form post). `Origin: null` (a sandboxed frame) and other junk have no host:

@@ -7,13 +7,13 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import { mongo } from "@/config/db";
-import { oauthDb } from "@/config/oauth-db";
 import {
-  ClientInputError,
+  CliInputError,
   SuspendedTenantError,
   UnknownTenantError,
-} from "@/modules/resources/errors";
+} from "@/cli/errors";
+import { mongo } from "@/config/db";
+import { oauthDb } from "@/config/oauth-db";
 import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
@@ -191,10 +191,45 @@ describe("registerClient", () => {
         name: "Keeps type",
         redirectUris: [REDIRECT],
       }),
-    ).rejects.toBeInstanceOf(ClientInputError);
+    ).rejects.toBeInstanceOf(CliInputError);
     expect(
       (await (await storeOf("regalpha")).findClient("keeps-type"))?.secretHash,
     ).toBeString();
+  });
+
+  test("a public client is not turned confidential by --confidential", async () => {
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Stays public",
+      redirectUris: [REDIRECT],
+    });
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Stays public",
+        redirectUris: [REDIRECT],
+        type: "confidential",
+      }),
+    ).rejects.toThrow(/is a public client/);
+    const stored = await (await storeOf("regalpha")).findClient("stays-public");
+    expect(stored?.secretHash).toBeUndefined();
+    expect(stored?.tokenEndpointAuthMethod).toBeUndefined();
+  });
+
+  test("--rotate-secret on a public client is refused, not ignored", async () => {
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "No secret",
+      redirectUris: [REDIRECT],
+    });
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "No secret",
+        redirectUris: [REDIRECT],
+        rotateSecret: true,
+      }),
+    ).rejects.toThrow(/--rotate-secret needs a confidential client/);
   });
 
   test("an unknown slug and a suspended tenant are refused", async () => {
@@ -220,7 +255,7 @@ describe("registerClient", () => {
       { ...base, clientId: "Not Valid" },
     ]) {
       await expect(registerClient(options, input)).rejects.toBeInstanceOf(
-        ClientInputError,
+        CliInputError,
       );
     }
     expect(await (await storeOf("regalpha")).findClient("bad")).toBeNull();
@@ -294,11 +329,11 @@ describe("command line", () => {
   });
 
   test("a missing flag or an unknown one is refused", () => {
-    expect(() => parseClientArgs(["--name", "x"])).toThrow(ClientInputError);
-    expect(() => parseClientArgs(["--tenant", "a"])).toThrow(ClientInputError);
+    expect(() => parseClientArgs(["--name", "x"])).toThrow(CliInputError);
+    expect(() => parseClientArgs(["--tenant", "a"])).toThrow(CliInputError);
     expect(() =>
       parseClientArgs(["--tenant", "a", "--name", "x", "--nope"]),
-    ).toThrow(ClientInputError);
+    ).toThrow(CliInputError);
   });
 
   test("the default id is the name as a-z0-9-", () => {

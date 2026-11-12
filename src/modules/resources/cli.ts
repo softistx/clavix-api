@@ -1,8 +1,6 @@
 import { parseArgs } from "node:util";
-import {
-  type RegisterResourceInput,
-  ResourceInputError,
-} from "./register-resource";
+import { CliInputError } from "@/cli/errors";
+import type { RegisterResourceInput } from "./register-resource";
 
 export const USAGE = `Usage: bun run resources:create --tenant <slug> --uri <uri> --scope <scope> [options]
 
@@ -11,7 +9,7 @@ export const USAGE = `Usage: bun run resources:create --tenant <slug> --uri <uri
   --scope <scope>   a scope a client may request on it; repeat for several (at least one)
   --name <name>     a label; default: the URI's host`;
 
-/** The script's flags as a registration input; a `ResourceInputError` for a bad line. */
+/** The script's flags as a registration input; a `CliInputError` for a bad line. */
 export function parseResourceArgs(
   argv: readonly string[],
 ): RegisterResourceInput {
@@ -19,15 +17,14 @@ export function parseResourceArgs(
   try {
     values = read(argv).values;
   } catch (error) {
-    throw new ResourceInputError(
+    throw new CliInputError(
       error instanceof Error ? error.message : String(error),
     );
   }
   if (values.tenant === undefined) {
-    throw new ResourceInputError("--tenant is required");
+    throw new CliInputError("--tenant is required");
   }
-  if (values.uri === undefined)
-    throw new ResourceInputError("--uri is required");
+  if (values.uri === undefined) throw new CliInputError("--uri is required");
   return {
     tenant: values.tenant,
     uri: values.uri,

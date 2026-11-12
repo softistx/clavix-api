@@ -1,18 +1,13 @@
 import type { Clock } from "@softistx/janus";
-import {
-  createOAuthIssuers,
-  type OAuthIssuerKey,
-  type OAuthIssuers,
-  type OAuthResource,
-  type SigningKeyStore,
-} from "@softistx/janus-oauth";
-import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import { createOAuthIssuers, type OAuthIssuers } from "@softistx/janus-oauth";
 import { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
-import { lifetimes } from "./lifetimes";
+import { buildIssuer, userinfoOf } from "./building";
 import type { AuthFor, ClaimsFor, ResourcesFor, SigningKeysFor } from "./ports";
+import { type Keyed, resolveIssuer } from "./resolution";
+import { NoSigningKeyError, unavailable } from "./signing-keys";
 
 export interface ClavixOAuthOptions {
   /** Host to tenant: unknown and suspended hosts resolve to `null`, a 404. */
@@ -36,76 +31,16 @@ export interface ClavixOAuthOptions {
   clock?: Clock;
 }
 
-/** A tenant has no `current` signing key yet (just created, rotation pending). */
-export class NoSigningKeyError extends Error {
-  constructor(readonly tenantId: string) {
-    super(`tenant ${tenantId} has no current signing key yet`);
-    this.name = "NoSigningKeyError";
-  }
-}
-
-// The store janus signs with, failing with a typed error (not janus's bare
-// `Error`) when the tenant has no current key, so `handle` can answer it.
-function requiringCurrentKey(
-  store: SigningKeyStore,
-  tenantId: string,
-): SigningKeyStore {
-  return new Proxy(store, {
-    get(target, property) {
-      if (property !== "findCurrentKey") {
-        const value = Reflect.get(target, property, target);
-        return typeof value === "function" ? value.bind(target) : value;
-      }
-      return async (now: Date) => {
-        const key = await target.findCurrentKey(now);
-        if (key === null) throw new NoSigningKeyError(tenantId);
-        return key;
-      };
-    },
-  });
-}
-
-/** 503 with `Retry-After`: the keys of a new tenant arrive within moments. */
-const unavailable = () =>
-  Response.json(
-    {
-      error: "temporarily_unavailable",
-      error_description: "the issuer has no signing key yet, retry shortly",
-    },
-    {
-      status: 503,
-      headers: { "retry-after": "30", "cache-control": "no-store" },
-    },
-  );
-
-/** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
-export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
-
-/** The scopes the userinfo resource offers: the standard OpenID Connect ones. */
-const OIDC_SCOPES = ["openid", "profile", "email"];
-
-// What `resolve` answers: janus's key (the version as a string) and the tenant.
-type Keyed = OAuthIssuerKey & {
-  tenant: ResolvedTenant;
-  resources: Readonly<Record<string, OAuthResource>>;
-};
-
-// A short stable digest of a tenant's resources: the issuer is rebuilt when
-// one is added, changed or removed, though the tenant itself did not change.
-const fingerprintOf = (resources: Readonly<Record<string, OAuthResource>>) =>
-  Bun.hash(
-    JSON.stringify(
-      Object.entries(resources)
-        .map(([uri, { scopes }]) => [uri, [...scopes].sort()])
-        .sort(([a], [b]) => String(a).localeCompare(String(b))),
-    ),
-  ).toString(36);
+export { userinfoOf } from "./building";
+export { NoSigningKeyError } from "./signing-keys";
 
 /**
  * One OAuth authorization server per tenant (ADR-0003): the issuer is the
  * tenant's, its store is the tenant's partition of the janus collections
  * (ADR-0006) and its signing keys are the tenant's. A server is rebuilt when
- * the tenant's `version` changes, i.e. after any tenant write.
+ * the tenant's `version` changes, i.e. after any tenant write. Resolution is
+ * `resolution.ts`, the server config `building.ts`, the key store wrapper
+ * `signing-keys.ts`.
  */
 export function createClavixOAuthIssuers(
   options: ClavixOAuthOptions,
@@ -124,40 +59,12 @@ export function createClavixOAuthIssuers(
       return options.claimsFor(tenant)(subject, scopes);
     },
   });
+  const build = buildIssuer({ db, signingKeysFor, authFor, oidc, clock });
   const issuers = createOAuthIssuers<Keyed>({
-    resolve: async (request) => {
-      const tenant = await resolver.resolveRequest(request);
-      if (tenant === null) return null;
-      const resources = (await resourcesFor?.(tenant)) ?? {};
-      return {
-        issuer: tenant.issuer,
-        version: `${tenant.version}.${fingerprintOf(resources)}`,
-        tenant,
-        resources,
-      };
-    },
-    build: ({ tenant, resources }) => {
-      tenantOf.set(tenant.issuer, tenant);
-      // One store signs access tokens and id_tokens: the JWKS verifies both.
-      const keys = requiringCurrentKey(
-        signingKeysFor(tenant.tenantId),
-        tenant.tenantId,
-      );
-      const userinfo = userinfoOf(tenant.issuer);
-      return {
-        auth: authFor(tenant),
-        store: createMongoOAuth(db, { partition: tenant.partition }),
-        issuer: tenant.issuer,
-        resources: {
-          ...resources,
-          [userinfo]: { scopes: OIDC_SCOPES },
-        },
-        defaultResource: userinfo,
-        lifetimes,
-        accessTokens: { format: "jwt", keys },
-        tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
-        ...(clock === undefined ? {} : { clock }),
-      };
+    resolve: resolveIssuer(resolver, resourcesFor),
+    build: (keyed) => {
+      tenantOf.set(keyed.tenant.issuer, keyed.tenant);
+      return build(keyed);
     },
     endpoints: ({ resources }) => ({
       consentUrl: options.consentUrl ?? "/consent",

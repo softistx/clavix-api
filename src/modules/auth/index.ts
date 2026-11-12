@@ -3,7 +3,6 @@ import { tenantMail } from "@/config/mail";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
-import { throttleOf } from "./plugin";
 import { requestSignInCode, verifySignInCode } from "./sign-in";
 
 // The janus instance and the tenant of the request's host; both are `null`
@@ -42,7 +41,10 @@ export const auth: Resolvers = {
     requestSignInCode: async (_, { email }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
       ctx.set.headers.set("cache-control", "no-store");
-      await throttleOf(ctx)?.check({ tenantId: tenant.tenantId, ip: ctx.ip });
+      await ctx.signInThrottle?.check({
+        tenantId: tenant.tenantId,
+        ip: ctx.ip,
+      });
       return requestSignInCode(
         { auth, mail: tenantMail(tenant), signUp: tenant.signUp },
         email,

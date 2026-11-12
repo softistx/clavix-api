@@ -7,11 +7,11 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import {
-  ClientInputError,
-  type ClientTenant,
+  CliInputError,
+  type CliTenant,
   SuspendedTenantError,
   UnknownTenantError,
-} from "@/modules/resources/errors";
+} from "@/cli/errors";
 import { partitionOf } from "@/modules/tenants/identity";
 
 /**
@@ -54,7 +54,7 @@ export interface RegisteredClient {
 export interface RegisterClientOptions {
   /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
   db: Db;
-  findTenant: (slug: string) => Promise<ClientTenant | undefined>;
+  findTenant: (slug: string) => Promise<CliTenant | undefined>;
   now?: () => Date;
 }
 
@@ -76,26 +76,26 @@ function validate(input: RegisterClientInput): {
   redirectUris: string[];
 } {
   const name = input.name.trim();
-  if (name === "") throw new ClientInputError("a client needs a name");
+  if (name === "") throw new CliInputError("a client needs a name");
   const clientId = input.clientId ?? clientIdOf(name);
   if (!ID_PATTERN.test(clientId)) {
-    throw new ClientInputError(
+    throw new CliInputError(
       `client id "${clientId}" must be 1-64 characters of a-z, 0-9 and "-", not starting or ending with "-"`,
     );
   }
   const redirectUris = [...new Set(input.redirectUris)];
   if (redirectUris.length === 0) {
-    throw new ClientInputError("a client needs at least one redirect URI");
+    throw new CliInputError("a client needs at least one redirect URI");
   }
   for (const uri of redirectUris) {
     const problem = redirectUriProblem(uri);
     if (problem !== null) {
-      throw new ClientInputError(`redirect URI "${uri}": ${problem}`);
+      throw new CliInputError(`redirect URI "${uri}": ${problem}`);
     }
   }
   for (const grant of input.grants ?? OFFERED_GRANTS) {
     if (!(OFFERED_GRANTS as readonly string[]).includes(grant)) {
-      throw new ClientInputError(
+      throw new CliInputError(
         `grant "${grant}" is not offered: janus-oauth ${OFFERED_GRANTS.join(" and ")} only, for every client`,
       );
     }
@@ -126,19 +126,34 @@ export async function registerClient(
   });
   const existing = await store.findClient(clientId);
   if (existing !== null && existing.source !== "registered") {
-    throw new ClientInputError(`"${clientId}" is not a registered client`);
+    throw new CliInputError(`"${clientId}" is not a registered client`);
   }
 
   const confidential = type === "confidential";
-  if (!confidential && existing?.secretHash !== undefined) {
-    throw new ClientInputError(
+  const existingHash = existing?.secretHash;
+  if (!confidential && existingHash !== undefined) {
+    throw new CliInputError(
       `"${clientId}" is a confidential client: re-run with --confidential, or use another client id (a client keeps its type)`,
     );
   }
-  const keptHash =
-    input.rotateSecret === true ? undefined : existing?.secretHash;
-  const keepsSecret = confidential && keptHash !== undefined;
-  const clientSecret = confidential && !keepsSecret ? mintOAuthSecret() : null;
+  if (confidential && existing !== null && existingHash === undefined) {
+    throw new CliInputError(
+      `"${clientId}" is a public client: it cannot become confidential (a client keeps its type); register a confidential client under another client id`,
+    );
+  }
+  if (!confidential && input.rotateSecret === true) {
+    throw new CliInputError(
+      `--rotate-secret needs a confidential client: "${clientId}" is public and has no secret`,
+    );
+  }
+  // A confidential client's secret: kept (its stored hash) unless rotated or
+  // new, else minted now and returned once.
+  const keptHash = input.rotateSecret === true ? undefined : existingHash;
+  const clientSecret =
+    confidential && keptHash === undefined ? mintOAuthSecret() : null;
+  const secretHash =
+    keptHash ??
+    (clientSecret === null ? undefined : hashOAuthSecret(clientSecret));
   const record: OAuthClientRecord = {
     id: clientId,
     name,
@@ -146,13 +161,10 @@ export async function registerClient(
     source: "registered",
     createdAt: existing?.createdAt ?? (options.now ?? (() => new Date()))(),
     expiresAt: null,
-    ...(confidential
+    ...(confidential && secretHash !== undefined
       ? {
           tokenEndpointAuthMethod: "client_secret_basic" as const,
-          secretHash:
-            clientSecret === null
-              ? (keptHash as string)
-              : hashOAuthSecret(clientSecret),
+          secretHash,
         }
       : {}),
   };

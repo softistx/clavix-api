@@ -3,12 +3,8 @@ import { passkeyThrottle, signInThrottle } from "./config/throttle";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
-import {
-  janusMasking,
-  janusPlugin,
-  throttleContext,
-} from "./modules/auth/plugin";
-import type { SignInThrottle } from "./modules/auth/throttle";
+import type { Throttle } from "./http/throttle/core";
+import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import { oauthContext } from "./modules/consent";
 import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
@@ -27,12 +23,17 @@ export function createApp(
     oauth?: OAuthHandle;
     // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
     // default (none without REDIS_URL).
-    signInThrottle?: SignInThrottle | undefined;
+    signInThrottle?: Throttle | undefined;
     // The same for `passkeySignInOptions`.
-    passkeyThrottle?: SignInThrottle | undefined;
+    passkeyThrottle?: Throttle | undefined;
   } = {},
 ) {
-  const base = createBase()
+  const base = createBase(undefined, {
+    signInThrottle:
+      "signInThrottle" in options ? options.signInThrottle : signInThrottle,
+    passkeyThrottle:
+      "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
+  })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     .bodyLimit(BODY_LIMIT);
   return (
@@ -44,12 +45,6 @@ export function createApp(
       plugins: [
         useSameOriginJson(),
         janusPlugin(),
-        throttleContext(
-          "signInThrottle" in options ? options.signInThrottle : signInThrottle,
-          "passkeyThrottle" in options
-            ? options.passkeyThrottle
-            : passkeyThrottle,
-        ),
         ...(options.oauth?.serverFor === undefined
           ? []
           : [oauthContext({ serverFor: options.oauth.serverFor })]),

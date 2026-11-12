@@ -1,10 +1,11 @@
+import { CliInputError } from "@/cli/errors";
 import { parseClientArgs, USAGE } from "@/clients/cli";
 import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
+import { redis } from "@/config/redis";
 import { tenantBySlug } from "@/config/tenancy";
-import { ClientInputError } from "@/modules/resources/errors";
 import { issuerOf } from "@/modules/tenants/identity";
 
 // Registers an OAuth client on a tenant, or updates it (idempotent on the
@@ -42,9 +43,10 @@ try {
     ),
   );
 } catch (error) {
-  if (!(error instanceof ClientInputError)) throw error;
+  if (!(error instanceof CliInputError)) throw error;
   console.error(`clients:create: ${error.message}\n\n${USAGE}`);
   process.exitCode = 1;
 } finally {
   await mongo.close();
+  await redis?.close();
 }
