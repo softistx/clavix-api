@@ -39,7 +39,7 @@ export function consentGraphQL({ issuers, janusIssuers }: ConsentOptions) {
       oauthResolvers({
         oauth: async (ctx) => {
           const server = await issuers.serverFor(ctx.request);
-          if (server === null) throw new Error("no OAuth server for this host");
+          if (server === null) throw denial("NOT_FOUND");
           return server;
         },
       }),

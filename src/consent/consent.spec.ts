@@ -224,8 +224,9 @@ describe("approve", () => {
   test("a session older than five minutes is STEP_UP_REQUIRED and the request stays pending", async () => {
     const auth = await janusIssuers.forRequest(new Request(url("acme")));
     const user = await auth?.create({ email: "old@example.test" });
-    const result = await auth?.signInProven(user as never);
-    if (result?.status !== "signedIn") throw new Error("no session");
+    if (auth === null || user === undefined) throw new Error("no janus");
+    const result = await auth.signInProven(user);
+    if (result.status !== "signedIn") throw new Error("no session");
     await oauthDb
       .collection("partitionedSessions")
       .updateMany(
@@ -249,10 +250,11 @@ describe("deny", () => {
     const id = await authorize("acme");
     const denied = await gql("acme", DENY, { id }, cookieOf("acme"));
     expect(denied.errors).toBeUndefined();
-    const { redirectTo, grantId } = denied.data?.["denyOAuthRequest"] as {
+    const decision = denied.data?.["denyOAuthRequest"] as {
       redirectTo: string;
       grantId: string | null;
     };
+    const { redirectTo, grantId } = decision;
     const target = new URL(redirectTo);
     expect(`${target.origin}${target.pathname}`).toBe(REDIRECT);
     expect(target.searchParams.get("error")).toBe("access_denied");
@@ -284,6 +286,55 @@ describe("tenant isolation", () => {
     const id = await authorize("globex");
     const result = await gql("globex", REQUEST, { id }, cookieOf("acme"));
     expect(codeOf(result)).toBe("UNAUTHENTICATED");
+  });
+});
+
+describe("a foreign page cannot decide", () => {
+  const post = (headers: Record<string, string>, body: string) =>
+    yoga.fetch(
+      new Request(url("acme", CONSENT_GRAPHQL_PATH), {
+        method: "POST",
+        headers: { cookie: cookieOf("acme"), ...headers },
+        body,
+      }),
+    );
+
+  test("a foreign Origin is refused, with no CORS header", async () => {
+    const id = await authorize("acme");
+    const response = await post(
+      {
+        "content-type": "application/json",
+        origin: "https://evil.clavix.test",
+      },
+      JSON.stringify({ query: DENY, variables: { id } }),
+    );
+    expect(response.status).toBe(403);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    const still = await gql("acme", REQUEST, { id }, cookieOf("acme"));
+    expect(still.errors).toBeUndefined();
+  });
+
+  test("a form post is refused", async () => {
+    const id = await authorize("acme");
+    const response = await post(
+      { "content-type": "application/x-www-form-urlencoded" },
+      new URLSearchParams({
+        query: `mutation { denyOAuthRequest(id: "${id}") { redirectTo } }`,
+      }).toString(),
+    );
+    expect(response.status).toBe(415);
+  });
+
+  test("the page's own Origin passes", async () => {
+    const id = await authorize("acme");
+    const response = await post(
+      {
+        "content-type": "application/json",
+        origin: url("acme", "").replace(/\/$/, ""),
+      },
+      JSON.stringify({ query: REQUEST, variables: { id } }),
+    );
+    expect(response.status).toBe(200);
   });
 });
 

@@ -176,6 +176,9 @@ request), `BAD_USER_INPUT` (a scope not asked for), `STEP_UP_REQUIRED` (403).
   minutes (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page
   signs the user in again (E1's e-mail code), then repeats the mutation; the request stays
   pending. `denyOAuthRequest` and the read do not ask.
+- **Same origin only**: the API sets no CORS headers, refuses a request whose `Origin` is not the
+  tenant's own (403) and any POST that is not `application/json` (415). The page is served from
+  the tenant's host. The step-up mutations (`auth.stepUp.*`) are not mounted here until E1.
 - **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No
   `amr` or `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL
   surface does not), and M1 needs neither.
