@@ -7,22 +7,24 @@ nxgt-janus release says which.
 
 ## Now
 
-- **M0, skeleton** — the repository builds, lints, type checks and tests in CI: a `health`
-  query and `GET /healthz`.
+**M1, dogfooding: our applications sign in through Clavix**
+- **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
+  a schedule, published as a JWKS per issuer ([#2](https://github.com/softistx/clavix-api/issues/2)).
+- **An authorization server per issuer** — authorization code with PKCE, refresh,
+  revocation and discovery for each tenant ([#3](https://github.com/softistx/clavix-api/issues/3)).
+- **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
+  (RFC 9068) and introspection ([#4](https://github.com/softistx/clavix-api/issues/4)).
+- **Users and sessions per tenant** — passkey and e-mail code sign-in
+  ([#5](https://github.com/softistx/clavix-api/issues/5)). Users per tenant wait on janus
+  partitioned user stores.
+- **Clients registered by script** — until the console exists
+  ([#6](https://github.com/softistx/clavix-api/issues/6)).
 
 ## Next
 
-**M1, dogfooding: our applications sign in through Clavix**
-- **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
-  a schedule, published as a JWKS per issuer (1.2). Waits on janus: JWT access tokens and
-  signing keys.
-- **An authorization server per issuer** — authorization code with PKCE, refresh,
-  revocation and discovery for each tenant (1.3). Waits on janus: several issuers in one
-  process.
-- **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
-  (RFC 9068) and introspection (1.4). Waits on `@softistx/janus-oidc`.
-- **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
-- **Clients registered by script** — until the console exists (1.7, with the UI).
+**M1, dogfooding (continued)**
+- **A migration guide** — for an application moving from embedded janus sessions to Clavix
+  as a relying party ([#7](https://github.com/softistx/clavix-api/issues/7)).
 
 **M5, access rules (ADR-0031)**
 - **Access rules (M5, ADR-0031)** — an application publishes its OpenAPI and SDL from CI
@@ -63,6 +65,8 @@ nxgt-janus release says which.
 
 ## Shipped
 
+- **M0, skeleton** — the repository builds, lints, type checks and tests in CI: a `health`
+  query and `GET /healthz`.
 - **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and
   cached in Redis, a suspension applying within 60 s at worst), a repository that cannot
   read another tenant's data, slugs reserved for good, and the `clavix` tenant seeded (1.1).
