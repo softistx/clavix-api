@@ -18,14 +18,18 @@ nxgt-janus release says which.
   (1.2, [#2](https://github.com/softistx/clavix-api/issues/2)); adopted from janus-oauth 0.8.
 - **An authorization server per issuer** — authorization code with PKCE, refresh with
   rotation, revocation and discovery for each tenant (1.3, `src/oauth`, janus-oauth 0.8
-  `createOAuthIssuers`). Built; the end-user authentication (1.5) is still a port, so it
-  serves nothing in the running app until it lands.
+  `createOAuthIssuers`). Built and mounted by `server.ts` with the real `authFor`/`claimsFor`;
+  no `/authorize` succeeds until a tenant has a resource (M2) and a sign-in surface (E1, E2).
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
   (RFC 9068) and introspection (1.4, [#4](https://github.com/softistx/clavix-api/issues/4),
   `src/oauth`, janus-oidc 0.3). Built: each tenant host serves its own discovery, JWKS,
-  userinfo and introspection; the user claims are a port (`ClaimsFor`) until the users
-  (1.5) land. The `roles` claim moved to M2.
-- **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
+  userinfo and introspection; the user claims come from the tenant's own user pool. The `roles` claim moved to M2.
+- **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5,
+  [#5](https://github.com/softistx/clavix-api/issues/5)). Slice B built: one janus instance and
+  one partitioned user pool per tenant, host-only `__Host-` session cookie (14 days sliding),
+  the passkey rpId (`rpIdOf`) and the real `authFor`/`claimsFor`, served by `server.ts`. Still
+  to come: e-mail code sign-in and the GraphQL sign-in surface (E1), passkeys and consent (E2),
+  and the 30-day absolute session cap (waits on janus).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and

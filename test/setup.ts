@@ -23,6 +23,11 @@ delete Bun.env["REDIS_URL"];
     "@softistx/janus-oauth-mongo"
   );
   await syncMongoOAuthPartitioned(oauthDb);
+  // The janus user stores and invitations, partitioned per tenant too.
+  const { syncMongoInvitationsPartitioned, syncMongoStoresPartitioned } =
+    await import("@softistx/janus-mongo");
+  await syncMongoStoresPartitioned(oauthDb);
+  await syncMongoInvitationsPartitioned(oauthDb);
   // The seed, once for the run (`clearDatabase` keeps what it wrote).
   const { migrate } = await import("@softistx/mongo/migrations");
   const { migrations } = await import("@/migrations");
