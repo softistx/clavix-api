@@ -1,9 +1,9 @@
 import { alxia } from "@alxia/core";
 import type { GraphQLContext } from "@alxia/graphql";
-import { env } from "../config/env";
-import { tenantResolver } from "../config/tenancy";
-import type { ResolvedTenant } from "../tenancy/resolved-tenant";
-import type { TenantResolver } from "../tenancy/resolver";
+import { env } from "@/config/env";
+import { tenantResolver } from "@/config/tenancy";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import type { TenantResolver } from "@/tenancy/resolver";
 
 // The base: what every resolver reads, decorated or derived here.
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for

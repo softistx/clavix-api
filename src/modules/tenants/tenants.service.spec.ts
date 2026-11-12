@@ -79,14 +79,16 @@ describe("TenantsService", () => {
     expect(hosts).toEqual([]);
   });
 
-  test("delete archives the tenant, frees the slug and invalidates", async () => {
+  test("delete archives the tenant, reserves the slug and invalidates", async () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     hosts.length = 0;
     await service.delete(tenant._id);
     expect(await collection.findById(tenant._id)).toBeUndefined();
     expect(hosts).toEqual([["acme.clavix.test"]]);
-    const again = await service.create({ slug: "acme", name: "Acme 2" });
-    expect(again._id).not.toEqual(tenant._id);
+    await expect(
+      service.create({ slug: "acme", name: "Acme 2" }),
+    ).rejects.toThrow(SlugTakenError);
+    expect(hosts).toEqual([["acme.clavix.test"]]);
   });
 
   test("the platform tenant cannot be suspended or deleted", async () => {

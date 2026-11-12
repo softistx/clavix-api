@@ -49,54 +49,124 @@ describe("tenant-owned collections", () => {
 
 // Where platform code may touch a tenant-owned collection directly.
 const allowed = ["src/tenancy/", "src/migrations/", "src/modules/tenants/"];
-// Every way platform code reaches a tenant-owned collection without
-// `scoped()`: `mongo.db.<name>` (also after `const { db } = mongo`),
-// `db["<name>"]`, `getCollection(…<name>…)` and `<name>.raw`.
+// Where the platform `tenants` collection may be reached: every writer
+// there goes through the service, which invalidates the resolver's cache.
+const tenantsAllowed = [
+  "src/modules/tenants/",
+  "src/config/tenancy.ts",
+  "src/migrations/",
+];
+// Every way platform code reaches a collection without `scoped()`:
+// `mongo.db.<name>` (also after `const { db } = mongo`), `db["<name>"]`,
+// destructuring (`const { <name> } = mongo.db`), an alias of the db object
+// (`const d = mongo.db`), `getCollection(…<name>…)` and `<name>.raw`.
 const direct = (names: string[]) => {
   const any = names.join("|");
   return [
     new RegExp(`\\bdb\\.(${any})\\b`),
     new RegExp(`\\bdb\\[\\s*["'\`](${any})["'\`]\\s*\\]`),
+    new RegExp(`\\{[^}]*\\b(${any})\\b[^}]*\\}\\s*=\\s*(?:\\w+\\.)*db\\b`),
     new RegExp(`\\bgetCollection\\([^)]*\\b(${any})\\b`),
     new RegExp(`\\b(${any})\\.raw\\b`),
   ];
 };
+// The db object bound to another name, whose members the patterns above
+// cannot follow.
+const aliasesDb =
+  /\b(?:const|let|var)\s+\w+\s*=\s*(?:\w+\.)*db\s*;?\s*(?:\n|$)/;
 const reaches = (patterns: RegExp[], text: string) =>
   patterns.some((pattern) => pattern.test(text));
 
+// Both the export key and the collection's `name` may differ (`userNotes` /
+// "notes"), and code may use either.
+const namesOf = (entries: [string, { name: string }][]) => [
+  ...new Set(entries.flatMap(([key, definition]) => [key, definition.name])),
+];
+const ownedNames = namesOf(
+  Object.entries(definitions).filter(([, definition]) =>
+    isTenantOwned(definition),
+  ),
+);
+
+async function offendersOf(
+  patterns: RegExp[],
+  permitted: string[],
+  alias = false,
+) {
+  const offenders: string[] = [];
+  for await (const path of new Glob("src/**/*.ts").scan(".")) {
+    if (path.endsWith(".spec.ts")) continue;
+    if (permitted.some((prefix) => path.startsWith(prefix))) continue;
+    const text = await Bun.file(path).text();
+    if (reaches(patterns, text) || (alias && aliasesDb.test(text))) {
+      offenders.push(path);
+    }
+  }
+  return offenders;
+}
+
 describe("source scan", () => {
   test("tenant-owned collections are reached only where it is allowed", async () => {
-    const patterns = direct(owned.map((c) => c.name));
-    const offenders: string[] = [];
-    for await (const path of new Glob("src/**/*.ts").scan(".")) {
-      if (path.endsWith(".spec.ts")) continue;
-      if (allowed.some((prefix) => path.startsWith(prefix))) continue;
-      if (reaches(patterns, await Bun.file(path).text())) offenders.push(path);
-    }
-    expect(offenders).toEqual([]);
+    expect(await offendersOf(direct(ownedNames), allowed, true)).toEqual([]);
+  });
+
+  test("the tenants collection is reached only by its module, its wiring and the migrations", async () => {
+    expect(await offendersOf(direct(["tenants"]), tenantsAllowed)).toEqual([]);
+  });
+
+  test("the names include the export key and the collection name", () => {
+    expect(ownedNames).toContain("notes");
+    expect(namesOf([["userNotes", { name: "notes" }]])).toEqual([
+      "userNotes",
+      "notes",
+    ]);
   });
 
   test("the scan sees what it is meant to refuse", () => {
-    const patterns = direct(["notes"]);
+    const patterns = direct(["notes", "userNotes"]);
     for (const refused of [
       "await mongo.db.notes.findMany()",
+      "await mongo.db.userNotes.findMany()",
       "scoped(mongo.db.notes, tenantId)",
       "const { db } = mongo; db.notes.findMany()",
       'mongo.db["notes"].findMany()',
-      "mongo.db['notes']",
+      "mongo.db['userNotes']",
       "getCollection(mongo.db, notes)",
-      "getCollection(db, notes, { autoSync: true })",
+      "getCollection(db, userNotes, { autoSync: true })",
       "notes.raw.find()",
+      "const { notes } = mongo.db;",
+      "const { tenants, userNotes: n } = db;",
     ]) {
       expect(reaches(patterns, refused)).toBe(true);
+    }
+    for (const refused of [
+      "const d = mongo.db;\nd.notes.find()",
+      "let d = db;",
+    ]) {
+      expect(aliasesDb.test(refused)).toBe(true);
     }
     for (const fine of [
       "mongo.db.tenants.findMany()",
       'mongo.db["tenants"]',
       "getCollection(mongo.db, tenants)",
       "tenants.raw.find()",
+      "const { tenants } = mongo.db;",
     ]) {
       expect(reaches(patterns, fine)).toBe(false);
+    }
+    expect(aliasesDb.test("const x = mongo.dbName;")).toBe(false);
+  });
+
+  test("the tenants scan sees what it is meant to refuse", () => {
+    const patterns = direct(["tenants"]);
+    for (const refused of [
+      "mongo.db.tenants.update(id, patch)",
+      'db["tenants"].delete(id)',
+      "const { tenants } = mongo.db;",
+      "getCollection(db, tenants).create(x)",
+      "tenants.raw.updateOne()",
+    ]) {
+      expect(reaches(patterns, refused)).toBe(true);
     }
   });
 });

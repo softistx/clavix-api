@@ -24,7 +24,7 @@ export interface TenantCache {
 export const tenantHostCache = defineCache({
   name: "tenant-host",
   key: (host: string) => host,
-  ttl: 600,
+  ttl: 60,
   schema: resolvedTenant.nullable(),
 });
 
@@ -41,7 +41,7 @@ export interface BoundTenantHostCache {
 
 /**
  * Redis-backed. Get then set, not `remember`: the resolver decides the TTL
- * (600 s for a tenant, 30 s for none). A value of an older shape reads as a
+ * (60 s for a tenant, 30 s for none). A value of an older shape reads as a
  * miss (the package forgets it).
  */
 export function redisTenantCache(bound: BoundTenantHostCache): TenantCache {
