@@ -2,40 +2,37 @@
 
 This guide is for an application that today owns its users and sessions with an embedded
 `@softistx/janus` instance (sign-in, passwords, passkeys, sessions in its own database) and moves
-to Clavix as its identity provider, becoming an OpenID Connect relying party (RP). The decision is
-ADR-0023 and the packaging ADR-0030 (`spec/decisions.md`); each application's own session does the
-migration.
+to Clavix as its identity provider, becoming an OpenID Connect relying party (RP). Each application migrates in its own project.
 
-Status words used below: **Built** (in clavix-api on `feat/m1-dogfooding` or in a released
+Status words used below: **Built** (in clavix-api or in a released
 package), **Not built** (a gap: nothing exists yet; it is listed in [Gaps](#gaps)). Nothing here
 is a promise of a date.
 
 ## What changes for the application
 
-| Before | After |
-| --- | --- |
-| The app's janus holds the users, credentials and sessions. | Clavix holds the users and the credentials (passkey, e-mail code) of the app's tenant. |
-| The app shows its own sign-in page. | The app sends the visitor to its tenant's host (`https://<slug>.<CLAVIX_DOMAIN>`), which shows the hosted sign-in page, then redirects back. |
-| The API trusts the app's own session or token. | The API verifies the JWT access token (ES256 by default) Clavix signed, with the tenant's public keys. |
+| Before                                                     | After                                                                                                                                        |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| The app's janus holds the users, credentials and sessions. | Clavix holds the users and the credentials (passkey, e-mail code) of the app's tenant.                                                       |
+| The app shows its own sign-in page.                        | The app sends the visitor to its tenant's host (`https://<slug>.<CLAVIX_DOMAIN>`), which shows the hosted sign-in page, then redirects back. |
+| The API trusts the app's own session or token.             | The API verifies the JWT access token (ES256 by default) Clavix signed, with the tenant's public keys.                                       |
 
 Facts to hold on to (all Built, see the clavix-api README):
-
-- **One tenant per application** (ADR-0002, ADR-0003). The tenant's issuer is
+- **One tenant per application**. The tenant's issuer is
   `https://<slug>.<CLAVIX_DOMAIN>` (plus `:CLAVIX_PUBLIC_PORT` when set). It serves its own
   `/.well-known/openid-configuration`, `/jwks.json`, `/authorize`, `/token`, `/revoke`,
   `/userinfo` and `/introspect`.
-- **One user pool per tenant** (ADR-0008). The same e-mail in two tenants is two users.
+- **One user pool per tenant**. The same e-mail in two tenants is two users.
 - **Clavix sessions are Clavix's.** Its cookie `__Host-clavix-session` is host-only on the
   tenant's host, 14 days sliding and 30 days at most. The app never reads it.
 - **The app may keep an embedded janus** for its own session after Clavix has authenticated the
-  visitor (ADR-0030). That is the path of the preset in [step 3](#3-sign-the-user-in).
+  visitor. That is the path of the preset in [step 3](#3-sign-the-user-in).
 - A sign-up on a tenant is a per-tenant flag, `signUp`; it is closed on the `clavix` tenant
   (invitation only). Sign-in methods in M1: passkey and e-mail one-time code. Password sign-in
   is not offered.
 
 ## 0. Prerequisites
 
-- A tenant for the application. **There is no script or console to create a tenant yet** (console: M2, slice 2.2; the `clavix` tenant is seeded by a migration). Ask the Clavix session, and see
+- A tenant for the application. **There is no script or console to create a tenant yet** (console: M2, slice 2.2, see the [roadmap](../roadmap.md); the `clavix` tenant is seeded by a migration). Ask the Clavix maintainers, and see
   [Gaps](#gaps).
 - The hosted pages (sign-in, consent) are clavix-ui slice 1.6
   ([clavix-ui#1](https://github.com/softistx/clavix-ui/issues/1)); check that issue's state.
@@ -57,7 +54,6 @@ The output is JSON (`created`, `clientId`, `issuer`, `redirectUris`, `type`, and
 `clientSecret` is **printed once**: copy it into the application's secret store at once, because
 janus keeps only its SHA-256. Re-running is idempotent on the client id and prints
 `clientSecret: null`; `--rotate-secret` mints another.
-
 - **Redirect URIs** are matched exactly (janus's rules: HTTPS, no fragment, loopback `http`
   allowed). List every environment's callback with a repeated `--redirect-uri`.
 - A browser-only app registers a public client (omit `--confidential`): PKCE `S256` only, no
@@ -70,7 +66,6 @@ Full flag table: "OAuth clients" in the [README](../../README.md#oauth-clients).
 ## 2. The redirect flow
 
 The flow is the authorization code grant with PKCE (`S256`), on the tenant's issuer:
-
 1. The app redirects the browser to the tenant's `/authorize` with `response_type=code`,
    `client_id`, `redirect_uri`, `scope=openid email profile`, `state`, `nonce` and
    `code_challenge` (S256).
@@ -82,27 +77,27 @@ The flow is the authorization code grant with PKCE (`S256`), on the tenant's iss
 4. The app validates the `id_token` (`iss`, `aud`, `exp`, `nonce`; it carries `sub`, `auth_time`,
    `at_hash`) and uses `sub` as the user's identity.
 
-Lifetimes (assumed, not answered, reversible): access token 15 min; refresh token 30 days
+Lifetimes (current defaults, `src/oauth/lifetimes.ts`; they may change): access token 15 min; refresh token 30 days
 sliding, 90 days at most.
 
 ## 3. Sign the user in
 
-Two ways. The first is the one ADR-0030 chooses for our applications.
+Two ways. The first is the recommended one: the application keeps its embedded janus for its own session.
 
 ### 3a. With the Clavix preset of `@softistx/janus-social`
 
-`@softistx/janus-social` 0.2.0 and later (0.2.2 at the time of writing, on GitHub Packages) has
+`@softistx/janus-social` 0.2.0 and later (on GitHub Packages) has
 `clavix()`. It does the redirect, PKCE, the code exchange and the ID token checks of
 [step 2](#2-the-redirect-flow), and plugs into the app's embedded janus as a social provider:
 
 ```ts
-import { clavix } from '@softistx/janus-social';
+import { clavix } from "@softistx/janus-social";
 
 export const provider = clavix({
-  issuer: 'https://acme.clavix.example.com', // the tenant's issuer
+  issuer: "https://acme.clavix.example.com", // the tenant's issuer
   clientId: process.env.CLAVIX_CLIENT_ID!,
   clientSecret: process.env.CLAVIX_CLIENT_SECRET!,
-  redirectUri: 'https://app.example.com/auth/clavix/callback', // registered byte for byte
+  redirectUri: "https://app.example.com/auth/clavix/callback", // registered byte for byte
 });
 // then: janus({ ..., social: { providers: { clavix: provider } } })
 ```
@@ -132,19 +127,19 @@ keys of the token's own issuer, allowing only issuers you list or that match
 `https://<one label>.<domain>`:
 
 ```ts
-import { alxia, health } from '@alxia/core';
-import { clavix, requireScope } from '@alxia/clavix';
+import { alxia, health } from "@alxia/core";
+import { clavix, requireScope } from "@alxia/clavix";
 
 const auth = clavix({
-  domain: 'clavix.example.com', // dedicated to Clavix tenants
-  audience: 'https://api.example.com',
-  warm: ['https://acme.clavix.example.com'], // /ready waits for these keys
+  domain: "clavix.example.com", // dedicated to Clavix tenants
+  audience: "https://api.example.com",
+  warm: ["https://acme.clavix.example.com"], // /ready waits for these keys
 });
 
 alxia()
   .plugin(health({ checks: { clavix: auth.ready } }))
   .use(auth.bearer())
-  .get('/invoices', requireScope('invoices:read'), ({ user, reply }) =>
+  .get("/invoices", requireScope("invoices:read"), ({ user, reply }) =>
     reply(200, { tenant: user.tenant, subject: user.subject }),
   )
   .listen(3000);
@@ -156,7 +151,6 @@ alxia()
 package's guide ([`packages/clavix/docs`](https://github.com/softistx/alxia/tree/develop/packages/clavix/docs)).
 
 Constraints to know before relying on it:
-
 - **The token's `aud` must contain the API's identifier, and that identifier is a Clavix
   resource.** Resources per tenant arrive with the console (M2, slice 2.3); clavix-api has
   no script to register one yet, and the README states that no `/authorize` succeeds before
@@ -174,7 +168,6 @@ Constraints to know before relying on it:
 
 Clavix users have their own ids and `sub`; **nothing maps an old janus id to a Clavix `sub` for
 you.** What exists:
-
 - **With the preset (3a)**, the app's janus links the account on its own: the first time a
   visitor signs in through Clavix, `social.complete` looks for a janus user of the app with the
   same e-mail. If the Clavix ID token says the e-mail is verified **and** the app's user had
@@ -216,7 +209,7 @@ Do not use the e-mail alone as the identity once the link exists: key on `sub`.
   credentials): not built. Passkeys and password hashes cannot be carried over; the user
   registers a passkey, or signs in by e-mail code.
 - **The console** (M2): tenants, clients, resources, scopes and users are managed by script or
-  by the Clavix session until then.
+  by the Clavix maintainers until then.
 - **Social federation** (Google, GitHub, upstream OIDC; M2 slice 2.6 and M4 slice 4.1): the
   tenant offers passkey and e-mail code only.
 - Also later: MFA and step-up (4.2), PAR and DPoP (3.1, 3.2), device code and token exchange
@@ -224,8 +217,7 @@ Do not use the e-mail alone as the identity once the link exists: key on `sub`.
 
 ## Gaps
 
-For the Clavix session to decide or file, nothing here is invented to cover it:
-
+For the Clavix maintainers to decide or file an issue on clavix-api, nothing here is invented to cover it:
 1. **No user import.** No script, GraphQL operation or file format loads existing users into a
    tenant. Needed: a bulk create that keeps the e-mail (verified) and returns old id to new
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
