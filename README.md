@@ -180,6 +180,16 @@ A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, 
 own resources. A tenant with no signing key yet answers 503 `temporarily_unavailable`. The
 claims come from the users of the tenant (see "Users per tenant").
 
+**The `sub` claim** is the janus user id of the signed-in user in that tenant, unchanged
+(`janus-oidc` sets `sub` to the session's `userId` in the id_token and in `/userinfo`; no
+hashing, no pairwise value). Janus mints that id in its core (`mintId`) when the user is created:
+a lowercase, hyphenated **UUIDv7** (36 characters, e.g. `0192f3a4-5b6c-7d8e-9f01-23456789abcd`),
+time-ordered by creation. It is stable: it never changes for a user, whichever client asks, and
+it is not derived from the e-mail, so changing the e-mail does not change it. It is unique per
+tenant, not across tenants: the same person in two tenants is two users with two unrelated
+`sub`s, and a `sub` of one tenant is unknown to another. Treat it as an opaque string (currently
+36 characters; do not rely on the shape), keyed together with the issuer (`iss`, the tenant host).
+
 ## Users per tenant
 
 Each tenant has its own user pool (ADR-0008): one `@softistx/janus` instance per tenant
@@ -195,8 +205,10 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Consent and passkeys are below, and no `/authorize`
-  succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
+  `src/server.ts`. Consent and passkeys are below. A tenant always has
+  its userinfo resource as `defaultResource` (`src/oauth/issuers.ts`), so a request with no
+  `resource` is `/authorize`-able before any `resourcesFor` entry exists; an API audience needs
+  a registered resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
 
 ## Consent (the hosted page's API)
 

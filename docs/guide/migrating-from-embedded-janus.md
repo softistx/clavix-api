@@ -185,6 +185,14 @@ you.** What exists:
 
 Do not use the e-mail alone as the identity once the link exists: key on `sub`.
 
+**What a Clavix `sub` is.** The janus user id of the user in that tenant, passed through
+unchanged (the id_token and `/userinfo` both carry it). Janus mints it when the user is created:
+a lowercase, hyphenated UUIDv7 (36 characters), time-ordered. It is stable for the life of the
+user and independent of the e-mail, so an e-mail change does not move it. It is unique per
+tenant only: the same person in two tenants has two unrelated `sub`s. Store it as an opaque
+string (currently 36 characters; do not rely on the shape), together with the issuer (`iss`) when the app can see several tenants.
+Nothing maps an old janus id to the new `sub`, which is why a mapping column is needed.
+
 ## 6. Sessions and signing out of the old app
 
 - **Sessions do not move.** A session of the old embedded janus is not a Clavix session, and a
@@ -226,10 +234,8 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
    Clavix cannot issue the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
-5. **Subject format** of Clavix's `sub` is not documented in the repository; read it from an
-   ID token or `/userinfo` before relying on a shape.
-6. **Per-client grants and `client_credentials`** are not available (janus-oauth has no
+5. **Per-client grants and `client_credentials`** are not available (janus-oauth has no
    per-client grant list), so a back end calling the API as itself cannot yet use a Clavix
    token.
-7. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
+6. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
    a token with `read:packages`, as in the README's Run section.

@@ -19,7 +19,7 @@ nxgt-janus release says which.
 - **An authorization server per issuer** — authorization code with PKCE, refresh with
   rotation, revocation and discovery for each tenant (1.3, `src/oauth`, janus-oauth 0.8
   `createOAuthIssuers`). Built and mounted by `server.ts` with the real `authFor`/`claimsFor`;
-  no `/authorize` succeeds until a tenant has a resource (M2) and a sign-in surface (E1) and consent (E2a, built).
+  a request with no `resource` is for the userinfo resource, always the tenant's `defaultResource`; an API audience needs a registered resource (M2). Sign-in surface (E1) and consent (E2a) are built.
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
   (RFC 9068) and introspection (1.4, [#4](https://github.com/softistx/clavix-api/issues/4),
   `src/oauth`, janus-oidc 0.3). Built: each tenant host serves its own discovery, JWKS,
