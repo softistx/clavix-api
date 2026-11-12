@@ -49,7 +49,13 @@ describe("tenant-owned collections", () => {
 });
 
 // Where platform code may touch a tenant-owned collection directly.
-const allowed = ["src/tenancy/", "src/migrations/", "src/modules/tenants/"];
+const allowed = [
+  "src/tenancy/",
+  "src/migrations/",
+  "src/modules/tenants/",
+  "src/modules/resources/",
+  "src/config/resources.ts",
+];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.
 const tenantsAllowed = [

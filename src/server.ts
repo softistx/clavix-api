@@ -22,8 +22,8 @@ await startKeyRotation(
   redis?.queues.keyRotation,
 );
 
-// The app with the OAuth/OIDC endpoints of every tenant (no resource is
-// configured yet, so no /authorize succeeds until the tenants' resources, M2).
+// The app with the OAuth/OIDC endpoints of every tenant, serving each tenant's
+// stored resources (`resources:create`) beside the built-in userinfo one.
 const app = createApp({
   oauth: createIssuers(authFor, claimsFor),
 }).onStop(async () => {
