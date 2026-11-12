@@ -1,4 +1,5 @@
 import { createTenantAuth } from "@/users/tenant-auth";
+import { env } from "./env";
 import { oauthDb } from "./oauth-db";
 import { tenantResolver } from "./tenancy";
 
@@ -7,5 +8,9 @@ import { tenantResolver } from "./tenancy";
 // `claimsFor` are the ports of the OAuth issuers (`createIssuers`); the sign-in
 // surface of slices 1.5 E1 and E2 plugs into `janusIssuers`.
 export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
-  { resolver: tenantResolver, db: oauthDb },
+  {
+    resolver: tenantResolver,
+    db: oauthDb,
+    masterKey: env.CLAVIX_KEYS_MASTER_KEY,
+  },
 );

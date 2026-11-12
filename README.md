@@ -166,7 +166,7 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Consent is below, passkeys wait on janus (slice E3), and no `/authorize`
+  `src/server.ts`. Consent and passkeys are below, and no `/authorize`
   succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
 
 ## Consent (the hosted page's API)
@@ -280,6 +280,80 @@ address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` coo
 or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
 `clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
 come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
+
+## Passkey sign-in and registration
+
+Passwordless sign-in with a passkey, on the same `/graphql` of the tenant's host (every operation
+below goes through the same-origin guard). janus passkeys are the **first factor** here
+(`passkeys.firstFactor`, `@softistx/janus-passkeys` 0.2): no password and no TOTP. The relying party
+is the tenant's own host (`rpIdOf`) and the only origin `originOf`, so a passkey belongs to one
+tenant for good, and is unknown to every other one. WebAuthn options and responses travel as
+**JSON text** (`String`); in the browser, parse the options with
+`PublicKeyCredential.parseRequestOptionsFromJSON` / `parseCreationOptionsFromJSON` and send
+`JSON.stringify(credential.toJSON())`.
+
+```graphql
+type PasskeySignInChallenge {
+  options: String!
+  challenge: String!
+  expiresAt: DateTime!
+}
+type PasskeyRegistration {
+  options: String!
+  challenge: String!
+  expiresAt: DateTime!
+}
+type Passkey {
+  id: ID!
+  name: String!
+  transports: [String!]!
+  backupEligible: Boolean!
+  backedUp: Boolean!
+  createdAt: DateTime!
+  lastUsedAt: DateTime
+}
+extend type Query {
+  myPasskeys: [Passkey!]!
+}
+extend type Mutation {
+  passkeySignInOptions: PasskeySignInChallenge!
+  signInWithPasskey(challenge: String!, response: String!): SignedIn! # sets the cookie
+  passkeyRegistrationOptions: PasskeyRegistration!
+  registerPasskey(
+    challenge: String!
+    response: String!
+    name: String!
+  ): Passkey!
+  removePasskey(id: ID!): Boolean!
+}
+```
+
+- **Sign in** (anonymous): `passkeySignInOptions`, `navigator.credentials.get({ publicKey })`
+  (discoverable credential, so no e-mail is asked), then `signInWithPasskey`. The session cookie
+  is set as after `verifySignInCode`, and the response is `Cache-Control: no-store`. The challenge
+  lasts 5 minutes and is **spent by the first try**, right or wrong: ask for new options. Keep it
+  in the hosted page's server session, not in a URL.
+- **Register** (signed in, e-mail verified): `passkeyRegistrationOptions`,
+  `navigator.credentials.create({ publicKey })`, then `registerPasskey` with a name of 1 to 100
+  characters. The registration challenge lasts 5 minutes too, and a new `passkeyRegistrationOptions`
+  spends the user's earlier one. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
+  verified gets `EMAIL_UNVERIFIED` (403). The session must have signed in within 10 minutes
+  (`STEP_UP_REQUIRED`, 403: sign in again with a code). Up to 10 passkeys per user.
+- **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
+  (`true` when this call removed it, `false` for an id that is not the caller's; same freshness).
+  A removed passkey no longer signs in. Registering and removing mail nothing yet.
+- **Errors**: `PASSKEY_INVALID` (401) for every refusal of `signInWithPasskey`: unknown credential,
+  another tenant's passkey, wrong rpId or origin, a user not verified on the device, a wrong user
+  handle, an unknown, spent or expired challenge, a malformed response, an inactive user. One
+  code and one message: it does not say whether the credential or the user exists. At
+  registration, janus's own codes pass through: `PASSKEY_INVALID` (400, the response did not
+  verify, the challenge is spent), `PASSKEY_TAKEN` (409), `PASSKEY_LIMIT` (409),
+  `EMAIL_UNVERIFIED` (403), `STEP_UP_REQUIRED` (403), `TOKEN_*` for a bad challenge.
+  `UNAUTHENTICATED` (401) when the operation needs a session and has none.
+- **Over http** (development): janus refuses `http` origins, so every passkey operation answers
+  `NOT_FOUND`; test passkeys over https.
+- **Not yet**: `passkeySignInOptions` is anonymous and stores a token per call; the sign-in code
+  limits do not cover it, so put a rate limit in front (clavix-api#64). The `amr`/`acr` claims stay unset.
 
 ## Same origin on /graphql
 
