@@ -13,7 +13,7 @@
         "@nxgt/graphql-scalars": "^0.7.1",
         "@nxgt/graphql-validation": "^0.8.1",
         "@softistx/janus": "^0.55.0",
-        "@softistx/janus-graphql": "^0.24.1",
+        "@softistx/janus-graphql": "^0.24.2",
         "@softistx/janus-mail": "^0.25.8",
         "@softistx/janus-mongo": "^0.23.3",
         "@softistx/janus-oauth": "^0.8.4",
@@ -308,7 +308,7 @@
 
     "@softistx/janus": ["@softistx/janus@0.55.0", "https://npm.pkg.github.com/download/@softistx/janus/0.55.0/d3aadf37e10e60601f8262aafa95e6362cd91d83", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-waYzIAYIkyBJU4GFbqNLMxAZ+j4vBMYownSmWPyfDXS/uBoIBs4qnCmhXo9AKhEL1NwI5ZqaB/Jqn62Eq3BboA=="],
 
-    "@softistx/janus-graphql": ["@softistx/janus-graphql@0.24.1", "https://npm.pkg.github.com/download/@softistx/janus-graphql/0.24.1/feee6b1dbf95c310235763b3fecd19a3f4cc9f21", { "peerDependencies": { "@envelop/core": "^5.0.0", "@graphql-tools/utils": ">=10.0.0 <13", "@softistx/janus": "^0.55.0", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-m/wUlhDnmOHw7ND7jncVIN4SosaqQrcClYD3hfp1w6FqJzrhPxBGKdN7+MCrEeJMDa0LhIwJ4snf5DKzPpW8Tg=="],
+    "@softistx/janus-graphql": ["@softistx/janus-graphql@0.24.2", "https://npm.pkg.github.com/download/@softistx/janus-graphql/0.24.2/2cfd859733d19556c9f2b868b48073ae3af043a7", { "peerDependencies": { "@envelop/core": "^5.0.0 || ^6.0.0", "@graphql-tools/utils": ">=10.0.0 <14", "@softistx/janus": "^0.55.0", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-A0iYVXcAm4SHu2ZliZetXuDafDhhi6cE5JAUtyR0qY/2ynT7ciuUcIfxXCWtBNKQduRd0FyDCntYCBDv/W3kmA=="],
 
     "@softistx/janus-mail": ["@softistx/janus-mail@0.25.8", "https://npm.pkg.github.com/download/@softistx/janus-mail/0.25.8/dd42e7471bc772d25e338f206297705fdb303120", { "peerDependencies": { "@softistx/janus": "^0.55.0", "@softistx/mail": ">=1.5.0 <2", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-sDyQw7pbgsIz+eoaoxGFOZIFA2++2L8U53yZ2jg8c+q8RqW8C1muiP9/Ac5HHpAqgVOFcFOQLUivg2fj0e7SWg=="],
 
