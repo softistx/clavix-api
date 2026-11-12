@@ -1,12 +1,12 @@
 # Troubleshooting
 
 Find the message you see, then read when it appears, why, and the fix.
-- [`temporarily_unavailable`: the issuer has no signing key yet](#temporarily_unavailable-the-issuer-has-no-signing-key-yet-retry-shortly)
+- [`temporarily_unavailable`: the issuer has no signing key yet](#temporarily_unavailable-the-issuer-has-no-signing-key-yet)
 - [`CLAVIX_TRUSTED_PROXIES is required in production`](#clavix_trusted_proxies-is-required-in-production-set-the-number-of-reverse-proxies-in-front-of-the-app-0-if-none)
 - [Client registration refusals (`clients:create`)](#client-registration-refusals-clientscreate)
 - [`FORBIDDEN` and `NOT_FOUND` on `/graphql`](#forbidden-and-not_found-on-graphql)
 
-## `temporarily_unavailable`: the issuer has no signing key yet, retry shortly
+## `temporarily_unavailable`: the issuer has no signing key yet
 
 **When:** an OAuth endpoint answers `503` with the body
 `{"error":"temporarily_unavailable", ...}` (janus-oauth's `NoSigningKeyError`; the response carries no `Retry-After`).
