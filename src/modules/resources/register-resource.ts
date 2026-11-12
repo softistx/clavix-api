@@ -109,6 +109,14 @@ export async function registerResource(
       `"${uri}" is the tenant's userinfo endpoint, a built-in resource`,
     );
   }
+  // Refuse rather than rewrite: `.href` adds "/" to a bare origin, which would
+  // change the audience the clients already request.
+  const canonical = new URL(uri).href;
+  if (canonical !== uri) {
+    throw new CliInputError(
+      `resource URI "${uri}" is not in canonical form: write it as ${canonical}`,
+    );
+  }
   const scoped = scopeToTenant(options.collection, tenant._id);
   let existing = await scoped.findFirst({ uri });
   if (existing === undefined) {
