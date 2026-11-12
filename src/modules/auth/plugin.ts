@@ -1,6 +1,5 @@
 import { denial, janusMaskError, useJanus } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
-import type { SignInThrottle } from "./throttle";
 
 // `ctx.janus` on every operation, from the janus instance of the tenant the
 // request's host names (a session of another tenant is anonymous there), and
@@ -21,34 +20,3 @@ export const janusPlugin = () =>
 // A JanusError a resolver lets through is answered with its code and status
 // (MAIL_THROTTLED 429, STORE_FAILED 503), the rest as Yoga masks it.
 export const janusMasking = { maskError: janusMaskError() };
-
-// The throttles of the anonymous operations (`requestSignInCode`,
-// `passkeySignInOptions`), put on every context by `createApp`; none: no
-// extra limit.
-const THROTTLE = "signInThrottle" as const;
-const PASSKEY_THROTTLE = "passkeyThrottle" as const;
-type WithThrottles = {
-  [THROTTLE]?: SignInThrottle | undefined;
-  [PASSKEY_THROTTLE]?: SignInThrottle | undefined;
-};
-
-export const throttleContext = (
-  throttle: SignInThrottle | undefined,
-  passkeyThrottle?: SignInThrottle | undefined,
-) => ({
-  onContextBuilding: ({
-    extendContext,
-  }: {
-    extendContext: (extension: WithThrottles) => void;
-  }) =>
-    extendContext({
-      [THROTTLE]: throttle,
-      [PASSKEY_THROTTLE]: passkeyThrottle,
-    }),
-});
-
-export const throttleOf = (ctx: unknown): SignInThrottle | undefined =>
-  (ctx as WithThrottles)[THROTTLE];
-
-export const passkeyThrottleOf = (ctx: unknown): SignInThrottle | undefined =>
-  (ctx as WithThrottles)[PASSKEY_THROTTLE];

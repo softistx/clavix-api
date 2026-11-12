@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { ClientInputError } from "@/modules/resources/errors";
+import { CliInputError } from "@/cli/errors";
 import { OFFERED_GRANTS, type RegisterClientInput } from "./register-client";
 
 export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name> --redirect-uri <uri> [options]
@@ -12,21 +12,20 @@ export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name
   --grants <a,b>           ${OFFERED_GRANTS.join(",")} (default: both; every client has both)
   --rotate-secret          mint a new secret for an existing confidential client`;
 
-/** The script's flags as a registration input; a `ClientInputError` for a bad line. */
+/** The script's flags as a registration input; a `CliInputError` for a bad line. */
 export function parseClientArgs(argv: readonly string[]): RegisterClientInput {
   let values: ReturnType<typeof read>["values"];
   try {
     values = read(argv).values;
   } catch (error) {
-    throw new ClientInputError(
+    throw new CliInputError(
       error instanceof Error ? error.message : String(error),
     );
   }
   if (values.tenant === undefined) {
-    throw new ClientInputError("--tenant is required");
+    throw new CliInputError("--tenant is required");
   }
-  if (values.name === undefined)
-    throw new ClientInputError("--name is required");
+  if (values.name === undefined) throw new CliInputError("--name is required");
   return {
     tenant: values.tenant,
     name: values.name,

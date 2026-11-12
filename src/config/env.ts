@@ -17,6 +17,9 @@ const optionalOutsideProduction = <T>(schema: z.ZodType<T, string>) =>
         .pipe(schema.optional())
         .optional();
 
+const trustedProxiesRequired =
+  "CLAVIX_TRUSTED_PROXIES is required in production: set the number of reverse proxies in front of the app (0 if none)";
+
 const redisUrl = z
   .string()
   .regex(/^rediss?:\/\/[^/]/, "not a redis:// or rediss:// URL");
@@ -103,6 +106,13 @@ export const env = defineEnv({
     .default(3600),
   // How many reverse proxies stand in front of the app. 0 (default): the
   // client address is the connection's. N: it is the entry N places from the
-  // right of X-Forwarded-For, which the proxies append to.
-  CLAVIX_TRUSTED_PROXIES: z.coerce.number().int().min(0).default(0),
+  // right of X-Forwarded-For, which the proxies append to. Required in
+  // production, where a wrong 0 behind a proxy rate-limits the proxy's address
+  // for everyone (and a wrong N lets a client forge its own): say it, even if 0.
+  CLAVIX_TRUSTED_PROXIES: production
+    ? z
+        .string({ error: trustedProxiesRequired })
+        .regex(/^\d+$/, trustedProxiesRequired)
+        .transform(Number)
+    : z.coerce.number().int().min(0).default(0),
 });

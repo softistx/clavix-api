@@ -3,13 +3,13 @@ import {
   type BoundLimits,
   createThrottle,
   ipAndTenantLimits,
+  type LimitConfig,
   retryAfterSeconds,
-  type SignInLimitConfig,
-  type SignInThrottle,
-} from "@/modules/auth/throttle";
+  type Throttle,
+} from "@/http/throttle/core";
 
-export type PasskeyLimitConfig = SignInLimitConfig;
-export type PasskeyThrottle = SignInThrottle;
+export type PasskeyLimitConfig = LimitConfig;
+export type PasskeyThrottle = Throttle;
 
 // The two limits on the anonymous `passkeySignInOptions`, which writes one
 // token per call: per client address and tenant, and per tenant. Same shape

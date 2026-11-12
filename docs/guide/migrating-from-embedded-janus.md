@@ -4,9 +4,9 @@ This guide is for an application that today owns its users and sessions with an 
 `@softistx/janus` instance (sign-in, passwords, passkeys, sessions in its own database) and moves
 to Clavix as its identity provider, becoming an OpenID Connect relying party (RP). Each application migrates in its own project.
 
-Status words used below: **Built** (in clavix-api or in a released
-package), **Not built** (a gap: nothing exists yet; it is listed in [Gaps](#gaps)). Nothing here
-is a promise of a date.
+Two status words are used below. **Built** means it works today, in clavix-api or in a
+released package. **Not built** means it does not exist yet; every such item is listed in
+[Gaps](#gaps). Nothing here is a promise of a date.
 
 ## What changes for the application
 
@@ -27,20 +27,20 @@ Facts to hold on to (all Built, see the clavix-api README):
 - **The app may keep an embedded janus** for its own session after Clavix has authenticated the
   visitor. That is the path of the preset in [step 3](#3-sign-the-user-in).
 - A sign-up on a tenant is a per-tenant flag, `signUp`; it is closed on the `clavix` tenant
-  (invitation only). Sign-in methods in M1: passkey and e-mail one-time code. Password sign-in
+  (invitation only). Sign-in methods today: passkey and e-mail one-time code. Password sign-in
   is not offered.
 
 ## 0. Prerequisites
 
-- A tenant for the application. Create it with `bun run tenants:create --slug <slug> --name <name>` (see the README, "Tenants"); the console comes in M2 (slice 2.2, see the [roadmap](../roadmap.md)), and the `clavix` tenant is seeded by a migration. See [Gaps](#gaps).
-- The hosted pages (sign-in, consent) are clavix-ui slice 1.6
+- A tenant for the application. Create it with `bun run tenants:create --slug <slug> --name <name>` (see the README, "Tenants"); a console for it is planned (see the [roadmap](../roadmap.md)), and the `clavix` tenant is seeded by a migration. See [Gaps](#gaps).
+- The hosted pages (sign-in, consent) are a later clavix-ui release
   ([clavix-ui#1](https://github.com/softistx/clavix-ui/issues/1)); check that issue's state.
   The API behind them (e-mail code, passkeys, consent) is Built.
 - A resource for the API's tokens (`bun run resources:create`), see [step 4](#4-verify-access-tokens-on-the-api).
 
 ## 1. Register the application as a client
 
-Until the console exists (M2, slice 2.3) a client is registered on a tenant by script, from a
+Until the console exists (planned) a client is registered on a tenant by script, from a
 clavix-api checkout with the deployment's environment:
 
 ```sh
@@ -107,7 +107,7 @@ and the preset's own page,
 [`docs/guide/clavix.md`](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus-social/docs/guide/clavix.md).
 The preset asks for `openid email profile`. The identity it hands janus is `accountId` = the
 ID token's `sub`, `email`, `emailVerified`, `name`, `picture`. Its optional `acrValues` and
-`maxAge` need MFA and step-up on the tenant, which are **not built** (M4, slice 4.2): leave
+`maxAge` need MFA and step-up on the tenant, which are **not built** yet (see the [roadmap](../roadmap.md)): leave
 them out for now.
 
 The app keeps its own janus session cookie after `complete` answers `signedIn`.
@@ -153,12 +153,12 @@ Constraints to know before relying on it:
 - **The token's `aud` must contain the API's identifier, and that identifier is a Clavix
   resource.** Register it with
   `bun run resources:create --tenant <slug> --uri <api audience> --scope <scope>` (the console
-  comes in M2, slice 2.3). Sign-in itself works without one (a request with no `resource` is
+  is planned). Sign-in itself works without one (a request with no `resource` is
   for the tenant's userinfo, so the token's `aud` is the userinfo URL); a client that asks
   `resource=<uri>` gets a token whose `aud` is that URI, and an unregistered URI is refused
   (`invalid_target`).
-- **`roles` is empty**: the `roles` claim moved to M2 (slice 2.3). `permissions` arrive in M5.
-- **`scopes`** are the scopes granted on the resource, which are also configured in M2.
+- **`roles` is empty**: the `roles` claim is planned. `permissions` come with access rules, later.
+- **`scopes`** are the scopes granted on the resource, which a console will configure later.
 - A non-alxia API can verify the token itself: the JWT is signed by the tenant's key
   (ES256 default), published at `/jwks.json`; or it calls `/introspect` as a confidential
   client of the same tenant.
@@ -212,17 +212,17 @@ Nothing maps an old janus id to the new `sub`, which is why a mapping column is 
 - To cut the app's API access on sign-out, revoke the refresh token at `/revoke`. An access
   token already issued stays valid until `exp` (15 min) unless the API introspects it.
 
-## What M1 does not cover
+## What is not covered yet
 
 - **User import** (old users into a tenant, with their e-mail verified flag, passkeys and
   credentials): not built. Passkeys and password hashes cannot be carried over; the user
   registers a passkey, or signs in by e-mail code.
-- **The console** (M2): tenants, clients, resources, scopes and users are managed by script or
+- **The console**: tenants, clients, resources, scopes and users are managed by script or
   by the Clavix maintainers until then.
-- **Social federation** (Google, GitHub, upstream OIDC; M2 slice 2.6 and M4 slice 4.1): the
+- **Social federation** (Google, GitHub, upstream OIDC; planned): the
   tenant offers passkey and e-mail code only.
-- Also later: MFA and step-up (4.2), PAR and DPoP (3.1, 3.2), device code and token exchange
-  (3.3, 3.4), the `roles` claim (2.3), permissions and access rules (M5).
+- Also later: MFA and step-up, PAR and DPoP, device code and token exchange, the `roles`
+  claim, permissions and access rules.
 
 ## Gaps
 
@@ -230,8 +230,8 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
 1. **No user import.** No script, GraphQL operation or file format loads existing users into a
    tenant. Needed: a bulk create that keeps the e-mail (verified) and returns old id to new
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
-2. **No tenant console** before M2 slice 2.2; a tenant is created by `tenants:create`.
-3. **No resource console** before slice 2.3: resources are registered by script
+2. **No tenant console** before the console exists; a tenant is created by `tenants:create`.
+3. **No resource console** before the console exists: resources are registered by script
    (`resources:create`), which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".

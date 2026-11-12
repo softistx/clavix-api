@@ -5,6 +5,8 @@ import {
   type SigningKeyStore,
   s256Challenge,
 } from "@softistx/janus-oauth";
+import { DataError } from "@softistx/mongo";
+import { CliInputError } from "@/cli/errors";
 import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
@@ -15,15 +17,12 @@ import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { parseResourceArgs } from "./cli";
-import {
-  ResourceInputError,
-  registerResource,
-  storedResourcesFor,
-} from "./register-resource";
+import { registerResource, storedResourcesFor } from "./register-resource";
 
 const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";
 const API_A = "https://api.alpha.example/v1";
+const API_RACE = "https://api.race.example/v1";
 const API_B = "https://api.beta.example/v1";
 const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
@@ -188,7 +187,7 @@ describe("resources:create", () => {
         scopes: ["read"],
         ...input,
       });
-    await expect(bad({ uri: "not a uri" })).rejects.toThrow(ResourceInputError);
+    await expect(bad({ uri: "not a uri" })).rejects.toThrow(CliInputError);
     await expect(bad({ uri: "http://api.example/v1" })).rejects.toThrow(
       /https/,
     );
@@ -200,6 +199,65 @@ describe("resources:create", () => {
     await expect(
       bad({ uri: userinfoOf(issuerOf("resalpha", config)) }),
     ).rejects.toThrow(/userinfo/);
+    // The same URL spelled another way is still the userinfo endpoint.
+    const spelled = userinfoOf(issuerOf("resalpha", config)).replace(
+      "https://",
+      "HTTPS://",
+    );
+    await expect(bad({ uri: spelled })).rejects.toThrow(/userinfo/);
+  });
+
+  test("a concurrent run that created the resource first is re-read and updated", async () => {
+    await registerResource(options, {
+      tenant: "resalpha",
+      uri: API_RACE,
+      scopes: ["read"],
+    });
+    // The first read misses (as if the other run had not written yet), the
+    // create is then refused by the unique index.
+    let reads = 0;
+    const stale = new Proxy(mongo.db.resources, {
+      get(target, key, receiver) {
+        const value = Reflect.get(target, key, receiver);
+        if (key !== "findFirst") return value;
+        return async (...args: unknown[]) => {
+          reads += 1;
+          return reads === 1
+            ? undefined
+            : (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+    const result = await registerResource(
+      { ...options, collection: stale },
+      { tenant: "resalpha", uri: API_RACE, scopes: ["write"] },
+    );
+    expect(result).toMatchObject({ scopes: ["write"] });
+    const alpha = await findTenant("resalpha");
+    const stored = await mongo.db.resources.raw
+      .find({ tenantId: alpha?._id as never, uri: API_RACE })
+      .toArray();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.scopes).toEqual(["write"]);
+  });
+
+  test("a store failure is not an input error: it reaches the script as it is", async () => {
+    const failing = new Proxy(mongo.db.resources, {
+      get(target, key, receiver) {
+        if (key === "create") {
+          return async () => {
+            throw new DataError("store down", { serverCode: 6 });
+          };
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const attempt = registerResource(
+      { ...options, collection: failing },
+      { tenant: "resalpha", uri: API_B, scopes: ["read"] },
+    );
+    await expect(attempt).rejects.toBeInstanceOf(DataError);
+    await expect(attempt).rejects.not.toBeInstanceOf(CliInputError);
   });
 
   test("parses the script's flags", () => {
@@ -217,7 +275,7 @@ describe("resources:create", () => {
     ).toEqual({ tenant: "acme", uri: API_A, scopes: ["read", "write"] });
     expect(() => parseResourceArgs(["--uri", API_A])).toThrow(/--tenant/);
     expect(() => parseResourceArgs(["--tenant", "a"])).toThrow(/--uri/);
-    expect(() => parseResourceArgs(["--bogus"])).toThrow(ResourceInputError);
+    expect(() => parseResourceArgs(["--bogus"])).toThrow(CliInputError);
   });
 });
 

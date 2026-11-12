@@ -2,7 +2,6 @@ import { denial, passkeyResolvers } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
-import { passkeyThrottleOf } from "@/modules/auth/plugin";
 import {
   asPasskeyInvalid,
   currentOf,
@@ -28,6 +27,7 @@ async function authOf(ctx: Context) {
 }
 
 const janusPasskeys = passkeyResolvers({ auth: authOf, firstFactor: true });
+// Temporary, until @softistx/janus-graphql#682
 // `firstFactor: true` adds both fields; the types keep them optional.
 const present = <T>(field: T | undefined): T => {
   if (field === undefined) throw new TypeError("janus has no passkey sign-in");
@@ -46,9 +46,12 @@ export const passkeys: Resolvers = {
   },
   Mutation: {
     passkeySignInOptions: async (_, __, ctx) => {
+      // The tenant first: a host that names none is a NOT_FOUND before any
+      // throttle budget is spent. The key is the client address and the tenant.
       const tenant = await ctx.tenant();
-      await passkeyThrottleOf(ctx)?.check({
-        tenantId: tenant?.tenantId ?? "",
+      if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      await ctx.passkeyThrottle?.check({
+        tenantId: tenant.tenantId,
         ip: ctx.ip,
       });
       return signInOptions(_, __, ctx);

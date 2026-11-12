@@ -117,6 +117,21 @@ describe("source scan", () => {
     expect(await offendersOf(direct(ownedNames), allowed, true)).toEqual([]);
   });
 
+  test("no allowed module exports a tenant-owned collection bare", async () => {
+    // `export const x = mongo.db.resources` would hand the unscoped collection
+    // to any importer, past the scan above: export a bound function instead.
+    const bare = new RegExp(
+      `export\\s+(?:const|let|var)\\s+\\w+\\s*=\\s*(?:\\w+\\.)*db\\.(${ownedNames.join("|")})\\s*;`,
+    );
+    const offenders: string[] = [];
+    for await (const path of new Glob("src/**/*.ts").scan(".")) {
+      if (path.endsWith(".spec.ts")) continue;
+      if (bare.test(await Bun.file(path).text())) offenders.push(path);
+    }
+    expect(offenders).toEqual([]);
+    expect(bare.test("export const c = mongo.db.notes;")).toBe(true);
+  });
+
   test("the tenants collection is reached only by its module, its wiring and the migrations", async () => {
     expect(await offendersOf(direct(["tenants"]), tenantsAllowed)).toEqual([]);
   });

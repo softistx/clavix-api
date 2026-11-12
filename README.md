@@ -1,11 +1,25 @@
 # clavix-api
 
-The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider. The
-spec is in `../spec/`; the plan is `docs/roadmap.md`. Rules for contributors:
-[AGENTS.md](AGENTS.md). Moving an application from embedded janus to Clavix:
-[docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md).
+The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider: one issuer per
+tenant at `https://<slug>.<CLAVIX_DOMAIN>`, with its own users, clients, resources and signing keys.
+The product spec lives with the project's planning folder, outside this repository.
 
-Today it serves `GET /healthz`, `health { status version }` and the e-mail code sign-in of the hosted pages (below) on `POST /graphql`.
+Today it serves:
+- the OAuth 2.1 / OpenID Connect endpoints of each tenant (authorization code with PKCE, refresh,
+  JWT access tokens, discovery, userinfo, introspection, JWKS);
+- on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
+  passkey sign-in and registration, and the consent API of the hosted pages;
+- scripts that create tenants, OAuth clients and API resources until the console exists.
+
+## Documentation
+
+| Page                                                                                       | What is in it                                       |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| This README                                                                                | run, environment, and each feature below            |
+| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix |
+| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes      |
+| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                 |
+| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                   |
 
 ## Run
 
@@ -32,25 +46,36 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
 
+Every script reads `MONGO_URI` (and the rest of the environment below, validated at start). What each
+one needs on top:
+
+| Script                  | Environment it needs                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `db:sync`, `db:migrate` | `MONGO_URI` with a role that may create indexes and validators (`dbAdmin`)                                                                                                                                   |
+| `tenants:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
+| `clients:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
+| `resources:create`      | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
+| `start`                 | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
+
 ## Environment
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                               |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `PORT`                                                                 | 3000                                                                                                         |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                       |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                             |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                         |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                     |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                  |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                            |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                            |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                             |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                  |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                   |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app, default 0 (see "Sign-in code limits")                                   |
+| Variable                                                               | Default / rule                                                                                                           |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`                                                                 | 3000                                                                                                                     |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                   |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                                         |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                     |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                 |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                              |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory             |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                        |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                        |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                         |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                              |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                               |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits") |
 
 ## Sign-in code limits
 
@@ -227,7 +252,7 @@ or suspended host has no instance.
   `SameSite=Lax`, `Path=/`: a browser never sends one tenant's session to another host.
 - **Lifetime**: 14 days, sliding (renewed once a day), and never more than 30 days after sign-in
   (`session.absolute`): past it the session is anonymous however recently it was used.
-- **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
+- **Passkey relying party** (a default to confirm before the first production passkey, since a passkey is bound to its relying party for good): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
   `src/server.ts`. Consent and passkeys are below, and a client's `/authorize` needs a resource: userinfo's, or one
@@ -349,7 +374,7 @@ come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, 
 
 Passwordless sign-in with a passkey, on the same `/graphql` of the tenant's host (every operation
 below goes through the same-origin guard). janus passkeys are the **first factor** here
-(`passkeys.firstFactor`, `@softistx/janus-passkeys` 0.2): no password and no TOTP. The relying party
+(`passkeys.firstFactor`, `@softistx/janus-passkeys`): no password and no TOTP. The relying party
 is the tenant's own host (`rpIdOf`) and the only origin `originOf`, so a passkey belongs to one
 tenant for good, and is unknown to every other one. WebAuthn options and responses travel as
 **JSON text** (`String`); in the browser, parse the options with

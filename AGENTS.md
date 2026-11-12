@@ -1,10 +1,11 @@
 # clavix-api: rules for agents and contributors
 
 The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (one
-issuer per tenant): Bun, alxia, GraphQL Yoga, and later `@softistx/mongo`,
-`@softistx/redis` and the `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints,
-the GraphQL API of the console and of the hosted pages, and the tenant, key, domain and
-policy services. The UI is `softistx/clavix-ui`.
+issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
+`@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
+pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
+services behind them; tenants, clients and resources are created by script until the M2 console.
+The UI is `softistx/clavix-ui`.
 
 The owner's rules for every repository (worktrees, Conventional Commits, integration
 branches, CI quotas, merges and releases, questions to the owner, in-house packages) are
@@ -12,7 +13,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 
 ## Where things are
 
-- **The spec** is in `../spec/` (the coordinating session's folder): `README.md`,
+- **The spec** is in `../spec/` (the coordinating session's folder, outside this repository): `README.md`,
   `vision.md`, `domain.md`, `architecture.md`, `decisions.md` (the ADRs, changed only by a
   new ADR), `milestones.md`. Read `architecture.md` and `decisions.md` before a slice.
 - **The roadmap** is `docs/roadmap.md`; each slice is one GitHub issue on this repository,
@@ -27,13 +28,14 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `.claude/settings.json`); healthix-api is the worked example this skeleton was cut from.
 - Layout: `src/modules/<name>/` holds a module's `*.graphqls`, resolvers and services,
   merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
-  `src/config/` reads the environment once (`defineEnv`); generated code is in
+  `src/config/` reads the environment once (`defineEnv`); `src/cli/` holds what the scripts share
+  (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below); generated code is in
   `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
-  not the scoped collections. `createApp({ oauth })` mounts it. `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page of a later UI slice (its API is built, see Consent). `bun run
+  not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config) and `signing-keys.ts` (the no-key error and the key-store wrapper). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
   db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
@@ -48,7 +50,7 @@ A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the acces
 <slug> --uri <https uri> --scope <s> [--scope <s>] [--name <label>]` stores or updates one
 (idempotent on the URI; the scopes are replaced), until the console (M2). The `resources`
 collection is tenant-owned and reached only through `scopeToTenant` (`storedResourcesFor`,
-`registerResource`), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
+`registerResource`; `src/config/resources.ts` exports `registerStoredResource`, never the collection), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
 in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/resources.ts`.
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
@@ -104,11 +106,11 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
 - The challenge travels in the response body (`cache-control: no-store`), not a cookie: the hosted
   pages are a BFF. Code: 6 digits, 10 min, 5 attempts; 5 mails per address per 10 min
   (`MAIL_THROTTLED`, 429), both janus's.
-- **Limits on top** (`throttle.ts`, README "Sign-in code limits"): per client IP and tenant (20 / 10 min)
+- **Limits on top** (`src/modules/auth/throttle.ts` over `src/http/throttle/core.ts`, README "Sign-in code limits"): per client IP and tenant (20 / 10 min)
   and per tenant (200 / hour), `@softistx/redis` rate limits wired in `openAppRedis`, keys led by the
   tenant id, configured by `CLAVIX_CODE_*`. Refusal = janus's `MailThrottledError`, so the answer is the
   per-address one. `createApp({ signInThrottle })` injects it (specs); default: the app's Redis, none
-  without it. The IP is `ctx.ip`; `CLAVIX_TRUSTED_PROXIES` (default 0) makes `createBase` read
+  without it. The IP is `ctx.ip`; `CLAVIX_TRUSTED_PROXIES` (required in production, 0 elsewhere by default) makes `createBase` read
   `X-Forwarded-For`, and `test/setup.ts` sets it to 1 so specs choose the address by header.
 - **Mail**: one platform sender `no-reply@<CLAVIX_DOMAIN>` (display name = tenant name) over
   `@softistx/mail-smtp` when `CLAVIX_SMTP_URL` is set (required in production), else the memory
@@ -134,7 +136,8 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 - The anonymous `passkeySignInOptions` has its own limits (`src/modules/passkeys/throttle.ts`, README
   "Passkey sign-in and registration"): per IP and tenant (60 / 10 min) and per tenant (600 / hour),
   `CLAVIX_PASSKEY_*`, over the shared core `createThrottle` / `ipAndTenantLimits` of
-  `auth/throttle.ts` (never copy it). Refusal = `PASSKEY_THROTTLED` 429 with `Retry-After`; Redis down:
+  `src/http/throttle/core.ts` (never copy it); the throttles ride on the context (`ctx.signInThrottle`,
+  `ctx.passkeyThrottle`, set by `createBase`). `passkeySignInOptions` resolves the tenant first (unknown host: `NOT_FOUND`, no budget spent). Refusal = `PASSKEY_THROTTLED` 429 with `Retry-After`; Redis down:
   fail open, logged. `createApp({ passkeyThrottle })` injects it (specs); default: the app's Redis.
   Spec: `src/modules/passkeys/throttle.spec.ts`.
 
@@ -182,7 +185,9 @@ the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its ow
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
 `tenantBySlug` (`src/config/tenancy.ts`). Grants are not stored: janus-oauth 0.8 has no
-per-client list (the script refuses all but code and refresh).
+per-client list (the script refuses all but code and refresh). A client keeps its type: re-running a
+public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
+one is refused (docs/troubleshooting.md).
 
 ## Green bar
 

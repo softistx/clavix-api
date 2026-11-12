@@ -173,3 +173,22 @@ test("the sign-in code limits and the proxy count have defaults and are read", a
     "CLAVIX_CODE_IP_LIMIT",
   );
 });
+
+test("CLAVIX_TRUSTED_PROXIES is required in production, with a clear error", async () => {
+  const production = {
+    ...clean,
+    NODE_ENV: "production",
+    REDIS_URL: "redis://redis:6379",
+    CLAVIX_DOMAIN: "clavix.example",
+    CLAVIX_SMTP_URL: "smtps://relay.example:465",
+    CLAVIX_KEYS_MASTER_KEY: Buffer.alloc(32, 7).toString("base64"),
+  };
+  await expect(
+    load({ ...production, CLAVIX_TRUSTED_PROXIES: undefined }),
+  ).rejects.toThrow("CLAVIX_TRUSTED_PROXIES is required in production");
+  await expect(
+    load({ ...production, CLAVIX_TRUSTED_PROXIES: "" }),
+  ).rejects.toThrow("CLAVIX_TRUSTED_PROXIES");
+  const zero = await load({ ...production, CLAVIX_TRUSTED_PROXIES: "0" });
+  expect(zero.env.CLAVIX_TRUSTED_PROXIES).toBe(0);
+});
