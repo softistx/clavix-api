@@ -213,3 +213,26 @@ the user is deactivated. All look alike on purpose. A mail scanner that opened t
 `GET` would also have spent it: the page must sign in only on a POST from a button.
 
 **Fix:** offer a new link with `requestMagicLink`, and tell the user to open the latest e-mail.
+
+## Console API refusals (`/console/graphql`, `operators:grant`)
+
+### `401 UNAUTHENTICATED: A valid console token is required`
+
+The request has no bearer token, or it is forged, expired, revoked or for another audience. Ask
+the `clavix` tenant's issuer for a token with `resource=https://console.<CLAVIX_DOMAIN>/api`.
+
+### `503 SERVICE_UNAVAILABLE: Try again later`
+
+The token store or the `clavix` tenant could not be reached. Retry; check MongoDB and that the
+`clavix` tenant is active.
+
+### `FORBIDDEN: Not allowed`
+
+The caller's role does not give the permission the field needs (a viewer cannot edit, a tenant's
+admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
+role `bun run operators:grant --email <address> --role <role>`.
+
+### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
+
+The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
+first. Pass `--email`, and a `--role` of owner, admin or viewer.

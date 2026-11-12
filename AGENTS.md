@@ -36,7 +36,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
-  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
+  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
