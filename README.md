@@ -199,16 +199,15 @@ mutation Revoke($id: ID!) {
 The page sends the user agent to `redirectTo` (the client's redirect URI with `code` or the error,
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
-request, a host with no tenant, or a request that is not same-origin JSON), `BAD_USER_INPUT` (a
+request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
 scope not asked for), `STEP_UP_REQUIRED` (403).
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
   again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
   the request stays pending. `denyOAuthRequest` and the read do not ask. janus's `auth.stepUp.*`
   mutations are not exposed.
-- **Same origin, JSON only**: a consent read or decision whose `Origin` is not the tenant's own, or
-  that is a POST other than `application/json` (a CORS "simple" form post), sees no such request
-  (`NOT_FOUND`); the cookie is the credential and a sibling tenant host is same-site.
+- **Same origin, JSON only**: this holds for every `/graphql` operation, not only consent (see "Same
+  origin on /graphql" below).
 - **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No `amr` or
   `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL surface does not), and
   M1 needs neither.
@@ -251,6 +250,29 @@ address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` coo
 or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
 `clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
 come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
+
+## Same origin on /graphql
+
+The cookie is the credential and a sibling tenant host is same-site (`SameSite=Lax` does not stop it),
+so one Yoga plugin (`useSameOriginJson`, `src/http/same-origin.ts`) guards every `/graphql` request
+before anything is parsed or run: a foreign `Origin`, `Origin: null`, or a POST other than
+`application/json` (a CORS "simple" form post) is refused, and the answer carries no CORS header. The
+`Origin` host is compared with the request host (not the scheme, so it holds behind a TLS-terminating
+proxy); a request with no `Origin` (not a browser) passes, since the cookie is `__Host-`.
+
+| Refused operation                                                                                          | Answer                                  |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| consent (`oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, `connectedApps`, `revokeConnectedApp`) | HTTP 404, `extensions.code` `NOT_FOUND` |
+| any other (`signOut`, `requestSignInCode`, `verifySignInCode`, `currentUser`, ...)                         | HTTP 403, `extensions.code` `FORBIDDEN` |
+
+A request that mixes consent and other root fields gets the 403. A refused request is neither executed nor mailed. Both answers are `{ "errors": [...] }` JSON.
+
+## Shutdown
+
+On `SIGTERM` or `SIGINT` the server finishes the requests in flight, then waits up to 10 seconds for
+the sign-in code mails still being handed to the relay (`drain` in `src/modules/auth/outbox.ts`, an
+`onStop` hook in `src/server.ts`), so a code is not lost; a mail still in flight after that is dropped
+and logged (the visitor asks again).
 
 ## How a host maps to a tenant
 

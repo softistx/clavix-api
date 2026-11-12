@@ -21,7 +21,22 @@ export function afterAnswer(
   inFlight.add(run);
 }
 
-/** Resolves when every e-mail started so far has been handed over or has failed: the specs. The server does not drain it on stop yet: a code mail in flight at SIGTERM is lost (the visitor asks again). */
+/** Resolves when every e-mail started so far has been handed over or has failed. */
 export async function settled(): Promise<void> {
   while (inFlight.size > 0) await Promise.all([...inFlight]);
+}
+
+/** The shutdown drain: waits for the mails in flight, at most `timeoutMs`. `"timeout"` means some were still in flight (lost; the visitor asks again). */
+export async function drain(
+  timeoutMs = 10_000,
+): Promise<"drained" | "timeout"> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+  });
+  try {
+    return await Promise.race([settled().then(() => "drained" as const), late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
