@@ -1,5 +1,6 @@
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { redis } from "@/config/redis";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
 import { parseTenantArgs, USAGE } from "@/modules/tenants/cli";
 import { issuerOf } from "@/modules/tenants/identity";
@@ -44,4 +45,5 @@ try {
   process.exitCode = 1;
 } finally {
   await mongo.close();
+  await redis?.close();
 }

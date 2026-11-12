@@ -19,6 +19,12 @@ nxgt-janus release says which.
   (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
   and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
   Waits on `@softistx/security` `remotePolicy`.
+- **Magic-link sign-in (toggleable)** — a user signs in from a link sent by e-mail, behind a
+  `CLAVIX_MAGIC_LINK` switch that is off by default
+  ([#89](https://github.com/softistx/clavix-api/issues/89)). The second factor is still
+  required after the link, the answer is the same for any address, and requests are throttled.
+  A per-tenant toggle comes later with sign-in methods per tenant
+  ([#12](https://github.com/softistx/clavix-api/issues/12)).
 
 ## Later
 
@@ -40,9 +46,9 @@ nxgt-janus release says which.
 - MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
 - Audit log, viewer and export; webhooks per tenant; telemetry.
 
-**Authorization (after the first version)**
-- Roles, permissions and relations authored per tenant in Clavix, published as signed
-  rules that each API pulls and evaluates locally, with no remote decision point.
+**Authorization authoring**
+- Roles, permissions and relations defined per tenant in the console, as the vocabulary
+  the access rules refer to.
 
 ## Shipped
 

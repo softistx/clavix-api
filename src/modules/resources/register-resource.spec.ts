@@ -205,6 +205,14 @@ describe("resources:create", () => {
       "HTTPS://",
     );
     await expect(bad({ uri: spelled })).rejects.toThrow(/userinfo/);
+    // Another spelling of a resource would be a second audience: refused with
+    // the canonical form (a bare origin gains "/", so it is not rewritten).
+    await expect(bad({ uri: "https://API.alpha.example/v1" })).rejects.toThrow(
+      /write it as https:\/\/api\.alpha\.example\/v1/,
+    );
+    await expect(bad({ uri: "https://api.alpha.example" })).rejects.toThrow(
+      /write it as https:\/\/api\.alpha\.example\//,
+    );
   });
 
   test("a concurrent run that created the resource first is re-read and updated", async () => {

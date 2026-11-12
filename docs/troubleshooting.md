@@ -109,6 +109,21 @@ bun run clients:create --tenant acme --name "Web app" \
 Also refused: an unknown tenant slug or a suspended tenant, a missing `--name`, and a client id that is not
 1-64 characters of `a-z`, `0-9` and `-` (not starting or ending with `-`).
 
+## Resource registration refusals (`resources:create`)
+
+### `resource URI "<uri>" is not in canonical form: write it as <canonical>`
+
+**When:** `--uri` is a valid URL but not spelled the way URLs normalise: upper-case scheme or host, a default
+port (`:443`), dot segments, or a bare origin without its `/`.
+**Why:** the URI is the `aud` of the access tokens and the key of idempotency. Two spellings of one URL would
+create two audiences. It is refused rather than rewritten, because the rewrite can change the audience a
+client already requests (`https://api.example.com` becomes `https://api.example.com/`).
+**Fix:** pass the spelling the error prints, and have clients request that same value.
+
+```sh
+bun run resources:create --tenant acme --uri https://api.example.com/ --scope read
+```
+
 ## `FORBIDDEN` and `NOT_FOUND` on `/graphql`
 
 **When:** a `/graphql` request is answered before it runs, with
