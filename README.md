@@ -135,8 +135,50 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Sign-in itself (e-mail code, passkeys, consent) comes with slices E1 and E2, and no `/authorize`
+  `src/server.ts`. Sign-in itself (e-mail code) comes with slice E1, consent is below, passkeys wait on janus (slice E3), and no `/authorize`
   succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
+
+## Consent (the hosted page's API)
+
+`/authorize` redirects a signed-out or not-yet-consented user to `/consent?request_id=<id>` on the
+tenant's host: a page of clavix-ui, which calls the GraphQL API below. It is served by
+`src/consent` (janus-oauth's `oauthResolvers` and `useJanus`, both picking the tenant from the
+request's host) as `POST /graphql/consent`, a Yoga server of its own until slice E1's `/graphql`
+takes its parts in (`consentGraphQL()` returns them). The viewer is the tenant's session cookie
+(`__Host-clavix-session`, same host, so send the request with credentials), never another
+tenant's: a request id or a session of another tenant is `NOT_FOUND` / `UNAUTHENTICATED`.
+
+```graphql
+query Consent($id: ID!) {
+  oauthRequest(id: $id) {
+    id
+    client { id name url host }   # show id and host, not only the self-declared name
+    redirectHost                  # and the host the user is sent back to
+    resource redirectUri expiresAt
+    scopes { name label }
+  }
+  connectedApps { id client { id name } scopes { label } createdAt }
+}
+mutation Allow($id: ID!, $scopes: [String!]) {   # scopes: a subset, omit for all
+  approveOAuthRequest(id: $id, scopes: $scopes) { redirectTo grantId }
+}
+mutation Refuse($id: ID!) {
+  denyOAuthRequest(id: $id) { redirectTo }       # redirectTo carries error=access_denied
+}
+mutation Revoke($id: ID!) { revokeConnectedApp(id: $id) }
+```
+
+The page sends the user agent to `redirectTo` (the client's redirect URI with `code` or the error,
+`state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401, go to sign-in and
+come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
+request), `BAD_USER_INPUT` (a scope not asked for), `STEP_UP_REQUIRED` (403).
+- **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5
+  minutes (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page
+  signs the user in again (E1's e-mail code), then repeats the mutation; the request stays
+  pending. `denyOAuthRequest` and the read do not ask.
+- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No
+  `amr` or `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL
+  surface does not), and M1 needs neither.
 
 ## How a host maps to a tenant
 

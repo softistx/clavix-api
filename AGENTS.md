@@ -75,6 +75,17 @@ partitioned: never use them for tenant users.
 - The per-tenant `signUp` flag (sign-up closed on `clavix`, invitation only) is not in the tenant
   model yet: slice E1 adds it with the sign-in surface.
 
+## Consent
+
+`src/consent/` is the API of the hosted `/consent` page: `consentGraphQL({ issuers, janusIssuers })`
+returns the typeDefs, resolvers and plugins (janus-oauth's `oauthResolvers`, `useJanus` with the
+tenant's janus picked from the request), `createConsentYoga` serves them at
+`POST /graphql/consent` (`createApp({ consent })`), a separate server until slice E1's `/graphql`
+takes the parts in (then drop the `base` stub and the second Yoga). Both the OAuth server and the
+session are the request's tenant's. `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`)
+and passes no `amr`/`acr` (janus gap, not worked around). Passkeys (slice E3) wait on janus: its
+passkeys are a second factor beside TOTP only, with no passwordless sign-in yet.
+
 ## Signing keys
 
 `src/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
