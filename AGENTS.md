@@ -33,6 +33,14 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
 
+## Signing keys
+
+`src/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
+`src/config/keys.ts`; a tenant's partition is its hex id), the rotation policy and the hourly
+`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them (README, "Signing keys"). Sign and
+verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
+outside the specs.
+
 ## Green bar
 
 `bun run verify` = `generate`, `check:ci` (Biome), `typecheck` (`bun check`), `test`; CI
