@@ -303,6 +303,15 @@ describe("a foreign page cannot decide", () => {
     expect(still.errors).toBeUndefined();
   });
 
+  test("an Origin of null sees no request", async () => {
+    const id = await authorize("acme");
+    const response = await post(
+      { "content-type": "application/json", origin: "null" },
+      JSON.stringify({ query: REQUEST, variables: { id } }),
+    );
+    expect(codeOf((await response.json()) as GqlResult)).toBe("NOT_FOUND");
+  });
+
   test("a form post decides nothing", async () => {
     const id = await authorize("acme");
     const response = await post(

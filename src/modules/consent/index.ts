@@ -30,12 +30,20 @@ const requestOf = (ctx: unknown): Request => {
 // The cookie is the credential and a sibling tenant host is same-site (SameSite=Lax does not stop
 // it), so a request that decides or reads a consent must come from the tenant's own origin and as
 // JSON (not a CORS "simple" form post). Anything else sees no such request.
+// `Origin: null` (a sandboxed frame) and other junk have no host: they never match.
+const hostOf = (value: string): string | null => {
+  try {
+    return new URL(value).host;
+  } catch {
+    return null;
+  }
+};
+
 export function sameOriginJson(request: Request): boolean {
   const origin = request.headers.get("origin");
   // Hosts, not origins: behind a TLS-terminating proxy `request.url` may say http while the
   // browser's Origin says https. A request with no Origin (not a browser) passes; the cookie is `__Host-`.
-  if (origin !== null && new URL(origin).host !== new URL(request.url).host)
-    return false;
+  if (origin !== null && hostOf(origin) !== hostOf(request.url)) return false;
   return (
     request.method !== "POST" ||
     (request.headers.get("content-type") ?? "").startsWith("application/json")
