@@ -103,6 +103,23 @@ bun run clients:create --tenant acme --name "Web app" \
   code and refresh grants. `--grants` refuses any other (device code, token exchange, client
   credentials) until janus offers them per client.
 
+## OpenID Connect
+
+Each tenant host is its own OpenID Provider (ADR-0003), served by `@softistx/janus-oidc`:
+
+| Path                                | What                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------ |
+| `/.well-known/openid-configuration` | discovery: the issuer, endpoints, `jwks_uri`, supported scopes and algorithms  |
+| `/jwks.json`                        | the tenant's public signing keys (verifies access tokens and id_tokens)        |
+| `/userinfo`                         | `sub` and the claims the token's scopes release (`profile`, `email`, ...)      |
+| `/introspect`                       | RFC 7662, for a confidential client of the same tenant (`client_secret_basic`) |
+
+A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, `iat`,
+`auth_time`, `nonce`, `at_hash`) signed with the tenant's current key. A request with no
+`resource` is for the tenant's userinfo. Introspection answers only for tokens of the tenant's
+own resources. A tenant with no signing key yet answers 503 `temporarily_unavailable`. The
+claims come from the users of the tenant (slice 1.5; the `ClaimsFor` port until then).
+
 ## How a host maps to a tenant
 
 A request belongs to the tenant whose slug is the one label before `CLAVIX_DOMAIN`:

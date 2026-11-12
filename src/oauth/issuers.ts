@@ -6,11 +6,12 @@ import {
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { lifetimes } from "./lifetimes";
-import type { AuthFor, ResourcesFor, SigningKeysFor } from "./ports";
+import type { AuthFor, ClaimsFor, ResourcesFor, SigningKeysFor } from "./ports";
 
 export interface ClavixOAuthOptions {
   /** Host to tenant: unknown and suspended hosts resolve to `null`, a 404. */
@@ -19,6 +20,8 @@ export interface ClavixOAuthOptions {
   db: Db;
   signingKeysFor: SigningKeysFor;
   authFor: AuthFor;
+  /** The claims of a tenant's users, for the id_token and userinfo. */
+  claimsFor: ClaimsFor;
   /** Default: no resource, so no `/authorize` succeeds (tenants' resources come with slice 2.3). */
   resourcesFor?: ResourcesFor;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
@@ -68,6 +71,12 @@ const unavailable = () =>
     },
   );
 
+/** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
+export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
+
+/** The scopes the userinfo resource offers: the standard OpenID Connect ones. */
+const OIDC_SCOPES = ["openid", "profile", "email"];
+
 // What `resolve` answers: janus's key (the version as a string) and the tenant.
 type Keyed = OAuthIssuerKey & { tenant: ResolvedTenant };
 
@@ -82,6 +91,18 @@ export function createClavixOAuthIssuers(
 ): OAuthIssuers {
   const { resolver, db, signingKeysFor, authFor, resourcesFor, clock } =
     options;
+  // issuer -> tenant, filled by `build`: janus gives `claims` the issuer
+  // `resolve` answered, and a server is always built before it answers.
+  const tenantOf = new Map<string, ResolvedTenant>();
+  const oidc = createOidcProvider({
+    claims: (subject, scopes, { issuer }) => {
+      const tenant = tenantOf.get(issuer);
+      if (tenant === undefined) {
+        throw new Error(`oidc: no tenant built for issuer ${issuer}`);
+      }
+      return options.claimsFor(tenant)(subject, scopes);
+    },
+  });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: async (request) => {
       const tenant = await resolver.resolveRequest(request);
@@ -89,28 +110,49 @@ export function createClavixOAuthIssuers(
         ? null
         : { issuer: tenant.issuer, version: String(tenant.version), tenant };
     },
-    build: ({ tenant }) => ({
-      auth: authFor(tenant),
-      store: createMongoOAuth(db, { partition: tenant.partition }),
-      issuer: tenant.issuer,
-      resources: resourcesFor?.(tenant) ?? {},
-      lifetimes,
-      accessTokens: {
-        format: "jwt",
-        keys: requiringCurrentKey(
-          signingKeysFor(tenant.tenantId),
-          tenant.tenantId,
-        ),
+    build: ({ tenant }) => {
+      tenantOf.set(tenant.issuer, tenant);
+      // One store signs access tokens and id_tokens: the JWKS verifies both.
+      const keys = requiringCurrentKey(
+        signingKeysFor(tenant.tenantId),
+        tenant.tenantId,
+      );
+      const userinfo = userinfoOf(tenant.issuer);
+      return {
+        auth: authFor(tenant),
+        store: createMongoOAuth(db, { partition: tenant.partition }),
+        issuer: tenant.issuer,
+        resources: {
+          ...(resourcesFor?.(tenant) ?? {}),
+          [userinfo]: { scopes: OIDC_SCOPES },
+        },
+        defaultResource: userinfo,
+        lifetimes,
+        accessTokens: { format: "jwt", keys },
+        tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
+        ...(clock === undefined ? {} : { clock }),
+      };
+    },
+    endpoints: ({ tenant }) => ({
+      consentUrl: options.consentUrl ?? "/consent",
+      // Same-tenant confidential clients introspect the tokens of the
+      // tenant's own resources (ADR-0024); a client of another tenant does
+      // not authenticate here, its partition is another.
+      introspection: {
+        authorize: () => ({
+          resources: Object.keys(resourcesFor?.(tenant) ?? {}),
+        }),
       },
-      ...(clock === undefined ? {} : { clock }),
     }),
-    endpoints: { consentUrl: options.consentUrl ?? "/consent" },
   });
+  const openid = oidc.issuers(issuers, { resource: userinfoOf });
   return {
     ...issuers,
     handle: async (request) => {
       try {
-        return await issuers.handle(request);
+        return (
+          (await openid.handle(request)) ?? (await issuers.handle(request))
+        );
       } catch (error) {
         if (error instanceof NoSigningKeyError) {
           console.warn(`oauth: ${error.message}`);

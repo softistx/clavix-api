@@ -21,7 +21,10 @@ nxgt-janus release says which.
   `createOAuthIssuers`). Built; the end-user authentication (1.5) is still a port, so it
   serves nothing in the running app until it lands.
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
-  (RFC 9068) and introspection (1.4). Waits on `@softistx/janus-oidc`.
+  (RFC 9068) and introspection (1.4, [#4](https://github.com/softistx/clavix-api/issues/4),
+  `src/oauth`, janus-oidc 0.3). Built: each tenant host serves its own discovery, JWKS,
+  userinfo and introspection; the user claims are a port (`ClaimsFor`) until the users
+  (1.5) land. The `roles` claim moved to M2.
 - **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,

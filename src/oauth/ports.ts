@@ -3,6 +3,7 @@ import type {
   OAuthResource,
   SigningKeyStore,
 } from "@softistx/janus-oauth";
+import type { OidcClaims, OidcSubject } from "@softistx/janus-oidc";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 
 /**
@@ -26,3 +27,16 @@ export type AuthFor = (tenant: ResolvedTenant) => OAuthAuth;
 export type ResourcesFor = (
   tenant: ResolvedTenant,
 ) => Readonly<Record<string, OAuthResource>>;
+
+/**
+ * The claims of a tenant's users (slice 1.4): looks the subject up in that
+ * tenant's user pool (ADR-0008) and returns every claim it knows; the scopes
+ * of the token decide which are released. The real one comes with the users
+ * (slice 1.5).
+ */
+export type ClaimsFor = (
+  tenant: ResolvedTenant,
+) => (
+  subject: OidcSubject,
+  scopes: readonly string[],
+) => OidcClaims | Promise<OidcClaims>;

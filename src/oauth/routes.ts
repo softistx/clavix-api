@@ -2,13 +2,15 @@ import type { OAuthIssuers } from "@softistx/janus-oauth";
 
 // The paths janus's endpoints answer (its defaults, under the issuer's empty
 // path): the authorization server's own, never the GraphQL or console routes.
-// Slice 1.4 (OpenID Connect) adds `/.well-known/openid-configuration`,
-// `/jwks.json`, userinfo and introspection here.
 export const OAUTH_PATHS = [
   "/authorize",
   "/token",
   "/revoke",
   "/.well-known/oauth-authorization-server",
+  "/.well-known/openid-configuration",
+  "/jwks.json",
+  "/userinfo",
+  "/introspect",
 ] as const;
 
 /** The slice of `OAuthIssuers` the app mounts. */
