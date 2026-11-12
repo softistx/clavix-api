@@ -23,7 +23,10 @@ export interface TenantResolverOptions {
   /** Where issuers live (`CLAVIX_DOMAIN`, scheme, port). */
   config: PublicOrigin;
   log?: (message: string) => void;
-  /** Seconds a resolved tenant stays cached. Default 600. */
+  /**
+   * Seconds a resolved tenant stays cached. Default 60: also the bound on how
+   * long a suspension can take to apply when its invalidation was lost.
+   */
   hitTtl?: number;
   /** Seconds "no tenant" stays cached. Default 30. */
   missTtl?: number;
@@ -48,7 +51,7 @@ export function createTenantResolver(
 ): TenantResolver {
   const { lookup, cache, config } = options;
   const log = options.log ?? ((message) => console.warn(message));
-  const hitTtl = options.hitTtl ?? 600;
+  const hitTtl = options.hitTtl ?? 60;
   const missTtl = options.missTtl ?? 30;
 
   const attempt = async <T>(
@@ -68,6 +71,17 @@ export function createTenantResolver(
     }
   };
 
+  const toResolved = (tenant: TenantRecord | undefined) =>
+    tenant === undefined || tenant.status !== "active"
+      ? null
+      : ({
+          tenantId: tenant._id.toHexString(),
+          slug: tenant.slug,
+          issuer: issuerOf(tenant.slug, config),
+          partition: partitionOf(tenant._id),
+          version: tenant.version,
+        } satisfies ResolvedTenant);
+
   const resolveHost = async (raw: string) => {
     const host = normalizeHost(raw);
     if (host === null) return null;
@@ -77,20 +91,17 @@ export function createTenantResolver(
     const cached = await attempt("read", host, () => cache.get(host));
     if (cached !== undefined) return cached;
 
-    const tenant = await lookup(slug);
-    const resolved: ResolvedTenant | null =
-      tenant === undefined || tenant.status !== "active"
-        ? null
-        : {
-            tenantId: tenant._id.toHexString(),
-            slug: tenant.slug,
-            issuer: issuerOf(tenant.slug, config),
-            partition: partitionOf(tenant._id),
-            version: tenant.version,
-          };
+    const resolved = toResolved(await lookup(slug));
     await attempt("write", host, () =>
       cache.set(host, resolved, resolved === null ? missTtl : hitTtl),
     );
+    // Cache-aside race: a write (suspend, delete, create) may have run its
+    // invalidation between our read and our `set`, leaving a stale entry. Read
+    // the tenant again; if it changed, drop what we just stored.
+    const after = toResolved(await lookup(slug));
+    if (after?.version !== resolved?.version) {
+      await attempt("delete", host, () => cache.delete(host));
+    }
     return resolved;
   };
 
@@ -104,7 +115,14 @@ export function createTenantResolver(
       await Promise.all(
         hosts.map(async (raw) => {
           const host = normalizeHost(raw) ?? raw;
-          await cache.delete(host);
+          // Retried once: a suspension must not outlive a blip of Redis. If
+          // the retry fails too, the caller logs it and the entry expires
+          // within `hitTtl` (60 s) at worst.
+          try {
+            await cache.delete(host);
+          } catch {
+            await cache.delete(host);
+          }
         }),
       );
     },

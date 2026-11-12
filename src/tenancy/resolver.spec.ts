@@ -57,14 +57,16 @@ describe("resolveHost", () => {
     );
   });
 
-  test("a hit is cached: Mongo is read once", async () => {
+  test("a hit is cached: a second host read does not read Mongo", async () => {
     const { resolver, lookups } = setup([acme]);
     await resolver.resolveHost("acme.clavix.test");
+    // The miss read the tenant, and read its version again after the set.
+    expect(lookups).toEqual(["acme", "acme"]);
     await resolver.resolveHost("ACME.clavix.test:1");
-    expect(lookups).toEqual(["acme"]);
+    expect(lookups).toEqual(["acme", "acme"]);
   });
 
-  test("a hit is stored for 600 s, none for 30 s", async () => {
+  test("a hit is stored for 60 s, none for 30 s", async () => {
     const stored: [string, unknown, number][] = [];
     const cache: TenantCache = {
       ...memoryTenantCache(),
@@ -77,7 +79,7 @@ describe("resolveHost", () => {
     await resolver.resolveHost("acme.clavix.test");
     await resolver.resolveHost("ghost.clavix.test");
     expect(stored.map(([h, v, ttl]) => [h, v === null, ttl])).toEqual([
-      ["acme.clavix.test", false, 600],
+      ["acme.clavix.test", false, 60],
       ["ghost.clavix.test", true, 30],
     ]);
   });
@@ -85,8 +87,9 @@ describe("resolveHost", () => {
   test("an unknown slug is null, and the null is cached", async () => {
     const { resolver, lookups } = setup([]);
     expect(await resolver.resolveHost("ghost.clavix.test")).toBeNull();
+    expect(lookups).toEqual(["ghost", "ghost"]);
     expect(await resolver.resolveHost("ghost.clavix.test")).toBeNull();
-    expect(lookups).toEqual(["ghost"]);
+    expect(lookups).toEqual(["ghost", "ghost"]);
   });
 
   test("the null expires after 30 s", async () => {
@@ -101,7 +104,7 @@ describe("resolveHost", () => {
     expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
     now = 30_001;
     expect(await resolver.resolveHost("acme.clavix.test")).not.toBeNull();
-    expect(lookups).toEqual(["acme", "acme"]);
+    expect(lookups).toEqual(["acme", "acme", "acme", "acme"]);
   });
 
   test("a suspended tenant is null", async () => {
@@ -161,5 +164,90 @@ describe("invalidate", () => {
     expect((await resolver.resolveHost("acme.clavix.test"))?.version).toBe(3);
     await resolver.invalidate(["Acme.clavix.test"]);
     expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+  });
+});
+
+describe("cache-aside race", () => {
+  test("a suspension between the read and the set does not leave a stale entry", async () => {
+    const records: TenantRecord[] = [acme];
+    const inner = memoryTenantCache();
+    let resolver: ReturnType<typeof createTenantResolver>;
+    let raced = false;
+    const cache: TenantCache = {
+      ...inner,
+      // The interleaving: lookup (active) / suspend + invalidate / set.
+      set: async (host, value, ttl) => {
+        if (!raced) {
+          raced = true;
+          records[0] = { ...acme, status: "suspended", version: 4 };
+          await resolver.invalidate([host]);
+        }
+        await inner.set(host, value, ttl);
+      },
+    };
+    resolver = createTenantResolver({
+      lookup: async (slug) => records.find((r) => r.slug === slug),
+      cache,
+      config,
+      log: () => {},
+    });
+    // This caller read the tenant before the suspension: it may answer with it.
+    expect((await resolver.resolveHost("acme.clavix.test"))?.version).toBe(3);
+    // The stale entry did not survive: the next caller sees the suspension.
+    expect(await inner.get("acme.clavix.test")).toBeUndefined();
+    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+  });
+
+  test("a creation between the read and the set drops the cached null", async () => {
+    const records: TenantRecord[] = [];
+    const inner = memoryTenantCache();
+    let raced = false;
+    const cache: TenantCache = {
+      ...inner,
+      set: async (host, value, ttl) => {
+        if (!raced) {
+          raced = true;
+          records.push(acme);
+        }
+        await inner.set(host, value, ttl);
+      },
+    };
+    const resolver = createTenantResolver({
+      lookup: async (slug) => records.find((r) => r.slug === slug),
+      cache,
+      config,
+      log: () => {},
+    });
+    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+    expect((await resolver.resolveHost("acme.clavix.test"))?.slug).toBe("acme");
+  });
+});
+
+describe("invalidate failure", () => {
+  test("a failed delete is retried once", async () => {
+    let calls = 0;
+    const cache: TenantCache = {
+      ...memoryTenantCache(),
+      delete: async () => {
+        calls++;
+        if (calls === 1) throw new Error("down");
+      },
+    };
+    const { resolver } = setup([acme], cache);
+    await resolver.invalidate(["acme.clavix.test"]);
+    expect(calls).toBe(2);
+  });
+
+  test("two failures reach the caller", async () => {
+    const cache: TenantCache = {
+      ...memoryTenantCache(),
+      delete: async () => {
+        throw new Error("down");
+      },
+    };
+    const { resolver } = setup([acme], cache);
+    await expect(resolver.invalidate(["acme.clavix.test"])).rejects.toThrow(
+      "down",
+    );
   });
 });
