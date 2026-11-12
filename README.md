@@ -349,8 +349,8 @@ extend type Mutation {
   verify, the challenge is spent), `PASSKEY_TAKEN` (409), `PASSKEY_LIMIT` (409),
   `EMAIL_UNVERIFIED` (403), `STEP_UP_REQUIRED` (403), `TOKEN_*` for a bad challenge.
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
-- **Not yet**: `passkeySignInOptions` is anonymous and stores a token per call; rate limits on
-  `/graphql` are slice #59. Passkeys need an https origin (janus refuses `http`): in development
+- **Not yet**: `passkeySignInOptions` is anonymous and stores a token per call; the sign-in code
+  limits do not cover it, so put a rate limit in front. Passkeys need an https origin (janus refuses `http`): in development
   over `http` the operations answer `NOT_FOUND`. The `amr`/`acr` claims stay unset.
 
 ## Same origin on /graphql

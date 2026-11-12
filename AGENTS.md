@@ -119,7 +119,8 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
   `passkeysOn(tenant)` is false over `http`, and the module answers `NOT_FOUND`.
 - Specs use the software authenticator copied from janus-passkeys' own tests
   (`test/passkey-authenticator.ts`, `test/passkey-cbor.ts`): copy again when that one changes.
-- The anonymous `passkeySignInOptions` has no rate limit until slice #59.
+- The anonymous `passkeySignInOptions` is not under the sign-in code limits (`throttle.ts` guards
+  `requestSignInCode` only): a follow-up if the tokens it stores become a problem.
 
 ## Consent
 
