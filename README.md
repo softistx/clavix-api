@@ -2,7 +2,8 @@
 
 The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider. The
 spec is in `../spec/`; the plan is `docs/roadmap.md`. Rules for contributors:
-[AGENTS.md](AGENTS.md).
+[AGENTS.md](AGENTS.md). Moving an application from embedded janus to Clavix:
+[docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md).
 
 Today it serves `GET /healthz`, `health { status version }` and the e-mail code sign-in of the hosted pages (below) on `POST /graphql`.
 

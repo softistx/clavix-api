@@ -39,6 +39,11 @@ nxgt-janus release says which.
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and
   refresh wait on a per-client grant list in janus-oauth.
+- **Migration guide** — how an application moves from embedded janus to Clavix as an OIDC
+  relying party: client registration, the code + PKCE flow, token verification with
+  `@alxia/clavix`, user mapping, sessions and sign-out, and the gaps (1.8,
+  [#7](https://github.com/softistx/clavix-api/issues/7)).
+  [Written](guide/migrating-from-embedded-janus.md).
 
 **M5, access rules (ADR-0031)**
 - **Access rules (M5, ADR-0031)** — an application publishes its OpenAPI and SDL from CI
