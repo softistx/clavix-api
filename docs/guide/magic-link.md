@@ -7,13 +7,12 @@ on for every tenant. Built on janus's `magicLink` (prepare, send, confirm).
 
 On the tenant's host, `POST /graphql` with a JSON body (same origin as the page):
 
-| Operation | Input | Answer | Refusals |
-| --- | --- | --- | --- |
-| `requestMagicLink(email)` | `EmailAddress!` | `{ expiresAt }` (15 minutes), always, known address or not | `MAGIC_LINK_DISABLED` 404, `MAIL_THROTTLED` 429 (`Retry-After`), `NOT_FOUND` 404 (unknown host) |
-| `confirmMagicLink(token)` | `String!` | `{ user { id email name emailVerified }, expiresAt }` and the `__Host-clavix-session` cookie | `MAGIC_LINK_DISABLED` 404, `MAGIC_LINK_INVALID` 401, `NOT_FOUND` 404 |
+| Operation                 | Input           | Answer                                                                                       | Refusals                                                                                        |
+| ------------------------- | --------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `requestMagicLink(email)` | `EmailAddress!` | `{ expiresAt }` (15 minutes), always, known address or not                                   | `MAGIC_LINK_DISABLED` 404, `MAIL_THROTTLED` 429 (`Retry-After`), `NOT_FOUND` 404 (unknown host) |
+| `confirmMagicLink(token)` | `String!`       | `{ user { id email name emailVerified }, expiresAt }` and the `__Host-clavix-session` cookie | `MAGIC_LINK_DISABLED` 404, `MAGIC_LINK_INVALID` 401, `NOT_FOUND` 404                            |
 
 Flow of the page `/sign-in/link`:
-
 1. The e-mail's button opens `https://<slug>.<CLAVIX_DOMAIN>/sign-in/link?token=<token>`.
 2. That page only shows a "Sign in" button. It does **not** sign in on load: mail scanners open links.
 3. The button POSTs `confirmMagicLink(token)` (from the BFF, forwarding the `Set-Cookie`), then goes on.
