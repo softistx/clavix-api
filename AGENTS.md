@@ -113,7 +113,7 @@ only, with no passwordless sign-in yet.
 `/graphql` operation once: a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before
 parsing, with no CORS header: consent operations (`CONSENT_FIELDS`) get 404 `NOT_FOUND`, all others 403
 `FORBIDDEN`. Origin and request are compared by host (TLS-terminating proxy); no Origin passes (the cookie
-is `__Host-`). A new operation needs no guard of its own; never add a CORS plugin without revisiting this.
+is `__Host-`). A new operation needs no guard of its own; never add a CORS plugin without revisiting this, and `onRequest` does not guard a WebSocket upgrade (`ws` is off: keep it so or guard the upgrade).
 On stop, `server.ts` has an `onStop` hook that awaits `drain()` (`src/modules/auth/outbox.ts`, 10 s)
 so a code mail in flight is not lost; `stopTimeout` is set above it.
 

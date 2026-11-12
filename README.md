@@ -199,7 +199,7 @@ mutation Revoke($id: ID!) {
 The page sends the user agent to `redirectTo` (the client's redirect URI with `code` or the error,
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
-request, a host with no tenant, or a request that is not same-origin JSON), `BAD_USER_INPUT` (a
+request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
 scope not asked for), `STEP_UP_REQUIRED` (403).
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
@@ -265,7 +265,7 @@ proxy); a request with no `Origin` (not a browser) passes, since the cookie is `
 | consent (`oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, `connectedApps`, `revokeConnectedApp`) | HTTP 404, `extensions.code` `NOT_FOUND` |
 | any other (`signOut`, `requestSignInCode`, `verifySignInCode`, `currentUser`, ...) | HTTP 403, `extensions.code` `FORBIDDEN`  |
 
-A refused request is neither executed nor mailed. Both answers are `{ "errors": [...] }` JSON.
+A request that mixes consent and other root fields gets the 403. A refused request is neither executed nor mailed. Both answers are `{ "errors": [...] }` JSON.
 
 ## Shutdown
 

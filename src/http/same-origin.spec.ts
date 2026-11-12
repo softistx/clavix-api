@@ -90,6 +90,25 @@ describe("the same-origin guard on /graphql", () => {
     expect(await codeOf(response)).toBe("FORBIDDEN");
   });
 
+  test("a foreign-Origin GET and a JSON array body are refused", async () => {
+    const get = await app.request(`${URL_}?query=%7BcurrentUser%7Bid%7D%7D`, {
+      headers: { origin: "https://evil.clavix.test" },
+    });
+    expect(get.status).toBe(403);
+    const batch = await post({ ...json, origin: "https://evil.clavix.test" }, [
+      SIGN_OUT,
+    ]);
+    expect(batch.status).toBe(403);
+    expect(await codeOf(batch)).toBe("FORBIDDEN");
+  });
+
+  test("Origin: null on a consent operation is NOT_FOUND; an odd content-type fails closed", async () => {
+    const nul = await post({ ...json, origin: "null" }, CONSENT);
+    expect(await codeOf(nul)).toBe("NOT_FOUND");
+    const odd = await post({ "content-type": "Application/JSON" }, SIGN_OUT);
+    expect(odd.status).toBe(403);
+  });
+
   test("the tenant's own Origin and a request with no Origin pass", async () => {
     for (const headers of [
       { ...json, origin: "http://acme.clavix.test" },
