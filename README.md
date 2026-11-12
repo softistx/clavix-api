@@ -152,20 +152,48 @@ tenant's: a request id or a session of another tenant is `NOT_FOUND` / `UNAUTHEN
 query Consent($id: ID!) {
   oauthRequest(id: $id) {
     id
-    client { id name url host }   # show id and host, not only the self-declared name
-    redirectHost                  # and the host the user is sent back to
-    resource redirectUri expiresAt
-    scopes { name label }
+    client {
+      id
+      name
+      url
+      host
+    } # show id and host, not only the self-declared name
+    redirectHost # and the host the user is sent back to
+    resource
+    redirectUri
+    expiresAt
+    scopes {
+      name
+      label
+    }
   }
-  connectedApps { id client { id name } scopes { label } createdAt }
+  connectedApps {
+    id
+    client {
+      id
+      name
+    }
+    scopes {
+      label
+    }
+    createdAt
+  }
 }
-mutation Allow($id: ID!, $scopes: [String!]) {   # scopes: a subset, omit for all
-  approveOAuthRequest(id: $id, scopes: $scopes) { redirectTo grantId }
+mutation Allow($id: ID!, $scopes: [String!]) {
+  # scopes: a subset, omit for all
+  approveOAuthRequest(id: $id, scopes: $scopes) {
+    redirectTo
+    grantId
+  }
 }
 mutation Refuse($id: ID!) {
-  denyOAuthRequest(id: $id) { redirectTo }       # redirectTo carries error=access_denied
+  denyOAuthRequest(id: $id) {
+    redirectTo
+  } # redirectTo carries error=access_denied
 }
-mutation Revoke($id: ID!) { revokeConnectedApp(id: $id) }
+mutation Revoke($id: ID!) {
+  revokeConnectedApp(id: $id)
+}
 ```
 
 The page sends the user agent to `redirectTo` (the client's redirect URI with `code` or the error,
