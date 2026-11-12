@@ -25,6 +25,8 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `test`                    | `bun test`                                                               |
 | `typecheck`               | `bun check`                                                              |
 | `lint`, `fix`, `check:ci` | Biome                                                                    |
+| `db:sync`, `db:migrate`   | collections and indexes; pending migrations (deployment steps)           |
+| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
 
 ## Environment
@@ -65,6 +67,41 @@ Clavix adds no `jose`.
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
   them. Changing the master key is the same; there is no re-encryption in place.
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
+
+## OAuth clients
+
+Until the console exists (M2), a client is registered on a tenant by script. Clients are per tenant:
+they live in the tenant's partition of the janus collections, so a client of `acme` is unknown to
+`globex` (its `/authorize` answers `invalid_client`).
+
+```sh
+bun run clients:create --tenant acme --name "Back office" \
+  --redirect-uri https://office.example.com/callback --confidential
+bun run clients:create --tenant acme --name "Web app" \
+  --redirect-uri https://app.example.com/callback          # a public client, PKCE only
+```
+
+| Flag                   | Meaning                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                     |
+| `--name <name>`        | required                                                                                       |
+| `--redirect-uri <uri>` | required, repeatable; exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed) |
+| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                        |
+| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                      |
+| `--grants <a,b>`       | `authorization_code,refresh_token` (the default and all there is: see below)                   |
+| `--rotate-secret`      | a new secret for an existing confidential client                                               |
+- **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client
+  and creates nothing new. The output (JSON) says `created: true | false`.
+- **A confidential client's secret is printed once**, in `clientSecret`; janus keeps only its
+  SHA-256. A re-run prints `clientSecret: null` and keeps the secret; `--rotate-secret` mints another.
+- **A client keeps its type**: re-running a confidential client without `--confidential` is
+  refused (the secret is never dropped silently); a public client re-run with `--confidential`
+  becomes confidential and gets a secret.
+- The output also carries `issuer`, `tenant`, `redirectUris` and `type`. `--help` prints the
+  usage; bad input prints the message and the usage and exits 1.
+- **Grants**: janus-oauth 0.8 has no per-client grant list; every client may use the authorization
+  code and refresh grants. `--grants` refuses any other (device code, token exchange, client
+  credentials) until janus offers them per client.
 
 ## How a host maps to a tenant
 
