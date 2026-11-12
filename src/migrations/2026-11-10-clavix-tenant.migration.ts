@@ -1,4 +1,4 @@
-import { ConflictError, getCollection } from "@softistx/mongo";
+import { getCollection } from "@softistx/mongo";
 import { defineMigration } from "@softistx/mongo/migrations";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { tenants } from "@/modules/tenants/tenants.model";
@@ -14,12 +14,8 @@ export const clavixTenant = defineMigration({
   async up({ db, session }) {
     const collection = getCollection(db, tenants).withSession(session);
     if (await collection.exists({ slug: PLATFORM_TENANT_SLUG })) return;
-    try {
-      await collection.create({ slug: PLATFORM_TENANT_SLUG, name: "Clavix" });
-    } catch (error) {
-      // A concurrent run won the unique index: the tenant is there.
-      if (!(error instanceof ConflictError)) throw error;
-    }
+    // The runner's lock keeps a concurrent run out; the unique index backs it.
+    await collection.create({ slug: PLATFORM_TENANT_SLUG, name: "Clavix" });
   },
   async down({ db, session }) {
     await db
