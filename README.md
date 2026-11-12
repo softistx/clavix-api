@@ -4,7 +4,7 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider. 
 spec is in `../spec/`; the plan is `docs/roadmap.md`. Rules for contributors:
 [AGENTS.md](AGENTS.md).
 
-Today it is a skeleton: `GET /healthz`, and `health { status version }` on `POST /graphql`.
+Today it serves `GET /healthz`, `health { status version }` and the e-mail code sign-in of the hosted pages (below) on `POST /graphql`.
 
 ## Run
 
@@ -33,15 +33,16 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                 | Default / rule                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `PORT`                   | 3000                                                                              |
-| `MONGO_URI`              | required; a replica set (transactions)                                            |
-| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                  |
-| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                              |
-| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                          |
-| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                       |
-| `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere |
+| Variable                 | Default / rule                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`                   | 3000                                                                                                         |
+| `MONGO_URI`              | required; a replica set (transactions)                                                                       |
+| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                                             |
+| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                                                         |
+| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                                                     |
+| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                                                  |
+| `CLAVIX_SMTP_URL`        | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
+| `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere                            |
 
 ## Signing keys
 
@@ -135,8 +136,47 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Sign-in itself (e-mail code, passkeys, consent) comes with slices E1 and E2, and no `/authorize`
+  `src/server.ts`. Passkeys and consent come with slice E2, and no `/authorize`
   succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
+
+## E-mail code sign-in
+
+The hosted pages call the GraphQL API on the tenant's own host (`https://<slug>.<CLAVIX_DOMAIN>/graphql`):
+
+```graphql
+mutation {
+  requestSignInCode(email: "ada@example.com") {
+    challenge
+    expiresAt
+  }
+}
+mutation {
+  verifySignInCode(challenge: "...", code: "123456") {
+    user {
+      id
+      email
+    }
+    expiresAt
+  }
+}
+query {
+  currentUser {
+    id
+    email
+    name
+    emailVerified
+  }
+}
+mutation {
+  signOut
+}
+```
+
+A 6-digit code is mailed from `no-reply@<CLAVIX_DOMAIN>` (valid 10 minutes, 5 attempts, 5 mails per
+address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` cookie; a wrong, spent
+or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
+`clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
+come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
 
 ## How a host maps to a tenant
 

@@ -29,6 +29,7 @@ const clean = {
   CLAVIX_PUBLIC_SCHEME: undefined,
   CLAVIX_PUBLIC_PORT: undefined,
   CLAVIX_KEYS_MASTER_KEY: undefined,
+  CLAVIX_SMTP_URL: undefined,
 };
 
 const masterKey = Buffer.alloc(32, 7).toString("base64");
@@ -93,7 +94,14 @@ test("production requires REDIS_URL and CLAVIX_DOMAIN and refuses http", async (
     CLAVIX_DOMAIN: "clavix.example",
     CLAVIX_PUBLIC_SCHEME: "https",
     CLAVIX_KEYS_MASTER_KEY: masterKey,
+    CLAVIX_SMTP_URL: "smtps://relay.example:465",
   };
+  await expect(
+    load({ ...clean, ...production, CLAVIX_SMTP_URL: undefined }),
+  ).rejects.toThrow("CLAVIX_SMTP_URL");
+  await expect(
+    load({ ...clean, ...production, CLAVIX_SMTP_URL: "http://relay" }),
+  ).rejects.toThrow("CLAVIX_SMTP_URL");
   // `production` is read at import, so each case sets NODE_ENV for its load.
   const { env } = await load({ ...clean, ...production });
   expect(env.CLAVIX_DOMAIN).toBe("clavix.example");
@@ -120,6 +128,7 @@ test("the keys master key: a public default outside production, never in it", as
     NODE_ENV: "production",
     REDIS_URL: "redis://redis:6379",
     CLAVIX_DOMAIN: "clavix.example",
+    CLAVIX_SMTP_URL: "smtps://relay.example:465",
   };
   // Missing, short, long and not base64 are all refused in production...
   for (const bad of [

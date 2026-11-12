@@ -1,6 +1,7 @@
 import { graphql } from "@alxia/graphql";
 import { createBase } from "./http/context";
 import { schema } from "./http/schema";
+import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
@@ -19,7 +20,14 @@ export function createApp(options: { oauth?: OAuthHandle } = {}) {
     .bodyLimit(BODY_LIMIT);
   return (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)
-  ).plugin((app) => graphql(app, { schema, ide: "apollo-sandbox" }));
+  ).plugin((app) =>
+    graphql(app, {
+      schema,
+      ide: "apollo-sandbox",
+      plugins: [janusPlugin()],
+      maskedErrors: janusMasking,
+    }),
+  );
 }
 
 // The app the server runs.

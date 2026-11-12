@@ -9,6 +9,8 @@ import { z } from "zod";
 export const resolvedTenant = z.object({
   tenantId: z.string(),
   slug: z.string(),
+  name: z.string(),
+  signUp: z.boolean(),
   issuer: z.string(),
   partition: z.string(),
   version: z.number(),

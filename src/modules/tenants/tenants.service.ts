@@ -53,14 +53,22 @@ export class TenantsService {
     this.log = options.log ?? ((message) => console.warn(message));
   }
 
-  async create(input: { slug: string; name: string }): Promise<Tenant> {
+  async create(input: {
+    slug: string;
+    name: string;
+    signUp?: boolean;
+  }): Promise<Tenant> {
     const problem = slugProblem(input.slug);
     if (problem !== undefined) throw new InvalidSlugError(problem);
     const name = input.name.trim();
     if (name === "") throw new TypeError("A tenant needs a name");
     let created: Tenant;
     try {
-      created = await this.collection.create({ slug: input.slug, name });
+      created = await this.collection.create({
+        slug: input.slug,
+        name,
+        ...(input.signUp === undefined ? {} : { signUp: input.signUp }),
+      });
     } catch (error) {
       if (error instanceof ConflictError) {
         throw new SlugTakenError(`The slug "${input.slug}" is taken`);
