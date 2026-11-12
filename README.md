@@ -60,7 +60,6 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 They stop anyone sending codes to many addresses through the shared no-reply sender (#59). The `CLAVIX_CODE_*` values are whole numbers of at least 1;
 `CLAVIX_TRUSTED_PROXIES` a whole number of at least 0.
-
 - They use `@softistx/redis` rate limits (GCRA: the bucket starts full and refills evenly over the
   window), under the `clavix` prefix: `clavix:signin-ip:<tenantId>/<ip>`, `clavix:signin-tenant:<tenantId>`.
   Keys carry the tenant id, so a tenant's traffic never spends another's budget, and one address has
