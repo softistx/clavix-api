@@ -18,7 +18,7 @@
         "@softistx/janus-mongo": "^0.23.4",
         "@softistx/janus-oauth": "^0.9.1",
         "@softistx/janus-oauth-mongo": "^0.8.6",
-        "@softistx/janus-oidc": "^0.3.5",
+        "@softistx/janus-oidc": "^0.3.6",
         "@softistx/janus-passkeys": "^0.3.2",
         "@softistx/mail": "^1.5.0",
         "@softistx/mail-smtp": "^1.1.0",
@@ -318,7 +318,7 @@
 
     "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.8.6", "https://npm.pkg.github.com/download/@softistx/janus-oauth-mongo/0.8.6/d19aab8f7ff260e66aee5fda99ebd6004951ecff", { "peerDependencies": { "@softistx/janus": "^0.56.0", "@softistx/janus-oauth": "^0.9.1", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-7e0rWktRWNy1gNQX2U8xlO1rFtVDe6TxsPL9Y+gN/f5WF0OvpNJyOiBCd4xJS1NZjtUYiRxWuPgENiUHKtfPow=="],
 
-    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.5", "https://npm.pkg.github.com/download/@softistx/janus-oidc/0.3.5/47cb3518abfaf6dc89fdc812b3e1f4f088ae2716", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.56.0", "@softistx/janus-oauth": "^0.9.1", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-QxEImKaaWzjHQXdgoAFDw8lvuMGjFigXT26uP5nv9vTYOzhQ1cwnIKaQglunelNWpTdDOutD5H6qDfIi4YoZLQ=="],
+    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.6", "https://npm.pkg.github.com/download/@softistx/janus-oidc/0.3.6/4a994d38b81c995597180c41aa93c4fdbc7ca052", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.56.0", "@softistx/janus-oauth": "^0.9.1", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-ACTxtkTSwCTUiMR0sz8JbUOsqQIIAzOyTG6ejk1qmkgEW8zfCH2oerKkn4AoRnbI3aSg4KfgLXxLkc7VS5bkVQ=="],
 
     "@softistx/janus-passkeys": ["@softistx/janus-passkeys@0.3.2", "https://npm.pkg.github.com/download/@softistx/janus-passkeys/0.3.2/395987f9d1508036272466f913674501c3fc7fb2", { "dependencies": { "@simplewebauthn/server": "^14.0.3" }, "peerDependencies": { "@softistx/janus": "^0.56.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-ezJ6l8fsn/fwh0Rac9y+oBF639NCbBPycWxbcB08gKBeur9/y7gsGHzqFTyVQ4ZthlBH61dyY3gusWqfhU8xXQ=="],
 
