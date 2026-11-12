@@ -2,6 +2,7 @@ import { denial } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { passkeyThrottleOf } from "@/modules/auth/plugin";
 import { passkeysOn } from "@/users/rp";
 import {
   currentOf,
@@ -37,7 +38,11 @@ export const passkeys: Resolvers = {
   },
   Mutation: {
     passkeySignInOptions: async (_, __, ctx) => {
-      const auth = await authOf(ctx);
+      const [auth, tenant] = await Promise.all([authOf(ctx), ctx.tenant()]);
+      await passkeyThrottleOf(ctx)?.check({
+        tenantId: tenant?.tenantId ?? "",
+        ip: ctx.ip,
+      });
       const issued = await auth.passkeys.signInOptions();
       ctx.set.headers.set("cache-control", "no-store");
       return {

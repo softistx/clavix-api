@@ -22,18 +22,33 @@ export const janusPlugin = () =>
 // (MAIL_THROTTLED 429, STORE_FAILED 503), the rest as Yoga masks it.
 export const janusMasking = { maskError: janusMaskError() };
 
-// The throttle `requestSignInCode` consults, put on every context by
-// `createApp({ signInThrottle })`; none: no extra limit.
+// The throttles of the anonymous operations (`requestSignInCode`,
+// `passkeySignInOptions`), put on every context by `createApp`; none: no
+// extra limit.
 const THROTTLE = "signInThrottle" as const;
-type WithThrottle = { [THROTTLE]?: SignInThrottle | undefined };
+const PASSKEY_THROTTLE = "passkeyThrottle" as const;
+type WithThrottles = {
+  [THROTTLE]?: SignInThrottle | undefined;
+  [PASSKEY_THROTTLE]?: SignInThrottle | undefined;
+};
 
-export const throttleContext = (throttle: SignInThrottle | undefined) => ({
+export const throttleContext = (
+  throttle: SignInThrottle | undefined,
+  passkeyThrottle?: SignInThrottle | undefined,
+) => ({
   onContextBuilding: ({
     extendContext,
   }: {
-    extendContext: (extension: WithThrottle) => void;
-  }) => extendContext({ [THROTTLE]: throttle }),
+    extendContext: (extension: WithThrottles) => void;
+  }) =>
+    extendContext({
+      [THROTTLE]: throttle,
+      [PASSKEY_THROTTLE]: passkeyThrottle,
+    }),
 });
 
 export const throttleOf = (ctx: unknown): SignInThrottle | undefined =>
-  (ctx as WithThrottle)[THROTTLE];
+  (ctx as WithThrottles)[THROTTLE];
+
+export const passkeyThrottleOf = (ctx: unknown): SignInThrottle | undefined =>
+  (ctx as WithThrottles)[PASSKEY_THROTTLE];
