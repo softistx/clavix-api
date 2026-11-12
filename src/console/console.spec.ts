@@ -152,6 +152,11 @@ let tenantA = "";
 let tenantB = "";
 
 beforeAll(async () => {
+  // Other specs clear shared collections: seed what the migration seeds.
+  await (await import("@/migrations/console-seed")).seedConsole(
+    oauthDb,
+    origin,
+  );
   const clavix = await findTenant(PLATFORM_TENANT_SLUG);
   if (clavix === undefined) throw new Error("no clavix tenant");
   await rotateSigningKeys(
