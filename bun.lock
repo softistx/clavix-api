@@ -12,7 +12,7 @@
         "@graphql-tools/merge": "^10.0.6",
         "@nxgt/graphql-scalars": "^0.7.1",
         "@nxgt/graphql-validation": "^0.8.1",
-        "@softistx/janus": "^0.58.0",
+        "@softistx/janus": "^0.58.1",
         "@softistx/janus-graphql": "^0.25.3",
         "@softistx/janus-mail": "^0.25.11",
         "@softistx/janus-mongo": "^0.24.1",
@@ -306,7 +306,7 @@
 
     "@simplewebauthn/server": ["@simplewebauthn/server@14.1.0", "", { "dependencies": { "@hexagon/base64": "^1.1.27", "@levischuck/tiny-cbor": "^0.2.2", "@peculiar/asn1-android": "^2.6.0", "@peculiar/asn1-ecc": "^2.6.1", "@peculiar/asn1-rsa": "^2.6.1", "@peculiar/asn1-schema": "^2.6.0", "@peculiar/asn1-x509": "^2.6.1", "@peculiar/asn1-x509-post-quantum": "^2.9.4", "@peculiar/x509": "^2.1.0", "reflect-metadata": "^0.2.2" } }, "sha512-HPRRBR4Vzr45+RVvbmf6JuCfGdYYcSs4Pnnnp9YSY2IABa4JKnG+wxybczoB7rmdLCOMS/mbBa2ZL/Bcz58UlA=="],
 
-    "@softistx/janus": ["@softistx/janus@0.58.0", "https://npm.pkg.github.com/download/@softistx/janus/0.58.0/997c3562d293383de5f16292d23e526b94a59db4", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-KcQUxRxgo0CdcvAw4jvul6A7eJmOW0KzwhcWAvhoWF9106u58jPokUU0+CeiMvat0S/brSKOxCftrhXai7Z48A=="],
+    "@softistx/janus": ["@softistx/janus@0.58.1", "https://npm.pkg.github.com/download/@softistx/janus/0.58.1/b38fffbc919fecb90eaa37d59f8775bc58bcc96a", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-gQuN68QoFKO7HjQNsHqPj4P184Pc1qXJ9rJ6+azgwPTqN2gh6Apeawg0EheozAxnFtCHzNwMnuXRvue6uShyxw=="],
 
     "@softistx/janus-graphql": ["@softistx/janus-graphql@0.25.3", "https://npm.pkg.github.com/download/@softistx/janus-graphql/0.25.3/0222992db29a0b082e4dd6b9a900c49038ac72bc", { "peerDependencies": { "@envelop/core": "^5.0.0 || ^6.0.0", "@graphql-tools/utils": ">=10.0.0 <14", "@softistx/janus": "^0.58.0", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-45GXFAf7Bf23KYpONYIpxREFmBJWV8MBKMLzjH1Y9rE1d+TlkOD89J6v6r0Au/dWICTT7+aMg3hytOsFj4n3Sg=="],
 
