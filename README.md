@@ -33,16 +33,45 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                 | Default / rule                                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `PORT`                   | 3000                                                                                                         |
-| `MONGO_URI`              | required; a replica set (transactions)                                                                       |
-| `REDIS_URL`              | required in production; unset elsewhere, the tenant cache is off                                             |
-| `CLAVIX_DOMAIN`          | required in production; `clavix.localhost` elsewhere                                                         |
-| `CLAVIX_PUBLIC_SCHEME`   | `https`; `http` is refused in production                                                                     |
-| `CLAVIX_PUBLIC_PORT`     | optional; set when issuers are not on the scheme's own port                                                  |
-| `CLAVIX_SMTP_URL`        | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
-| `CLAVIX_KEYS_MASTER_KEY` | required in production (32 bytes, base64); a public development default elsewhere                            |
+| Variable                                                         | Default / rule                                                                                               |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`                                                           | 3000                                                                                                         |
+| `MONGO_URI`                                                      | required; a replica set (transactions)                                                                       |
+| `REDIS_URL`                                                      | required in production; unset elsewhere, the tenant cache is off                                             |
+| `CLAVIX_DOMAIN`                                                  | required in production; `clavix.localhost` elsewhere                                                         |
+| `CLAVIX_PUBLIC_SCHEME`                                           | `https`; `http` is refused in production                                                                     |
+| `CLAVIX_PUBLIC_PORT`                                             | optional; set when issuers are not on the scheme's own port                                                  |
+| `CLAVIX_SMTP_URL`                                                | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
+| `CLAVIX_KEYS_MASTER_KEY`                                         | required in production (32 bytes, base64); a public development default elsewhere                            |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`         | sign-in code requests per client address and tenant: 20 per 600 s                                            |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS` | sign-in code requests per tenant: 200 per 3600 s                                                             |
+| `CLAVIX_TRUSTED_PROXIES`                                         | reverse proxies in front of the app, default 0 (see "Sign-in code limits")                                   |
+
+## Sign-in code limits
+
+`requestSignInCode` is limited three ways; going over any of them is `MAIL_THROTTLED` (HTTP 429,
+`Retry-After` in seconds), the same answer in all three cases:
+
+| Limit                             | Default       | Variables                                                       |
+| --------------------------------- | ------------- | --------------------------------------------------------------- |
+| per address (the e-mail), janus's | 5 per 10 min  | not configurable                                                |
+| per client IP, per tenant         | 20 per 10 min | `CLAVIX_CODE_IP_LIMIT`, `CLAVIX_CODE_IP_WINDOW_SECONDS`         |
+| per tenant, all clients           | 200 per hour  | `CLAVIX_CODE_TENANT_LIMIT`, `CLAVIX_CODE_TENANT_WINDOW_SECONDS` |
+
+They stop anyone sending codes to many addresses through the shared no-reply sender (#59).
+- They use `@softistx/redis` rate limits (GCRA: the bucket starts full and refills evenly over the
+  window), under the `clavix` prefix: `clavix:signin-ip:<tenantId>/<ip>`, `clavix:signin-tenant:<tenantId>`.
+  Keys carry the tenant id, so a tenant's traffic never spends another's budget, and one address has
+  one bucket per tenant. The IP is counted first: a refused address does not spend the tenant's budget.
+- **They need `REDIS_URL`** (required in production). Without it (development) only janus's per-address
+  limit applies. If Redis is down or slow (250 ms), the request is let through and a warning is logged;
+  janus's per-address limit still holds.
+- **Client IP and the trusted-proxy assumption.** The IP is `ctx.ip`. By default it is the connection's
+  address, which behind a reverse proxy is the proxy: set `CLAVIX_TRUSTED_PROXIES` to the number of
+  proxies in front of the app (`1` for one load balancer). The client is then the entry that many
+  places from the right of `X-Forwarded-For` (what the proxies appended; what the client wrote left of
+  them is never read). Only set it when every request reaches the app through those proxies, or a
+  client could pick its own address. A request with no known address shares one `unknown` bucket.
 
 ## Signing keys
 

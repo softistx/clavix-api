@@ -1,4 +1,4 @@
-import { alxia } from "@alxia/core";
+import { alxia, forwardedIp } from "@alxia/core";
 import type { GraphQLContext } from "@alxia/graphql";
 import type { JanusContext } from "@softistx/janus-graphql";
 import { env } from "@/config/env";
@@ -11,7 +11,13 @@ import type { TenantJanus } from "@/users/tenant-janus";
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for
 // the OAuth endpoints), resolved once per request, on first use.
 export function createBase(resolver: TenantResolver = tenantResolver) {
-  return alxia()
+  // `ctx.ip`: the connection's address, or, behind CLAVIX_TRUSTED_PROXIES
+  // proxies, the client X-Forwarded-For names (never believed beyond them).
+  return alxia(
+    env.CLAVIX_TRUSTED_PROXIES === 0
+      ? {}
+      : { ip: forwardedIp({ trusted: env.CLAVIX_TRUSTED_PROXIES }) },
+  )
     .decorate({ env })
     .derive(({ request }) => {
       let tenant: Promise<ResolvedTenant | null> | undefined;

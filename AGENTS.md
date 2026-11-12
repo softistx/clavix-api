@@ -91,6 +91,12 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
 - The challenge travels in the response body (`cache-control: no-store`), not a cookie: the hosted
   pages are a BFF. Code: 6 digits, 10 min, 5 attempts; 5 mails per address per 10 min
   (`MAIL_THROTTLED`, 429), both janus's.
+- **Limits on top** (`throttle.ts`, README "Sign-in code limits"): per client IP and tenant (20 / 10 min)
+  and per tenant (200 / hour), `@softistx/redis` rate limits wired in `openAppRedis`, keys led by the
+  tenant id, configured by `CLAVIX_CODE_*`. Refusal = janus's `MailThrottledError`, so the answer is the
+  per-address one. `createApp({ signInThrottle })` injects it (specs); default: the app's Redis, none
+  without it. The IP is `ctx.ip`; `CLAVIX_TRUSTED_PROXIES` (default 0) makes `createBase` read
+  `X-Forwarded-For`, and `test/setup.ts` sets it to 1 so specs choose the address by header.
 - **Mail**: one platform sender `no-reply@<CLAVIX_DOMAIN>` (display name = tenant name) over
   `@softistx/mail-smtp` when `CLAVIX_SMTP_URL` is set (required in production), else the memory
   mailer. Links point at the tenant issuer. Mails are English: users have no locale yet.
