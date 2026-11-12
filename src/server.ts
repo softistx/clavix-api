@@ -1,4 +1,5 @@
 import { createApp } from "./app";
+import { createConsoleDeps } from "./config/console";
 import { env } from "./config/env";
 import { signingKeysFor } from "./config/keys";
 import { createIssuers } from "./config/oauth";
@@ -24,8 +25,10 @@ await startKeyRotation(
 
 // The app with the OAuth/OIDC endpoints of every tenant, serving each tenant's
 // stored resources (`resources:create`) beside the built-in userinfo one.
+const oauth = createIssuers(authFor, claimsFor);
 const app = createApp({
-  oauth: createIssuers(authFor, claimsFor),
+  oauth,
+  console: createConsoleDeps(oauth),
 }).onStop(async () => {
   // A code mail still in flight is awaited (the requests have already finished), then lost if late.
   if ((await drain(MAIL_DRAIN_MS)) === "timeout")

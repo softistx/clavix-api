@@ -34,6 +34,9 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   const { syncMongoInvitationsPartitioned, syncMongoStoresPartitioned } =
     await import("@softistx/janus-mongo");
   await syncMongoStoresPartitioned(oauthDb);
+  // The console's permission tuples (not partitioned).
+  const { syncMongoRelations } = await import("@softistx/janus-mongo");
+  await syncMongoRelations(oauthDb);
   await syncMongoInvitationsPartitioned(oauthDb);
   // The seed, once for the run (`clearDatabase` keeps what it wrote).
   const { migrate } = await import("@softistx/mongo/migrations");

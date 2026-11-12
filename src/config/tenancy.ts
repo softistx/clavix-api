@@ -8,6 +8,7 @@ import {
   redisTenantCache,
   type TenantCache,
 } from "@/tenancy/tenant-cache";
+import { linkTenantToPlatform } from "./access";
 import { mongo } from "./db";
 import { env } from "./env";
 import { ensureSigningKeyOf } from "./keys";
@@ -46,7 +47,12 @@ export function createTenancy({
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
 export const { tenantResolver, tenantsService } = createTenancy({
   tenants: mongo.db.tenants,
-  onCreated: ensureSigningKeyOf,
+  // The first signing key, and the platform link (the console's permissions).
+  onCreated: async (tenantId) => {
+    // The link first: cheap and idempotent, so a failing key never leaves a tenant unseen by operators.
+    await linkTenantToPlatform(tenantId);
+    await ensureSigningKeyOf(tenantId);
+  },
   cache:
     redis === undefined
       ? noTenantCache

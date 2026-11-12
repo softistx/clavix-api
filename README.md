@@ -9,7 +9,8 @@ Today it serves:
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- scripts that create tenants, OAuth clients and API resources until the console exists.
+- on `POST /console/graphql`, the console API (only `me` for now), behind a bearer token;
+- scripts that create tenants, OAuth clients and API resources until the console can.
 
 ## Documentation
 
@@ -34,18 +35,19 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 ## Scripts
 
-| Script                    | Does                                                                     |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `generate`                | scalar/validation SDL, then GraphQL codegen                              |
-| `dev`, `build`, `start`   | watch server; bundle into `dist/`; run the bundle                        |
-| `test`                    | `bun test`                                                               |
-| `typecheck`               | `bun check`                                                              |
-| `lint`, `fix`, `check:ci` | Biome                                                                    |
-| `db:sync`, `db:migrate`   | collections and indexes; pending migrations (deployment steps)           |
-| `tenants:create`          | create a tenant (see "Tenants")                                          |
-| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
-| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
-| `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
+| Script                    | Does                                                                      |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `generate`                | scalar/validation SDL, then GraphQL codegen                               |
+| `dev`, `build`, `start`   | watch server; bundle into `dist/`; run the bundle                         |
+| `test`                    | `bun test`                                                                |
+| `typecheck`               | `bun check`                                                               |
+| `lint`, `fix`, `check:ci` | Biome                                                                     |
+| `db:sync`, `db:migrate`   | collections, indexes and relations; pending migrations (deployment steps) |
+| `tenants:create`          | create a tenant (see "Tenants")                                           |
+| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")      |
+| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")   |
+| `operators:grant`         | give a clavix-tenant user a platform role for the console (`--email`)     |
+| `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`)  |
 
 Every script reads `MONGO_URI` and validates the rest of the environment below at start, so with `NODE_ENV=production` a script also needs the production-required variables. What each
 one needs on top:
@@ -56,6 +58,7 @@ one needs on top:
 | `tenants:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`      | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
+| `operators:grant`       | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users)                                                                                                                     |
 | `start`                 | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
 ## Environment
@@ -131,6 +134,34 @@ Clavix adds no `jose`.
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
   them. Changing the master key is the same; there is no re-encryption in place.
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
+
+## Console API
+
+`POST /console/graphql` is the console's own GraphQL API (SDL in `src/console`). It reads no
+cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
+tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
+No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. Today it
+exposes only `me { user platformRole memberships { tenant { slug } role } }`, so the scripts above
+still create tenants, clients and resources.
+
+Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
+tenant; every field is refused unless its guard allows it.
+
+Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
+registers the console resource and its confidential client `console` in the `clavix` tenant and
+prints the client secret once: save it), then name the first operator, a user who already exists
+in the `clavix` tenant:
+
+```sh
+bun run operators:grant --email ada@example.com            # platform owner
+bun run operators:grant --email bob@example.com --role viewer
+```
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"{ me { platformRole } }"}'
+```
 
 ## Tenants
 

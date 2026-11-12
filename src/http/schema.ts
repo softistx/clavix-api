@@ -18,7 +18,11 @@ const typeDefs = mergeTypeDefs([
   constraintTypeDefs,
   consentTypeDefs,
   ...loadFilesSync(
-    join(import.meta.dir, bundled ? ".." : join("..", ".."), "src"),
+    [
+      join(import.meta.dir, bundled ? ".." : join("..", ".."), "src"),
+      // The console API has its own schema (src/console/schema.ts).
+      `!${join(import.meta.dir, bundled ? ".." : join("..", ".."), "src", "console")}/**`,
+    ],
     { extensions: ["graphqls"] },
   ),
 ]);

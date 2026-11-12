@@ -4,6 +4,7 @@ import {
   OptimisticLockError,
   type TypedCollection,
 } from "@softistx/mongo";
+import { ObjectId } from "mongodb";
 import { env } from "@/config/env";
 import { hostOf, partitionOf } from "./identity";
 import { PLATFORM_TENANT_SLUG, slugProblem } from "./slug";
@@ -95,6 +96,18 @@ export class TenantsService {
       filter: { status: "active" },
     });
     return active.map((tenant) => partitionOf(tenant._id));
+  }
+
+  /** The active tenants with these ids (hex); an unknown, suspended or deleted one is left out. */
+  async activeByIds(ids: readonly string[]): Promise<Tenant[]> {
+    const valid = ids.filter((id) => ObjectId.isValid(id));
+    if (valid.length === 0) return [];
+    return this.collection.findMany({
+      filter: {
+        _id: { $in: valid.map((id) => new ObjectId(id)) },
+        status: "active",
+      },
+    });
   }
 
   suspend(id: IdOf<typeof tenants> | string): Promise<Tenant> {

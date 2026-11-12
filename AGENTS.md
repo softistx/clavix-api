@@ -36,7 +36,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
-  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
+  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
@@ -187,6 +187,31 @@ M2 console. It only parses flags (`src/modules/tenants/cli.ts`) and calls `regis
 (`register-tenant.ts`), which goes through `TenantsService.create` (the one place for slug rules,
 reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
 `created: false`, other values are refused, a deleted tenant's slug stays reserved.
+
+## Console API (`src/console`)
+
+The console's own GraphQL API, `POST /console/graphql`, apart from the hosted pages' `/graphql`
+(`src/http/schema.ts` and `codegen.ts` leave `src/console/**` out; `codegen.console.ts` generates
+`src/generated/console`). No cookie and no Host-based tenant: the credential is a bearer JWT of the
+`clavix` tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, verified in process by
+`server.authenticate(request, { resource })` (`auth.ts`; no crypto of ours, a store outage is a 503,
+every other failure a 401).
+- **Permissions** are a janus `defineModel` (`model.ts`) over the relation store in `oauthDb`
+  (`config/access.ts`; `db:sync` creates its collection): platform and tenant `owner` / `admin` /
+  `viewer`, permits `manage` / `edit` / `view`, a platform role inherited by every tenant through the
+  tenant's `platform` link. The link is written when a tenant is created (`config/tenancy.ts`
+  `onCreated`) and backfilled by the `2026-11-12-console` migration.
+- **Deny by default** (`guard.ts`): every root field is wrapped, and one without an entry in its
+  module's `guards` (`signedIn()`, `onTenant(perm, args => tenantId)`, `onPlatform(perm)`) is refused
+  `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
+- **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards) and lists it
+  in `modules/index.ts`; the SDL lives there, never in `src/modules`.
+- **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
+  resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
+  an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
+  once by the migration (not in tests).
+- **`bun run operators:grant --email <address> [--role owner|admin|viewer]`** gives a user of the
+  `clavix` tenant a platform role (default owner), until the console can. The user must exist.
 
 ## OAuth clients
 
