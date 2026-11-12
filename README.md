@@ -48,7 +48,7 @@ A request belongs to the tenant whose slug is the one label before `CLAVIX_DOMAI
 the `Host` header; `X-Forwarded-Host` is ignored. It is lowercased, its port and trailing dot
 removed. No tenant (`null`, a 404 for the OAuth endpoints) for an IP, the apex itself, more
 than one label before it, a reserved label (`www`, `console`, `api`, ...), an unknown slug, a
-suspended or deleted tenant. In a resolver, `await tenant()` of the context gives
+suspended or deleted tenant. A slug is reserved for good: deleting a tenant does not free its slug, and creating a tenant with it fails like any duplicate. In a resolver, `await tenant()` of the context gives
 `{ tenantId, slug, issuer, partition, version }`, resolved once per request.
 
 Resolved hosts are cached in Redis (`tenant-host`, 60 s; 30 s for "no tenant"); creating,

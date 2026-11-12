@@ -70,7 +70,7 @@ export class TenantsService {
     return this.setStatus(id, "active");
   }
 
-  /** Archives the tenant (soft delete); its slug is free again. */
+  /** Archives the tenant (soft delete); its slug stays reserved. */
   async delete(id: IdOf<typeof tenants> | string): Promise<Tenant> {
     const tenant = await this.collection.getById(id);
     this.refuseIfPlatform(tenant, "deleted");
