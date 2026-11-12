@@ -1,6 +1,7 @@
 import { defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
+import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
@@ -13,6 +14,12 @@ import { env } from "./env";
 export async function openAppRedis(
   uri: string,
   log: (message: string) => void = (message) => console.warn(message),
+  limits: SignInLimitConfig = {
+    ipLimit: env.CLAVIX_CODE_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_CODE_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_CODE_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_CODE_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -24,6 +31,7 @@ export async function openAppRedis(
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
       queues: { keyRotation },
+      limits: signInLimits(limits),
       background: {
         onDown: () => log("redis unavailable: tenant cache degraded"),
         onUp: () => log("redis is back"),

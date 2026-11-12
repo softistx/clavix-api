@@ -147,3 +147,29 @@ test("the keys master key: a public default outside production, never in it", as
     load({ ...clean, CLAVIX_KEYS_MASTER_KEY: "c2hvcnQ=" }),
   ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
 });
+
+test("the sign-in code limits and the proxy count have defaults and are read", async () => {
+  const { env } = await load({
+    ...clean,
+    CLAVIX_CODE_IP_LIMIT: undefined,
+    CLAVIX_CODE_IP_WINDOW_SECONDS: undefined,
+    CLAVIX_CODE_TENANT_LIMIT: undefined,
+    CLAVIX_CODE_TENANT_WINDOW_SECONDS: undefined,
+    CLAVIX_TRUSTED_PROXIES: undefined,
+  });
+  expect(env.CLAVIX_CODE_IP_LIMIT).toBe(20);
+  expect(env.CLAVIX_CODE_IP_WINDOW_SECONDS).toBe(600);
+  expect(env.CLAVIX_CODE_TENANT_LIMIT).toBe(200);
+  expect(env.CLAVIX_CODE_TENANT_WINDOW_SECONDS).toBe(3600);
+  expect(env.CLAVIX_TRUSTED_PROXIES).toBe(0);
+  const set = await load({
+    ...clean,
+    CLAVIX_CODE_IP_LIMIT: "5",
+    CLAVIX_TRUSTED_PROXIES: "2",
+  });
+  expect(set.env.CLAVIX_CODE_IP_LIMIT).toBe(5);
+  expect(set.env.CLAVIX_TRUSTED_PROXIES).toBe(2);
+  await expect(load({ ...clean, CLAVIX_CODE_IP_LIMIT: "0" })).rejects.toThrow(
+    "CLAVIX_CODE_IP_LIMIT",
+  );
+});
