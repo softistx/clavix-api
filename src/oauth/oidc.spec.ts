@@ -307,6 +307,20 @@ describe("userinfo", () => {
     });
   });
 
+  test("each tenant's userinfo reads its own user pool", async () => {
+    const tokens = await tokensOf("globex", "openid email");
+    const response = await get(
+      "globex",
+      "/userinfo",
+      `Bearer ${tokens.access_token}`,
+    );
+    expect(await response.json()).toEqual({
+      sub: "user-globex",
+      email: "user-globex@globex.test",
+      email_verified: true,
+    });
+  });
+
   test("no token is a 401", async () => {
     expect((await get("acme", "/userinfo")).status).toBe(401);
   });
