@@ -31,10 +31,12 @@ export interface TenantJanusOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
   /** The database of the janus collections (`syncMongoStoresPartitioned`). */
   db: Db;
+  /** The global magic-link switch (`CLAVIX_MAGIC_LINK`); off when left out. */
+  magicLink?: boolean;
 }
 
 /** The janus instance of a tenant: its own partition of the user stores (ADR-0006, ADR-0008). */
-function buildJanus(db: Db, tenant: ResolvedTenant) {
+function buildJanus(db: Db, tenant: ResolvedTenant, magicLink: boolean) {
   return janus({
     user: userSchema,
     email: "email",
@@ -44,6 +46,9 @@ function buildJanus(db: Db, tenant: ResolvedTenant) {
     // The e-mailed code: 10 minutes, five attempts, five requests per address
     // and 10 minutes (janus's mail throttle, on by default).
     tokens: { signInCode: SIGN_IN_CODE_LIFESPAN },
+    // janus 0.56 defaults magic-link sign-in to on; Clavix turns it off until
+    // the owner switches it on (CLAVIX_MAGIC_LINK, feature: clavix-api#89).
+    magicLink: { enabled: magicLink },
     // A passkey as the first factor: the relying party is the tenant's own
     // host (`rp.ts`), so a passkey is unknown to every other tenant. janus
     // accepts `http://<name>.localhost` origins, so a development tenant on
@@ -72,15 +77,23 @@ function buildJanus(db: Db, tenant: ResolvedTenant) {
 
 export type TenantJanus = ReturnType<typeof buildJanus>;
 
-export function buildTenantJanus(db: Db, tenant: ResolvedTenant): TenantJanus {
-  return buildJanus(db, tenant);
+export function buildTenantJanus(
+  db: Db,
+  tenant: ResolvedTenant,
+  magicLink = false,
+): TenantJanus {
+  return buildJanus(db, tenant, magicLink);
 }
 
 /**
  * One janus instance per tenant, chosen by host, rebuilt when the tenant's
  * `version` changes. The same resolver feeds the OAuth issuers.
  */
-export function createTenantJanusIssuers({ resolver, db }: TenantJanusOptions) {
+export function createTenantJanusIssuers({
+  resolver,
+  db,
+  magicLink = false,
+}: TenantJanusOptions) {
   return createJanusIssuers({
     resolve: async (request) => {
       const tenant = await resolver.resolveRequest(request);
@@ -88,6 +101,6 @@ export function createTenantJanusIssuers({ resolver, db }: TenantJanusOptions) {
         ? null
         : { issuer: tenant.issuer, version: String(tenant.version), tenant };
     },
-    build: ({ tenant }) => buildTenantJanus(db, tenant),
+    build: ({ tenant }) => buildTenantJanus(db, tenant, magicLink),
   });
 }

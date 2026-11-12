@@ -73,6 +73,8 @@ too (janus answers it itself). The `roles` claim is M2.
 
 ## Users and sessions
 
+Magic-link sign-in is a global switch, `CLAVIX_MAGIC_LINK`, off by default: janus 0.56 defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }`. The feature itself is clavix-api#89.
+
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
 one `janus()` per tenant over `createMongoStores(db, { partition })`, so users, sessions, passkeys and

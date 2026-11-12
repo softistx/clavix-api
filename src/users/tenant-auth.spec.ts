@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { JanusError, statusOf } from "@softistx/janus";
 import {
   createMemorySigningKeys,
   rotateSigningKeys,
@@ -15,7 +16,7 @@ import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { originOf, rpIdOf } from "./rp";
 import { createTenantAuth } from "./tenant-auth";
-import { SESSION_COOKIE } from "./tenant-janus";
+import { buildTenantJanus, SESSION_COOKIE } from "./tenant-janus";
 
 const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";
@@ -300,5 +301,26 @@ describe("OAuth with the real authFor", () => {
       const consent = await consentAs("globex", cookie);
       expect(consent?.signedIn).toBeNull();
     }
+  });
+});
+
+describe("magic link switch", () => {
+  test("with the flag unset, the magic-link request is refused with MAGIC_LINK_DISABLED (404)", async () => {
+    const auth = await janusOf("acme");
+    expect(auth.magicLink.enabled).toBe(false);
+    const refusal = await auth.magicLink
+      .request(EMAIL)
+      .catch((e: unknown) => e);
+    expect(refusal).toBeInstanceOf(JanusError);
+    expect((refusal as JanusError).code).toBe("MAGIC_LINK_DISABLED");
+    expect(statusOf((refusal as JanusError).code)).toBe(404);
+  });
+
+  test("magicLink: true reaches janus", async () => {
+    const tenant = await tenantOf("acme");
+    expect(buildTenantJanus(oauthDb, tenant, true).magicLink.enabled).toBe(
+      true,
+    );
+    expect(buildTenantJanus(oauthDb, tenant).magicLink.enabled).toBe(false);
   });
 });
