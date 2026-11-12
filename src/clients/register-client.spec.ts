@@ -9,6 +9,11 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
+import {
+  ClientInputError,
+  SuspendedTenantError,
+  UnknownTenantError,
+} from "@/modules/resources/errors";
 import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
@@ -16,13 +21,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { parseClientArgs } from "./cli";
-import {
-  ClientInputError,
-  clientIdOf,
-  registerClient,
-  SuspendedTenantError,
-  UnknownTenantError,
-} from "./register-client";
+import { clientIdOf, registerClient } from "./register-client";
 
 const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";

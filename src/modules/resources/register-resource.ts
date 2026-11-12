@@ -1,14 +1,14 @@
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
+import { userinfoOf } from "@/oauth/issuers";
+import type { ResourcesFor } from "@/oauth/ports";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import {
   ClientInputError,
   type ClientTenant,
   SuspendedTenantError,
   UnknownTenantError,
-} from "@/clients/register-client";
-import { userinfoOf } from "@/oauth/issuers";
-import type { ResourcesFor } from "@/oauth/ports";
-import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+} from "./errors";
 import type { resources } from "./resources.model";
 
 export { ClientInputError as ResourceInputError };

@@ -1,9 +1,10 @@
 import { parseClientArgs, USAGE } from "@/clients/cli";
-import { ClientInputError, registerClient } from "@/clients/register-client";
+import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantBySlug } from "@/config/tenancy";
+import { ClientInputError } from "@/modules/resources/errors";
 import { issuerOf } from "@/modules/tenants/identity";
 
 // Registers an OAuth client on a tenant, or updates it (idempotent on the
