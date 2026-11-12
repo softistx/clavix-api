@@ -13,6 +13,17 @@ export interface SignInDeps {
 
 const LIFESPAN_MS = 10 * 60_000; // = SIGN_IN_CODE_LIFESPAN ("10m"), checked by auth.spec.ts
 
+/** Opens the account of an address on a tenant that allows sign-up; one that exists is left alone. */
+export async function createIfOpen(auth: TenantJanus, email: string) {
+  try {
+    await auth.create({ email });
+  } catch (error) {
+    if (!(error instanceof JanusError && error.code === "LOGIN_TAKEN")) {
+      throw error;
+    }
+  }
+}
+
 /**
  * Counts the request (past the limit: MAIL_THROTTLED), mints the challenge for
  * whoever asked, then, after the answer, creates the account when sign-up is
@@ -25,15 +36,7 @@ export async function requestSignInCode(
 ) {
   const pending = await auth.signInCode.prepare(email);
   afterAnswer(async () => {
-    if (signUp) {
-      try {
-        await auth.create({ email });
-      } catch (error) {
-        if (!(error instanceof JanusError && error.code === "LOGIN_TAKEN")) {
-          throw error;
-        }
-      }
-    }
+    if (signUp) await createIfOpen(auth, email);
     const issued = await pending.send();
     if (issued !== null) await mail.signInCode(issued);
   });

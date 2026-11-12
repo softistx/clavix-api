@@ -17,6 +17,7 @@ Today it serves:
 | ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | This README                                                                                | run, environment, and each feature below            |
 | [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix |
+| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls   |
 | [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes      |
 | [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                 |
 | [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                   |
@@ -61,22 +62,22 @@ one needs on top:
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                                                                             |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                                                 | 3000                                                                                                                                                       |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                     |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                                                                           |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                       |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                   |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                               |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                                                          |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                          |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                           |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                 |
-| `CLAVIX_MAGIC_LINK`                                                    | global switch of magic-link sign-in (janus `magicLink.enabled`); `true`/`1` or `false`/`0`, default `false`; no API operation uses it before clavix-api#89 |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                   |
+| Variable                                                               | Default / rule                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                                 | 3000                                                                                                                                                                                                                    |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                  |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                                                                                                                                        |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                    |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                             |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                            |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                                                                                                                       |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                       |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                        |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                             |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                              |
+| `CLAVIX_MAGIC_LINK`                                                    | global switch of magic-link sign-in (janus `magicLink.enabled`); `true`/`1` or `false`/`0`, default `false`; off, `requestMagicLink` and `confirmMagicLink` answer 404 `MAGIC_LINK_DISABLED` (see "Magic-link sign-in") |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                |
 
 ## Sign-in code limits
 
@@ -370,6 +371,43 @@ address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` coo
 or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
 `clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
 come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
+
+## Magic-link sign-in
+
+Off by default: `CLAVIX_MAGIC_LINK=true` (or `1`) turns it on for every tenant. Off, both operations
+answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or mailed, so the surface
+looks absent; the hosted page hides its button. Same endpoint as the e-mail code
+(`https://<slug>.<CLAVIX_DOMAIN>/graphql`):
+
+```graphql
+mutation {
+  requestMagicLink(email: "ada@example.com") {
+    expiresAt
+  }
+}
+mutation {
+  confirmMagicLink(token: "...") {
+    user {
+      id
+      email
+      emailVerified
+    }
+    expiresAt
+  }
+}
+```
+
+`requestMagicLink` mails a link `https://<slug>.<CLAVIX_DOMAIN>/sign-in/link?token=<token>` (valid
+15 minutes; only the last link a user asked for works). The answer is the same for an address with
+an account, one without and, on a `signUp: false` tenant, one that is not invited (nothing is created
+or sent for the last). The hosted page behind that URL must show a button that POSTs the token to
+`confirmMagicLink`: never sign in on the `GET`, mail scanners open links and would spend the token.
+`confirmMagicLink` opens the session (`__Host-clavix-session`), marks the e-mail verified, and every
+refusal (unknown, spent, expired or stale link) is `MAGIC_LINK_INVALID` (401): offer a new link.
+`MAIL_THROTTLED` (429) past 5 requests per address and 10 minutes, and the per-IP and per-tenant
+"Sign-in code limits" apply to link requests too (one shared budget). janus 0.57 refuses to enrol a
+passkey or second factor while the e-mail is unproved (`EMAIL_UNVERIFIED`), so a link that proves
+the e-mail has no squatter's factor to wipe. More in [docs/guide/magic-link.md](docs/guide/magic-link.md).
 
 ## Passkey sign-in and registration
 

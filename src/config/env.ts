@@ -105,8 +105,8 @@ export const env = defineEnv({
     .min(1)
     .default(3600),
   // The global switch of magic-link sign-in (janus `magicLink.enabled`), off by
-  // default (owner decision, clavix-api#24). Only "true" / "1" turn it on. The
-  // feature itself is slice clavix-api#89; until then nothing exposes it.
+  // default (owner decision, clavix-api#24). Only "true" / "1" turn it on. Off,
+  // requestMagicLink and confirmMagicLink answer 404 MAGIC_LINK_DISABLED.
   CLAVIX_MAGIC_LINK: z
     .enum(["true", "false", "1", "0"])
     .default("false")

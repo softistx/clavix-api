@@ -192,3 +192,24 @@ const { token } = await auth.changeEmail.send(user, "new@example.test");
 // the user follows the e-mailed link, then:
 await auth.changeEmail.confirm(token);
 ```
+
+## `MAGIC_LINK_DISABLED` (404) on `requestMagicLink` or `confirmMagicLink`
+
+**When:** the operation is answered with HTTP 404 and `"extensions":{"code":"MAGIC_LINK_DISABLED"}`.
+
+**Why:** magic-link sign-in is off, which is the default. Nothing was counted, written or mailed, and a
+link mailed earlier is not spent.
+
+**Fix:** set `CLAVIX_MAGIC_LINK=true` (or `1`) and restart; every tenant then has it. The hosted page
+should hide its "e-mail me a link" button when the operation answers 404.
+
+## `MAGIC_LINK_INVALID` (401) on `confirmMagicLink`
+
+**When:** the hosted page POSTs the token and gets HTTP 401 `MAGIC_LINK_INVALID`.
+
+**Why:** the link is unknown (also another tenant's), already used, expired (15 minutes), superseded
+by a newer request (only the last link works), sent to an address the user has since changed, or
+the user is deactivated. All look alike on purpose. A mail scanner that opened the link and signed in on
+`GET` would also have spent it: the page must sign in only on a POST from a button.
+
+**Fix:** offer a new link with `requestMagicLink`, and tell the user to open the latest e-mail.
