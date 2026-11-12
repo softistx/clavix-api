@@ -13,8 +13,6 @@ nxgt-janus release says which.
 ## Next
 
 **M1, dogfooding: our applications sign in through Clavix**
-- **Tenants** — a tenant model, the tenant a host belongs to, a repository that cannot
-  read another tenant's data, and the `clavix` tenant seeded (1.1).
 - **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
   a schedule, published as a JWKS per issuer (1.2). Waits on janus: JWT access tokens and
   signing keys.
@@ -42,7 +40,7 @@ nxgt-janus release says which.
 
 **M2, console**
 - Platform: tenants, plans and quotas, usage counters (2.2).
-- Tenant: clients, resources, scopes, users and admin roles (2.3).
+- Tenant: clients, resources, scopes, end-user roles and memberships (2.3).
 - Branding: a theme per tenant, with a live preview and an AA contrast check (2.4).
 - Custom domains: DNS TXT verification and automatic TLS (2.5).
 - Sign-in methods and social providers per tenant (2.6).
@@ -58,6 +56,13 @@ nxgt-janus release says which.
 - MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`) (4.2).
 - Audit log, viewer and export (4.3); webhooks per tenant (4.4); telemetry (4.5).
 
+**M5, authorization (after v1)**
+- Roles, permissions and relations authored per tenant in Clavix, published as signed
+  rules that each API pulls and evaluates locally, with no remote decision point
+  (5.1–5.10).
+
 ## Shipped
 
-Nothing yet.
+- **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and
+  cached in Redis, a suspension applying within 60 s at worst), a repository that cannot
+  read another tenant's data, slugs reserved for good, and the `clavix` tenant seeded (1.1).

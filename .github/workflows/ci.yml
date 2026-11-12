@@ -20,7 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache folder
-        run: echo "BUN_INSTALL_CACHE_DIR=$HOME/.cache/nxgt/bun-install" >> "$GITHUB_ENV"
+        run: |
+          {
+            echo "BUN_INSTALL_CACHE_DIR=$HOME/.cache/nxgt/bun-install"
+            echo "MONGOMS_DOWNLOAD_DIR=$HOME/.cache/nxgt/$RUNNER_NAME/mongodb-binaries"
+            echo "REDISMS_DOWNLOAD_DIR=$HOME/.cache/nxgt/$RUNNER_NAME/redis-binaries"
+          } >> "$GITHUB_ENV"
       # Node for the tools that run under node (graphql-codegen and its
       # dependencies use the regex `v` flag): the runners' system Node is 18.
       - uses: actions/setup-node@v4
@@ -29,6 +34,23 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      # mongod, for the in-memory replica set of test/setup.ts: its version
+      # follows mongodb-memory-server-core, so the key follows the lockfile.
+      - id: binaries
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/nxgt/${{ runner.name }}/mongodb-binaries
+          key: test-binaries-${{ runner.name }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: test-binaries-${{ runner.name }}-${{ runner.os }}-${{ runner.arch }}-
+      # redis-server, compiled from source by @softistx/redis/testing on its
+      # first run (~2 min): its version is pinned by the package, so the key
+      # follows the lockfile.
+      - id: redis-binaries
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/nxgt/${{ runner.name }}/redis-binaries
+          key: test-redis-${{ runner.name }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: test-redis-${{ runner.name }}-${{ runner.os }}-${{ runner.arch }}-
       - id: bun-cache
         uses: actions/cache/restore@v4
         with:
@@ -47,3 +69,35 @@ jobs:
       - run: bun run verify
       # The bundle production runs (dist/server.js).
       - run: bun run build
+      # mongod complete: found and answering --version, so a half-written
+      # folder is never frozen under the key.
+      - id: binaries-complete
+        if: always() && steps.binaries.outputs.cache-hit != 'true'
+        run: |
+          mongod=$(find "$MONGOMS_DOWNLOAD_DIR" -maxdepth 1 -type f -name 'mongod-*' ! -name '*.md5' 2>/dev/null | head -n 1)
+          if [ -n "$mongod" ] && "$mongod" --version >/dev/null; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The test binaries are incomplete; their cache is not saved."
+          fi
+      - uses: actions/cache/save@v4
+        if: always() && steps.binaries-complete.outputs.ok == 'true'
+        with:
+          path: ~/.cache/nxgt/${{ runner.name }}/mongodb-binaries
+          key: ${{ steps.binaries.outputs.cache-primary-key }}
+      # redis-server complete: found and answering --version, so a failed
+      # build is never frozen under the key.
+      - id: redis-complete
+        if: always() && steps.redis-binaries.outputs.cache-hit != 'true'
+        run: |
+          server=$(find "$REDISMS_DOWNLOAD_DIR" -type f -name redis-server 2>/dev/null | head -n 1)
+          if [ -n "$server" ] && "$server" --version >/dev/null; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The Redis build is incomplete; its cache is not saved."
+          fi
+      - uses: actions/cache/save@v4
+        if: always() && steps.redis-complete.outputs.ok == 'true'
+        with:
+          path: ~/.cache/nxgt/${{ runner.name }}/redis-binaries
+          key: ${{ steps.redis-binaries.outputs.cache-primary-key }}

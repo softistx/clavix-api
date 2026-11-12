@@ -1,0 +1,105 @@
+import { expect, test } from "bun:test";
+
+// src/config/env.ts checks Bun.env once, when it is first imported: a spec
+// gives it a fresh copy (a query string makes a new module) under the values it
+// tests.
+let loads = 0;
+const load = async (values: Record<string, string | undefined>) => {
+  const before = Object.fromEntries(
+    Object.keys(values).map((key) => [key, Bun.env[key]]),
+  );
+  const set = (entries: Record<string, string | undefined>) => {
+    for (const [key, value] of Object.entries(entries)) {
+      if (value === undefined) delete Bun.env[key];
+      else Bun.env[key] = value;
+    }
+  };
+  set(values);
+  try {
+    loads += 1;
+    return await import(`./env.ts?load=${loads}`);
+  } finally {
+    set(before);
+  }
+};
+
+const clean = {
+  REDIS_URL: undefined,
+  CLAVIX_DOMAIN: undefined,
+  CLAVIX_PUBLIC_SCHEME: undefined,
+  CLAVIX_PUBLIC_PORT: undefined,
+};
+
+test("outside production the defaults stand in", async () => {
+  const { env } = await load(clean);
+  expect(env.REDIS_URL).toBeUndefined();
+  expect(env.CLAVIX_DOMAIN).toBe("clavix.localhost");
+  expect(env.CLAVIX_PUBLIC_SCHEME).toBe("https");
+  expect(env.CLAVIX_PUBLIC_PORT).toBeUndefined();
+});
+
+test("the values are read", async () => {
+  const { env } = await load({
+    ...clean,
+    REDIS_URL: "redis://localhost:6379",
+    CLAVIX_DOMAIN: "clavix.example",
+    CLAVIX_PUBLIC_SCHEME: "http",
+    CLAVIX_PUBLIC_PORT: "3000",
+  });
+  expect(env.REDIS_URL).toBe("redis://localhost:6379");
+  expect(env.CLAVIX_DOMAIN).toBe("clavix.example");
+  expect(env.CLAVIX_PUBLIC_SCHEME).toBe("http");
+  expect(env.CLAVIX_PUBLIC_PORT).toBe(3000);
+});
+
+test("empty REDIS_URL and CLAVIX_PUBLIC_PORT are unset", async () => {
+  const { env } = await load({
+    ...clean,
+    REDIS_URL: "",
+    CLAVIX_PUBLIC_PORT: "",
+  });
+  expect(env.REDIS_URL).toBeUndefined();
+  expect(env.CLAVIX_PUBLIC_PORT).toBeUndefined();
+});
+
+test("a malformed variable stops the app, naming it", async () => {
+  await expect(load({ ...clean, MONGO_URI: "http://x" })).rejects.toThrow(
+    "MONGO_URI",
+  );
+  await expect(load({ ...clean, REDIS_URL: "nope" })).rejects.toThrow(
+    "REDIS_URL",
+  );
+  await expect(
+    load({ ...clean, CLAVIX_DOMAIN: "Clavix.Example" }),
+  ).rejects.toThrow("CLAVIX_DOMAIN");
+  await expect(load({ ...clean, CLAVIX_DOMAIN: "localhost" })).rejects.toThrow(
+    "CLAVIX_DOMAIN",
+  );
+  await expect(load({ ...clean, CLAVIX_PUBLIC_SCHEME: "ftp" })).rejects.toThrow(
+    "CLAVIX_PUBLIC_SCHEME",
+  );
+  await expect(load({ ...clean, CLAVIX_PUBLIC_PORT: "70000" })).rejects.toThrow(
+    "CLAVIX_PUBLIC_PORT",
+  );
+});
+
+test("production requires REDIS_URL and CLAVIX_DOMAIN and refuses http", async () => {
+  const production = {
+    NODE_ENV: "production",
+    REDIS_URL: "redis://redis:6379",
+    CLAVIX_DOMAIN: "clavix.example",
+    CLAVIX_PUBLIC_SCHEME: "https",
+  };
+  // `production` is read at import, so each case sets NODE_ENV for its load.
+  const { env } = await load({ ...clean, ...production });
+  expect(env.CLAVIX_DOMAIN).toBe("clavix.example");
+  await expect(
+    load({ ...clean, ...production, REDIS_URL: undefined }),
+  ).rejects.toThrow("REDIS_URL");
+  await expect(
+    load({ ...clean, ...production, CLAVIX_DOMAIN: undefined }),
+  ).rejects.toThrow("CLAVIX_DOMAIN");
+  await expect(
+    load({ ...clean, ...production, CLAVIX_PUBLIC_SCHEME: "http" }),
+  ).rejects.toThrow("CLAVIX_PUBLIC_SCHEME");
+});
