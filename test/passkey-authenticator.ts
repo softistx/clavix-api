@@ -1,4 +1,5 @@
 /**
+ * Temporary, until @softistx/janus-passkeys#666 publishes a test authenticator.
  * A software authenticator: ES256 keys on WebCrypto, `none` attestation, and
  * the browser's JSON (`toJSON()`) for what it registers and signs. Every knob
  * a refusal case turns is an option.
