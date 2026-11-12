@@ -7,6 +7,15 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Console** — operators and tenant admins manage Clavix from the console instead of scripts:
+  tenants, plans and quotas with usage counters
+  ([#8](https://github.com/softistx/clavix-api/issues/8)); a tenant's clients, resources, scopes,
+  users and admin roles ([#9](https://github.com/softistx/clavix-api/issues/9)); a theme per
+  tenant with an AA contrast check ([#10](https://github.com/softistx/clavix-api/issues/10));
+  custom domains with DNS TXT verification and automatic TLS
+  ([#11](https://github.com/softistx/clavix-api/issues/11)); and sign-in methods and social
+  providers per tenant ([#12](https://github.com/softistx/clavix-api/issues/12)).
+
 ## Next
 
 - **Access rules** — an application publishes its OpenAPI and SDL from CI
@@ -21,13 +30,6 @@ nxgt-janus release says which.
   Waits on `@softistx/security` `remotePolicy`.
 
 ## Later
-
-**Console**
-- Platform: tenants, plans and quotas, usage counters.
-- Tenant: clients, resources, scopes, end-user roles and memberships.
-- Branding: a theme per tenant, with a live preview and an AA contrast check.
-- Custom domains: DNS TXT verification and automatic TLS.
-- Sign-in methods and social providers per tenant.
 
 **Advanced protocols**
 - PAR mandatory by default; DPoP-bound tokens.
@@ -45,6 +47,10 @@ nxgt-janus release says which.
   the access rules refer to.
 
 ## Shipped
+
+- **Dogfooding on Clavix** — our applications sign in through Clavix: the OIDC authorization
+  server per issuer, users and sessions per tenant, passkeys and e-mailed codes, clients,
+  resources and tenants registered by script, and a migration guide. Each piece is listed below.
 
 - **Magic-link sign-in (toggleable)** — `requestMagicLink` and `confirmMagicLink` behind the
   `CLAVIX_MAGIC_LINK` switch, off by default (404 `MAGIC_LINK_DISABLED` when off). The answer is the
