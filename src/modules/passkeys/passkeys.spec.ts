@@ -12,7 +12,7 @@ import { janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
-import { originOf, passkeysOn, rpIdOf } from "@/users/rp";
+import { originOf, rpIdOf } from "@/users/rp";
 import { buildTenantJanus, SESSION_COOKIE } from "@/users/tenant-janus";
 
 const app = createApp();
@@ -465,12 +465,12 @@ describe("removal", () => {
 });
 
 describe("development over http", () => {
-  test("a tenant on an http origin builds a janus instead of failing, and passkeys are off for it", async () => {
+  test("a tenant on an http .localhost origin builds a janus with its real rpId and origin, passkeys on", async () => {
     const tenant = await tenantOf("acme");
     const issuer = "http://acme.clavix.localhost:3000";
-    expect(() =>
-      buildTenantJanus(oauthDb, { ...tenant, issuer }),
-    ).not.toThrow();
-    expect(passkeysOn({ issuer })).toBe(false);
+    const janus = buildTenantJanus(oauthDb, { ...tenant, issuer });
+    expect(janus.passkeys).toBeDefined();
+    expect(rpIdOf({ issuer })).toBe("acme.clavix.localhost");
+    expect(originOf({ issuer })).toBe(issuer);
   });
 });

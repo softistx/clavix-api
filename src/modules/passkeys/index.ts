@@ -3,7 +3,6 @@ import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { passkeyThrottleOf } from "@/modules/auth/plugin";
-import { passkeysOn } from "@/users/rp";
 import {
   asPasskeyInvalid,
   currentOf,
@@ -25,8 +24,6 @@ async function authOf(ctx: Context) {
   if (auth === null || tenant === null) {
     throw denial("NOT_FOUND", "No such tenant");
   }
-  // Over http (development) janus has no passkeys configured.
-  if (!passkeysOn(tenant)) throw denial("NOT_FOUND", "Passkeys need https");
   return auth;
 }
 

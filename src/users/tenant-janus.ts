@@ -7,7 +7,7 @@ import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
 import type { Db } from "mongodb";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
-import { originOf, passkeysOn, rpIdOf } from "./rp";
+import { originOf, rpIdOf } from "./rp";
 import { userSchema } from "./user";
 
 /** Host-only, `__Host-` prefixed: no Domain, Secure, Path=/ (janus's defaults), so a browser never sends it to another host. */
@@ -46,15 +46,12 @@ function buildJanus(db: Db, tenant: ResolvedTenant) {
     tokens: { signInCode: SIGN_IN_CODE_LIFESPAN },
     // A passkey as the first factor: the relying party is the tenant's own
     // host (`rp.ts`), so a passkey is unknown to every other tenant. janus
-    // takes https origins (and http://localhost) only, so a development tenant
-    // on http (`<slug>.clavix.localhost`) gets a placeholder relying party that
-    // is never used: the passkey operations answer NOT_FOUND there
-    // (`passkeysOn`). The block stays unconditional for janus's types to carry
-    // `passkeys`.
+    // accepts `http://<name>.localhost` origins, so a development tenant on
+    // http (`<slug>.clavix.localhost`) has passkeys like any other.
     passkeys: {
-      rpId: passkeysOn(tenant) ? rpIdOf(tenant) : "localhost",
+      rpId: rpIdOf(tenant),
       rpName: tenant.name,
-      origins: [passkeysOn(tenant) ? originOf(tenant) : "http://localhost"],
+      origins: [originOf(tenant)],
       verifier: simpleWebAuthnVerifier(),
       firstFactor: true as const,
       userVerification: "required" as const,

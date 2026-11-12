@@ -415,8 +415,8 @@ extend type Mutation {
   verify, the challenge is spent), `PASSKEY_TAKEN` (409), `PASSKEY_LIMIT` (409),
   `EMAIL_UNVERIFIED` (403), `STEP_UP_REQUIRED` (403), `TOKEN_*` for a bad challenge.
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
-- **Over http** (development): janus refuses `http` origins, so every passkey operation answers
-  `NOT_FOUND`; test passkeys over https.
+- **Over http** (development): `http://<slug>.clavix.localhost` tenants have passkeys with their real
+  rpId and origin (janus 0.55+ accepts `*.localhost` origins).
 - **Rate limit**: `passkeySignInOptions` is anonymous and stores a token per call, so it is limited
   like `requestSignInCode`, with its own buckets and variables: per client IP and tenant
   (60 per 10 min, `CLAVIX_PASSKEY_IP_LIMIT`, `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`) and per tenant
