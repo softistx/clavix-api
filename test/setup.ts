@@ -6,6 +6,11 @@ import { MongoMemoryReplSet } from "mongodb-memory-server-core";
 // whole run. src/config/env.ts then reads its URI as MONGO_URI.
 const replSet = await MongoMemoryReplSet.create({
   replSet: { count: 1, storageEngine: "wiredTiger" },
+  // mongod sizes its cache at half the RAM and, on a loaded laptop, can take
+  // longer than the default 10 s to open; a small cache and a longer wait.
+  instanceOpts: [
+    { args: ["--wiredTigerCacheSizeGB=1"], launchTimeout: 60_000 },
+  ],
 });
 Bun.env["MONGO_URI"] = replSet.getUri("clavix-test");
 // Specs never cache through a Redis of the developer's .env: they inject their

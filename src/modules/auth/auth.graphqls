@@ -28,6 +28,16 @@ type SignedIn {
   expiresAt: DateTime!
 }
 
+"""
+The answer to `requestMagicLink`: always the same, whether the address has an
+account or not, so it says nothing about it. The link itself only reaches the
+inbox.
+"""
+type MagicLinkRequested {
+  "The link lives until then (15 minutes); only the last link sent works."
+  expiresAt: DateTime!
+}
+
 type Query {
   "The signed-in user of this tenant, or null for an anonymous request."
   currentUser: CurrentUser
@@ -47,6 +57,24 @@ type Mutation {
   (wrong, spent, expired or unknown challenge) is the same CODE_INVALID, 401.
   """
   verifySignInCode(challenge: String!, code: String!): SignedIn!
+  """
+  Asks for a sign-in link by e-mail (only when the deployment turns magic-link
+  sign-in on; otherwise 404 MAGIC_LINK_DISABLED, as if the operation did not
+  exist). The answer is the same for an address with an account, one without
+  and, on a tenant that closed sign-up, one that is not invited. The link opens
+  the hosted page `/sign-in/link?token=...` of the tenant, which must POST the
+  token to `confirmMagicLink` (never sign in on GET: mail scanners open links).
+  Errors: MAGIC_LINK_DISABLED (404), MAIL_THROTTLED (429).
+  """
+  requestMagicLink(email: EmailAddress!): MagicLinkRequested!
+  """
+  Redeems the token of a sign-in link, proves the address and opens the session
+  (the cookie is set on the response). Every refusal (unknown, spent, expired or
+  stale link, deactivated user) is the same MAGIC_LINK_INVALID, 401; the page
+  offers a new link. MAGIC_LINK_DISABLED (404) when the switch is off; the token
+  is not spent then.
+  """
+  confirmMagicLink(token: String!): SignedIn!
   "Ends the session of the request and clears the cookie. True even when anonymous."
   signOut: Boolean!
 }

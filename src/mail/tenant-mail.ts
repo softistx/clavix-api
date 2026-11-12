@@ -3,6 +3,9 @@ import type { Mailer } from "@softistx/mail";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { senderAddress } from "./mailer";
 
+/** The hosted page a sign-in link opens (clavix-ui); the token is its `token` query parameter. */
+export const MAGIC_LINK_PATH = "/sign-in/link";
+
 export interface TenantMailOptions {
   mailer: Mailer;
   /** The apex (`CLAVIX_DOMAIN`): the sender is `no-reply@<domain>`. */
@@ -25,8 +28,12 @@ export function createTenantMail({ mailer, domain }: TenantMailOptions) {
       from: { name: tenant.name, address: senderAddress(domain) },
       brand: tenant.name,
       // The sign-in code e-mail carries no link; the hosted pages answer these
-      // when the flows that need them (M2) are wired.
+      // when the flows that need them (M2) are wired. `magicLink` is the
+      // hosted page that shows a button, which POSTs the token back
+      // (`confirmMagicLink`): never a link that signs in on GET.
       links: {
+        magicLink: (token) =>
+          `${tenant.issuer}${MAGIC_LINK_PATH}?token=${encodeURIComponent(token)}`,
         verifyEmail: (token) =>
           `${tenant.issuer}/verify?token=${encodeURIComponent(token)}`,
         resetPassword: (token) =>
