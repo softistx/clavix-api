@@ -108,10 +108,20 @@ cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.
 (janus-oauth's `oauthResolvers` and `oauthTypeDefs`, merged in `src/http/schema.ts`). `oauthContext`
 (a Yoga plugin added in `createApp` when `oauth.serverFor` exists) puts the issuers in the context, and
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
-`ownsRequest` is the same-origin guard (a foreign Origin or a non-JSON POST sees `NOT_FOUND`).
+The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
 not worked around). Passkeys (slice E3) wait on janus: its passkeys are a second factor beside TOTP
 only, with no passwordless sign-in yet.
+
+## Same-origin guard and shutdown
+
+`useSameOriginJson` (`src/http/same-origin.ts`, first Yoga plugin of `createApp`) guards **every**
+`/graphql` operation once: a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before
+parsing, with no CORS header: consent operations (`CONSENT_FIELDS`) get 404 `NOT_FOUND`, all others 403
+`FORBIDDEN`. Origin and request are compared by host (TLS-terminating proxy); no Origin passes (the cookie
+is `__Host-`). A new operation needs no guard of its own; never add a CORS plugin without revisiting this, and `onRequest` does not guard a WebSocket upgrade (`ws` is off: keep it so or guard the upgrade).
+On stop, `server.ts` has an `onStop` hook that awaits `drain()` (`src/modules/auth/outbox.ts`, 10 s)
+so a code mail in flight is not lost; `stopTimeout` is set above it.
 
 ## Signing keys
 

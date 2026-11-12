@@ -1,6 +1,7 @@
 import { graphql } from "@alxia/graphql";
 import { signInThrottle } from "./config/throttle";
 import { createBase } from "./http/context";
+import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import {
   janusMasking,
@@ -39,6 +40,7 @@ export function createApp(
       schema,
       ide: "apollo-sandbox",
       plugins: [
+        useSameOriginJson(),
         janusPlugin(),
         throttleContext(
           "signInThrottle" in options ? options.signInThrottle : signInThrottle,
