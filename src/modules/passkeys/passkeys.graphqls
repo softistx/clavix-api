@@ -18,6 +18,7 @@ type PasskeyRegistration {
   options: String!
   "The secret `registerPasskey` spends, once."
   challenge: String!
+  "The challenge lapses then (5 minutes)."
   expiresAt: DateTime!
 }
 

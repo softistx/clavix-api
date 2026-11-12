@@ -335,7 +335,8 @@ extend type Mutation {
   in the hosted page's server session, not in a URL.
 - **Register** (signed in, e-mail verified): `passkeyRegistrationOptions`,
   `navigator.credentials.create({ publicKey })`, then `registerPasskey` with a name of 1 to 100
-  characters. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
+  characters. The registration challenge lasts 5 minutes too, and a new `passkeyRegistrationOptions`
+  spends the user's earlier one. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
   verified gets `EMAIL_UNVERIFIED` (403). The session must have signed in within 10 minutes
   (`STEP_UP_REQUIRED`, 403: sign in again with a code). Up to 10 passkeys per user.
 - **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
@@ -349,9 +350,10 @@ extend type Mutation {
   verify, the challenge is spent), `PASSKEY_TAKEN` (409), `PASSKEY_LIMIT` (409),
   `EMAIL_UNVERIFIED` (403), `STEP_UP_REQUIRED` (403), `TOKEN_*` for a bad challenge.
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
+- **Over http** (development): janus refuses `http` origins, so every passkey operation answers
+  `NOT_FOUND`; test passkeys over https.
 - **Not yet**: `passkeySignInOptions` is anonymous and stores a token per call; the sign-in code
-  limits do not cover it, so put a rate limit in front. Passkeys need an https origin (janus refuses `http`): in development
-  over `http` the operations answer `NOT_FOUND`. The `amr`/`acr` claims stay unset.
+  limits do not cover it, so put a rate limit in front. The `amr`/`acr` claims stay unset.
 
 ## Same origin on /graphql
 
