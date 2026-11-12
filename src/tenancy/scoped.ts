@@ -1,3 +1,4 @@
+// Temporary, until @softistx/mongo#393
 import {
   type CursorPage,
   type CursorPaginateOptions,
@@ -15,6 +16,7 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
+import { patchTouches } from "./patch-paths";
 
 // The field every tenant-owned collection declares, first in its schema:
 // `schema: z.object({ _id: id(), ...tenantField, … })`.
@@ -36,28 +38,14 @@ type ScopedNew<Def> = Omit<NewOf<Def>, "tenantId">;
 type ScopedPatch<Def> = DistributiveOmit<Patch<Def>, "tenantId">;
 type ScopedManyPatch<Def> = DistributiveOmit<ManyPatch<Def>, "tenantId">;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const head = (path: string) => path.split(".")[0];
-
-// Throws when a patch writes or removes `tenantId`: as a field, as a path
-// under any operator, or as the target of a `$rename`. With `_id` immutable
-// too (the collection refuses it), a document never leaves its tenant, so
+// Throws when a patch writes or removes `tenantId`. With `_id` immutable too
+// (the collection refuses it), a document never leaves its tenant, so
 // checking the tenant before a write by id is enough.
 export function refuseTenantId(patch: unknown): void {
-  if (!isRecord(patch)) return;
-  for (const [key, value] of Object.entries(patch)) {
-    const paths =
-      key.startsWith("$") && isRecord(value)
-        ? Object.entries(value).flatMap(([path, target]) =>
-            key === "$rename" ? [path, String(target)] : [path],
-          )
-        : [key];
-    if (paths.some((path) => head(path) === "tenantId")) {
-      throw new TypeError(
-        "A document's tenantId is immutable: a scoped write never changes it",
-      );
-    }
+  if (patchTouches(patch, "tenantId")) {
+    throw new TypeError(
+      "A document's tenantId is immutable: a scoped write never changes it",
+    );
   }
 }
 

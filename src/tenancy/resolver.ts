@@ -6,7 +6,7 @@ import {
 } from "@/modules/tenants/identity";
 import { hostOfRequest, normalizeHost, slugOfHost } from "./host";
 import type { ResolvedTenant } from "./resolved-tenant";
-import type { TenantCache } from "./tenant-cache";
+import { noTenantCache, type TenantCache } from "./tenant-cache";
 
 /** What the resolver needs of a stored tenant. */
 export interface TenantRecord {
@@ -41,6 +41,40 @@ export interface TenantResolver {
   invalidate(hosts: readonly string[]): Promise<void>;
 }
 
+function toResolved(
+  tenant: TenantRecord | undefined,
+  config: PublicOrigin,
+): ResolvedTenant | null {
+  return tenant === undefined || tenant.status !== "active"
+    ? null
+    : {
+        tenantId: tenant._id.toHexString(),
+        slug: tenant.slug,
+        issuer: issuerOf(tenant.slug, config),
+        partition: partitionOf(tenant._id),
+        version: tenant.version,
+      };
+}
+
+// A cache failure is logged, never thrown: Mongo is read instead.
+async function attempt<T>(
+  log: (message: string) => void,
+  what: string,
+  host: string,
+  run: () => T | Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await run();
+  } catch (error) {
+    log(
+      `tenancy: cache ${what} failed for ${host}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
+
 /**
  * Host to tenant: `<slug>.<CLAVIX_DOMAIN>` with an active tenant of that slug.
  * Only hosts of a valid slug shape reach the cache or Mongo, so arbitrary
@@ -54,53 +88,27 @@ export function createTenantResolver(
   const hitTtl = options.hitTtl ?? 60;
   const missTtl = options.missTtl ?? 30;
 
-  const attempt = async <T>(
-    what: string,
-    host: string,
-    run: () => T | Promise<T>,
-  ) => {
-    try {
-      return await run();
-    } catch (error) {
-      log(
-        `tenancy: cache ${what} failed for ${host}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      return undefined;
-    }
-  };
-
-  const toResolved = (tenant: TenantRecord | undefined) =>
-    tenant === undefined || tenant.status !== "active"
-      ? null
-      : ({
-          tenantId: tenant._id.toHexString(),
-          slug: tenant.slug,
-          issuer: issuerOf(tenant.slug, config),
-          partition: partitionOf(tenant._id),
-          version: tenant.version,
-        } satisfies ResolvedTenant);
-
   const resolveHost = async (raw: string) => {
     const host = normalizeHost(raw);
     if (host === null) return null;
     const slug = slugOfHost(host, config.domain);
     if (slug === null) return null;
 
-    const cached = await attempt("read", host, () => cache.get(host));
+    const cached = await attempt(log, "read", host, () => cache.get(host));
     if (cached !== undefined) return cached;
 
-    const resolved = toResolved(await lookup(slug));
-    await attempt("write", host, () =>
+    const resolved = toResolved(await lookup(slug), config);
+    await attempt(log, "write", host, () =>
       cache.set(host, resolved, resolved === null ? missTtl : hitTtl),
     );
     // Cache-aside race: a write (suspend, delete, create) may have run its
     // invalidation between our read and our `set`, leaving a stale entry. Read
     // the tenant again; if it changed, drop what we just stored.
-    const after = toResolved(await lookup(slug));
+    // Nothing was stored with `noTenantCache`, so there is nothing to drop.
+    if (cache === noTenantCache) return resolved;
+    const after = toResolved(await lookup(slug), config);
     if (after?.version !== resolved?.version) {
-      await attempt("delete", host, () => cache.delete(host));
+      await attempt(log, "delete", host, () => cache.delete(host));
     }
     return resolved;
   };

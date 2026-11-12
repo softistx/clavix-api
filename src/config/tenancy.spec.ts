@@ -1,26 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
-import { TenantsService } from "@/modules/tenants";
+import { createTenancy } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { createTenantResolver } from "@/tenancy/resolver";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 
-// The wiring of src/config/tenancy.ts (lookup on the wired collection, the
-// service's onHostsChanged calling invalidate), with the in-memory cache in
-// place of Redis.
+// createTenancy (the wiring of src/config/tenancy.ts) on the wired collection,
+// with the in-memory cache in place of Redis.
 const cache = memoryTenantCache();
-const resolver = createTenantResolver({
-  lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
+const { tenantResolver: resolver, tenantsService: service } = createTenancy({
+  tenants: mongo.db.tenants,
   cache,
   config: {
     scheme: env.CLAVIX_PUBLIC_SCHEME,
     domain: env.CLAVIX_DOMAIN,
     port: env.CLAVIX_PUBLIC_PORT,
   },
-});
-const service = new TenantsService(mongo.db.tenants, {
-  onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
 const host = `acme.${env.CLAVIX_DOMAIN}`;
 
