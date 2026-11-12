@@ -317,6 +317,23 @@ describe("a foreign page cannot decide", () => {
     expect(still.errors).toBeUndefined();
   });
 
+  test("a foreign Origin or a form post cannot list or revoke connected apps", async () => {
+    const foreign = await post(
+      {
+        "content-type": "application/json",
+        origin: "https://evil.clavix.test",
+      },
+      JSON.stringify({ query: 'mutation { revokeConnectedApp(id: "x") }' }),
+    );
+    expect(codeOf((await foreign.json()) as GqlResult)).toBe("NOT_FOUND");
+    const form = await post(
+      { "content-type": "application/x-www-form-urlencoded" },
+      new URLSearchParams({ query: "{ connectedApps { id } }" }).toString(),
+    );
+    const body = (await form.json()) as GqlResult;
+    expect(body.data?.["connectedApps"] ?? null).toBeNull();
+  });
+
   test("the page's own Origin passes", async () => {
     const id = await authorize("acme");
     const response = await post(

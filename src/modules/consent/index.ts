@@ -32,7 +32,10 @@ const requestOf = (ctx: unknown): Request => {
 // JSON (not a CORS "simple" form post). Anything else sees no such request.
 export function sameOriginJson(request: Request): boolean {
   const origin = request.headers.get("origin");
-  if (origin !== null && origin !== new URL(request.url).origin) return false;
+  // Hosts, not origins: behind a TLS-terminating proxy `request.url` may say http while the
+  // browser's Origin says https. A request with no Origin (not a browser) passes; the cookie is `__Host-`.
+  if (origin !== null && new URL(origin).host !== new URL(request.url).host)
+    return false;
   return (
     request.method !== "POST" ||
     (request.headers.get("content-type") ?? "").startsWith("application/json")
@@ -50,8 +53,10 @@ export function sameOriginJson(request: Request): boolean {
 export const consentResolvers: IResolvers = {
   ...oauthResolvers({
     oauth: async (ctx) => {
-      const servers = (ctx as WithServers)[SERVERS];
-      const server = await servers?.serverFor(requestOf(ctx));
+      // Every consent operation (read, decide, list and revoke connected apps) passes the guard here.
+      const request = requestOf(ctx);
+      if (!sameOriginJson(request)) throw denial("NOT_FOUND");
+      const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
       if (server === null || server === undefined) throw denial("NOT_FOUND");
       return server;
     },
