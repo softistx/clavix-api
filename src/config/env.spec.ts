@@ -42,6 +42,16 @@ test("outside production the defaults stand in", async () => {
   expect(env.CLAVIX_PUBLIC_PORT).toBeUndefined();
 });
 
+test("CLAVIX_MAGIC_LINK is off by default and reads true / 1", async () => {
+  expect((await load(clean)).env.CLAVIX_MAGIC_LINK).toBe(false);
+  expect(
+    (await load({ ...clean, CLAVIX_MAGIC_LINK: "true" })).env.CLAVIX_MAGIC_LINK,
+  ).toBe(true);
+  expect(
+    (await load({ ...clean, CLAVIX_MAGIC_LINK: "0" })).env.CLAVIX_MAGIC_LINK,
+  ).toBe(false);
+});
+
 test("the values are read", async () => {
   const { env } = await load({
     ...clean,

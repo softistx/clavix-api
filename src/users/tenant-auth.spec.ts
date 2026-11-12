@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { JanusError, statusOf } from "@softistx/janus";
 import {
   createMemorySigningKeys,
   rotateSigningKeys,
@@ -300,5 +301,18 @@ describe("OAuth with the real authFor", () => {
       const consent = await consentAs("globex", cookie);
       expect(consent?.signedIn).toBeNull();
     }
+  });
+});
+
+describe("magic link switch", () => {
+  test("with the flag unset, the magic-link request is refused with MAGIC_LINK_DISABLED (404)", async () => {
+    const auth = await janusOf("acme");
+    expect(auth.magicLink.enabled).toBe(false);
+    const refusal = await auth.magicLink
+      .request(EMAIL)
+      .catch((e: unknown) => e);
+    expect(refusal).toBeInstanceOf(JanusError);
+    expect((refusal as JanusError).code).toBe("MAGIC_LINK_DISABLED");
+    expect(statusOf((refusal as JanusError).code)).toBe(404);
   });
 });
