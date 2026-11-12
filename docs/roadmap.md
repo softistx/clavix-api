@@ -16,9 +16,10 @@ nxgt-janus release says which.
 - **Signing keys per tenant** — keys kept encrypted by janus's Mongo key store, rotated on
   a schedule (90 days, published 48 h ahead, retired 24 h), published as a JWKS per issuer
   (1.2, [#2](https://github.com/softistx/clavix-api/issues/2)); adopted from janus-oauth 0.8.
-- **An authorization server per issuer** — authorization code with PKCE, refresh,
-  revocation and discovery for each tenant (1.3). Waits on janus: several issuers in one
-  process.
+- **An authorization server per issuer** — authorization code with PKCE, refresh with
+  rotation, revocation and discovery for each tenant (1.3, `src/oauth`, janus-oauth 0.8
+  `createOAuthIssuers`). Built; the end-user authentication (1.5) is still a port, so it
+  serves nothing in the running app until it lands.
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
   (RFC 9068) and introspection (1.4). Waits on `@softistx/janus-oidc`.
 - **Users and sessions per tenant** — passkey and e-mail code sign-in (1.5).
