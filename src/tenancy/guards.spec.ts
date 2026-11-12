@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { isTenantOwned } from "@softistx/mongo";
 import { Glob } from "bun";
 import type { IndexDescription } from "mongodb";
 import * as appCollections from "@/modules/collections";
 import { notes } from "~/notes";
-import { isTenantOwned, tenantOwned } from "./owned";
+import { tenantOwned } from "./owned";
 
 // The app's collections, and the test-only `notes` that stands for a
 // tenant-owned one while 1.1 has none.
@@ -56,7 +57,7 @@ const tenantsAllowed = [
   "src/config/tenancy.ts",
   "src/migrations/",
 ];
-// Every way platform code reaches a collection without `scoped()`:
+// Every way platform code reaches a collection without `scopeToTenant()`:
 // `mongo.db.<name>` (also after `const { db } = mongo`), `db["<name>"]`,
 // destructuring (`const { <name> } = mongo.db`), an alias of the db object
 // (`const d = mongo.db`), `getCollection(…<name>…)` and `<name>.raw`.
@@ -127,7 +128,7 @@ describe("source scan", () => {
     for (const refused of [
       "await mongo.db.notes.findMany()",
       "await mongo.db.userNotes.findMany()",
-      "scoped(mongo.db.notes, tenantId)",
+      "scopeToTenant(mongo.db.notes, tenantId)",
       "const { db } = mongo; db.notes.findMany()",
       'mongo.db["notes"].findMany()',
       "mongo.db['userNotes']",

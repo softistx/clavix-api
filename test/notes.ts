@@ -1,6 +1,5 @@
-import { defineCollection, id } from "@softistx/mongo";
+import { defineCollection, id, tenantField } from "@softistx/mongo";
 import { z } from "zod";
-import { tenantField } from "@/tenancy/scoped";
 
 // A test-only tenant-owned collection: 1.1 has no real one yet, and the
 // scoping and guard specs need one. It is never wired into src/.
