@@ -33,19 +33,21 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                         | Default / rule                                                                                               |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `PORT`                                                           | 3000                                                                                                         |
-| `MONGO_URI`                                                      | required; a replica set (transactions)                                                                       |
-| `REDIS_URL`                                                      | required in production; unset elsewhere, the tenant cache is off                                             |
-| `CLAVIX_DOMAIN`                                                  | required in production; `clavix.localhost` elsewhere                                                         |
-| `CLAVIX_PUBLIC_SCHEME`                                           | `https`; `http` is refused in production                                                                     |
-| `CLAVIX_PUBLIC_PORT`                                             | optional; set when issuers are not on the scheme's own port                                                  |
-| `CLAVIX_SMTP_URL`                                                | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
-| `CLAVIX_KEYS_MASTER_KEY`                                         | required in production (32 bytes, base64); a public development default elsewhere                            |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`         | sign-in code requests per client address and tenant: 20 per 600 s                                            |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS` | sign-in code requests per tenant: 200 per 3600 s                                                             |
-| `CLAVIX_TRUSTED_PROXIES`                                         | reverse proxies in front of the app, default 0 (see "Sign-in code limits")                                   |
+| Variable                                                               | Default / rule                                                                                               |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`                                                                 | 3000                                                                                                         |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                       |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                             |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                         |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                     |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                  |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                            |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                            |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                             |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                  |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                   |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app, default 0 (see "Sign-in code limits")                                   |
 
 ## Sign-in code limits
 
@@ -342,7 +344,8 @@ extend type Mutation {
 - **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
   (`true` when this call removed it, `false` for an id that is not the caller's; same freshness).
   A removed passkey no longer signs in. Registering and removing mail nothing yet.
-- **Errors**: `PASSKEY_INVALID` (401) for every refusal of `signInWithPasskey`: unknown credential,
+- **Errors**: `PASSKEY_THROTTLED` (429, `Retry-After`) when `passkeySignInOptions` is over its rate limit
+  (below); `PASSKEY_INVALID` (401) for every refusal of `signInWithPasskey`: unknown credential,
   another tenant's passkey, wrong rpId or origin, a user not verified on the device, a wrong user
   handle, an unknown, spent or expired challenge, a malformed response, an inactive user. One
   code and one message: it does not say whether the credential or the user exists. At
@@ -352,8 +355,16 @@ extend type Mutation {
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
 - **Over http** (development): janus refuses `http` origins, so every passkey operation answers
   `NOT_FOUND`; test passkeys over https.
-- **Not yet**: `passkeySignInOptions` is anonymous and stores a token per call; the sign-in code
-  limits do not cover it, so put a rate limit in front (clavix-api#64). The `amr`/`acr` claims stay unset.
+- **Rate limit**: `passkeySignInOptions` is anonymous and stores a token per call, so it is limited
+  like `requestSignInCode`, with its own buckets and variables: per client IP and tenant
+  (60 per 10 min, `CLAVIX_PASSKEY_IP_LIMIT`, `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`) and per tenant
+  (600 per hour, `CLAVIX_PASSKEY_TENANT_LIMIT`, `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS`), whole numbers
+  of at least 1. Going over either is `PASSKEY_THROTTLED` (HTTP 429, `Retry-After` in seconds). The
+  rules of "Sign-in code limits" apply: `@softistx/redis` GCRA limits keyed by tenant id
+  (`clavix:passkey-ip:<tenantId>/<ip>`, `clavix:passkey-tenant:<tenantId>`), the address counted
+  first, `CLAVIX_TRUSTED_PROXIES` for the client IP, and no limit without `REDIS_URL`; Redis down or
+  slow: the request goes through and a warning is logged.
+- **Not yet**: the `amr`/`acr` claims stay unset.
 
 ## Same origin on /graphql
 

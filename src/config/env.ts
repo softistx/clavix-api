@@ -91,6 +91,16 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Passkey sign-in options (`passkeySignInOptions`, anonymous, one token per
+  // call), per client address and tenant, and per tenant. Redis only, as above.
+  CLAVIX_PASSKEY_IP_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_PASSKEY_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_PASSKEY_TENANT_LIMIT: z.coerce.number().int().min(1).default(600),
+  CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // How many reverse proxies stand in front of the app. 0 (default): the
   // client address is the connection's. N: it is the entry N places from the
   // right of X-Forwarded-For, which the proxies append to.

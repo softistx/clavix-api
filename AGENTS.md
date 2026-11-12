@@ -119,8 +119,12 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
   `passkeysOn(tenant)` is false over `http`, and the module answers `NOT_FOUND`.
 - Specs use the software authenticator copied from janus-passkeys' own tests
   (`test/passkey-authenticator.ts`, `test/passkey-cbor.ts`): copy again when that one changes.
-- The anonymous `passkeySignInOptions` is not under the sign-in code limits (`throttle.ts` guards
-  `requestSignInCode` only): tracked in clavix-api#64.
+- The anonymous `passkeySignInOptions` has its own limits (`src/modules/passkeys/throttle.ts`, README
+  "Passkey sign-in and registration"): per IP and tenant (60 / 10 min) and per tenant (600 / hour),
+  `CLAVIX_PASSKEY_*`, over the shared core `createThrottle` / `ipAndTenantLimits` of
+  `auth/throttle.ts` (never copy it). Refusal = `PASSKEY_THROTTLED` 429 with `Retry-After`; Redis down:
+  fail open, logged. `createApp({ passkeyThrottle })` injects it (specs); default: the app's Redis.
+  Spec: `src/modules/passkeys/throttle.spec.ts`.
 
 ## Consent
 

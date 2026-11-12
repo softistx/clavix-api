@@ -1,5 +1,5 @@
 import { graphql } from "@alxia/graphql";
-import { signInThrottle } from "./config/throttle";
+import { passkeyThrottle, signInThrottle } from "./config/throttle";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
@@ -28,6 +28,8 @@ export function createApp(
     // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
     // default (none without REDIS_URL).
     signInThrottle?: SignInThrottle | undefined;
+    // The same for `passkeySignInOptions`.
+    passkeyThrottle?: SignInThrottle | undefined;
   } = {},
 ) {
   const base = createBase()
@@ -44,6 +46,9 @@ export function createApp(
         janusPlugin(),
         throttleContext(
           "signInThrottle" in options ? options.signInThrottle : signInThrottle,
+          "passkeyThrottle" in options
+            ? options.passkeyThrottle
+            : passkeyThrottle,
         ),
         ...(options.oauth?.serverFor === undefined
           ? []
