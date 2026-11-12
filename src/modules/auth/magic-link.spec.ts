@@ -118,7 +118,7 @@ describe.skipIf(on)("magic link switched off (the default)", () => {
     expect(answer.cookies).toHaveLength(0);
   });
 
-  test("nothing is created and no request budget is spent", async () => {
+  test("nothing is created", async () => {
     await gql("acme", REQUEST, { email: "ghost@example.test" });
     const users = await oauthDb
       .collection("partitionedUsers")
@@ -156,6 +156,11 @@ describe.skipIf(!on)("magic link switched on", () => {
       c.startsWith(`${SESSION_COOKIE}=`),
     );
     expect(cookie).toBeDefined();
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Lax");
+    expect(cookie).toContain("Path=/");
+    expect(cookie).not.toContain("Domain=");
 
     const me = await app.request(url("acme"), {
       method: "POST",
@@ -197,13 +202,22 @@ describe.skipIf(!on)("magic link switched on", () => {
   });
 
   test("a closed tenant answers an unknown address alike and mails nothing", async () => {
-    const known = await ask("acme", "known@example.test");
+    const auth = await (async () => {
+      const found = await janusIssuers.forRequest(new Request(url("vault")));
+      if (found === null) throw new Error("no janus for vault");
+      return found;
+    })();
+    await auth.create({ email: "known@example.test" });
+    const known = await ask("vault", "known@example.test");
     const unknown = await ask("vault", "stranger@example.test");
+    expect(known.mails).toHaveLength(1);
+    expect(unknown.mails).toHaveLength(0);
     expect(unknown.answer.status).toBe(known.answer.status);
+    // Same shape; only the expiry instant differs.
     expect(Object.keys(unknown.answer.data ?? {})).toEqual(
       Object.keys(known.answer.data ?? {}),
     );
-    expect(unknown.mails).toHaveLength(0);
+    expect(unknown.answer.errors).toBeUndefined();
     const users = await oauthDb
       .collection("partitionedUsers")
       .countDocuments({ email: "stranger@example.test" } as never);

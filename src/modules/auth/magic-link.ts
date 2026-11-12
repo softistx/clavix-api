@@ -1,5 +1,4 @@
 import { JanusError } from "@softistx/janus";
-import type { JanusMail } from "@softistx/janus-mail";
 import { GraphQLError } from "graphql";
 import type { TenantJanus } from "@/users/tenant-janus";
 import { afterAnswer } from "./outbox";
@@ -29,7 +28,7 @@ export async function requestMagicLink(
   afterAnswer(async () => {
     if (signUp) await createIfOpen(auth, email);
     const issued = await pending.send();
-    if (issued !== null) await (mail as JanusMail).magicLink(issued);
+    if (issued !== null) await mail.magicLink(issued);
   });
   return { expiresAt: new Date(Date.now() + LIFESPAN_MS) };
 }
