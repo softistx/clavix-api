@@ -167,6 +167,14 @@ so a code mail in flight is not lost; `stopTimeout` is set above it.
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 
+## Tenants by script
+
+`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant until the
+M2 console. It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
+(`register-tenant.ts`), which goes through `TenantsService.create` (the one place for slug rules,
+reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
+`created: false`, other values are refused, a deleted tenant's slug stays reserved.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`

@@ -27,6 +27,7 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `typecheck`               | `bun check`                                                              |
 | `lint`, `fix`, `check:ci` | Biome                                                                    |
 | `db:sync`, `db:migrate`   | collections and indexes; pending migrations (deployment steps)           |
+| `tenants:create`          | create a tenant (see "Tenants")                                          |
 | `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
 | `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
@@ -104,6 +105,30 @@ Clavix adds no `jose`.
   them. Changing the master key is the same; there is no re-encryption in place.
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
 
+## Tenants
+
+Until the console exists (M2), a tenant is created by script, through the same `TenantsService` the
+platform uses (slug rules, reserved slugs, the tenant's first signing key). The script prints the
+tenant as JSON, with its issuer, `https://<slug>.<CLAVIX_DOMAIN>`.
+
+```sh
+bun run tenants:create --slug acme --name "Acme"
+bun run tenants:create --slug acme --name "Acme" --sign-up   # open sign-up for unknown e-mails
+```
+
+| Flag        | Meaning                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| `--slug`    | required; 2 to 63 characters, lowercase letters, digits and inner hyphens; never changes |
+| `--name`    | required; the display name                                                               |
+| `--sign-up` | open sign-up; default is closed (invitation only)                                        |
+- **Idempotent**: re-running with the same values creates nothing (`created: false`). An existing
+  slug with another name, or a `--sign-up` that differs from its setting, is refused, not edited.
+  Bad input exits 1 with the usage; `--help` prints it.
+- **Refused**: an invalid or reserved slug (`console`, `www`, `api`, ...) and the slug of a deleted
+  tenant, which stays reserved for good.
+- The first signing key is made at creation; if that fails (logged), the hourly rotation job makes it.
+- Then register its clients with `clients:create`.
+
 ## Resources
 
 An access token is bound to one resource (RFC 8707): the API it is for. Until the console exists
@@ -179,6 +204,16 @@ A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, 
 `resource` is for the tenant's userinfo. Introspection answers only for tokens of the tenant's
 own resources. A tenant with no signing key yet answers 503 `temporarily_unavailable`. The
 claims come from the users of the tenant (see "Users per tenant").
+
+**The `sub` claim** is the janus user id of the signed-in user in that tenant, unchanged
+(`janus-oidc` sets `sub` to the session's `userId` in the id_token and in `/userinfo`; no
+hashing, no pairwise value). Janus mints that id in its core (`mintId`) when the user is created:
+a lowercase, hyphenated **UUIDv7** (36 characters, e.g. `0192f3a4-5b6c-7d8e-9f01-23456789abcd`),
+time-ordered by creation. It is stable: it never changes for a user, whichever client asks, and
+it is not derived from the e-mail, so changing the e-mail does not change it. It is unique per
+tenant, not across tenants: the same person in two tenants is two users with two unrelated
+`sub`s, and a `sub` of one tenant is unknown to another. Treat it as an opaque string (currently
+36 characters; do not rely on the shape), keyed together with the issuer (`iss`, the tenant host).
 
 ## Users per tenant
 

@@ -32,8 +32,7 @@ Facts to hold on to (all Built, see the clavix-api README):
 
 ## 0. Prerequisites
 
-- A tenant for the application. **There is no script or console to create a tenant yet** (console: M2, slice 2.2, see the [roadmap](../roadmap.md); the `clavix` tenant is seeded by a migration). Ask the Clavix maintainers, and see
-  [Gaps](#gaps).
+- A tenant for the application. Create it with `bun run tenants:create --slug <slug> --name <name>` (see the README, "Tenants"); the console comes in M2 (slice 2.2, see the [roadmap](../roadmap.md)), and the `clavix` tenant is seeded by a migration. See [Gaps](#gaps).
 - The hosted pages (sign-in, consent) are clavix-ui slice 1.6
   ([clavix-ui#1](https://github.com/softistx/clavix-ui/issues/1)); check that issue's state.
   The API behind them (e-mail code, passkeys, consent) is Built.
@@ -187,6 +186,14 @@ you.** What exists:
 
 Do not use the e-mail alone as the identity once the link exists: key on `sub`.
 
+**What a Clavix `sub` is.** The janus user id of the user in that tenant, passed through
+unchanged (the id_token and `/userinfo` both carry it). Janus mints it when the user is created:
+a lowercase, hyphenated UUIDv7 (36 characters), time-ordered. It is stable for the life of the
+user and independent of the e-mail, so an e-mail change does not move it. It is unique per
+tenant only: the same person in two tenants has two unrelated `sub`s. Store it as an opaque
+string (currently 36 characters; do not rely on the shape), together with the issuer (`iss`) when the app can see several tenants.
+Nothing maps an old janus id to the new `sub`, which is why a mapping column is needed.
+
 ## 6. Sessions and signing out of the old app
 
 - **Sessions do not move.** A session of the old embedded janus is not a Clavix session, and a
@@ -223,15 +230,13 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
 1. **No user import.** No script, GraphQL operation or file format loads existing users into a
    tenant. Needed: a bulk create that keeps the e-mail (verified) and returns old id to new
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
-2. **No tenant creation script or console** before M2 slice 2.2; the guide says "ask".
+2. **No tenant console** before M2 slice 2.2; a tenant is created by `tenants:create`.
 3. **No resource console** before slice 2.3: resources are registered by script
    (`resources:create`), which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
-5. **Subject format** of Clavix's `sub` is not documented in the repository; read it from an
-   ID token or `/userinfo` before relying on a shape.
-6. **Per-client grants and `client_credentials`** are not available (janus-oauth has no
+5. **Per-client grants and `client_credentials`** are not available (janus-oauth has no
    per-client grant list), so a back end calling the API as itself cannot yet use a Clavix
    token.
-7. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
+6. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
    a token with `read:packages`, as in the README's Run section.
