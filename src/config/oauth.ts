@@ -2,16 +2,17 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, ResourcesFor } from "@/oauth/ports";
 import { signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
+import { resourcesFor as storedResourcesFor } from "./resources";
 import { tenantResolver } from "./tenancy";
 
 // The app's OAuth issuers with the real tenant resolver, database and signing
-// keys. The end-user authentication and claims (`authFor`, `claimsFor`, slice 1.5) and the tenants'
-// resources are the only parts still to come: the entry point calls this with
-// them and passes the result to `createApp({ oauth })`.
+// keys and the tenants' stored resources (`resources:create`). The entry point
+// calls this with the end-user authentication and claims (`authFor`,
+// `claimsFor`) and passes the result to `createApp({ oauth })`.
 export const createIssuers = (
   authFor: AuthFor,
   claimsFor: ClaimsFor,
-  resourcesFor?: ResourcesFor,
+  resourcesFor: ResourcesFor = storedResourcesFor,
 ) =>
   createClavixOAuthIssuers({
     resolver: tenantResolver,
@@ -19,5 +20,5 @@ export const createIssuers = (
     signingKeysFor,
     authFor,
     claimsFor,
-    ...(resourcesFor === undefined ? {} : { resourcesFor }),
+    resourcesFor,
   });

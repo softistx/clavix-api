@@ -28,6 +28,7 @@ bun dev            # http://localhost:3000/graphql and /healthz
 | `lint`, `fix`, `check:ci` | Biome                                                                    |
 | `db:sync`, `db:migrate`   | collections and indexes; pending migrations (deployment steps)           |
 | `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
+| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
 | `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
 
 ## Environment
@@ -103,6 +104,30 @@ Clavix adds no `jose`.
   them. Changing the master key is the same; there is no re-encryption in place.
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
 
+## Resources
+
+An access token is bound to one resource (RFC 8707): the API it is for. Until the console exists
+(M2), a tenant registers its APIs by script. A resource is per tenant: `acme`'s is unknown to
+`globex` (`invalid_target`). A client asking `resource=<uri>` gets a token whose `aud` is that URI,
+signed with the tenant's key; an unregistered URI is refused. Re-running with the same URI updates
+the name and replaces the scopes. It serves at once, with no restart.
+
+```sh
+bun run resources:create --tenant acme --uri https://api.acme.example \
+  --scope invoices:read --scope invoices:write
+```
+
+| Flag              | Meaning                                                           |
+| ----------------- | ----------------------------------------------------------------- |
+| `--tenant <slug>` | required; an unknown slug or a suspended tenant is refused        |
+| `--uri <uri>`     | required; `https` (`http` on a loopback host), no fragment        |
+| `--scope <s>`     | required, repeatable; printable ASCII without space, quote or `\` |
+| `--name <name>`   | a label; default: the URI's host                                  |
+
+A URI is matched exactly as stored (`resource=` is compared as a string): register it as the API
+sends it. The tenant's own `<issuer>/userinfo` is built in (the default resource of OIDC clients that send
+none) and cannot be registered.
+
 ## OAuth clients
 
 Until the console exists (M2), a client is registered on a tenant by script. Clients are per tenant:
@@ -170,8 +195,8 @@ or suspended host has no instance.
 - **Passkey relying party** (assumed, not answered): the tenant's own host. `rpIdOf(tenant)` is
   `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
-  `src/server.ts`. Consent and passkeys are below, and no `/authorize`
-  succeeds before a tenant has a resource (M2). `__Host-` cookies need https (Chrome accepts `localhost`).
+  `src/server.ts`. Consent and passkeys are below, and a client's `/authorize` needs a resource: userinfo's, or one
+  registered with `resources:create`. `__Host-` cookies need https (Chrome accepts `localhost`).
 
 ## Consent (the hosted page's API)
 

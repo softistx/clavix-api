@@ -19,7 +19,7 @@ nxgt-janus release says which.
 - **An authorization server per issuer** — authorization code with PKCE, refresh with
   rotation, revocation and discovery for each tenant (1.3, `src/oauth`, janus-oauth 0.8
   `createOAuthIssuers`). Built and mounted by `server.ts` with the real `authFor`/`claimsFor`;
-  no `/authorize` succeeds until a tenant has a resource (M2) and a sign-in surface (E1) and consent (E2a, built).
+  `/authorize` needs a registered resource (`resources:create`, below), a sign-in surface (E1) and consent (E2a, built).
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
   (RFC 9068) and introspection (1.4, [#4](https://github.com/softistx/clavix-api/issues/4),
   `src/oauth`, janus-oidc 0.3). Built: each tenant host serves its own discovery, JWKS,
@@ -39,6 +39,11 @@ nxgt-janus release says which.
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once (1.7,
   [#6](https://github.com/softistx/clavix-api/issues/6)). Built; grants other than code and
   refresh wait on a per-client grant list in janus-oauth.
+- **Resources registered by script** — `bun run resources:create` stores a tenant's API (audience
+  URI and scopes), idempotently; the issuer serves them beside userinfo's, so an app's own API gets
+  access tokens with its `aud`, isolated per tenant
+  ([#75](https://github.com/softistx/clavix-api/issues/75)). Built; scopes are a plain list until
+  the console (2.3).
 - **Migration guide** — how an application moves from embedded janus to Clavix as an OIDC
   relying party: client registration, the code + PKCE flow, token verification with
   `@alxia/clavix`, user mapping, sessions and sign-out, and the gaps (1.8,

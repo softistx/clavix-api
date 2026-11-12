@@ -3,6 +3,7 @@ import {
   createOAuthIssuers,
   type OAuthIssuerKey,
   type OAuthIssuers,
+  type OAuthResource,
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
@@ -22,7 +23,13 @@ export interface ClavixOAuthOptions {
   authFor: AuthFor;
   /** The claims of a tenant's users, for the id_token and userinfo. */
   claimsFor: ClaimsFor;
-  /** Default: no resource, so no `/authorize` succeeds (tenants' resources come with slice 2.3). */
+  /**
+   * The tenants' own resources (their APIs, `resources:create`); the userinfo
+   * resource is always added. Default: none, so only OIDC clients that ask for
+   * userinfo's resource (or none) succeed. Read on every request, so a resource
+   * registered by script serves at once: its fingerprint is part of the
+   * issuer's cache version.
+   */
   resourcesFor?: ResourcesFor;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
@@ -78,7 +85,21 @@ export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
 const OIDC_SCOPES = ["openid", "profile", "email"];
 
 // What `resolve` answers: janus's key (the version as a string) and the tenant.
-type Keyed = OAuthIssuerKey & { tenant: ResolvedTenant };
+type Keyed = OAuthIssuerKey & {
+  tenant: ResolvedTenant;
+  resources: Readonly<Record<string, OAuthResource>>;
+};
+
+// A short stable digest of a tenant's resources: the issuer is rebuilt when
+// one is added, changed or removed, though the tenant itself did not change.
+const fingerprintOf = (resources: Readonly<Record<string, OAuthResource>>) =>
+  Bun.hash(
+    JSON.stringify(
+      Object.entries(resources)
+        .map(([uri, { scopes }]) => [uri, [...scopes].sort()])
+        .sort(([a], [b]) => String(a).localeCompare(String(b))),
+    ),
+  ).toString(36);
 
 /**
  * One OAuth authorization server per tenant (ADR-0003): the issuer is the
@@ -106,11 +127,16 @@ export function createClavixOAuthIssuers(
   const issuers = createOAuthIssuers<Keyed>({
     resolve: async (request) => {
       const tenant = await resolver.resolveRequest(request);
-      return tenant === null
-        ? null
-        : { issuer: tenant.issuer, version: String(tenant.version), tenant };
+      if (tenant === null) return null;
+      const resources = (await resourcesFor?.(tenant)) ?? {};
+      return {
+        issuer: tenant.issuer,
+        version: `${tenant.version}.${fingerprintOf(resources)}`,
+        tenant,
+        resources,
+      };
     },
-    build: ({ tenant }) => {
+    build: ({ tenant, resources }) => {
       tenantOf.set(tenant.issuer, tenant);
       // One store signs access tokens and id_tokens: the JWKS verifies both.
       const keys = requiringCurrentKey(
@@ -123,7 +149,7 @@ export function createClavixOAuthIssuers(
         store: createMongoOAuth(db, { partition: tenant.partition }),
         issuer: tenant.issuer,
         resources: {
-          ...(resourcesFor?.(tenant) ?? {}),
+          ...resources,
           [userinfo]: { scopes: OIDC_SCOPES },
         },
         defaultResource: userinfo,
@@ -133,14 +159,14 @@ export function createClavixOAuthIssuers(
         ...(clock === undefined ? {} : { clock }),
       };
     },
-    endpoints: ({ tenant }) => ({
+    endpoints: ({ resources }) => ({
       consentUrl: options.consentUrl ?? "/consent",
       // Same-tenant confidential clients introspect the tokens of the
       // tenant's own resources (ADR-0024); a client of another tenant does
       // not authenticate here, its partition is another.
       introspection: {
         authorize: () => ({
-          resources: Object.keys(resourcesFor?.(tenant) ?? {}),
+          resources: Object.keys(resources),
         }),
       },
     }),

@@ -33,14 +33,27 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
-  not the scoped collections. `createApp({ oauth })` mounts it. `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`), and without `resourcesFor`
-  no `/authorize` succeeds. `/consent` is the hosted page of a later UI slice (its API is built, see Consent). `bun run
+  not the scoped collections. `createApp({ oauth })` mounts it. `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page of a later UI slice (its API is built, see Consent). `bun run
   db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
+
+## Resources (`src/modules/resources`)
+
+A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the access tokens asked with
+`resource=<uri>`, its `scopes` what a client may request on it. `bun run resources:create --tenant
+<slug> --uri <https uri> --scope <s> [--scope <s>] [--name <label>]` stores or updates one
+(idempotent on the URI; the scopes are replaced), until the console (M2). The `resources`
+collection is tenant-owned and reached only through `scopeToTenant` (`storedResourcesFor`,
+`registerResource`), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
+in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/resources.ts`.
+`ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
+cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
+URL cannot be registered: it is built in, with the OpenID Connect scopes. Scopes are a plain list
+for now (assumed; the Scope entity with consent texts is M2).
 
 ## OpenID Connect
 

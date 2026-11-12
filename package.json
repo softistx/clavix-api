@@ -13,6 +13,7 @@
     "db:sync": "bun src/scripts/db-sync.ts",
     "db:migrate": "bun src/scripts/db-migrate.ts",
     "clients:create": "bun src/scripts/clients-create.ts",
+    "resources:create": "bun src/scripts/resources-create.ts",
     "lint": "biome lint",
     "format": "biome format --write",
     "fix": "biome check --write",

@@ -23,10 +23,16 @@ export type SigningKeysFor = (tenantId: string) => SigningKeyStore;
  */
 export type AuthFor = (tenant: ResolvedTenant) => OAuthAuth;
 
-/** The protected resources a tenant serves (RFC 8707), by URL. */
+/**
+ * The protected resources a tenant serves (RFC 8707), by URL: its own APIs,
+ * read from that tenant's scope (`resources:create`), so one tenant's resource
+ * is never another's. Asked on every request.
+ */
 export type ResourcesFor = (
   tenant: ResolvedTenant,
-) => Readonly<Record<string, OAuthResource>>;
+) =>
+  | Readonly<Record<string, OAuthResource>>
+  | Promise<Readonly<Record<string, OAuthResource>>>;
 
 /**
  * The claims of a tenant's users (slice 1.4): looks the subject up in that
