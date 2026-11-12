@@ -153,9 +153,10 @@ package's guide ([`packages/clavix/docs`](https://github.com/softistx/alxia/tree
 Constraints to know before relying on it:
 - **The token's `aud` must contain the API's identifier, and that identifier is a Clavix
   resource.** Resources per tenant arrive with the console (M2, slice 2.3); clavix-api has
-  no script to register one yet, and the README states that no `/authorize` succeeds before
-  a tenant has a resource. So an API cannot receive Clavix tokens for its own audience today.
-  This is the main gap of M1 for this guide.
+  no script to register one yet. Sign-in itself works without one (a request with no
+  `resource` is for the tenant's userinfo, so the token's `aud` is the userinfo URL), but a
+  token for an API's own audience cannot be issued today. This is the main gap of M1 for this
+  guide.
 - **`roles` is empty**: the `roles` claim moved to M2 (slice 2.3). `permissions` arrive in M5.
 - **`scopes`** are the scopes granted on the resource, which are also configured in M2.
 - A non-alxia API can verify the token itself: the JWT is signed by the tenant's key
@@ -223,8 +224,8 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
 2. **No tenant creation script or console** before M2 slice 2.2; the guide says "ask".
 3. **No resource registration** (script or console) before slice 2.3, so no API audience:
-   Clavix cannot issue the access tokens that [step 4](#4-verify-access-tokens-on-the-api)
-   verifies for an application's own API.
+   Clavix cannot issue the token for an application's own API that
+   [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
 5. **Subject format** of Clavix's `sub` is not documented in the repository; read it from an
    ID token or `/userinfo` before relying on a shape.
