@@ -151,3 +151,26 @@ await fetch("/graphql", {
 
 Behind a TLS-terminating proxy only hosts are compared, so `http` against `https` is not the cause; check
 that the proxy keeps the original `Host`.
+
+## `EMAIL_UNVERIFIED` (403) when registering a passkey
+
+**When:** `passkeyRegistrationOptions` or `registerPasskey` is answered with HTTP 403 and
+`"extensions":{"code":"EMAIL_UNVERIFIED"}`.
+
+**Why:** since janus 0.57, enrolling a sign-in factor (a passkey, or any second factor) is refused
+while the user's e-mail is unproved, so a factor cannot be bound to an address nobody confirmed. The
+code is stable and passes through unchanged; the hosted UI shows it as "unverified". Sign-in with
+`signInWithPasskey` still answers the single `PASSKEY_INVALID` (401).
+
+**Fix:** prove the e-mail first. Signing in with an e-mailed code (`verifySignInCode`) proves it;
+then register the passkey again.
+
+```graphql
+mutation {
+  passkeyRegistrationOptions {
+    challenge
+    options
+  }
+}
+# 403 EMAIL_UNVERIFIED -> sign in with the e-mailed code, then repeat
+```

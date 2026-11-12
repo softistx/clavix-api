@@ -340,6 +340,12 @@ describe("registration", () => {
     expect(codeOf(refused)).toBe("EMAIL_UNVERIFIED");
   });
 
+  test("a verified e-mail gets registration options", async () => {
+    const { cookie } = await userOf("acme", "grace@example.test");
+    const allowed = await gql("acme", REGISTRATION, {}, cookie);
+    expect(allowed.errors).toBeUndefined();
+  });
+
   test("anonymous callers are UNAUTHENTICATED, 401, and can ask for sign-in options", async () => {
     for (const query of [REGISTRATION, MINE]) {
       const refused = await gql("acme", query);
