@@ -51,10 +51,21 @@ than one label before it, a reserved label (`www`, `console`, `api`, ...), an un
 suspended or deleted tenant. In a resolver, `await tenant()` of the context gives
 `{ tenantId, slug, issuer, partition, version }`, resolved once per request.
 
-Resolved hosts are cached in Redis (`tenant-host`, 600 s; 30 s for "no tenant"); creating,
-suspending, reactivating or deleting a tenant drops its host. A Redis failure is logged and
-MongoDB is read, so the API runs, slower, without Redis.
+Resolved hosts are cached in Redis (`tenant-host`, 60 s; 30 s for "no tenant"); creating,
+suspending, reactivating or deleting a tenant drops its host (the delete is retried once),
+and a resolution that raced a write re-reads the tenant and drops what it just stored. A
+suspension therefore takes effect within 60 s at worst, even when Redis was down during the
+write. A Redis failure is logged and MongoDB is read, so the API runs, slower, without Redis.
+
+Operating the cache:
+- Give Redis a `maxmemory` and an eviction policy (`allkeys-lru`, or `volatile-ttl` since
+  every entry carries a TTL), so that the cache cannot grow without bound.
+- Null entries are bounded by the valid-slug shape, not by the tenants that exist: a client
+  sweeping `<random>.CLAVIX_DOMAIN` writes one 30 s entry per host. Put a rate limit per
+  client IP at the edge (reverse proxy or CDN) on the wildcard host.
 
 The Redis spec (`src/tenancy/tenant-cache.spec.ts`) starts a real Redis through
 `@softistx/redis/testing`, compiled from source on its first run (about two minutes, then
-cached in `node_modules/.cache/redis-memory-server`; needs `make` and a C compiler).
+cached in `node_modules/.cache/redis-memory-server` unless `REDISMS_DOWNLOAD_DIR` is set, which
+moves the cache there: CI sets it to a per-runner folder under `~/.cache/nxgt/`, so the path above
+is the local default only; needs `make` and a C compiler).
