@@ -427,7 +427,8 @@ extend type Mutation {
   `navigator.credentials.create({ publicKey })`, then `registerPasskey` with a name of 1 to 100
   characters. The registration challenge lasts 5 minutes too, and a new `passkeyRegistrationOptions`
   spends the user's earlier one. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
-  verified gets `EMAIL_UNVERIFIED` (403). The session must have signed in within 10 minutes
+  verified gets `EMAIL_UNVERIFIED` (403; janus 0.57 refuses every factor enrolment while the e-mail is unproved, see
+  [troubleshooting](docs/troubleshooting.md)). The session must have signed in within 10 minutes
   (`STEP_UP_REQUIRED`, 403: sign in again with a code). Up to 10 passkeys per user.
 - **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
   (`true` when this call removed it, `false` for an id that is not the caller's; same freshness).
