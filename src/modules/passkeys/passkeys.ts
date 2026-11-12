@@ -1,4 +1,4 @@
-import { JanusError, type Passkey } from "@softistx/janus";
+import type { Passkey } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
 import type { TenantJanus } from "@/users/tenant-janus";
@@ -18,20 +18,28 @@ function parsed(text: string): unknown {
   }
 }
 
-/** The passkey sign-in: any janus refusal is `PASSKEY_INVALID`; a store failure stays a 503. */
-export async function signInWithPasskey(
-  auth: TenantJanus,
-  challenge: string,
-  response: string,
-) {
+/** The codes janus answers a passkey sign-in it refuses with: a bad assertion, a challenge that is unknown, spent or lapsed, or a user who may not sign in. */
+const REFUSALS = new Set([
+  "CREDENTIALS_INVALID",
+  "TOKEN_UNKNOWN",
+  "TOKEN_SPENT",
+  "TOKEN_EXPIRED",
+  "BAD_USER_INPUT",
+  "USER_INACTIVE",
+  "EMAIL_UNVERIFIED",
+]);
+
+/** janus's passkey sign-in, with every refusal answered as the one `PASSKEY_INVALID` this API has always given; a store failure stays a 503. */
+export async function asPasskeyInvalid<T>(signIn: () => Promise<T>) {
   try {
-    return await auth.passkeys.signIn(challenge, parsed(response));
+    return await signIn();
   } catch (error) {
-    // Temporary, until @softistx/janus-passkeys#665: the verifier re-throws some
-    // library errors; one on a known credential must not differ from an unknown one.
-    if (error instanceof JanusError && error.code === "STORE_FAILED")
-      throw error;
-    throw passkeyInvalid();
+    const code = (error as { extensions?: { code?: unknown } }).extensions
+      ?.code;
+    if (error instanceof GraphQLError && REFUSALS.has(String(code))) {
+      throw passkeyInvalid();
+    }
+    throw error;
   }
 }
 

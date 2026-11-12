@@ -13,6 +13,6 @@ export const rpIdOf = (tenant: Pick<ResolvedTenant, "issuer">): string =>
 export const originOf = (tenant: Pick<ResolvedTenant, "issuer">): string =>
   new URL(tenant.issuer).origin;
 
-/** Temporary, until @softistx/janus#668: janus takes https origins only (browsers offer passkeys on a secure origin): a development server on http has none. */
+/** janus takes https origins (and http://localhost, http://127.0.0.1) only: a tenant host on http, such as `<slug>.clavix.localhost`, has no passkeys. */
 export const passkeysOn = (tenant: Pick<ResolvedTenant, "issuer">): boolean =>
   originOf(tenant).startsWith("https://");

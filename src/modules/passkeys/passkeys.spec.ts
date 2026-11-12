@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  type Ceremony,
+  softwareAuthenticator,
+} from "@softistx/janus-passkeys/testing";
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -10,7 +14,6 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { originOf, passkeysOn, rpIdOf } from "@/users/rp";
 import { buildTenantJanus, SESSION_COOKIE } from "@/users/tenant-janus";
-import { type Ceremony, softwareAuthenticator } from "~/passkey-authenticator";
 
 const app = createApp();
 const origin = {
@@ -462,18 +465,12 @@ describe("removal", () => {
 });
 
 describe("development over http", () => {
-  test("a tenant on an http origin builds a janus without passkeys instead of failing", async () => {
+  test("a tenant on an http origin builds a janus instead of failing, and passkeys are off for it", async () => {
     const tenant = await tenantOf("acme");
-    const http = buildTenantJanus(
-      oauthDb,
-      { ...tenant, issuer: "http://acme.clavix.localhost:3000" },
-      env.CLAVIX_KEYS_MASTER_KEY,
-    );
-    expect(passkeysOn({ issuer: "http://acme.clavix.localhost:3000" })).toBe(
-      false,
-    );
-    await expect(http.passkeys.signInOptions()).rejects.toBeInstanceOf(
-      TypeError,
-    );
+    const issuer = "http://acme.clavix.localhost:3000";
+    expect(() =>
+      buildTenantJanus(oauthDb, { ...tenant, issuer }),
+    ).not.toThrow();
+    expect(passkeysOn({ issuer })).toBe(false);
   });
 });

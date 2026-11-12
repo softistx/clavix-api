@@ -6,7 +6,6 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
-import { DEV_KEYS_MASTER_KEY } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
@@ -36,7 +35,6 @@ const tenants = new TenantsService(mongo.db.tenants, {
 const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth({
   resolver,
   db: oauthDb,
-  masterKey: DEV_KEYS_MASTER_KEY,
 });
 
 const keys = new Map<string, SigningKeyStore>();

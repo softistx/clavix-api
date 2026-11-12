@@ -1,20 +1,22 @@
-import { denial } from "@softistx/janus-graphql";
+import { denial, passkeyResolvers } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { passkeyThrottleOf } from "@/modules/auth/plugin";
 import { passkeysOn } from "@/users/rp";
 import {
+  asPasskeyInvalid,
   currentOf,
+  passkeyInvalid,
   passkeyOut,
   responseOf,
-  signInWithPasskey,
 } from "./passkeys";
 
-// Temporary, until @softistx/janus-graphql#667: janus-graphql ships a passkey SDL and `passkeyResolvers`, but they bind to
-// one janus instance and know no first-factor sign-in: ours is per tenant, so
-// the operations are written here on `auth.passkeys` (docs/guide/passkeys.md
-// of @softistx/janus).
+// The passkey sign-in is janus-graphql's (`passkeyResolvers` with `firstFactor`):
+// the operations below keep this API's own names, arguments and errors and call
+// its resolvers, so the challenge, the assertion check and the session cookie
+// are janus's. The management operations are written on `auth.passkeys`
+// (docs/guide/passkeys.md of @softistx/janus).
 async function authOf(ctx: Context) {
   const [auth, tenant] = await Promise.all([
     janusIssuers.forRequest(ctx.request),
@@ -28,6 +30,15 @@ async function authOf(ctx: Context) {
   return auth;
 }
 
+const janusPasskeys = passkeyResolvers({ auth: authOf, firstFactor: true });
+// `firstFactor: true` adds both fields; the types keep them optional.
+const present = <T>(field: T | undefined): T => {
+  if (field === undefined) throw new TypeError("janus has no passkey sign-in");
+  return field;
+};
+const signInOptions = present(janusPasskeys.Query.passkeySignInOptions);
+const passkeySignIn = present(janusPasskeys.Mutation.passkeySignIn);
+
 export const passkeys: Resolvers = {
   Query: {
     myPasskeys: async (_, __, ctx) => {
@@ -38,35 +49,29 @@ export const passkeys: Resolvers = {
   },
   Mutation: {
     passkeySignInOptions: async (_, __, ctx) => {
-      const [auth, tenant] = await Promise.all([authOf(ctx), ctx.tenant()]);
+      const tenant = await ctx.tenant();
       await passkeyThrottleOf(ctx)?.check({
         tenantId: tenant?.tenantId ?? "",
         ip: ctx.ip,
       });
-      const issued = await auth.passkeys.signInOptions();
-      ctx.set.headers.set("cache-control", "no-store");
-      return {
-        options: JSON.stringify(issued.options),
-        challenge: issued.challenge,
-        expiresAt: issued.expiresAt,
-      };
+      return signInOptions(_, __, ctx);
     },
     signInWithPasskey: async (_, { challenge, response }, ctx) => {
-      const auth = await authOf(ctx);
-      const signedIn = await signInWithPasskey(auth, challenge, response);
-      ctx.set.headers.set("cache-control", "no-store");
-      ctx.set.headers.append(
-        "set-cookie",
-        auth.cookie.serialize(signedIn.token, signedIn.session),
+      const signedIn = await asPasskeyInvalid(() =>
+        passkeySignIn(_, { challenge, assertion: response }, ctx),
       );
+      // janus types `signedIn.user` as an id and a type only: read the profile.
+      const auth = await authOf(ctx);
+      const user = await auth.findUser(signedIn.userId);
+      if (user === null) throw passkeyInvalid();
       return {
         user: {
-          id: signedIn.user.id,
-          email: signedIn.user.email,
-          name: signedIn.user.name ?? null,
-          emailVerified: signedIn.user.emailVerified,
+          id: user.id,
+          email: user.email,
+          name: user.name ?? null,
+          emailVerified: user.emailVerified,
         },
-        expiresAt: signedIn.session.expiresAt,
+        expiresAt: signedIn.expiresAt,
       };
     },
     passkeyRegistrationOptions: async (_, __, ctx) => {

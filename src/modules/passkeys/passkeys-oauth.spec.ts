@@ -4,6 +4,7 @@ import {
   rotateSigningKeys,
   s256Challenge,
 } from "@softistx/janus-oauth";
+import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
@@ -18,7 +19,6 @@ import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { originOf, rpIdOf } from "@/users/rp";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
-import { softwareAuthenticator } from "~/passkey-authenticator";
 
 // A passkey sign-in, then the OAuth flow of the same tenant: the id_token's
 // auth_time is the passkey session's sign-in time.
