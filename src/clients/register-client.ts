@@ -5,15 +5,14 @@ import {
   redirectUriProblem,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import type { Db, ObjectId } from "mongodb";
+import type { Db } from "mongodb";
+import {
+  ClientInputError,
+  type ClientTenant,
+  SuspendedTenantError,
+  UnknownTenantError,
+} from "@/modules/resources/errors";
 import { partitionOf } from "@/modules/tenants/identity";
-
-/** What the script needs of a stored tenant. */
-export interface ClientTenant {
-  _id: ObjectId;
-  slug: string;
-  status: "active" | "suspended";
-}
 
 /**
  * The grants janus-oauth 0.8 offers to every client: it has no per-client
@@ -50,30 +49,6 @@ export interface RegisteredClient {
   type: "public" | "confidential";
   /** The plain secret, shown here once; `null` for a public client or an unchanged secret. */
   clientSecret: string | null;
-}
-
-/** The script's input is wrong: the message says how. */
-export class ClientInputError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ClientInputError";
-  }
-}
-
-/** The slug names no tenant. */
-export class UnknownTenantError extends ClientInputError {
-  constructor(slug: string) {
-    super(`no tenant has the slug "${slug}"`);
-    this.name = "UnknownTenantError";
-  }
-}
-
-/** The tenant is suspended: no client is registered on it. */
-export class SuspendedTenantError extends ClientInputError {
-  constructor(slug: string) {
-    super(`tenant "${slug}" is suspended; reactivate it first`);
-    this.name = "SuspendedTenantError";
-  }
 }
 
 export interface RegisterClientOptions {
