@@ -170,8 +170,8 @@ afterAll(async () => {
 
 describe("authorization code with PKCE", () => {
   test("the full flow ends in a JWT access token of 15 minutes and a refresh token", async () => {
-    const code = await codeFor("acme", clients.acme as string);
-    const response = await exchange("acme", clients.acme as string, code);
+    const code = await codeFor("acme", clients["acme"] as string);
+    const response = await exchange("acme", clients["acme"] as string, code);
     expect(response.status).toBe(200);
     const tokens = (await response.json()) as Tokens;
     expect(tokens.expires_in).toBe(15 * 60);
@@ -187,30 +187,30 @@ describe("authorization code with PKCE", () => {
   });
 
   test("a wrong verifier is refused and a code is single-use", async () => {
-    const code = await codeFor("acme", clients.acme as string);
+    const code = await codeFor("acme", clients["acme"] as string);
     const wrong = await post("acme", "/token", {
       grant_type: "authorization_code",
-      client_id: clients.acme as string,
+      client_id: clients["acme"] as string,
       code,
       redirect_uri: REDIRECT,
       code_verifier: "w".repeat(64),
       resource: RESOURCE,
     });
     expect(wrong.status).toBe(400);
-    const good = await exchange("acme", clients.acme as string, code);
+    const good = await exchange("acme", clients["acme"] as string, code);
     expect(good.status).toBe(400);
   });
 });
 
 describe("refresh tokens", () => {
   test("rotate on every use", async () => {
-    const code = await codeFor("acme", clients.acme as string);
+    const code = await codeFor("acme", clients["acme"] as string);
     const first = (await (
-      await exchange("acme", clients.acme as string, code)
+      await exchange("acme", clients["acme"] as string, code)
     ).json()) as Tokens;
     const second = await refresh(
       "acme",
-      clients.acme as string,
+      clients["acme"] as string,
       first.refresh_token,
     );
     expect(second.status).toBe(200);
@@ -220,16 +220,16 @@ describe("refresh tokens", () => {
   });
 
   test("a reused refresh token revokes the whole grant", async () => {
-    const code = await codeFor("acme", clients.acme as string);
+    const code = await codeFor("acme", clients["acme"] as string);
     const first = (await (
-      await exchange("acme", clients.acme as string, code)
+      await exchange("acme", clients["acme"] as string, code)
     ).json()) as Tokens;
     const second = (await (
-      await refresh("acme", clients.acme as string, first.refresh_token)
+      await refresh("acme", clients["acme"] as string, first.refresh_token)
     ).json()) as Tokens;
     const reuse = await refresh(
       "acme",
-      clients.acme as string,
+      clients["acme"] as string,
       first.refresh_token,
     );
     expect(reuse.status).toBe(400);
@@ -237,7 +237,7 @@ describe("refresh tokens", () => {
     // The newest token went with the grant, and so did the access tokens.
     const newest = await refresh(
       "acme",
-      clients.acme as string,
+      clients["acme"] as string,
       second.refresh_token,
     );
     expect(newest.status).toBe(400);
@@ -255,18 +255,18 @@ describe("refresh tokens", () => {
 
 describe("revocation", () => {
   test("revoking a refresh token ends its use", async () => {
-    const code = await codeFor("acme", clients.acme as string);
+    const code = await codeFor("acme", clients["acme"] as string);
     const tokens = (await (
-      await exchange("acme", clients.acme as string, code)
+      await exchange("acme", clients["acme"] as string, code)
     ).json()) as Tokens;
     const revoked = await post("acme", "/revoke", {
-      client_id: clients.acme as string,
+      client_id: clients["acme"] as string,
       token: tokens.refresh_token,
     });
     expect(revoked.status).toBe(200);
     const after = await refresh(
       "acme",
-      clients.acme as string,
+      clients["acme"] as string,
       tokens.refresh_token,
     );
     expect(after.status).toBe(400);
@@ -282,9 +282,11 @@ describe("metadata", () => {
       );
       expect(response.status).toBe(200);
       const metadata = (await response.json()) as Record<string, unknown>;
-      expect(metadata.issuer).toBe(`https://${slug}.${DOMAIN}`);
-      expect(metadata.token_endpoint).toBe(`https://${slug}.${DOMAIN}/token`);
-      expect(metadata.jwks_uri).toBe(`https://${slug}.${DOMAIN}/jwks.json`);
+      expect(metadata["issuer"]).toBe(`https://${slug}.${DOMAIN}`);
+      expect(metadata["token_endpoint"]).toBe(
+        `https://${slug}.${DOMAIN}/token`,
+      );
+      expect(metadata["jwks_uri"]).toBe(`https://${slug}.${DOMAIN}/jwks.json`);
     }
   });
 });
@@ -329,8 +331,8 @@ describe("rebuild on tenant change", () => {
 
 describe("tenant isolation", () => {
   test("A's code, tokens and client are refused on B", async () => {
-    const acme = clients.acme as string;
-    const globex = clients.globex as string;
+    const acme = clients["acme"] as string;
+    const globex = clients["globex"] as string;
     const code = await codeFor("acme", acme);
 
     // The code, with A's client and with B's.
@@ -375,5 +377,31 @@ describe("tenant isolation", () => {
         { resource: RESOURCE },
       ),
     ).not.toBeNull();
+  });
+});
+
+describe("a tenant without a signing key yet", () => {
+  test("the token endpoint fails cleanly, spending no code", async () => {
+    await tenants.create({ slug: "nokey", name: "No key" });
+    const server = await serverOf("nokey");
+    const { client } = await server.createClient({
+      name: "App",
+      redirectUris: [REDIRECT],
+    });
+    const code = await codeFor("nokey", client.id);
+    const failed = await exchange("nokey", client.id, code);
+    expect(failed.status).toBe(503);
+    expect(failed.headers.get("retry-after")).toBe("30");
+    expect(await failed.json()).toMatchObject({
+      error: "temporarily_unavailable",
+    });
+    // The code was not spent: once the key exists, the same code exchanges.
+    const tenant = await resolver.resolveHost(`nokey.${DOMAIN}`);
+    await rotateSigningKeys(signingKeysFor(tenant?.tenantId ?? ""), {
+      now: new Date(),
+      lead: "1h",
+      retireAfter: "2h",
+    });
+    expect((await exchange("nokey", client.id, code)).status).toBe(200);
   });
 });
