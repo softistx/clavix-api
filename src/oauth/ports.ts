@@ -8,7 +8,10 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 /**
  * The signing keys of a tenant (slice 1.2, `src/keys`). Called once per build
  * of a tenant's server, so it must return the tenant's own store: a key of
- * one tenant never signs a token of another.
+ * one tenant never signs a token of another. It takes the tenant's id (the
+ * partition of its keys is that id, `ResolvedTenant.partition`). The store
+ * must hold a `current` key (slice 1.2 rotates them): access tokens are JWTs
+ * (ADR-0009) and the store also serves the tenant's `/jwks.json`.
  */
 export type SigningKeysFor = (tenantId: string) => SigningKeyStore;
 
