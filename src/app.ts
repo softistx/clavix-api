@@ -1,5 +1,6 @@
 import { graphql } from "@alxia/graphql";
 import { createBase } from "./http/context";
+import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import { oauthContext } from "./modules/consent";
@@ -26,6 +27,7 @@ export function createApp(options: { oauth?: OAuthHandle } = {}) {
       schema,
       ide: "apollo-sandbox",
       plugins: [
+        useSameOriginJson(),
         janusPlugin(),
         ...(options.oauth?.serverFor === undefined
           ? []
