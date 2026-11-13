@@ -4,6 +4,7 @@ import {
   type SocialConfig,
   type SocialProfile,
 } from "@softistx/janus";
+import type { SocialAuth } from "@softistx/janus-graphql";
 import {
   createMongoInvitations,
   createMongoStores,
@@ -48,9 +49,8 @@ export interface TenantJanusOptions {
 /** The janus instance of a tenant: its own partition of the user stores (ADR-0006, ADR-0008). */
 function buildJanus(db: Db, tenant: ResolvedTenant, social?: SocialConfig) {
   return janus({
-    // janus refuses a social config with no provider: such a tenant gets none
-    // (`undefined`, typed as if present; `socialOf` guards every use).
-    social: social as SocialConfig,
+    // janus refuses a social config with no provider: such a tenant gets none.
+    ...(social === undefined ? {} : { social }),
     user: userSchema,
     email: "email",
     store: createMongoStores(db, { partition: tenant.partition }),
@@ -92,8 +92,17 @@ function buildJanus(db: Db, tenant: ResolvedTenant, social?: SocialConfig) {
   });
 }
 
-/** The typed shape of a tenant's instance. `social` is typed as present but absent at runtime for a tenant with no provider: reach it through `socialOf`. */
+/** The typed shape of a tenant's instance. It has no `social`: only a tenant with a provider does, reached through `socialOf`. */
 export type TenantJanus = ReturnType<typeof buildJanus>;
+
+/** The instance of a tenant with at least one social provider. */
+export type TenantSocialJanus = TenantJanus & SocialAuth;
+
+/** The provider's display name when the user schema takes it (1 to 200 characters), else none: it never refuses a sign-up. */
+function nameOf(name: string | undefined): { name?: string } {
+  const trimmed = name?.trim() ?? "";
+  return trimmed === "" || trimmed.length > 200 ? {} : { name: trimmed };
+}
 
 /** The tenant's own social apps (ADR-0035); a new user only where sign-up is open. */
 function socialConfigOf(
@@ -112,7 +121,7 @@ function socialConfigOf(
     signUp: tenant.signUp
       ? (profile: SocialProfile) => ({
           email: profile.email ?? "",
-          ...(profile.name === undefined ? {} : { name: profile.name }),
+          ...nameOf(profile.name),
         })
       : false,
   };
@@ -127,8 +136,10 @@ export function buildTenantJanus(
 }
 
 /** The instance when the tenant has at least one social provider, else `null`. */
-export const socialOf = (auth: TenantJanus): TenantJanus | null =>
-  (auth as { social?: unknown }).social === undefined ? null : auth;
+export const socialOf = (auth: TenantJanus): TenantSocialJanus | null =>
+  "social" in auth && auth.social !== undefined
+    ? (auth as TenantSocialJanus)
+    : null;
 
 /**
  * One janus instance per tenant, chosen by host, rebuilt when the tenant's

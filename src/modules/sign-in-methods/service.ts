@@ -1,3 +1,4 @@
+import { OptimisticLockError } from "@softistx/mongo";
 import { GraphQLError } from "graphql";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
@@ -77,7 +78,7 @@ export class SignInPolicyService {
       }
     }
     await this.get(tenantId);
-    return this.tenants.updateSignIn(tenantId, ({ signIn }) => {
+    return this.write(tenantId, ({ signIn }) => {
       const current = methodsOf(signIn);
       const methods = current.map(({ type, enabled }) => ({
         type,
@@ -99,7 +100,9 @@ export class SignInPolicyService {
         ? undefined
         : checked("clientSecret", input.clientSecret);
     await this.get(tenantId);
-    return this.tenants.updateSignIn(tenantId, ({ signIn }) => {
+    return this.write(tenantId, ({ _id, signIn }) => {
+      // The stored tenant's own id binds the secret, not the caller's string.
+      const owner = _id.toHexString();
       const current = signIn.social.find(
         (entry) => entry.provider === input.provider,
       );
@@ -107,13 +110,9 @@ export class SignInPolicyService {
       if (id === undefined) throw badInput("clientId is required");
       // The same secret again is no change (a fresh seal never equals the old one).
       const secret =
-        clientSecret === undefined ||
-        this.holds(tenantId, current, clientSecret)
+        clientSecret === undefined || this.holds(owner, current, clientSecret)
           ? current?.secret
-          : this.box.seal(
-              clientSecret,
-              secretContext(tenantId, input.provider),
-            );
+          : this.box.seal(clientSecret, secretContext(owner, input.provider));
       if (secret === undefined) {
         throw refusal(
           "SOCIAL_SECRET_REQUIRED",
@@ -142,11 +141,30 @@ export class SignInPolicyService {
     provider: SocialProviderId,
   ): Promise<Tenant> {
     await this.get(tenantId);
-    return this.tenants.updateSignIn(tenantId, ({ signIn }) => {
+    return this.write(tenantId, ({ signIn }) => {
       const social = signIn.social.filter((e) => e.provider !== provider);
       if (social.length === signIn.social.length) return null;
       return this.usable({ ...signIn, social });
     });
+  }
+
+  /** One tenant write; other changes that keep winning the race end in CONFLICT (409), nothing stored. */
+  private async write(
+    tenantId: string,
+    change: (tenant: Tenant) => SignInPolicy | null,
+  ): Promise<Tenant> {
+    try {
+      return await this.tenants.updateSignIn(tenantId, change);
+    } catch (error) {
+      if (error instanceof OptimisticLockError) {
+        throw refusal(
+          "CONFLICT",
+          "The sign-in policy was changed at the same time; read it and try again",
+          409,
+        );
+      }
+      throw error;
+    }
   }
 
   /** Whether the stored entry already holds this secret. */

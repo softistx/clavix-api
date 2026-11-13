@@ -114,7 +114,8 @@ export class TenantsService {
    * Changes the tenant's sign-in policy (slice A5). `change` gets the stored
    * tenant and answers the new policy, or `null` for no change (no write, no
    * version bump, so no janus rebuild). The version read is the version
-   * expected; on a lost race the tenant is read again once.
+   * expected; on a lost race the tenant is read again (three attempts, then
+   * the `OptimisticLockError` is thrown).
    */
   async updateSignIn(
     id: IdOf<typeof tenants> | string,
@@ -132,7 +133,7 @@ export class TenantsService {
         await this.changed(updated);
         return updated;
       } catch (error) {
-        if (!(error instanceof OptimisticLockError) || attempt === 2) {
+        if (!(error instanceof OptimisticLockError) || attempt === 3) {
           throw error;
         }
       }

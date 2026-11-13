@@ -104,6 +104,14 @@ export const methodsOf = (policy: SignInPolicy): MethodEntry[] =>
 export const enabledSocial = (policy: SignInPolicy): SocialEntry[] =>
   policy.social.filter((entry) => entry.enabled);
 
+/**
+ * The enabled providers whose secret was sealed under the current key, so
+ * they can be opened: what the hosted page offers. One sealed under another
+ * master key is configured but unusable until its secret is entered again.
+ */
+export const offeredSocial = (policy: SignInPolicy, kid: string) =>
+  enabledSocial(policy).filter((entry) => entry.secret.kid === kid);
+
 /** Whether a user could still sign in: a method or a social provider is on. */
 export const hasSignInMethod = (policy: SignInPolicy): boolean =>
   methodsOf(policy).some((method) => method.enabled) ||

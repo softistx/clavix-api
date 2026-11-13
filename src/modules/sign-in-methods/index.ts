@@ -1,13 +1,14 @@
 import { denial, socialResolvers } from "@softistx/janus-graphql";
+import { secretBox } from "@/config/keys";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { socialOf, type TenantJanus } from "@/users/tenant-janus";
 import { methodDisabled } from "./gate";
 import {
-  enabledSocial,
   type MethodType,
   methodsOf,
+  offeredSocial,
   SOCIAL_LABELS,
 } from "./sign-in.schema";
 
@@ -27,7 +28,9 @@ async function tenantOf(ctx: Context) {
 // The social sign-in is janus-graphql's (`socialResolvers`): the flow, the
 // account link, the session cookie and the `no-store` header are janus's. Its
 // resolvers take one instance, and each tenant has its own (rebuilt when its
-// policy changes), so they are made once per instance.
+// policy changes), so they are made once per instance. Upstream need, to be
+// filed on nxgt-janus: `socialResolvers` taking a per-request auth source, as
+// `passkeyResolvers` does; this map goes then.
 const made = new WeakMap<TenantJanus, ReturnType<typeof socialResolvers>>();
 
 /** janus-graphql's social resolvers on the tenant's instance; `SIGN_IN_METHOD_DISABLED` for a tenant with no social provider. */
@@ -52,7 +55,7 @@ export const signInMethods: Resolvers = {
         methods: methodsOf(signIn)
           .filter((method) => method.enabled)
           .map((method) => HOSTED[method.type]),
-        social: enabledSocial(signIn).map(({ provider }) => ({
+        social: offeredSocial(signIn, secretBox.kid).map(({ provider }) => ({
           id: provider,
           label: SOCIAL_LABELS[provider],
         })),
@@ -64,8 +67,10 @@ export const signInMethods: Resolvers = {
       // The tenant's policy first: a provider it does not offer does not
       // exist, before any throttle budget is spent.
       const tenant = await tenantOf(ctx);
-      if (!enabledSocial(tenant.signIn).some((e) => e.provider === provider)) {
-        throw methodDisabled(provider);
+      const offered = offeredSocial(tenant.signIn, secretBox.kid);
+      if (!offered.some((entry) => entry.provider === provider)) {
+        // A fixed word: the caller's string is not echoed.
+        throw methodDisabled("this provider");
       }
       const { resolvers } = await socialOfTenant(ctx);
       await ctx.signInThrottle?.check({
