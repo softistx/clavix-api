@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
+import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
@@ -136,6 +137,7 @@ afterAll(async () => {
   ]) {
     await oauthDb.collection(name).deleteMany({});
   }
+  await mongo.db.adminEvents.raw.deleteMany({});
 });
 
 describe("permission per role", () => {
@@ -615,5 +617,104 @@ describe("changing and removing, the last owner protected", () => {
     await Promise.all([demote(ownB), demote(ownA2)]);
     const owners = await access.holders(tenantB, "owner");
     expect(owners.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("admin events", () => {
+  let tenant = "";
+  const eventsOf = async () =>
+    (
+      await mongo.db.adminEvents.raw
+        .find({ tenantId: new ObjectId(tenant) })
+        .sort({ _id: 1 })
+        .toArray()
+    ).map(({ actor, action, target }) => ({ actor, action, target }));
+
+  beforeAll(async () => {
+    tenant = (await tenantsService.create({ slug: "adm-ev", name: "Events" }))
+      .id;
+    await access.grantTenant(tenant, ownB, "owner");
+    await access.grantTenant(tenant, vwA, "viewer");
+  });
+
+  test("each mutation stores its event: the actor, the action, the target by id", async () => {
+    const invited = await invite(ownB, tenant, "ev@adm.test");
+    const invitationId = invited.data?.["inviteAdmin"]?.id as string;
+    await asConsole(
+      ownB,
+      `mutation { revokeAdminInvitation(tenantId: "${tenant}", invitationId: "${invitationId}") }`,
+    );
+    await asConsole(
+      ownB,
+      `mutation { changeMembership(tenantId: "${tenant}", userId: "${vwA}", role: ADMIN) { role } }`,
+    );
+    await asConsole(
+      ownB,
+      `mutation { removeMembership(tenantId: "${tenant}", userId: "${vwA}") }`,
+    );
+    expect(await eventsOf()).toEqual([
+      {
+        actor: ownB,
+        action: "membership.invite",
+        target: { type: "invitation", id: invitationId },
+      },
+      {
+        actor: ownB,
+        action: "membership.revokeInvitation",
+        target: { type: "invitation", id: invitationId },
+      },
+      {
+        actor: ownB,
+        action: "membership.change",
+        target: { type: "user", id: vwA },
+      },
+      {
+        actor: ownB,
+        action: "membership.remove",
+        target: { type: "user", id: vwA },
+      },
+    ]);
+    expect(JSON.stringify(await eventsOf())).not.toContain("ev@adm.test");
+  });
+
+  test("a refused mutation stores none; an id the trail cannot name is refused first", async () => {
+    const before = (await eventsOf()).length;
+    expect(
+      code(
+        await asConsole(
+          ownB,
+          `mutation { removeMembership(tenantId: "${tenant}", userId: "${ownB}") }`,
+        ),
+      ),
+    ).toBe("LAST_OWNER");
+    expect(
+      code(
+        await asConsole(
+          vwA,
+          `mutation { removeMembership(tenantId: "${tenant}", userId: "${ownA}") }`,
+        ),
+      ),
+    ).toBe("FORBIDDEN");
+    expect(
+      code(
+        await asConsole(
+          ownB,
+          `mutation { removeMembership(tenantId: "${tenant}", userId: "${"u".repeat(201)}") }`,
+        ),
+      ),
+    ).toBe("BAD_USER_INPUT");
+    expect((await eventsOf()).length).toBe(before);
+  });
+
+  test("a repeat records again, so a retry never leaves a change with no event", async () => {
+    const before = (await eventsOf()).length;
+    const remove = `mutation { removeMembership(tenantId: "${tenant}", userId: "${ownA2}") }`;
+    expect((await asConsole(ownB, remove)).data?.["removeMembership"]).toBe(
+      true,
+    );
+    expect((await asConsole(ownB, remove)).data?.["removeMembership"]).toBe(
+      true,
+    );
+    expect((await eventsOf()).length).toBe(before + 2);
   });
 });

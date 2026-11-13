@@ -4,10 +4,12 @@ import { graphql } from "graphql";
 import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
+import { adminEventRecorder } from "@/config/admin-events";
 import { brandingService } from "@/config/branding";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { tenantsService } from "@/config/tenancy";
+import type { AuditAction, AuditTarget } from "@/console/audit";
 import type { ConsoleContext } from "@/console/context";
 import type { Permission } from "@/console/model";
 import { consoleSchema } from "@/console/schema";
@@ -67,7 +69,21 @@ const ctxFor = (userId: string): ConsoleContext =>
       access.can(userId, permission, tenantId),
     canPlatform: (permission: Permission) =>
       access.canPlatform(userId, permission),
+    audit: (action: AuditAction, target: AuditTarget) =>
+      adminEventRecorder.record({
+        actor: userId,
+        action,
+        tenantId: target.tenantId,
+        target: { type: target.type, id: target.id },
+        requestId: "branding-spec",
+      }),
   }) as unknown as ConsoleContext;
+
+const eventsOf = (tenantId: string) =>
+  mongo.db.adminEvents.raw
+    .find({ tenantId: new ObjectId(tenantId) })
+    .sort({ _id: 1 })
+    .toArray();
 
 const run = (
   source: string,
@@ -111,6 +127,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongo.db.branding.raw.deleteMany({});
+  await mongo.db.adminEvents.raw.deleteMany({});
 });
 
 describe("the theme", () => {
@@ -228,12 +245,21 @@ describe("updateBranding", () => {
     expect(payload.branding.themeName).toBe(THEME_NAME);
     expect(payload.branding.css).toContain("data-nxgt-theme");
     expect(payload.branding.logoUrl).toStartWith("/branding/logo?v=");
+    const events = await eventsOf(tenantA);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actor: users.adminA,
+      action: "branding.update",
+      target: { type: "branding", id: tenantA },
+    });
 
     const again = await run(UPDATE, users.adminA, {
       t: tenantA,
       i: { ...base, logo: LOGO },
     });
     expect(payloadOf(again).changed).toBe(false);
+    // A repeat is recorded too: the retry of a call whose record failed.
+    expect(await eventsOf(tenantA)).toHaveLength(2);
 
     // The logo is kept when the next call sends none, and removed on request.
     const kept = await run(UPDATE, users.adminA, { t: tenantA, i: base });
@@ -362,8 +388,11 @@ describe("permissions and isolation", () => {
     expect(
       (await run(READ, users.viewerA, { t: tenantA })).errors,
     ).toBeUndefined();
+    const before = (await eventsOf(tenantA)).length;
     const result = await run(UPDATE, users.viewerA, { t: tenantA, i: base });
     expect(result.errors?.[0]?.extensions?.["code"]).toBe("FORBIDDEN");
+    // A refused mutation records no admin event.
+    expect(await eventsOf(tenantA)).toHaveLength(before);
   });
 
   test("the admin of tenant A can neither read nor edit tenant B", async () => {

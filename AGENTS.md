@@ -204,8 +204,9 @@ every other failure a 401).
 - **Deny by default** (`guard.ts`): every root field is wrapped, and one without an entry in its
   module's `guards` (`signedIn()`, `onTenant(perm, args => tenantId)`, `onPlatform(perm)`) is refused
   `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
-- **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards) and lists it
-  in `modules/index.ts`; the SDL lives there, never in `src/modules`.
+- **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
+  action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
+  there, never in `src/modules`.
 - **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
   membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
   tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
@@ -222,12 +223,50 @@ every other failure a 401).
   refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
   `onAccepted`, given per tenant by `invitationHooks` (`src/config/users.ts`; on `clavix`:
   `adminInvitationHooks`, which refuses a suspended or deleted tenant and grants the relation).
+  Its events are `membership.invite` / `.revokeInvitation` (target `invitation`) and `membership.change`
+  / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
+  canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse
+  after a write. Accepting (hosted, no console caller) records none.
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
   once by the migration (not in tests).
 - **`bun run operators:grant --email <address> [--role owner|admin|viewer]`** gives a user of the
   `clavix` tenant a platform role (default owner), until the console can. The user must exist.
+
+### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
+
+Every console mutation writes an append-only admin event (ADR-0037). A slice that adds a mutation
+does two things, and nothing else touches the collection:
+- **Declare** the action beside the module's guards, `export const <name>Audits: Audits = {
+  "Mutation.renameTenant": "tenant.rename" }`, and spread it into `audits` in `modules/index.ts`
+  (one line). `audit.spec.ts` walks the schema and fails on a `Mutation` root field with no action,
+  on a declaration that names no mutation, and on an action that is not `<noun>.<verb>`
+  (`AUDIT_ACTION`: camelCase segments, `client.rotateSecret`).
+- **Record** it in the resolver, once the change is stored:
+  `await ctx.audit("tenant.rename", { type: "tenant", id, tenantId })`. `tenantId` is the hex id of
+  the tenant the target belongs to, `null` only for a target of the platform itself (an operator).
+  `id` is the entity's own id (at most 200 characters), never a URI or free text, and `type` a
+  short noun (`client`). The actor (the token's user), the time and the request id are filled in
+  for you. A call the schema refuses (a malformed action, a `tenantId` that is not a tenant's hex
+  id) throws on every try: the slice's spec runs each mutation once and asserts its stored event. A mutation that
+  touches several targets records one event each; the same request id ties them.
+- **Awaited, and a failure fails the mutation**: `ctx.audit` rejects when the event cannot be
+  stored, so the resolver throws and the caller retries rather than a change being left with no
+  record. So a mutation stays safe to repeat (the plan's idempotency rule): its second run stores
+  nothing twice and records the event the first one missed. Never `void` it or catch its error. The declaration is not
+  checked against the call: the slice's own spec asserts the stored event.
+- **Never a secret**: an event is identifiers only (`target` is `{ type, id }`). The schema is
+  closed (`z.strictObject`, no free-form field), so there is no place for a secret, a token or the
+  before/after of a value, and none is to be added.
+- `adminEvents` is a platform collection: its `tenantId` says which tenant an event is about, so it
+  is listed in `platformCollections` (`src/tenancy/owned.ts`) and left out of the tenant-owned
+  guards. It is reached only through `AdminEventRecorder.record` (`src/config/admin-events.ts`); a
+  source scan in `src/tenancy/guards.spec.ts` refuses any other access or export. Indexes (`tenantId, at` and `actor, at`,
+  newest first) are the definition's, created by `db:sync`. No reader and no SDL until the viewer
+  (M4). `ConsoleDeps.adminEvents` takes another recorder in a spec.
+- The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
+  never used.
 
 ## Branding (`src/modules/branding`, `src/console/modules/branding`)
 
@@ -244,6 +283,8 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 - **`updateBranding` is a whole replacement, idempotent** (`changed: false` when nothing differs) and
   serialised by the optimistic lock: `update` writes at the version it read and decides again after a
   concurrent write (three attempts, then `CONFLICT`, 409). A new field joins `same()` or a repeat stops being a no-op.
+  It records the admin event `branding.update` (target `branding`, id the tenant's) after the store,
+  on a repeat too: the retry of a call whose record failed must still leave an event.
 - **The logo** (`logo.ts`, `logo-route.ts`) is a PNG, JPEG or WebP of at most 256 KiB, checked by its
   magic bytes and stored inline; never SVG (it runs script on the tenant's own host). Its sha256 is the
   `ETag`, and `immutable` is sent only when `?v=` names the current image (`logoUrl`).

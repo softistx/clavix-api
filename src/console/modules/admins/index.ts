@@ -1,5 +1,7 @@
 import { denial } from "@softistx/janus-graphql";
+import { GraphQLError } from "graphql";
 import type { Resolvers } from "@/generated/console/resolvers";
+import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import type { Role } from "../../model";
 import {
@@ -30,6 +32,37 @@ export const adminsGuards: Guards = {
   "Mutation.revokeAdminInvitation": onTenant("manage", tenantArg),
 };
 
+// One event per mutation, recorded once its change is stored. A repeat records
+// again (a removal of a non-member, a revocation of nothing): the retry of a
+// call whose record failed must not leave the change with no event.
+export const adminsAudits: Audits = {
+  "Mutation.inviteAdmin": "membership.invite",
+  "Mutation.changeMembership": "membership.change",
+  "Mutation.removeMembership": "membership.remove",
+  "Mutation.revokeAdminInvitation": "membership.revokeInvitation",
+};
+
+// The guard decided who may touch the tenant (a platform role is allowed on
+// any id); this decides the id is a tenant's, in the one spelling the
+// relations and the trail use, whatever case the caller sent.
+function tenantIdOf(given: string) {
+  if (!/^[0-9a-f]{24}$/i.test(given)) {
+    throw denial("NOT_FOUND", "No such tenant");
+  }
+  return given.toLowerCase();
+}
+
+// An id the trail can name (an event's target id holds 200 characters at
+// most): refused before anything is written, never after.
+function targetId(given: string, name: string) {
+  if (given.length === 0 || given.length > 200) {
+    throw new GraphQLError(`${name} is not an id`, {
+      extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+    });
+  }
+  return given;
+}
+
 const invitationOf = (invitation: {
   id: string;
   email: string;
@@ -56,37 +89,68 @@ export const admins: Resolvers = {
       (await ctx.admins.invitations(tenantId)).map(invitationOf),
   },
   Mutation: {
-    inviteAdmin: async (_, { tenantId, email, role }, ctx) => {
+    inviteAdmin: async (_, { tenantId: given, email, role }, ctx) => {
+      const tenantId = tenantIdOf(given);
       const tenant = await activeTenant(ctx.directory, tenantId);
       const known = await ctx.directory.findUserByEmail(email);
       if (known !== null) await assertNotMember(ctx.access, tenantId, known.id);
       const inviter = await ctx.directory.findUser(ctx.principal.userId);
-      return invitationOf(
-        await ctx.admins.invite({
-          tenantId,
-          tenantName: tenant.name,
-          email,
-          role: ROLE_OF[role],
-          invitedBy: {
-            id: ctx.principal.userId,
-            name: inviter?.name ?? inviter?.email,
-          },
-        }),
-      );
+      const invitation = await ctx.admins.invite({
+        tenantId,
+        tenantName: tenant.name,
+        email,
+        role: ROLE_OF[role],
+        invitedBy: {
+          id: ctx.principal.userId,
+          name: inviter?.name ?? inviter?.email,
+        },
+      });
+      // The invitation's id, never the address or the code.
+      await ctx.audit("membership.invite", {
+        type: "invitation",
+        id: invitation.id,
+        tenantId,
+      });
+      return invitationOf(invitation);
     },
-    changeMembership: async (_, { tenantId, userId, role }, ctx) => {
+    changeMembership: async (_, { tenantId: given, userId, role }, ctx) => {
+      const tenantId = tenantIdOf(given);
+      targetId(userId, "userId");
       await activeTenant(ctx.directory, tenantId);
       const stored = await changeRole(ctx, tenantId, userId, ROLE_OF[role]);
+      await ctx.audit("membership.change", {
+        type: "user",
+        id: userId,
+        tenantId,
+      });
       const user = await ctx.directory.findUser(userId);
       if (user === null) throw denial("NOT_FOUND", "No such user");
       return memberOf(user, stored);
     },
-    removeMembership: async (_, { tenantId, userId }, ctx) => {
+    removeMembership: async (_, { tenantId: given, userId }, ctx) => {
+      const tenantId = tenantIdOf(given);
+      targetId(userId, "userId");
       await removeMember(ctx, tenantId, userId);
+      await ctx.audit("membership.remove", {
+        type: "user",
+        id: userId,
+        tenantId,
+      });
       return true;
     },
-    revokeAdminInvitation: async (_, { tenantId, invitationId }, ctx) => {
+    revokeAdminInvitation: async (
+      _,
+      { tenantId: given, invitationId },
+      ctx,
+    ) => {
+      const tenantId = tenantIdOf(given);
+      targetId(invitationId, "invitationId");
       await ctx.admins.revoke(tenantId, invitationId);
+      await ctx.audit("membership.revokeInvitation", {
+        type: "invitation",
+        id: invitationId,
+        tenantId,
+      });
       return true;
     },
   },
