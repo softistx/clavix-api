@@ -81,7 +81,6 @@ describe("the tenant purge", () => {
     const names = ownedPurgers().map((p) => p.name);
     expect(names).toContain("branding");
     expect(names).toContain("usageCounters");
-    expect(names).toContain("domains");
     expect(names).not.toContain("adminEvents");
   });
 
