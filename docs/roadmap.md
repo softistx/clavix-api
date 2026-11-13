@@ -71,7 +71,7 @@ nxgt-janus release says which.
   telemetry.
 
 **Before v1**
-- Master-key rotation, a security review of the whole surface, a load test of the token and
+- A security review of the whole surface, a load test of the token and
   JWKS paths, and a restore drill.
 
 **Authorization authoring**
@@ -80,6 +80,8 @@ nxgt-janus release says which.
 
 ## Shipped
 
+- **Key rotation without downtime** — the master key is a keyring (`CLAVIX_KEYS_MASTER_KEY`, first seals, any opens) re-sealed by `bun run keys:reseal`, and `bun run keys:rotate` rotates a tenant's signing keys now in an emergency
+  ([#156](https://github.com/softistx/clavix-api/issues/156)); runbook in `docs/operations.md`.
 - **Sign-in methods and social providers per tenant** — a tenant turns passkey, e-mail code and
   magic link on or off, and brings its own Google, GitHub or Microsoft app (secret sealed at rest,
   never returned); the platform tenant always keeps passkey or e-mail code
