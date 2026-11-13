@@ -125,6 +125,19 @@ export class DomainStore {
     return found.map((d) => d.host);
   }
 
+  /**
+   * Every host that resolves to the tenant through `tenantOfHost`: its
+   * verified hosts, and its primary host even when its recheck lapsed. What a
+   * tenant write drops from the resolver's cache.
+   */
+  async resolvingHostsOf(tenantId: ObjectId): Promise<string[]> {
+    const hosts = await this.verifiedHostsOf(tenantId);
+    const primary = await this.primaryHostOf(tenantId);
+    return primary === undefined || hosts.includes(primary)
+      ? hosts
+      : [...hosts, primary];
+  }
+
   // -- writes --------------------------------------------------------------
 
   /**
