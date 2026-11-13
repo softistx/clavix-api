@@ -142,6 +142,27 @@ export function themeDefinitionOf(input: ValidThemeInput): ThemeDefinition {
   };
 }
 
+const UNSAFE_CSS = /<|@import|url\(|image-set\(|src\(|\\/i;
+
+/**
+ * Refuses a tenant stylesheet that could close the hosted pages' `<style>`,
+ * load a resource or hide a token behind an escape: `<`, `@import`, `url(`,
+ * `image-set(`, `src(` or a backslash, in any case, once CSS comments are
+ * stripped. Every write of a tenant's CSS goes through `buildTheme`, which
+ * calls it; the UI refuses the same at read (`safeCss`). Throws
+ * `BrandingInputError` on field `css`.
+ */
+export function assertSafeCss(css: string): void {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const found = UNSAFE_CSS.exec(stripped);
+  if (found !== null) {
+    throw new BrandingInputError(
+      "css",
+      `the theme's CSS is not safe: it contains "${found[0].toLowerCase()}", which a tenant stylesheet may not use (no <, @import, url(, image-set(, src( or backslash)`,
+    );
+  }
+}
+
 /**
  * Generates a theme's stylesheet (`themeToCss`, attribute scope) and measures
  * every pair in light and dark (`checkThemeContrast`).
@@ -154,9 +175,7 @@ export function measureTheme(theme: Theme): CompiledTheme {
   // colours and lengths it parsed, never the input, so nothing reaches this
   // today. It is a backstop: it refuses anything that could close the element
   // should the generator ever change.
-  if (css.includes("<")) {
-    throw new BrandingInputError("seed", "the theme's CSS is not safe");
-  }
+  assertSafeCss(css);
   return {
     css,
     warnings: warnings.map((w) => w.message),
@@ -230,6 +249,7 @@ export function buildTheme(
 ): { input: ValidThemeInput; compiled: CompiledTheme } {
   const valid = validateThemeInput(input);
   const compiled = compile(valid);
+  assertSafeCss(compiled.css);
   const failures = failuresOf(compiled);
   if (failures.length > 0) throw new BrandingContrastError(failures);
   return { input: valid, compiled };
