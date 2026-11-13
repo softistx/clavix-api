@@ -28,6 +28,7 @@ const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const options = {
   collection: mongo.db.resources,
+  scopes: mongo.db.scopes,
   findTenant,
   issuerOf: (slug: string) => issuerOf(slug, config),
 };
@@ -59,8 +60,17 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(mongo.db.resources),
+  resourcesFor: storedResourcesFor(mongo.db.resources, mongo.db.scopes),
 });
+
+const scopeNamesOf = async (resourceId: unknown) =>
+  (
+    await mongo.db.scopes.raw
+      .find({ resourceId: resourceId as never })
+      .toArray()
+  )
+    .map((scope) => scope.name)
+    .sort();
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
 const VERIFIER = "v".repeat(64);
@@ -176,7 +186,10 @@ describe("resources:create", () => {
       .find({ tenantId: alpha?._id as never })
       .toArray();
     expect(stored).toHaveLength(1);
-    expect(stored[0]).toMatchObject({ name: "Alpha API", scopes: ["read"] });
+    expect(stored[0]).toMatchObject({ name: "Alpha API" });
+    // The scopes are `Scope` documents of the resource, replaced by the re-run.
+    expect(stored[0]?.["scopes"]).toBeUndefined();
+    expect(await scopeNamesOf(stored[0]?._id)).toEqual(["read"]);
   });
 
   test("refuses bad input, an unknown or suspended tenant and the userinfo URL", async () => {
@@ -240,13 +253,13 @@ describe("resources:create", () => {
       { ...options, collection: stale },
       { tenant: "resalpha", uri: API_RACE, scopes: ["write"] },
     );
-    expect(result).toMatchObject({ scopes: ["write"] });
+    expect(result).toMatchObject({ created: false, scopes: ["write"] });
     const alpha = await findTenant("resalpha");
     const stored = await mongo.db.resources.raw
       .find({ tenantId: alpha?._id as never, uri: API_RACE })
       .toArray();
     expect(stored).toHaveLength(1);
-    expect(stored[0]?.scopes).toEqual(["write"]);
+    expect(await scopeNamesOf(stored[0]?._id)).toEqual(["write"]);
   });
 
   test("a store failure is not an input error: it reaches the script as it is", async () => {
@@ -348,12 +361,14 @@ describe("a registered resource in the issuer", () => {
     });
     const alpha = await findTenant("resalpha");
     const beta = await findTenant("resbeta");
-    const forAlpha = await storedResourcesFor(mongo.db.resources)(
-      (await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never,
-    );
-    const forBeta = await storedResourcesFor(mongo.db.resources)(
-      (await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never,
-    );
+    const forAlpha = await storedResourcesFor(
+      mongo.db.resources,
+      mongo.db.scopes,
+    )((await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never);
+    const forBeta = await storedResourcesFor(
+      mongo.db.resources,
+      mongo.db.scopes,
+    )((await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never);
     expect(alpha?._id.equals(beta?._id as never)).toBe(false);
     expect(Object.keys(forAlpha)).not.toContain(API_B);
     expect(Object.keys(forBeta)).toEqual([API_B]);

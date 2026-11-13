@@ -7,10 +7,16 @@ import {
 import { createMongoSigningKeys } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 
+const masterKeys = (key: Uint8Array | readonly Uint8Array[]) =>
+  key instanceof Uint8Array ? key : ([...key] as [Uint8Array, ...Uint8Array[]]);
+
 export interface TenantKeysOptions {
   db: Db;
-  /** 32 bytes: the AES-256-GCM key the private JWKs are encrypted with. */
-  masterKey: Uint8Array;
+  /**
+   * 32 bytes: the AES-256-GCM key the private JWKs are encrypted with. A
+   * non-empty list is a keyring for a rotation: the first seals, any opens.
+   */
+  masterKey: Uint8Array | readonly Uint8Array[];
 }
 
 /**
@@ -29,7 +35,7 @@ export function createTenantKeys({ db, masterKey }: TenantKeysOptions) {
     let store = stores.get(tenantId);
     if (store === undefined) {
       store = createMongoSigningKeys(db, {
-        encryptionKey: masterKey,
+        encryptionKey: masterKeys(masterKey),
         partition: tenantId,
       });
       assertSigningKeyStore(store, `signing keys of tenant ${tenantId}`);

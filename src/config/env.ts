@@ -1,5 +1,6 @@
 import { defineEnv } from "@alxia/env";
 import { z } from "zod";
+import { masterKeysProblem } from "./master-keys";
 
 const production = Bun.env.NODE_ENV === "production";
 
@@ -32,15 +33,13 @@ const domain = z
     "not a lowercase DNS name with at least two labels",
   );
 
-// 32 bytes in standard base64 (44 characters): the master key that encrypts the
-// signing keys at rest.
-const masterKey = z
-  .string()
-  .regex(/^[A-Za-z0-9+/]{43}=$/, "not 32 bytes in base64")
-  .refine(
-    (value) => Buffer.from(value, "base64").length === 32,
-    "not 32 bytes in base64",
-  );
+// The master key that encrypts the signing keys at rest: 32 bytes in standard
+// base64 (44 characters), or a comma-separated list of them while it rotates
+// (the first seals, any opens; see `master-keys.ts`).
+const masterKey = z.string().superRefine((value, ctx) => {
+  const problem = masterKeysProblem(value);
+  if (problem !== undefined) ctx.addIssue({ code: "custom", message: problem });
+});
 
 const smtpUrl = z
   .string()
@@ -67,7 +66,9 @@ export const env = defineEnv({
   // Encrypts every tenant's signing keys at rest (AES-256-GCM): 32 random
   // bytes in base64, e.g. `openssl rand -base64 32`. Required in production;
   // a public development default elsewhere. Losing it makes the stored keys
-  // unreadable: keep it in a secret manager, apart from the database.
+  // unreadable: keep it in a secret manager, apart from the database. To
+  // rotate it, a comma-separated list: the first key seals, any opens
+  // (docs/operations.md, "Rotating the master key").
   CLAVIX_KEYS_MASTER_KEY: inProduction(masterKey, DEV_KEYS_MASTER_KEY),
   // The SMTP server of the platform sender, `no-reply@<CLAVIX_DOMAIN>`
   // (`smtps://user:pass@smtp.example:465`). Required in production; unset
@@ -104,13 +105,13 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
-  // The global switch of magic-link sign-in (janus `magicLink.enabled`), off by
-  // default (owner decision, clavix-api#24). Only "true" / "1" turn it on. Off,
-  // requestMagicLink and confirmMagicLink answer 404 MAGIC_LINK_DISABLED.
-  CLAVIX_MAGIC_LINK: z
-    .enum(["true", "false", "1", "0"])
-    .default("false")
-    .transform((value) => value === "true" || value === "1"),
+  // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
+  // custom domains, A4): the shared secret of that URL, at least 32 characters.
+  // Unset, the endpoint does not exist. The route is internal: never expose
+  // `/internal/*` publicly (it also refuses a request carrying X-Forwarded-*).
+  CLAVIX_TLS_ASK_SECRET: z.string().min(32).optional(),
+  // Asks the endpoint answers per minute, all callers together (Redis only).
+  CLAVIX_TLS_ASK_LIMIT: z.coerce.number().int().min(1).default(120),
   // How many reverse proxies stand in front of the app. 0 (default): the
   // client address is the connection's. N: it is the entry N places from the
   // right of X-Forwarded-For, which the proxies append to. Required in

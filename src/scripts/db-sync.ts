@@ -1,5 +1,6 @@
 import {
   syncMongoInvitationsPartitioned,
+  syncMongoRelations,
   syncMongoStoresPartitioned,
 } from "@softistx/janus-mongo";
 import { syncMongoOAuthPartitioned } from "@softistx/janus-oauth-mongo";
@@ -18,6 +19,7 @@ try {
         oauth: await syncMongoOAuthPartitioned(oauthDb),
         users: await syncMongoStoresPartitioned(oauthDb),
         invitations: await syncMongoInvitationsPartitioned(oauthDb),
+        relations: await syncMongoRelations(oauthDb),
       },
       null,
       2,

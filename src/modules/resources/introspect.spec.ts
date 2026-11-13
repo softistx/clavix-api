@@ -28,6 +28,7 @@ const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const options = {
   collection: mongo.db.resources,
+  scopes: mongo.db.scopes,
   findTenant,
   issuerOf: (slug: string) => issuerOf(slug, config),
 };
@@ -59,7 +60,7 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(mongo.db.resources),
+  resourcesFor: storedResourcesFor(mongo.db.resources, mongo.db.scopes),
 });
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;

@@ -1,0 +1,172 @@
+"""
+Where a tenant stands. SUSPENDED: sign-in, sign-up, authorize and token
+(refresh included) are refused with TENANT_SUSPENDED; tokens already issued
+live to their expiry, and the console stays readable. DELETED: in the trash,
+behaves as suspended, hidden from the tenant's own admins, restorable by a
+platform operator until `purgeAt`.
+"""
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+"What a tenant may use. `null` means no limit."
+type Quotas {
+  "Monthly active users. Soft: going over raises `Usage.mau.exceeded` and mails the owners once a month, no sign-in is blocked."
+  mau: Int
+  "OAuth clients. Hard: creating one more is QUOTA_EXCEEDED."
+  clients: Int
+  "Custom domains. Hard: adding one more is QUOTA_EXCEEDED."
+  domains: Int
+}
+
+"A plan of the platform: a name and the quotas it grants."
+type Plan {
+  "`free`, `pro`, `enterprise`."
+  id: ID!
+  name: String!
+  quotas: Quotas!
+}
+
+extend type Tenant {
+  status: TenantStatus!
+  "Whether an unknown e-mail may open an account by signing in."
+  signUp: Boolean!
+  plan: Plan!
+  "The quotas set for this tenant alone; a `null` field follows the plan."
+  quotaOverrides: Quotas!
+  "What applies: the plan's quotas with the overrides on top."
+  quotas: Quotas!
+  createdAt: DateTime!
+  "When the tenant was put in the trash; `null` unless DELETED."
+  deletedAt: DateTime
+  "When the trash is emptied for good (30 days after `deletedAt`); `null` unless DELETED."
+  purgeAt: DateTime
+}
+
+"A page of tenants; `nextCursor` is `null` on the last."
+type TenantPage {
+  items: [Tenant!]!
+  nextCursor: String
+  "How many tenants match `q` and `status` in all, whatever the cursor or the page's size."
+  totalCount: Int!
+}
+
+"One metered thing of a tenant against its quota."
+type UsageMeter {
+  used: Int!
+  "The quota that applies; `null` means no limit."
+  quota: Int
+  "True when `used` is over `quota`. For `mau` it is the console's banner flag (nothing is blocked)."
+  exceeded: Boolean!
+}
+
+"What a tenant used in a month. `clients` and `domains` are the counts now, whatever the month."
+type Usage {
+  tenantId: ID!
+  "The month, `YYYY-MM` (UTC)."
+  month: String!
+  "Distinct users who opened a session or refreshed a token in the month (an estimate, within about 1 %)."
+  mau: UsageMeter!
+  clients: UsageMeter!
+  domains: UsageMeter!
+}
+
+input CreateTenantInput {
+  "The tenant's host label (a-z, 0-9, `-`), for ever: its issuer is `https://<slug>.<domain>`."
+  slug: String!
+  name: String!
+  "Default: closed (invitation only)."
+  signUp: Boolean
+  "A plan id of `plans`. Default `free`."
+  plan: ID
+}
+
+"Fields left out stay as they are. The slug never changes."
+input UpdateTenantInput {
+  name: String
+  signUp: Boolean
+}
+
+"A `null` field removes the override (the plan's quota applies); a number sets it (0 or more)."
+input QuotaOverridesInput {
+  mau: Int
+  clients: Int
+  domains: Int
+}
+
+"The plan and the whole set of overrides (a replacement, so repeating a call changes nothing)."
+input SetTenantPlanInput {
+  plan: ID!
+  quotaOverrides: QuotaOverridesInput
+}
+
+extend type Query {
+  """
+  Every tenant of the platform, by slug; `q` matches the start of the slug or
+  part of the name. Tenants in the trash are listed (status DELETED), purged
+  ones are not. Needs `view` on the platform.
+  """
+  tenants(
+    q: String
+    status: TenantStatus
+    after: String
+    first: Int = 25
+  ): TenantPage!
+  """
+  One tenant. Needs `view` on the tenant. `null` for an unknown id, and for a
+  tenant in the trash unless the caller is a platform operator.
+  """
+  tenant(id: ID!): Tenant
+  "The plans of the platform, smallest first. Any signed-in caller."
+  plans: [Plan!]!
+  """
+  What the tenant used. `month` is `YYYY-MM` (UTC), default the current month.
+  Needs `view` on the tenant. Errors: NOT_FOUND, BAD_USER_INPUT (400,
+  `extensions.field`) for a malformed month.
+  """
+  usage(tenantId: ID!, month: String): Usage!
+}
+
+# `type`, not `extend`: the console SDL has no Mutation base, and slices merge theirs.
+type Mutation {
+  """
+  Creates a tenant. Needs `edit` on the platform (operators only, ADR-0034).
+  Errors: BAD_USER_INPUT (400, `extensions.field` `slug`, `name` or `plan`),
+  SLUG_TAKEN (409; a deleted or purged tenant keeps its slug for ever).
+  """
+  createTenant(input: CreateTenantInput!): Tenant!
+  """
+  Renames a tenant or opens / closes its sign-up. Needs `edit` on the tenant.
+  Idempotent. Errors: NOT_FOUND, BAD_USER_INPUT (400), TENANT_SUSPENDED (403)
+  for a tenant admin when the tenant is suspended (a platform operator still
+  may; every other tenant-scoped write is refused the same way).
+  """
+  updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
+  """
+  Sets a tenant's plan and quota overrides. Needs `edit` on the platform.
+  Idempotent. Errors: NOT_FOUND, BAD_USER_INPUT (400, `extensions.field`).
+  """
+  setTenantPlan(id: ID!, input: SetTenantPlanInput!): Tenant!
+  """
+  Suspends a tenant (ADR-0039). Needs `edit` on the platform. Idempotent.
+  Errors: NOT_FOUND, PLATFORM_TENANT_PROTECTED (409) for the `clavix` tenant.
+  """
+  suspendTenant(id: ID!): Tenant!
+  "Lifts a suspension. Needs `edit` on the platform. Idempotent. Errors: NOT_FOUND (a tenant in the trash is restored, not resumed)."
+  resumeTenant(id: ID!): Tenant!
+  """
+  Puts a tenant in the trash for 30 days, then its data is purged for good and
+  only its slug stays reserved (ADR-0038). Needs `edit` on the platform.
+  Idempotent (a second call keeps the first `deletedAt`). Errors: NOT_FOUND,
+  PLATFORM_TENANT_PROTECTED (409).
+  """
+  deleteTenant(id: ID!): Tenant!
+  """
+  Takes a tenant out of the trash, with the status it had before (ACTIVE or
+  SUSPENDED). Needs `edit` on the platform. Idempotent. Errors: NOT_FOUND
+  (unknown, or already purged).
+  """
+  restoreTenant(id: ID!): Tenant!
+}

@@ -1,0 +1,107 @@
+"A way to sign in that a tenant turns on or off."
+enum SignInMethodType {
+  PASSKEY
+  EMAIL_CODE
+  MAGIC_LINK
+  PASSWORD
+}
+
+"One entry of a tenant's sign-in policy. Every type is always listed, in the enum's order."
+type SignInMethod {
+  type: SignInMethodType!
+  enabled: Boolean!
+  """
+  Whether Clavix can offer this method today. PASSWORD is not available yet
+  (no hosted page signs in by password): it stays off and cannot be turned on.
+  """
+  available: Boolean!
+}
+
+"A social provider the tenant can bring its own app for."
+enum SocialProviderKind {
+  GOOGLE
+  GITHUB
+  MICROSOFT
+}
+
+"""
+One social app of the tenant (its own client id and secret, ADR-0035). The
+secret is encrypted at rest and never returned: `hasSecret` says one is stored.
+"""
+type SocialProviderConfig {
+  provider: SocialProviderKind!
+  clientId: String!
+  hasSecret: Boolean!
+  enabled: Boolean!
+  "The redirect URI to register in the provider's console."
+  callbackUrl: String!
+}
+
+"""
+A tenant's sign-in policy. `version` is the tenant's version: it rises on every
+change, and the tenant's sign-in pages follow it within a minute at most.
+"""
+type SignInPolicy {
+  tenantId: ID!
+  methods: [SignInMethod!]!
+  social: [SocialProviderConfig!]!
+  version: Int!
+}
+
+input SignInMethodInput {
+  type: SignInMethodType!
+  enabled: Boolean!
+}
+
+"""
+`clientId` and `clientSecret` are required the first time a provider is set and
+optional after (left out, the stored value stays). `enabled` defaults to true
+for a new provider and to the current value after.
+"""
+input SocialProviderInput {
+  provider: SocialProviderKind!
+  clientId: String
+  clientSecret: String
+  enabled: Boolean
+}
+
+type Query {
+  "The tenant's sign-in policy. Needs view on the tenant."
+  signInPolicy(tenantId: ID!): SignInPolicy!
+}
+
+type Mutation {
+  """
+  Turns methods on or off; a type left out keeps its value. Needs edit on the
+  tenant. Idempotent: a call that changes nothing writes nothing.
+  NO_SIGN_IN_METHOD (409) when it would leave the tenant no way to sign in (no
+  method and no social provider enabled); PLATFORM_FIRST_PARTY_METHOD (409)
+  when it would leave the platform tenant with neither passkey nor e-mail code
+  enabled (a social provider does not count there);
+  SIGN_IN_METHOD_UNAVAILABLE (409) when it turns on a method that is not
+  available; BAD_USER_INPUT (400) when a type is given twice; CONFLICT (409)
+  when other changes kept winning the race (nothing stored: read the policy and
+  send the change again).
+  """
+  updateSignInMethods(
+    tenantId: ID!
+    methods: [SignInMethodInput!]!
+  ): SignInPolicy!
+  """
+  Sets the tenant's own app for a social provider. Needs edit on the tenant.
+  Idempotent. BAD_USER_INPUT (400) for a new provider without `clientId`,
+  SOCIAL_SECRET_REQUIRED (400) for one without `clientSecret`,
+  NO_SIGN_IN_METHOD (409) when disabling it would leave no way to sign in,
+  CONFLICT (409) as above.
+  """
+  setSocialProvider(tenantId: ID!, input: SocialProviderInput!): SignInPolicy!
+  """
+  Removes the tenant's app for a provider, and its secret. Needs edit on the
+  tenant. Idempotent. NO_SIGN_IN_METHOD (409) when it was the last way to sign
+  in, CONFLICT (409) as above.
+  """
+  removeSocialProvider(
+    tenantId: ID!
+    provider: SocialProviderKind!
+  ): SignInPolicy!
+}

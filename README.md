@@ -7,9 +7,12 @@ The product spec lives with the project's planning folder, outside this reposito
 Today it serves:
 - the OAuth 2.1 / OpenID Connect endpoints of each tenant (authorization code with PKCE, refresh,
   JWT access tokens, discovery, userinfo, introspection, JWKS);
-- on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
+- on `POST /graphql`, `GET /healthz`, `GET /readyz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- scripts that create tenants, OAuth clients and API resources until the console exists.
+- on `POST /console/graphql`, the console API (`me`, tenants with plans, quotas, usage, suspension and
+  trash, the admins of a tenant, a tenant's clients, resources, scopes and branding), behind a bearer token;
+- scripts that create tenants, OAuth clients and API resources. The trash is emptied after 30 days by a
+  daily scheduled purge (see "Tenants, plans and usage"); the console's refusals are in `docs/troubleshooting.md`.
 
 ## Documentation
 
@@ -18,6 +21,8 @@ Today it serves:
 | This README                                                                                | run, environment, and each feature below            |
 | [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix |
 | [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls   |
+| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers     |
+| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health       |
 | [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes      |
 | [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                 |
 | [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                   |
@@ -34,50 +39,54 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 ## Scripts
 
-| Script                    | Does                                                                     |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `generate`                | scalar/validation SDL, then GraphQL codegen                              |
-| `dev`, `build`, `start`   | watch server; bundle into `dist/`; run the bundle                        |
-| `test`                    | `bun test`                                                               |
-| `typecheck`               | `bun check`                                                              |
-| `lint`, `fix`, `check:ci` | Biome                                                                    |
-| `db:sync`, `db:migrate`   | collections and indexes; pending migrations (deployment steps)           |
-| `tenants:create`          | create a tenant (see "Tenants")                                          |
-| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")     |
-| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")  |
-| `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`) |
+| Script                    | Does                                                                      |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `generate`                | scalar/validation SDL, then GraphQL codegen                               |
+| `dev`, `build`, `start`   | watch server; bundle into `dist/`; run the bundle                         |
+| `test`                    | `bun test`                                                                |
+| `typecheck`               | `bun check`                                                               |
+| `lint`, `fix`, `check:ci` | Biome                                                                     |
+| `db:sync`, `db:migrate`   | collections, indexes and relations; pending migrations (deployment steps) |
+| `tenants:create`          | create a tenant (see "Tenants")                                           |
+| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")      |
+| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")   |
+| `operators:grant`         | give a clavix-tenant user a platform role for the console (`--email`)     |
+| `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`)  |
 
 Every script reads `MONGO_URI` and validates the rest of the environment below at start, so with `NODE_ENV=production` a script also needs the production-required variables. What each
 one needs on top:
 
-| Script                  | Environment it needs                                                                                                                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `db:sync`, `db:migrate` | `MONGO_URI` with a role that may create indexes and validators (`dbAdmin`)                                                                                                                                   |
-| `tenants:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
-| `clients:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
-| `resources:create`      | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
-| `start`                 | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
+| Script                       | Environment it needs                                                                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `db:sync`, `db:migrate`      | `MONGO_URI` with a role that may create indexes and validators (`dbAdmin`)                                                                                                                                   |
+| `tenants:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
+| `clients:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
+| `resources:create`           | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
+| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`)                                                                                                                      |
+| `operators:grant`            | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users; `--create` also needs `CLAVIX_SMTP_URL`)                                                                            |
+| `start`                      | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
 ## Environment
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                                                                                                                                          |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                                                 | 3000                                                                                                                                                                                                                    |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                  |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                                                                                                                                        |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                    |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                             |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                            |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                                                                                                                       |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                       |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                        |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                             |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                              |
-| `CLAVIX_MAGIC_LINK`                                                    | global switch of magic-link sign-in (janus `magicLink.enabled`); `true`/`1` or `false`/`0`, default `false`; off, `requestMagicLink` and `confirmMagicLink` answer 404 `MAGIC_LINK_DISABLED` (see "Magic-link sign-in") |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                |
+| Variable                                                               | Default / rule                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                                 | 3000                                                                                                                                                                                                                                           |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                                         |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off, monthly active users are not counted and the console's membership lock is per process (with it, shared by every API process; a lock that cannot be taken is a retryable 503) |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                                           |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                                       |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                                                    |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                                                   |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64, or a comma-separated keyring while rotating: the first seals, any opens); a public development default elsewhere                                                                                     |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                                              |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                                               |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                                                    |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                                                     |
+| `CLAVIX_TLS_ASK_SECRET`                                                | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
+| `CLAVIX_TLS_ASK_LIMIT`                                                 | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
 
 ## Sign-in code limits
 
@@ -129,12 +138,431 @@ Clavix adds no `jose`.
   serves, and each hourly pass logs a failure per tenant). Keep it in a secret manager, apart from
   the database. To recover, drop the tenants' `oauthSigningKeys` documents and let the rotation
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
-  them. Changing the master key is the same; there is no re-encryption in place.
+  them. Changing a master key you still hold is not a loss: it rotates without downtime
+  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`).
+- **Rotating** the master key and the **emergency rotation** of the signing keys
+  (`bun run keys:rotate <tenant>|--all [--drop-old]`) are in `docs/operations.md`, "Signing keys".
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
+
+## Console API
+
+`POST /console/graphql` is the console's own GraphQL API (SDL in `src/console`). It reads no
+cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
+tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
+No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
+exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
+resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
+tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, their plans and their
+trash are managed here too (below); `tenants:create` stays for scripted setups. The console shell's
+tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
+
+Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
+tenant; every field is refused unless its guard allows it.
+
+### Switchable tenants
+
+`me { switchableTenants(q, after, first) { items { role tenant { id slug name status } } nextCursor totalCount } }`
+is the console shell's tenant switcher. For a tenant admin it lists the tenants of their roles; for a
+platform operator, every tenant not in the trash. Each item carries the role they act with there (the
+stronger of their direct role and their platform role). Items are ordered by slug and paged by cursor
+(`first` is clamped to 1 to 100, default 25; `totalCount` is how many tenants the caller can switch to that match `q`, whatever the cursor or `first`; pass `nextCursor` as `after`: any other cursor is `BAD_USER_INPUT` (400), `The cursor is not valid`); `q` matches the start of the slug or part
+of the name, case-insensitively. A suspended tenant stays listed (`tenant.status` is `SUSPENDED`; the
+console stays readable on it); a tenant in the trash is left out, and a caller with no role gets an
+empty page. Any signed-in caller may ask; it never lists a tenant the caller holds no role on.
+`me.memberships` lists direct roles only; a suspended tenant is listed with its `status`, a trashed one is left out.
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"{ me { switchableTenants(q: \"acme\", first: 10) { items { role tenant { slug name status } } nextCursor totalCount } } }"}'
+```
+
+### Admins of a tenant
+
+A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `viewer` on it.
+`memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
+email, role)`, `changeMembership`, `removeMembership`, `resendAdminInvitation` and `revokeAdminInvitation` need `manage` (the
+tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
+`admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
+That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
+host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
+revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session and counts the user as active for the month. The grant runs under the same user lock as `deleteUser`, so an accept racing a delete either is swept by it or finds the account gone. Inviting an address that is
+already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it (new id, new inviter).
+`resendAdminInvitation(tenantId, invitationId)` instead renews the same invitation: a new code and
+lifetime, a new mail naming the caller, the old code stops working, a lapsed invitation is allowed.
+It is `NOT_FOUND` (404) for an id that is not this tenant's, `INVITATION_NOT_PENDING` (409) once
+accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60 s of the last send of
+that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
+a script did); a resend keeps it. The
+last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
+removed, nor disabled or deleted, on a tenant or on the platform: `LAST_OWNER` (409). An `owner`
+invitation is refused once its inviter is deleted or disabled. Role changes of one
+tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
+within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
+already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they
+sign in as usual. An invitation to a suspended or deleted tenant is `INVITATION_INVALID` until it is back.
+
+Each of the five mutations that succeeds records an admin event (see "Admin events"), repeats included:
+`membership.invite`, `membership.resendInvitation` and `membership.revokeInvitation` (target: the invitation's id, never the
+address), `membership.change` and `membership.remove` (target: the user's id). Accepting an
+invitation is the invitee's act on the hosted API and records none. A `userId` or `invitationId`
+longer than 200 characters is `BAD_USER_INPUT` (400); a `tenantId` is 24 hexadecimal characters, in
+any case.
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation { inviteAdmin(tenantId: \"65f1c0de00000000000000a1\", email: \"ada@example.com\", role: ADMIN) { id email role expiresAt } }"}'
+```
+
+A membership write whose lock cannot be taken (held by another process past 5 s, or Redis down) is a
+503 `SERVICE_UNAVAILABLE` and changes nothing: ask again. Accepting an invitation in that state fails the
+same way and releases the invitation, so the invitee retries the same link. `removeMembership`, like
+the other writes, is `NOT_FOUND` for a tenant that is gone or in the trash, and `TENANT_SUSPENDED` while it is suspended.
+
+Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
+registers the console resource and its confidential client `console` in the `clavix` tenant and
+prints the client secret once: save it; the `2026-11-13-scopes` migration turns each resource's
+scope strings into `Scope` documents), then name the first
+operator. A fresh database has no user and the `clavix` tenant is invitation-only, so invite
+the first one with `--create` (mailed link; the account and role are made when it is opened):
+
+```sh
+bun run operators:grant --email ada@example.com --create   # first operator on a fresh database
+bun run operators:grant --email ada@example.com            # platform owner (account exists and is active; the grant runs under the user lock, like an accept)
+bun run operators:grant --email bob@example.com --role viewer
+```
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"{ me { platformRole } }"}'
+```
+
+### Users of a tenant
+
+The end users of a tenant are the users of its own pool (ADR-0008), not its admins. Reads need
+`view` on the tenant, every mutation `edit` (a tenant admin or a platform admin); a user, session,
+grant or invitation id of another tenant is unknown, never touched.
+
+| Operation                                                                           | Does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users(tenantId, after, first, email, emailPrefix)`                                 | A page (25, at most 100), oldest first, `nextCursor` null on the last, and `totalCount` (all the users matching, not the page size). `email` finds that exact address (any case); `emailPrefix` keeps the users whose address or username starts with it (any case, plain text; blank = no filter). Both at once, or a cursor janus refuses, is `BAD_USER_INPUT` (400).                                                                                                                                                                      |
+| `user(tenantId, id)`                                                                | One user, or `null`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `inviteUser(tenantId, email)`                                                       | A janus invitation into the tenant's pool (scope `users`), mailed in the tenant's name; accepting on the tenant's hosted `/invitation` page makes the account (e-mail proved) even when sign-up is closed. A pending one of the same address is replaced; an address that already has an account is `USER_EXISTS` (409).                                                                                                                                                                                                                     |
+| `userInvitations(tenantId)` / `revokeInvitation(tenantId, invitationId)`            | The pending, unlapsed ones; revoking is true also when there is none.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `updateUser(tenantId, userId, input)`                                               | Renames the user (`input.name`, 1 to 200 characters once trimmed, else `BAD_USER_INPUT` 400; unknown user `NOT_FOUND`). The e-mail address is not editable: it changes through the user's own verified flow.                                                                                                                                                                                                                                                                                                                                 |
+| `setUserEmailVerified(tenantId, userId, verified)`                                  | Sets or clears the verified flag and nothing else (no session, password or second factor changes); answers the user. Idempotent; unknown user `NOT_FOUND`.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `disableUser` / `enableUser`                                                        | Idempotent. Disabling ends the user's sessions (a repeat ends any new one); an unknown user is `NOT_FOUND`.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `revokeUserSessions(tenantId, userId)`                                              | Ends every session; answers how many (0 on a repeat or an unknown user).                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `userSessions(tenantId, userId)` / `revokeUserSession(tenantId, userId, sessionId)` | The user's standing sessions, newest first: `id`, `device` (the User-Agent of the sign-in, cut at 256 characters; `null` on an older session or a sign-in without one), `createdAt`, `authenticatedAt`, `lastUsedAt` (moves at most once a day, `null` on an older session) and `expiresAt`; never the token. There is no `current` flag: the console reads another pool. `revokeUserSession` is true when it ended the session, false for one that is not this user's, is already ended or does not exist; an unknown user has no sessions. |
+| `userGrants(tenantId, userId)` / `revokeGrant(tenantId, userId, grantId)`           | The OAuth grants the user gave (standing only, with the client's name), and taking one back with the tokens it opened. `revokeGrant` is true also when already revoked, false for a grant that is not this user's.                                                                                                                                                                                                                                                                                                                           |
+| `deleteUser(tenantId, userId)`                                                      | Revokes the user's grants (and tokens), ends their sessions, removes their role assignments, deletes the user. True also when already gone.                                                                                                                                                                                                                                                                                                                                                                                                  |
+
+Each mutation records an admin event, repeats included (`user.invite`, `user.revokeInvitation`,
+`user.update`, `user.setEmailVerified`, `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeSession`, `user.revokeGrant`; target: the
+user, session, invitation or grant id, never an address).
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation { inviteUser(tenantId: \"65f1c0de00000000000000a1\", email: \"bob@example.com\") { id expiresAt } }"}'
+```
+
+### Roles of a tenant's end users
+
+A role is a name a tenant gives to some of its end users; it is released in their tokens as the
+`roles` claim (not a console admin role). Reads need `view` on the tenant, mutations `edit`. A role
+may be scoped to one of the tenant's resources (`resourceId`), else it applies to the whole tenant.
+A name is 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`, unique per tenant and resource.
+
+| Operation                                            | Does                                                                                                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `roles(tenantId, resourceId)` / `role(tenantId, id)` | The roles by name (only a resource's with `resourceId`), with `memberCount`; one role or `null`.                                                       |
+| `createRole(tenantId, input)` / `updateRole(...)`    | `{ name, description, resourceId }`; update changes the name or description. `CONFLICT` for a taken name, `NOT_FOUND` for an unknown resource or role. |
+| `deleteRole(tenantId, id)`                           | Deletes the role and its assignments. True also when already gone.                                                                                     |
+| `assignRole(tenantId, roleId, userId)`               | Idempotent. The user must be in the tenant's pool, else `NOT_FOUND`.                                                                                   |
+| `unassignRole(tenantId, roleId, userId)`             | True when the user held it, false on a repeat.                                                                                                         |
+| `roleMembers(tenantId, roleId, after, first)`        | A page (25, at most 100) of `{ user, assignedAt }`, oldest assignment first, with `totalCount` (all the holders, whatever the cursor).                 |
+| `userRoles(tenantId, userId)`                        | The roles a user holds.                                                                                                                                |
+
+Each mutation records an admin event (`role.create`, `role.update`, `role.delete`, `role.assign`,
+`role.unassign`; an assignment records the role and the user). Deleting a user or a resource removes
+the assignments and the resource-scoped roles that depended on them.
+
+### Clients, resources and scopes
+
+Every field takes the `tenantId` it works on. Queries need `view` on that tenant (any role),
+mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another tenant, gets
+`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (an unknown or trashed tenant), `TENANT_SUSPENDED` (403: a suspended tenant's console stays readable, every write of its admins is refused; platform operators still write), `CONFLICT`, `QUOTA_EXCEEDED`,
+`BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
+update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
+
+| Field                                                | What it does                                                                                                                                                                                              |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                             |
+| `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                     |
+| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
+| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                                                                                                                                           |
+| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                           |
+| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                          |
+| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                 |
+| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                  |
+| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                       |
+| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                                                                                                                                                   |
+
+```graphql
+mutation {
+  createClient(
+    tenantId: "6731…"
+    input: {
+      name: "Back office"
+      type: CONFIDENTIAL
+      redirectUris: ["https://office.example.com/callback"]
+    }
+  ) {
+    client {
+      id
+      name
+      type
+      redirectUris
+    }
+    clientSecret # shown once: janus keeps only its hash
+  }
+}
+```
+
+```graphql
+mutation {
+  createScope(
+    tenantId: "6731…"
+    input: {
+      name: "invoices:read"
+      resourceId: "6732…"
+      description: { fr: "Lire vos factures", en: "Read your invoices" }
+    }
+  ) {
+    id
+    name
+    description {
+      fr
+      en
+    }
+    resourceId
+    claims
+  }
+}
+```
+
+- **A client id** is `input.clientId` (`a-z0-9-`) or the name in that form; one that exists is a
+  `CONFLICT`. Redirect URIs follow the rules of `clients:create` (below).
+- **A scope** belongs to a resource, where its name is unique: two resources may each have a
+  `read`. Without `resourceId` it is a standard OpenID Connect scope and its name must be `openid`,
+  `profile` or `email`: this is how a tenant writes the consent text of those. `claims` is stored
+  only; no claim is emitted from it yet.
+- **The consent page** shows a scope's `description` as its label, in the viewer's language
+  (`Accept-Language`: French, else English), then in the other language, then the scope's name.
+- **A change serves at once**: the scopes a resource offers are read on every OAuth request.
+- **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
+  redirect URIs, a search 100 characters; more is `BAD_USER_INPUT`.
+- **The console's own client and resource** (`console` in the `clavix` tenant) cannot be changed
+  or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
+- **Listing**: clients come in id order; a client made by `clients:create` is listed too. With
+  `q`, a page may hold fewer than `first` items (even none) and still give a `nextCursor`: follow
+  it until it is `null`.
+- **`grantTypes`** on a client is what was recorded when it was registered (both grant types by
+  default, or the script's `--grants`). It is shown for information: the token endpoint does not
+  enforce it.
+- **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
+  opened are revoked.
+
+### Tenants, plans and usage
+
+Queries: `tenants` needs `view` on the platform (any operator role); `tenant` and `usage` need
+`view` on that tenant; `plans` is open to any signed-in caller. Mutations: `updateTenant` needs
+`edit` on the tenant (`owner` or `admin`, a tenant admin included); the other six need `edit` on the
+platform (`owner` or `admin` operator). Every mutation is audited (`tenant.create`, `.update`,
+`.setPlan`, `.suspend`, `.resume`, `.delete`, `.restore`, see "Admin events"). Errors carry
+`extensions.code`: `NOT_FOUND`, `BAD_USER_INPUT`, `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`,
+`TENANT_SUSPENDED`, `FORBIDDEN`.
+
+| Field                                   | What it does                                                                                                                  |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `tenants(q, status, after, first)`      | a page of tenants by slug, the trash included (status `DELETED`), purged ones left out, `totalCount` follows `q` and `status` |
+| `tenant(id)`                            | one tenant; a tenant in the trash is `null` unless the caller is a platform operator                                          |
+| `plans`                                 | `free`, `pro`, `enterprise`, with their quotas (`mau`, `clients`, `domains`; `null` is no limit)                              |
+| `usage(tenantId, month)`                | monthly active users, clients and domains against the quotas that apply                                                       |
+| `createTenant(input)`                   | slug (for ever), name, `signUp`, `plan`; `SLUG_TAKEN` for a slug in use, in the trash or purged                               |
+| `updateTenant(id, input)`               | the name and `signUp`; the slug never changes                                                                                 |
+| `setTenantPlan(id, input)`              | the plan and the whole set of quota overrides (`null` follows the plan)                                                       |
+| `suspendTenant(id)`, `resumeTenant(id)` | sign-in, authorize and token are refused with `TENANT_SUSPENDED` until resumed; idempotent                                    |
+| `deleteTenant(id)`, `restoreTenant(id)` | the trash (below)                                                                                                             |
+
+The `Tenant` type carries `status` (`ACTIVE`, `SUSPENDED`, `DELETED`), `plan`, `quotas`, `deletedAt`
+and `purgeAt`. The `clavix` tenant cannot be suspended or deleted (`PLATFORM_TENANT_PROTECTED`).
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation { suspendTenant(id: \"6731…\") { status } }"}'
+```
+
+**The trash.** `deleteTenant` puts the tenant in the trash: it behaves as suspended, is hidden from
+its own admins and keeps `deletedAt`; `purgeAt` is 30 days later. Until then a platform operator can
+`restoreTenant` it, with the status it had. At `purgeAt` the scheduled purge empties it for good.
+The job (`tenant-purge`, a Redis queue with a daily cron at 03:17 UTC, plus one pass at server start;
+without Redis only the start pass runs) takes only tenants whose 30 days are over, never a live,
+suspended or restored one. Per tenant it claims it first (from then on it resolves nowhere and
+cannot be restored), then removes:
+- the janus partition: OAuth clients, requests, codes, grants, access and refresh tokens and the
+  signing keys, then users, sessions, tokens, social links, passkeys and invitations (the counts per
+  collection are logged);
+- the tenant-owned collections (branding, usage counters, ...);
+- its roles and platform link in the console's permissions.
+
+`adminEvents` stay (the platform's record; the purge itself records no event: it has no actor, `tenant.delete` already
+recorded who trashed the tenant, and the per-collection counts are logged), and the Redis active-user counters are not deleted (they
+hold hashed ids and expire after 400 days). A purge is not a transaction: a failing tenant stays
+claimed, the tick fails and the next run resumes it; a second run finds nothing to remove. What is
+left is a tombstone (slug, `deletedAt`, `purgedAt`): the slug stays reserved for good, so
+`createTenant` with it is `SLUG_TAKEN`.
+
+### Admin events
+
+Every console mutation records what it did in the `adminEvents` collection (ADR-0037): the actor
+(the token's user), the action (`tenant.create`), the tenant it was about (`null` for the platform),
+the target's type and id, the time and the id of the request. Events are only ever added, and they
+hold identifiers alone: never a secret, a token or the old and new values of a field. `bun run
+db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
+reads it yet: the viewer and the export come with M4.
+
+A mutation declares its action beside its module's guards (the declaration is spread into `audits`
+in `src/console/modules/index.ts`) and records it once its change is stored; AGENTS.md "Admin
+events" has the rules:
+
+```ts
+// src/console/modules/tenants/index.ts
+export const tenantsAudits: Audits = {
+  "Mutation.renameTenant": "tenant.rename",
+};
+
+// in the resolver, after the write
+await ctx.audit("tenant.rename", { type: "tenant", id: tenantId, tenantId });
+```
+
+`ctx.audit` is awaited: when the event cannot be stored, the mutation fails (and may be retried)
+rather than leave a change with no record. `src/console/audit.spec.ts` fails for a mutation whose
+module declares no action.
+
+## Sign-in methods and social providers
+
+Each tenant chooses how its users sign in
+([docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md) has every operation and error).
+- **Methods**: `PASSKEY` and `EMAIL_CODE` are on for a new tenant, `MAGIC_LINK` is off, and
+  `PASSWORD` is listed but not available yet. A method that is off answers 404
+  `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) on the tenant's host.
+- **Social providers**: Google, GitHub and Microsoft through `@softistx/janus-social`, each tenant
+  with its own client id and secret. The redirect URI to register at the provider is the
+  `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback` (the host is the tenant's issuer: its primary custom domain when set, else the slug host).
+- **At least one way in**: a change that would leave no enabled method and no enabled provider is
+  refused, 409 `NO_SIGN_IN_METHOD`.
+- **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
+  `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
+  `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
+  and it is never logged. Losing the master key, or dropping the old key from the keyring while a secret is still sealed under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
+  left out with a warning that names the tenant and provider, and the admin enters the secret again.
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation ($t: ID!) { updateSignInMethods(tenantId: $t, methods: [{ type: MAGIC_LINK, enabled: true }]) { version methods { type enabled available } } }","variables":{"t":"<tenant id>"}}'
+```
+
+```graphql
+# On the tenant's host, POST /graphql: what the hosted sign-in page offers.
+{
+  hostedSignInMethods {
+    methods
+    social {
+      id
+      label
+    }
+  }
+}
+```
+
+## Branding
+
+A tenant wears its own theme on the hosted pages. The brand is one document per tenant (collection
+`branding`, tenant-owned, run `bun run db:sync` to create it): display name, seed colour, radius,
+optional background preset and motif (ids of `@softistx/material-core/backgrounds`), an optional logo,
+and the generated stylesheet.
+
+`updateBranding` on `/console/graphql` replaces the whole brand (the logo is kept unless `logo` or
+`removeLogo` is sent), so repeating a call changes nothing (`changed: false`). It compiles the seed with
+`defineTheme` and `themeToCss({ scope: "attribute" })`, measures every pair with `checkThemeContrast` in
+light and dark, and stores the CSS only when all pass WCAG AA. A pair that fails is `BRANDING_CONTRAST`
+(422, `extensions.failures`: foreground, background, mode, ratio, minimum). The generator moves a hard
+seed (a yellow) lighter or darker to reach AA on its own; the payload's `warnings` say what it moved.
+A bad value is `BAD_USER_INPUT` (400, `extensions.field`). `branding(tenantId)` needs `view` on the tenant,
+`updateBranding` needs `edit`. Each call that succeeds records the admin event `branding.update`.
+
+The display name is a label only: it is stored as text and never written into the stylesheet. The seed
+and the radius are parsed, and the CSS is built from the parsed values, so a value that is not a colour
+or a length is refused rather than copied. Escape the display name where you print it. Two calls at the
+same time apply one after the other (the document carries a `version`), so a logo one of them sets or
+removes is not undone by the other; a call that keeps losing to others is `CONFLICT` (409) and stored
+nothing: read the brand and send it again.
+
+Limits: `displayName` 1 to 80 characters; `radius` in rem or px up to 3rem (48px); `backgroundPreset`
+and `motif` must be ids of `@softistx/material-core/backgrounds`.
+
+```graphql
+mutation {
+  updateBranding(
+    tenantId: "..."
+    input: { displayName: "Acme", seed: "#0a7ea4", radius: "0.5rem" }
+  ) {
+    changed
+    warnings
+    branding {
+      themeName
+      css
+      logoUrl
+    }
+  }
+}
+```
+
+A logo is a PNG, JPEG or WebP of at most 256 KiB (`logo: { contentType, dataBase64 }`); SVG is refused
+because it can carry script. The hosted pages read `tenantBranding` on `/graphql` (anonymous, by the
+request host; `null` keeps Clavix's own theme): they put `css` in a `<style>` and set
+`data-nxgt-theme="<themeName>"` on the root element, and draw the page's background from
+`backgroundPreset` and `motif` (not part of the CSS; `null` for none).
+
+```graphql
+{
+  tenantBranding {
+    displayName
+    themeName
+    css
+    backgroundPreset
+    motif
+    logoUrl
+  }
+}
+```
+
+`GET /branding/logo` on the tenant's host serves the logo with an `ETag` (its sha256), `304` on
+`If-None-Match`, `nosniff` and a sandboxing CSP; `404` (not stored) for an unknown host or a tenant
+without a logo, `405` for a method other than GET or HEAD. `logoUrl` is
+`/branding/logo?v=<start of the hash>`, so it changes with the image: asked with the current `v` the
+logo is `Cache-Control: public, max-age=31536000, immutable`; the bare path, or an old `v`, is
+`max-age=300, must-revalidate`.
 
 ## Tenants
 
-Until the console exists (M2), a tenant is created by script, through the same `TenantsService` the
+The console API (`createTenant`) is the normal way to create a tenant; the script is for the first ones, and goes through the same `TenantsService` the
 platform uses (slug rules, reserved slugs, the tenant's first signing key). The script prints the
 tenant as JSON, with its issuer, `https://<slug>.<CLAVIX_DOMAIN>`.
 
@@ -158,11 +586,11 @@ bun run tenants:create --slug acme --name "Acme" --sign-up   # open sign-up for 
 
 ## Resources
 
-An access token is bound to one resource (RFC 8707): the API it is for. Until the console exists
-(M2), a tenant registers its APIs by script. A resource is per tenant: `acme`'s is unknown to
+An access token is bound to one resource (RFC 8707): the API it is for. A tenant registers its
+APIs in the console ("Console API") or by script. A resource is per tenant: `acme`'s is unknown to
 `globex` (`invalid_target`). A client asking `resource=<uri>` gets a token whose `aud` is that URI,
 signed with the tenant's key; an unregistered URI is refused. Re-running with the same URI updates
-the name and replaces the scopes. It serves at once, with no restart.
+the name and replaces the scopes (a scope that stays keeps its consent texts). It serves at once, with no restart.
 
 ```sh
 bun run resources:create --tenant acme --uri https://api.acme.example \
@@ -182,7 +610,7 @@ none) and cannot be registered.
 
 ## OAuth clients
 
-Until the console exists (M2), a client is registered on a tenant by script. Clients are per tenant:
+A client is registered on a tenant in the console ("Console API") or by script. Clients are per tenant:
 they live in the tenant's partition of the janus collections, so a client of `acme` is unknown to
 `globex` (its `/authorize` answers `invalid_client`).
 
@@ -211,9 +639,9 @@ bun run clients:create --tenant acme --name "Web app" \
   becomes confidential and gets a secret.
 - The output also carries `issuer`, `tenant`, `redirectUris` and `type`. `--help` prints the
   usage; bad input prints the message and the usage and exits 1.
-- **Grants**: janus-oauth 0.8 has no per-client grant list; every client may use the authorization
-  code and refresh grants. `--grants` refuses any other (device code, token exchange, client
-  credentials) until janus offers them per client.
+- **Grants**: `--grants` is recorded on the client and shown by the console (`grantTypes`), but
+  the token endpoint does not enforce it: every client may use the authorization code and refresh
+  grants. Any other (device code, token exchange, client credentials) is refused.
 
 ## OpenID Connect
 
@@ -231,6 +659,12 @@ A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, 
 `resource` is for the tenant's userinfo. Introspection answers only for tokens of the tenant's
 own resources. A tenant with no signing key yet answers 503 `temporarily_unavailable`. The
 claims come from the users of the tenant (see "Users per tenant").
+
+**The `roles` claim** (an array of names, sorted) is in the `id_token`, in `/userinfo` and in the JWT
+access tokens, with no scope to ask for. The tenant-wide roles of the user are in all three; a role
+scoped to a resource is only in the access tokens issued for that resource (its URI is the audience),
+so the `id_token` and userinfo, which have no audience, never carry it. A refreshed token carries the
+roles the user holds then. The `id_token` also carries the `email` and profile claims.
 
 **The `sub` claim** is the janus user id of the signed-in user in that tenant, unchanged
 (`janus-oidc` sets `sub` to the session's `userId` in the id_token and in `/userinfo`; no
@@ -374,9 +808,10 @@ come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, 
 
 ## Magic-link sign-in
 
-Off by default: `CLAVIX_MAGIC_LINK=true` (or `1`) turns it on for every tenant. Off, both operations
-answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or mailed, so the surface
-looks absent; the hosted page hides its button. Same endpoint as the e-mail code
+Off by default, per tenant: a tenant's admin turns it on in its sign-in policy
+(`updateSignInMethods`, see "Sign-in methods and social providers"); there is no global switch.
+Off, both operations answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or
+mailed, so the surface looks absent; the hosted page hides its button. Same endpoint as the e-mail code
 (`https://<slug>.<CLAVIX_DOMAIN>/graphql`):
 
 ```graphql
@@ -516,6 +951,54 @@ the sign-in code mails still being handed to the relay (`drain` in `src/modules/
 `onStop` hook in `src/server.ts`), so a code is not lost; a mail still in flight after that is dropped
 and logged (the visitor asks again).
 
+## Custom domains
+
+A tenant serves sign-in from its own host (`auth.acme.com`). Console operations (tenant `view` to
+read, `edit` to change): `domains`, `domain`, `addDomain`, `verifyDomain`, `removeDomain`,
+`setPrimaryDomain`.
+
+```graphql
+mutation {
+  addDomain(tenantId: "...", host: "Auth.Acme.com") {
+    id
+    host
+    status
+    txtRecord {
+      name
+      value
+    }
+  }
+}
+# publish: _clavix.auth.acme.com  TXT  <value>
+mutation {
+  verifyDomain(tenantId: "...", id: "...") {
+    domain {
+      status
+    }
+    failure
+  }
+}
+```
+
+- `failure` is `NO_RECORD`, `MISMATCH` or `LOOKUP_FAILED`; a verified domain serves, a pending one
+  does nothing. Each claim has its own token, so a record proves one tenant's claim only.
+- Pending claims count toward the plan's `domains` quota (`QUOTA_EXCEEDED`); removing one frees it.
+- Several tenants may claim a host; the first to verify wins and the other claims are dropped. A
+  host another tenant verified is `DOMAIN_TAKEN`. IPs, `localhost`, wildcards and the platform
+  domain are refused (`BAD_USER_INPUT`, field `host`).
+- A primary is chosen explicitly (`setPrimaryDomain`); it becomes the issuer, so relying parties
+  that pinned the old `iss` must be reconfigured. Passkeys keep the slug host as rpId. The primary
+  cannot be removed; the slug host keeps serving.
+- Every 6 hours the TXT records are read again. Missing for 7 days: the domain becomes
+  `UNVERIFIED`, stops serving, gets no certificate, and the owners are e-mailed. A lapsed primary
+  keeps its flag (the issuer never moves by itself).
+- Automatic TLS: Caddy's `on_demand_tls { ask http://<app>/internal/tls/ask?token=<CLAVIX_TLS_ASK_SECRET> }`
+  (Caddy adds `&domain=`). 200 only for a verified domain of a live tenant or a platform host (the apex, `console.`, a live
+  tenant's slug host), 429 past the limit, a bare 404 otherwise. Call the app directly (a request carrying `X-Forwarded-*` is refused) and
+  keep `/internal/` off the public proxy. Redis down: the limit is skipped.
+- `GET /.well-known/webauthn` on the slug host lists the verified domains' origins (WebAuthn Related
+  Origins); janus does not honour it yet.
+
 ## How a host maps to a tenant
 
 A request belongs to the tenant whose slug is the one label before `CLAVIX_DOMAIN`:
@@ -524,8 +1007,13 @@ A request belongs to the tenant whose slug is the one label before `CLAVIX_DOMAI
 the `Host` header; `X-Forwarded-Host` is ignored. It is lowercased, its port and trailing dot
 removed. No tenant (`null`, a 404 for the OAuth endpoints) for an IP, the apex itself, more
 than one label before it, a reserved label (`www`, `console`, `api`, ...), an unknown slug, a
-suspended or deleted tenant. A slug is reserved for good: deleting a tenant does not free its slug, and creating a tenant with it fails like any duplicate. In a resolver, `await tenant()` of the context gives
+tenant whose purge started. A suspended or deleted (trash) tenant resolves with its `status`: sign-in,
+`/authorize` and `/token` refuse it with `TENANT_SUSPENDED` (403), while discovery and keys keep answering. A slug is reserved for good: deleting a tenant does not free its slug, and creating a tenant with it fails like any duplicate. In a resolver, `await tenant()` of the context gives
 `{ tenantId, slug, issuer, partition, version }`, resolved once per request.
+
+A host that is the **verified custom domain** of a live tenant resolves to that tenant too (see
+"Custom domains"); a custom host of a suspended tenant behaves like the slug host. The `issuer`
+is the tenant's primary custom domain when it has one, else the slug host.
 
 Resolved hosts are cached in Redis (`tenant-host`, 60 s; 30 s for "no tenant"); creating,
 suspending, reactivating or deleting a tenant drops its host (the delete is retried once),

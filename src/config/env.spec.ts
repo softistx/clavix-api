@@ -42,22 +42,6 @@ test("outside production the defaults stand in", async () => {
   expect(env.CLAVIX_PUBLIC_PORT).toBeUndefined();
 });
 
-test("CLAVIX_MAGIC_LINK is off by default and reads true / 1", async () => {
-  expect((await load(clean)).env.CLAVIX_MAGIC_LINK).toBe(false);
-  expect(
-    (await load({ ...clean, CLAVIX_MAGIC_LINK: "true" })).env.CLAVIX_MAGIC_LINK,
-  ).toBe(true);
-  expect(
-    (await load({ ...clean, CLAVIX_MAGIC_LINK: "0" })).env.CLAVIX_MAGIC_LINK,
-  ).toBe(false);
-  expect(
-    (await load({ ...clean, CLAVIX_MAGIC_LINK: "1" })).env.CLAVIX_MAGIC_LINK,
-  ).toBe(true);
-  await expect(load({ ...clean, CLAVIX_MAGIC_LINK: "yes" })).rejects.toThrow(
-    "CLAVIX_MAGIC_LINK",
-  );
-});
-
 test("the values are read", async () => {
   const { env } = await load({
     ...clean,
@@ -161,6 +145,19 @@ test("the keys master key: a public default outside production, never in it", as
   // ...and a malformed one is refused outside it too, not replaced by the default.
   await expect(
     load({ ...clean, CLAVIX_KEYS_MASTER_KEY: "c2hvcnQ=" }),
+  ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
+});
+
+test("the keys master key takes a keyring: a comma-separated list, no repeat", async () => {
+  const next = Buffer.alloc(32, 9).toString("base64");
+  const ring = `${next},${masterKey}`;
+  const { env } = await load({ ...clean, CLAVIX_KEYS_MASTER_KEY: ring });
+  expect(env.CLAVIX_KEYS_MASTER_KEY).toBe(ring);
+  await expect(
+    load({ ...clean, CLAVIX_KEYS_MASTER_KEY: `${masterKey},${masterKey}` }),
+  ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
+  await expect(
+    load({ ...clean, CLAVIX_KEYS_MASTER_KEY: `${masterKey},c2hvcnQ=` }),
   ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
 });
 

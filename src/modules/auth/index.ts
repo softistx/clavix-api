@@ -1,8 +1,12 @@
 import { denial } from "@softistx/janus-graphql";
 import { tenantMail } from "@/config/mail";
+import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireMethod } from "@/modules/sign-in-methods/gate";
+import { requireLive } from "@/tenancy/live";
+import { deviceOptions } from "./device";
 import {
   confirmMagicLink,
   magicLinkDisabled,
@@ -45,6 +49,8 @@ export const auth: Resolvers = {
   Mutation: {
     requestSignInCode: async (_, { email }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
+      requireMethod(tenant, "emailCode");
       ctx.set.headers.set("cache-control", "no-store");
       await ctx.signInThrottle?.check({
         tenantId: tenant.tenantId,
@@ -56,8 +62,16 @@ export const auth: Resolvers = {
       );
     },
     verifySignInCode: async (_, { challenge, code }, ctx) => {
-      const { auth } = await tenantOf(ctx);
-      const signedIn = await verifySignInCode(auth, challenge, code);
+      const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
+      requireMethod(tenant, "emailCode");
+      const signedIn = await verifySignInCode(
+        auth,
+        challenge,
+        code,
+        deviceOptions(ctx.request),
+      );
+      await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");
       ctx.set.headers.append(
         "set-cookie",
@@ -70,6 +84,7 @@ export const auth: Resolvers = {
     },
     requestMagicLink: async (_, { email }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
       // Off: before any budget, store or mail is touched.
       if (!auth.magicLink.enabled) throw magicLinkDisabled();
       ctx.set.headers.set("cache-control", "no-store");
@@ -83,9 +98,15 @@ export const auth: Resolvers = {
       );
     },
     confirmMagicLink: async (_, { token }, ctx) => {
-      const { auth } = await tenantOf(ctx);
+      const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
       if (!auth.magicLink.enabled) throw magicLinkDisabled();
-      const signedIn = await confirmMagicLink(auth, token);
+      const signedIn = await confirmMagicLink(
+        auth,
+        token,
+        deviceOptions(ctx.request),
+      );
+      await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");
       ctx.set.headers.append(
         "set-cookie",

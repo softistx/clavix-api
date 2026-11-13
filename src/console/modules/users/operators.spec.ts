@@ -1,0 +1,128 @@
+import { describe, expect, test } from "bun:test";
+import type { ConsoleContext } from "../../context";
+import { createExclusive } from "../../exclusive";
+import type { Role } from "../../model";
+import { keepOwners } from "./operators";
+
+const PLATFORM = { slug: "clavix" };
+
+interface Setup {
+  /** Tenant id -> owner ids. */
+  owners?: Record<string, string[]>;
+  /** The platform owners. */
+  platform?: string[];
+  disabled?: string[];
+  gone?: string[];
+  /** Called on each read of the user's memberships: lets a spec grant meanwhile. */
+  onMemberships?: (call: number) => void;
+}
+
+/** A console context in memory: only what `keepOwners` reads. */
+function fake(setup: Setup = {}) {
+  const owners = setup.owners ?? {};
+  const platform = setup.platform ?? [];
+  let reads = 0;
+  const ctx = {
+    exclusive: createExclusive(),
+    canPlatform: async () => true,
+    directory: {
+      findUser: async (id: string) =>
+        (setup.gone ?? []).includes(id)
+          ? null
+          : {
+              id,
+              email: `${id}@t.test`,
+              active: !(setup.disabled ?? []).includes(id),
+            },
+    },
+    access: {
+      platformRole: async (id: string): Promise<Role | null> =>
+        platform.includes(id) ? "owner" : null,
+      platformOwners: async () => [...platform],
+      owners: async (tenantId: string) => [...(owners[tenantId] ?? [])],
+      memberships: async (id: string) => {
+        setup.onMemberships?.(++reads);
+        return Object.entries(owners)
+          .filter(([, ids]) => ids.includes(id))
+          .map(([tenantId]) => ({ tenantId, role: "owner" as const }));
+      },
+    },
+  } as unknown as ConsoleContext;
+  return ctx;
+}
+
+const code = async (run: Promise<unknown>) =>
+  run.then(
+    () => "ok",
+    (e: { extensions?: { code?: string } }) => e.extensions?.code,
+  );
+const disable = (ctx: ConsoleContext, id: string) =>
+  keepOwners(ctx, PLATFORM, id, async () => "done", "disable");
+const remove = (ctx: ConsoleContext, id: string) =>
+  keepOwners(ctx, PLATFORM, id, async () => "done", "delete");
+
+describe("the last live platform owner", () => {
+  test("cannot be disabled or deleted", async () => {
+    const ctx = fake({ platform: ["p1", "p2"], disabled: ["p2"] });
+    expect(await code(disable(ctx, "p1"))).toBe("LAST_OWNER");
+    expect(await code(remove(ctx, "p1"))).toBe("LAST_OWNER");
+  });
+
+  test("a second live platform owner lets the first go", async () => {
+    const ctx = fake({ platform: ["p1", "p2"] });
+    expect(await code(disable(ctx, "p1"))).toBe("ok");
+    expect(await code(remove(ctx, "p1"))).toBe("ok");
+  });
+
+  test("two platform owners removed at the same moment: one stays", async () => {
+    const platform = ["p1", "p2"];
+    const ctx = fake({ platform });
+    const drop = (id: string) =>
+      keepOwners(
+        ctx,
+        PLATFORM,
+        id,
+        async () => {
+          platform.splice(platform.indexOf(id), 1);
+        },
+        "delete",
+      );
+    const results = await Promise.all([drop("p1"), drop("p2")].map(code));
+    expect(results.sort()).toEqual(["LAST_OWNER", "ok"]);
+    expect(platform).toHaveLength(1);
+  });
+});
+
+describe("disabling twice", () => {
+  test("a disabled sole owner is disabled again, not refused", async () => {
+    const ctx = fake({
+      owners: { t1: ["sole"] },
+      platform: ["sole", "other"],
+      disabled: ["sole"],
+    });
+    expect(await code(disable(ctx, "sole"))).toBe("ok");
+  });
+
+  test("a live sole owner is still refused", async () => {
+    const ctx = fake({ owners: { t1: ["sole"] } });
+    expect(await code(disable(ctx, "sole"))).toBe("LAST_OWNER");
+  });
+});
+
+describe("the memberships keep changing", () => {
+  test("three reads that each find a new tenant answer CONFLICT (409)", async () => {
+    const owners: Record<string, string[]> = { t1: ["u", "v"] };
+    const ctx = fake({
+      owners,
+      // A new tenant is granted at each read inside the lock.
+      onMemberships: (call) => {
+        if (call >= 2) owners[`n${call}`] = ["u", "v"];
+      },
+    });
+    const error = await disable(ctx, "u").catch((e: unknown) => e);
+    const { extensions } = error as {
+      extensions: { code: string; http: { status: number } };
+    };
+    expect(extensions).toEqual({ code: "CONFLICT", http: { status: 409 } });
+  });
+});

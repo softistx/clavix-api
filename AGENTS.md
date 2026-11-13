@@ -4,7 +4,8 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (
 issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
-services behind them; tenants, clients and resources are created by script until the M2 console.
+services behind them; tenants, clients, resources and scopes are managed in the console API
+(the M2 console) or by script.
 The UI is `softistx/clavix-ui`.
 
 The owner's rules for every repository (worktrees, Conventional Commits, integration
@@ -36,26 +37,49 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
-  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations }`). Lifetimes (assumed
+  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
 
+## Console pages carry `totalCount: Int!`
+
+Every paged console connection (`TenantUserPage`, `ClientPage`, `RoleMemberPage`, `TenantPage`,
+`SwitchableTenantPage`) exposes `totalCount`: all the matches, ignoring the cursor and `first`,
+honouring the search (`q`, `status`, `emailPrefix`). It is counted by the module's tenant-scoped
+service (`clientsService.count`, `rolesService.membersCount` through `scopeToTenant`,
+`ctx.users.count`, `tenantAdmin.count` sharing its `filterOf` with `list`), never by a copy of the
+filter. The lists that are plain arrays (resources, scopes, roles, memberships, adminInvitations,
+domains) have no connection: their length is the count. A new paged connection adds `totalCount`
+the same way.
+
 ## Resources (`src/modules/resources`)
 
 A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the access tokens asked with
-`resource=<uri>`, its `scopes` what a client may request on it. `bun run resources:create --tenant
+`resource=<uri>`, its scopes what a client may request on it. `bun run resources:create --tenant
 <slug> --uri <https uri> --scope <s> [--scope <s>] [--name <label>]` stores or updates one
-(idempotent on the URI; the scopes are replaced), until the console (M2). The `resources`
-collection is tenant-owned and reached only through `scopeToTenant` (`storedResourcesFor`,
-`registerResource`; `src/config/resources.ts` exports `registerStoredResource`, never the collection), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
+(idempotent on the URI; the scopes are replaced), beside the console. The `resources` and `scopes`
+collections are tenant-owned and reached only through `scopeToTenant` (`Catalog` in `catalog.ts`,
+`storedResourcesFor`, `registerResource`; `src/config/resources.ts` exports `catalog`,
+`registerStoredResource` and `scopeTextsFor`, never the collections), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
 in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/resources.ts`.
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
-URL cannot be registered: it is built in, with the OpenID Connect scopes. Scopes are a plain list
-for now (assumed; the Scope entity with consent texts is M2).
+URL cannot be registered: it is built in, with the OpenID Connect scopes.
+- **A scope is a document** (`scopes.model.ts`, ADR-0025): `name`, `description { fr, en }`,
+  `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
+  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
+  or `email` (`scope-name.ts`); it exists once a tenant describes it. `claims` is stored only.
+- **`Catalog`** is the one writer of scopes and the console's writer of resources
+  (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
+  (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are
+  bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
+- **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
+  `scopes` documents), so a scope added or removed in the console serves at once.
+- **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
+  texts); `resources.scopes` stays optional in the model for its `down`.
 
 ## OpenID Connect
 
@@ -69,11 +93,19 @@ accepts. User claims come in through the `ClaimsFor` port (`src/oauth/ports.ts`)
 so the lookup is in that tenant's user pool. Introspection (`POST /introspect`, a confidential
 client of the same tenant, `client_secret_basic`) answers only for tokens of the tenant's own
 resources (`resourcesFor`), never for userinfo's. janus-oauth's `NoSigningKeyError` is a 503 `temporarily_unavailable` on these paths
-too (janus answers it itself). The `roles` claim is M2.
+too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 
 ## Users and sessions
 
-Magic-link sign-in is a global switch, `CLAVIX_MAGIC_LINK`, off by default: janus 0.56 defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }`. `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`, README "Magic-link sign-in") answer 404 `MAGIC_LINK_DISABLED` while it is off, checked in the resolver before the throttle. The test script runs `magic-link.spec.ts` twice: off (default, the "off" half) and with `CLAVIX_MAGIC_LINK=true` (the "on" half), because the flag is read once at start.
+Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:
+- **One field, one schema**: `signIn: signInPolicySchema` (`sign-in.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (a later `mfa` block goes beside it) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
+- **Every write goes through `SignInPolicyService`** (`service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
+- **Gates**: `requireMethod(tenant, method)` (`gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked in the resolver before the throttle. Registering a passkey while signed in is not gated.
+- **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
+- **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
+- **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
+- **Console users** (`src/console/modules/users/`): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port (`janus-users.ts`), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `src/modules/auth/device.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.
+- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; re-wrapping is clavix-api#49).
 
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
@@ -91,8 +123,8 @@ partitioned: never use them for tenant users.
   passkey is scoped to its rpId for good.
 - **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
   closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
-  Invitations: `createMongoInvitations(db, { partition })`; accepting one has no GraphQL surface
-  until the M2 console.
+  Invitations: `createMongoInvitations(db, { partition })`; accepting one is the hosted
+  `acceptInvitation` (below, "Admins of a tenant and invitations").
 
 ## E-mail code sign-in (`src/modules/auth`, `src/mail`)
 
@@ -160,7 +192,10 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
-not worked around). Passkeys are the next section.
+not worked around). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
+resource's scope, else the standard one; `Accept-Language` French else English, then the other
+language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 
@@ -176,17 +211,305 @@ so a code mail in flight is not lost; `stopTimeout` is set above it.
 
 `src/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
 `src/config/keys.ts`; a tenant's partition is its hex id), the rotation policy and the hourly
-`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them (README, "Signing keys"). Sign and
+`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). Sign and
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 
 ## Tenants by script
 
-`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant until the
-M2 console. It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
+`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant by script (the console API's
+`createTenant` does too). It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
 (`register-tenant.ts`), which goes through `TenantsService.create` (the one place for slug rules,
 reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
 `created: false`, other values are refused, a deleted tenant's slug stays reserved.
+
+## Console API (`src/console`)
+
+The console's own GraphQL API, `POST /console/graphql`, apart from the hosted pages' `/graphql`
+(`src/http/schema.ts` and `codegen.ts` leave `src/console/**` out; `codegen.console.ts` generates
+`src/generated/console`). No cookie and no Host-based tenant: the credential is a bearer JWT of the
+`clavix` tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, verified in process by
+`server.authenticate(request, { resource })` (`auth.ts`; no crypto of ours, a store outage is a 503,
+every other failure a 401). Only the console's own client (`CONSOLE_CLIENT_ID`, `identity.ts`) is
+accepted: a console-audience token minted for another client of `clavix` is a 401, whatever its scopes.
+- **Permissions** are a janus `defineModel` (`model.ts`) over the relation store in `oauthDb`
+  (`config/access.ts`; `db:sync` creates its collection): platform and tenant `owner` / `admin` /
+  `viewer`, permits `manage` / `edit` / `view`, a platform role inherited by every tenant through the
+  tenant's `platform` link. The link is written when a tenant is created (`config/tenancy.ts`
+  `onCreated`) and backfilled by the `2026-11-12-console` migration.
+- **Deny by default** (`guard.ts`): every root field is wrapped, and one without an entry in its
+  module's `guards` (`signedIn()`, `onTenant(perm, args => tenantId)`, `onPlatform(perm)`) is refused
+  `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
+- **Writes on the `clavix` tenant are the platform's** (`guard.ts`, `allowed`): an `onTenant` guard
+  with `edit` or `manage` whose target is the `clavix` tenant itself asks `canPlatform` instead of
+  the tenant role (operators, the issuer's domains, sign-in policy, clients, branding and users
+  are all behind it); `view` stays tenant-level. It is central, so no module opts in. A tenant-level
+  role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
+  also removes their console relations (`access.removeUser`); disabling or deleting a `clavix` user
+  who holds a platform role or owns a tenant needs platform `manage` (`users/operators.ts`).
+- **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
+  action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
+  there, never in `src/modules`.
+- **`clients` and `resources`** (issue #9) are thin: resolvers call `ClientsService`
+  (`src/modules/clients`, wired in `src/config/clients.ts`) and `Catalog`
+  (`src/modules/resources`), after `liveTenant` (`catalog-support.ts`: a suspended tenant is
+  readable, its writes are refused by the guard; a trashed one is `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
+  its admin event (`client.create`, `client.rotateSecret`, `resource.delete`, `scope.update`, ...:
+  the target is the client id or the document id, never a secret; a delete records on a repeat
+  too, and `deleteResource` one `scope.delete` per scope it removed). The `operators:grant` script records
+  `operator.grant` the same way (platform target, no tenant). `test/console.ts`
+  (`consoleAs(userId)`) runs the real console app with a stubbed token check.
+- **The console's own client and resource** (`console` in the `clavix` tenant, the migration's) are
+  refused by `modules/reserved.ts`: no update, rotation or deletion of the client, no deletion of
+  the resource or its scopes through the API (it would lock every operator out); scripts still can.
+- **Clients are listed from the janus store** (`ClientsService`, `src/modules/clients`): the
+  tenant's partition store answers `listClients` in id order, and each record is mapped to a
+  `ClientView` there, so a `secretHash` never reaches a resolver or a GraphQL type. The store has
+  no search: `q` is applied by `listClientViews` (`client-listing.ts`), which reads what the page still lacks until it is full
+  (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's. `totalCount` (`countClientViews`, same filter, every page read at 100) ignores the cursor.
+  `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
+  repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
+  has no insert-only write, so `createClient`, `updateClient`, `rotateClientSecret` and `deleteClient` run under `ctx.exclusive(clientsKey(tenant), ...)` (a racing delete never brings a client back; an update or rotation of a missing client is `NOT_FOUND`, from `ClientsService.require` inside the lock)
+  (`console:clients:<hex>`, the same queue and Redis lock as the admins): the id check and the
+  upsert of two creations of one id are never interleaved (one wins, the other is `CONFLICT`), and
+  the `clients` quota (`assertClientQuota`: `usageService.count` against `quotasOf`, `QUOTA_EXCEEDED`)
+  is read under it, so concurrent creations cannot pass the limit together. `deleteClient` leaves a
+  record that is not a registered one (`source` other than `registered`: a metadata-document client)
+  alone and answers false, and records `client.delete` only for a registered client or for a valid id
+  that names nothing (a retry may be the event the first run missed); an id no client can have, and an
+  untouched foreign record, name nothing to record. A deleted client's grants are revoked, so its
+  access and refresh tokens stop working (`clients.spec.ts`).
+- **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
+  membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
+  tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
+  per key in the process, plus the app's Redis lock when there is one, `config/exclusive.ts`): the
+  relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
+  Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
+  **One owner rule** (`otherLiveOwners`, `service.ts`): an owner counts only while they exist and can
+  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable and
+  delete of a `clavix` user, tenant ownerships and the last live platform owner, under
+  `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
+  ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` is never `LAST_OWNER`.
+  Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
+  (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
+  mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
+  (never copy it). An admin invitation is one of the `clavix` tenant under the scope
+  `adminScope(tenantId)` (`src/invitations/scope.ts`, `admin:<id>`); **only that scope grants a console
+  role**, so an invitation into a pool (the `clavix` pool included) uses any other scope. Accepting is
+  the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`, `acceptInvitation`, every
+  refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
+  `onAccepted`, given per tenant by `invitationHooks` (`src/config/users.ts`; on `clavix`:
+  `adminInvitationHooks`, which refuses a suspended or deleted tenant and grants the relation).
+  `resend` (`resendAdminInvitation`) sends a pending invitation again through janus's `resend`: a new
+  code and lifetime, `resentBy` set, the original `invitedBy` kept (the console reads it from the stored
+  invitation and resolves the name from the directory). The cooldown (`RESEND_COOLDOWN_MS`, 60 s) is read
+  from janus's `updatedAt`, so it holds across processes with no Redis; the check and the write run under
+  `ctx.exclusive` per invitation. Refusals are `ResendRefusedError` (`NOT_FOUND`, `INVITATION_NOT_PENDING`,
+  `RESEND_TOO_SOON` with `retryAfter`). A users-pool invitation has no resend yet.
+  Its events are `membership.invite` / `.resendInvitation` / `.revokeInvitation` (target `invitation`) and `membership.change`
+  / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
+  canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse
+  after a write. Accepting (hosted, no console caller) records none.
+- **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
+  resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
+  an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
+  once by the migration (not in tests).
+- **`bun run operators:grant --email <address> [--role owner|admin|viewer] [--create]`** gives a user
+  of the `clavix` tenant a platform role (default owner), until the console can. The user must exist,
+  unless `--create`: an unknown address is then invited (operator scope, `operatorScope()`, issued by
+  the system, mailed by the tenant's mail path) and accepting the invitation makes the account and
+  grants the role (`adminInvitationHooks`, under the user's `userKey` lock, inside the tenant's members lock, the order `keepOwners` keeps: platform owners, members by id, user). A disabled account is refused: the active check and `grantPlatform` run under the user's `userKey` lock (`grantOperator`'s `lock`, wired by the script with `exclusive`), on a fresh read, so a `deleteUser` or a disable cannot slip between them (#182). Each run records the admin event `operator.grant`.
+
+### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
+
+Every console mutation writes an append-only admin event (ADR-0037). The platform's own changes with no console user write one too, under a `system:<module>:<job>` actor (`domain.lapse`, `domain.evict`: see Custom domains). A slice that adds a mutation
+does two things, and nothing else touches the collection:
+- **Declare** the action beside the module's guards, `export const <name>Audits: Audits = {
+  "Mutation.renameTenant": "tenant.rename" }`, and spread it into `audits` in `modules/index.ts`
+  (one line). `audit.spec.ts` walks the schema and fails on a `Mutation` root field with no action,
+  on a declaration that names no mutation, and on an action that is not `<noun>.<verb>`
+  (`AUDIT_ACTION`: camelCase segments, `client.rotateSecret`).
+- **Record** it in the resolver, once the change is stored:
+  `await ctx.audit("tenant.rename", { type: "tenant", id, tenantId })`. `tenantId` is the hex id of
+  the tenant the target belongs to, `null` only for a target of the platform itself (an operator).
+  `id` is the entity's own id (at most 200 characters), never a URI or free text, and `type` a
+  short noun (`client`). The actor (the token's user), the time and the request id are filled in
+  for you. A call the schema refuses (a malformed action, a `tenantId` that is not a tenant's hex
+  id) throws on every try: the slice's spec runs each mutation once and asserts its stored event. A mutation that
+  touches several targets records one event each; the same request id ties them.
+- **Awaited, and a failure fails the mutation**: `ctx.audit` rejects when the event cannot be
+  stored, so the resolver throws and the caller retries rather than a change being left with no
+  record. So a mutation stays safe to repeat (the plan's idempotency rule): its second run stores
+  nothing twice and records the event the first one missed. So `createTenant`, `createClient` (`clientSecret: null`), `createRole`, `createResource` and `createScope` return the stored record, not `CONFLICT`, when a repeat has the same values. Never `void` it or catch its error. The declaration is not
+  checked against the call: the slice's own spec asserts the stored event.
+- **Never a secret**: an event is identifiers only (`target` is `{ type, id }`). The schema is
+  closed (`z.strictObject`, no free-form field), so there is no place for a secret, a token or the
+  before/after of a value, and none is to be added.
+- `adminEvents` is a platform collection: its `tenantId` says which tenant an event is about, so it
+  is listed in `platformCollections` (`src/tenancy/owned.ts`) and left out of the tenant-owned
+  guards. It is reached only through `AdminEventRecorder.record` (`src/config/admin-events.ts`); a
+  source scan in `src/tenancy/guards.spec.ts` refuses any other access or export. Indexes (`tenantId, at` and `actor, at`,
+  newest first) are the definition's, created by `db:sync`. No reader and no SDL until the viewer
+  (M4). `ConsoleDeps.adminEvents` takes another recorder in a spec.
+- The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
+  never used.
+
+## End-user roles (`src/modules/roles`, `src/console/modules/roles`)
+
+A role is a named claim value a tenant gives to its end users (not a console admin role, which is
+`access`). Two tenant-owned collections (`roles.model.ts`, purged with the tenant by `ownedPurgers`):
+`roles` (name, description, `resourceId`, unique `{tenantId, resourceId, name}`) and
+`roleAssignments` (`roleId`, `userId`, unique `{tenantId, roleId, userId}`). Everything goes through
+`RolesService` (`src/config/roles.ts`, `scopeToTenant`); the module is in the direct-access allow list of
+`tenancy/guards.spec.ts`.
+- **The claim**: `claimRoles(tenantId, userId, audience)` returns the sorted, de-duplicated names of the
+  tenant-wide roles plus those scoped to the resource whose `uri` is the audience. `RolesFor`
+  (`oauth/ports.ts`) is the port; `building.ts` puts it in janus's `accessTokens.claims` (runs on every
+  exchange and refresh, so a refreshed token carries the current roles) and `issuers.ts` in the id_token
+  and `/userinfo` (`scopeClaims: { openid: ["roles"] }`, `idToken.includeClaims`). No scope is needed. A
+  role scoped to resource X is in a token for X only; the id_token and userinfo have no audience, so they
+  carry the tenant-wide roles only. `includeClaims` also puts the e-mail and profile claims in the id_token.
+- **Console** (`roles` module): reads `onTenant("view")`, writes `onTenant("edit")`; audit actions
+  `role.create|update|delete|assign|unassign` (assign and unassign record the role and the user). `deleteRole`
+  and `unassignRole` are idempotent; `assignRole` needs a user of the tenant's pool (`NOT_FOUND` else).
+  `deleteRole` removes the assignments first, `deleteUser` and `deleteResource` remove theirs (a retry
+  finishes a half run). `assignRole` (check the user, write) and `deleteUser` (delete, sweep) run under
+  `ctx.exclusive(userKey(tenant, user))` (`console/modules/user-key.ts`), so no assignment outlives its
+  user; `disableUser` (platform users) and the `clavix` invitation accept hooks (`userLock`) take it too. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
+  `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
+  `RolesError`.
+- **Shared helpers**: `console/modules/ids.ts` (`tenantArg`, `tenantIdOf`, `idArg`, and `liveTenant`: a suspended tenant is returned, a trashed or unknown one is `NOT_FOUND`).
+  A tenant trashed mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
+- **A suspended tenant's console is readable, not writable** (ADR-0039, #167): `ConsoleDirectory.tenantsByIds`,
+  `TenantsService.liveByIds` and `SignInPolicyService.get` return active and suspended tenants (not the trash);
+  every read of every module works for the tenant's admins, and `Me.memberships` lists it with its `status`.
+  The write refusal is central, in `console/guard.ts`: a `tenant` guard with `edit` or `manage` on a
+  suspended tenant throws `TENANT_SUSPENDED` (403) after the role check (a caller with no right still gets
+  `FORBIDDEN`), unless the caller holds the same permission on the platform (support; `updateTenant` by an
+  operator keeps working). The platform's `suspendTenant`, `resumeTenant`, `deleteTenant`, `restoreTenant` and
+  `setTenantPlan` are `onPlatform` guards and never reach it. A new write on a tenant needs nothing
+  more than its `onTenant("edit" | "manage")` guard. `activeByIds` (status active only) stays for the
+  sign-up and invitation paths.
+- `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
+  read a token's content).
+
+## Branding (`src/modules/branding`, `src/console/modules/branding`)
+
+A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`), reached only through
+`BrandingService` (`config/branding.ts`), which scopes every read and write with `scopeToTenant`.
+- **The theme is compiled on write, served as stored** (`theme.ts`): `validateThemeInput`, then
+  `defineTheme` and `themeToCss({ scope: "attribute" })` of `@softistx/material-core`, measured by
+  `checkThemeContrast` in light and dark. A failing pair is `BRANDING_CONTRAST` and nothing is stored.
+  Never write a stylesheet by hand, and never store CSS that did not pass `buildTheme`.
+- **Nothing a tenant typed is copied into the CSS**: the display name is a label, the seed and radius
+  are parsed by the library and our radius pattern, the preset and motif are ids from its lists. The
+  hosted pages put `css` in a `<style>`, so a new brand field that reaches the stylesheet is parsed or
+  taken from a closed list, and gets a case in the "break out of the stylesheet" spec. `buildTheme` also refuses the compiled
+  CSS when it holds `<`, `@import`, `url(`, `image-set(`, `src(` or a backslash (`assertSafeCss`,
+  BAD_USER_INPUT field `css`).
+- **`updateBranding` is a whole replacement, idempotent** (`changed: false` when nothing differs) and
+  serialised by the optimistic lock: `update` writes at the version it read and decides again after a
+  concurrent write (three attempts, then `CONFLICT`, 409). A new field joins `same()` or a repeat stops being a no-op.
+  It records the admin event `branding.update` (target `branding`, id the tenant's) after the store,
+  on a repeat too: the retry of a call whose record failed must still leave an event.
+- **The logo** (`logo.ts`, `logo-route.ts`) is a PNG, JPEG or WebP of at most 256 KiB, checked by its
+  magic bytes and stored inline; never SVG (it runs script on the tenant's own host). Its sha256 is the
+  `ETag`, and `immutable` is sent only when `?v=` names the current image (`logoUrl`).
+- **Two schemas**: the console's `branding` / `updateBranding` (guards `view` / `edit` on the tenant)
+  live in `src/console/modules/branding`; the anonymous `tenantBranding` by host is in
+  `src/modules/branding` and shows only what a hosted page draws (no seed, no tenant id).
+
+## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`, `src/console/modules/tenants`)
+
+- **Two services on the one collection**: `TenantsService` creates and flips the status (script and
+  tests); `TenantAdminService` (`config/tenancy.ts`: `tenantAdmin`) is what the console uses: `find` /
+  `get` (trash included, a purging tenant is gone), `list`, `update`, `setPlan`, `trash`, `restore` and
+  the three writes of the purge. Every write drops the tenant's host from the resolver's cache.
+- **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
+  The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
+  tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
+  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  `socialSignInStart`, `socialSignInComplete`, `acceptInvitation` (on the tenant's own host: an end-user invitation of a suspended tenant is refused before the code is read),
+  and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
+  Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
+  already issued live to expiry, and the console stays readable.
+- **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
+  `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
+- **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
+  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
+  of the access token, so refreshes count) and an `acceptInvitation` that signs the new account in (#176); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
+  `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
+  `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
+  / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
+  clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
+- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
+  (`purge.ts`) claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
+  partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
+  record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
+  tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. The Redis MAU counters (hashed, no user ids) are not deleted: they expire on their own after 400 days.
+  A failing tenant stays
+  claimed and the next run resumes it. **The janus part** is `createPartitionPurger(oauthDb)`
+  (`src/config/partition-purger.ts`, the `PartitionPurger` port): `purgeMongoOAuthPartition`,
+  `purgeMongoStoresPartition` and `purgeMongoInvitationsPartition` for the tenant's partition (its hex
+  id), refusing `default` and empty; it answers the counts per collection, which the job logs. **Scheduled**
+  by the `tenant-purge` queue (`purge-queue.ts`, daily cron `17 3 * * *`, `purge-worker.ts`
+  `startTenantPurge` in `src/server.ts`, one pass at start; without Redis only that pass). Only
+  tenants deleted 30 days ago or more are touched. A new tenant-owned
+  collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
+- **Console API**: `tenants`, `tenant`, `plans`, `usage` and the seven mutations are in
+  `src/console/modules/tenants`, with their audit actions (`tenant.create`, `.update`, `.setPlan`,
+  `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin (refused with `TENANT_SUSPENDED` while the tenant is suspended); the rest
+  is platform-only. The `Tenant` parent is `TenantParent` (codegen mapper), so `Me.memberships` keeps
+  working with the extended type.
+- **Still public for a suspended or deleted tenant**: the anonymous `tenantBranding` and the logo by host
+  (a hosted page can show its suspended screen); `createTenant` repeated with the same slug, name, plan
+  and sign-up returns the tenant and records the event again (a retry after a failed record).
+  Dynamic client registration is off; if it is ever turned on, `tenant-state.ts` must refuse `/register`.
+
+## Custom domains (`src/modules/domains`, `src/console/modules/domains`)
+
+A tenant adds a host (`addDomain`), publishes `_clavix.<host> TXT clavix-verify=<token>`, then
+`verifyDomain` reads it through the `TxtResolver` port (`dns.ts`; specs inject a fake, only
+`src/config/domains.ts` wires the real resolver). `DomainStore` (`domains.service.ts`) is the
+only way into the `domains` collection; the periodic recheck is `DomainRecheck`
+(`domains.recheck.ts`, the DNS comparison `domains.check.ts`), which the store builds and delegates to.
+- `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
+  tenants (partial unique index on `{ host }` where `status: "verified"`), which the
+  tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still
+  carries `tenantId` except `tenantOfHost`/`verifiedHost`, the resolver's and the TLS ask's lookups.
+- The token is 32 random bytes, bound to its own claim (tenant and host). Several tenants may
+  hold a pending claim on a host; the first to verify wins and evicts the others. A host
+  verified elsewhere is `DOMAIN_TAKEN`. Hosts are normalised (case, trailing dot, IDN to
+  punycode); IPs, localhost, wildcards, reserved suffixes and the platform domain are refused.
+- The quota (`effectiveQuotas(...).domains`) counts pending claims too and is checked on
+  `addDomain` (`assertWithinQuota`), which runs under the tenant's `ctx.exclusive` lock
+  (`console:domains:<tenantId>`, shared by `removeDomain` and `setPrimaryDomain`, so two
+  concurrent `setPrimaryDomain` leave one primary); the post-insert recount stays as a second guard.
+  `removeDomain` records `domain.remove` on a repeat too (an id the trail cannot hold is not recorded).
+  `usage.domains` is `domainStore.count`. These slice decisions stand (issue #127): pending
+  claims count toward the quota; a lapsed primary keeps resolving but the TLS ask refuses it;
+  recheck every 6 h with a 7-day grace.
+- `verifyDomain` is held to one check per claim per 60 s (`VERIFY_COOLDOWN_SECONDS`, from the
+  claim's `checkedAt`): `VERIFY_COOLDOWN` (429) with `extensions.retryAfter`, no lookup made.
+- The platform's own changes are admin events too: `domain.lapse` (recheck, actor
+  `system:domains:recheck`) and `domain.evict` (a verification removing another tenant's claim,
+  actor `system:domains:verify`), recorded through `DomainStoreOptions.record` (`events.ts`,
+  wired in `src/config/domains.ts`); a failure to record is logged, never fails the write.
+- The primary is explicit (`setPrimaryDomain`, ADR-0032); the issuer follows it (resolver
+  `toResolved`), the passkey rpId stays the slug host (`slugIssuer`, `src/users/rp.ts`,
+  ADR-0036). The primary cannot be removed. The slug host keeps serving.
+- `recheckAll` runs every 6 hours (`recheck.queue.ts`, started in `src/server.ts`). A record
+  missing for 7 days makes the domain `unverified` (it stops serving and no certificate is
+  issued) and the tenant's owners are e-mailed once (`notice.ts`). A lapsed primary keeps its
+  flag and keeps resolving: the issuer never moves silently. A DNS failure changes nothing.
+- A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
+- **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
+  domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
+  when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
+  proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
+  The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
+- `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
+  (Related Origins). Janus accepting those origins is not wired yet.
 
 ## OAuth clients
 
@@ -195,8 +518,9 @@ in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through t
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
-`tenantBySlug` (`src/config/tenancy.ts`). Grants are not stored: janus-oauth 0.8 has no
-per-client list (the script refuses all but code and refresh). A client keeps its type: re-running a
+`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is recorded on the client (`grantTypes`,
+shown by the console) but not enforced by janus's token endpoint; the script refuses all but code
+and refresh. A client keeps its type: re-running a
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 

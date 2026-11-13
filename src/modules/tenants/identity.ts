@@ -16,5 +16,9 @@ export const issuerOf = (slug: string, origin: PublicOrigin) =>
     origin.port === undefined ? "" : `:${origin.port}`
   }`;
 
+/** The issuer served on `host` (a slug host or a custom domain), same scheme and port. */
+export const issuerOfHost = (host: string, origin: PublicOrigin) =>
+  `${origin.scheme}://${host}${origin.port === undefined ? "" : `:${origin.port}`}`;
+
 /** The janus partition (`createMongoOAuth(db, { partition })`): the tenant's id in hex. */
 export const partitionOf = (id: ObjectId) => id.toHexString();

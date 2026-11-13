@@ -1,5 +1,8 @@
 import { defineCollection, id, type ReadDocumentOf } from "@softistx/mongo";
 import { z } from "zod";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { planFields } from "./plan.schema";
+import { trashFields } from "./trash.schema";
 
 // A slug is reserved for good: the unique index is not partial, so a deleted
 // tenant keeps its slug (its issuer was registered by relying parties).
@@ -18,6 +21,9 @@ export const tenants = defineCollection({
     // Closed by default (and for a tenant stored before the flag existed): the
     // users come in by invitation. The `clavix` tenant stays closed.
     signUp: z.boolean().default(false),
+    signIn: signInPolicySchema, // slice A5: methods and social apps (sign-in.schema.ts)
+    ...planFields,
+    ...trashFields,
   }),
   indexes: [
     {

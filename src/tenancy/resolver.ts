@@ -1,12 +1,19 @@
 import type { ObjectId } from "mongodb";
 import {
   issuerOf,
+  issuerOfHost,
   type PublicOrigin,
   partitionOf,
 } from "@/modules/tenants/identity";
 import { hostOfRequest, normalizeHost, slugOfHost } from "./host";
 import type { ResolvedTenant } from "./resolved-tenant";
 import { noTenantCache, type TenantCache } from "./tenant-cache";
+
+/** What the resolver reads of the custom domains. */
+export interface DomainDirectory {
+  tenantOfHost(host: string): Promise<ObjectId | undefined>;
+  primaryHostOf(tenantId: ObjectId): Promise<string | undefined>;
+}
 
 /** What the resolver needs of a stored tenant. */
 export interface TenantRecord {
@@ -15,13 +22,26 @@ export interface TenantRecord {
   name: string;
   signUp: boolean;
   status: "active" | "suspended";
+  /** Set while the tenant is in the trash. */
+  deletedAt?: Date | null | undefined;
+  /** Set once the purge claimed the tenant: it resolves nowhere from then on. */
+  purgeStartedAt?: Date | undefined;
   version: number;
+  signIn: ResolvedTenant["signIn"];
 }
 
 export interface TenantResolverOptions {
-  /** The live tenant with this slug, or `undefined` (a deleted one is none). */
+  /** The stored tenant with this slug, in the trash or not, or `undefined`. */
   lookup: (slug: string) => Promise<TenantRecord | undefined>;
   cache: TenantCache;
+  /**
+   * Custom domains (A4): the tenant a non-slug host serves and a tenant's
+   * primary host. Both are needed to resolve a custom host; the issuer follows
+   * the primary host (ADR-0032). Without it only slug hosts resolve.
+   */
+  domains?: DomainDirectory;
+  /** The stored tenant with this id, in the trash or not. Needed with `domains`. */
+  lookupById?: (id: ObjectId) => Promise<TenantRecord | undefined>;
   /** Where issuers live (`CLAVIX_DOMAIN`, scheme, port). */
   config: PublicOrigin;
   log?: (message: string) => void;
@@ -46,17 +66,27 @@ export interface TenantResolver {
 function toResolved(
   tenant: TenantRecord | undefined,
   config: PublicOrigin,
+  primaryHost?: string,
 ): ResolvedTenant | null {
-  return tenant === undefined || tenant.status !== "active"
+  return tenant === undefined || tenant.purgeStartedAt !== undefined
     ? null
     : {
         tenantId: tenant._id.toHexString(),
         slug: tenant.slug,
         name: tenant.name,
         signUp: tenant.signUp,
-        issuer: issuerOf(tenant.slug, config),
+        status:
+          tenant.deletedAt === null || tenant.deletedAt === undefined
+            ? tenant.status
+            : "deleted",
+        issuer:
+          primaryHost === undefined
+            ? issuerOf(tenant.slug, config)
+            : issuerOfHost(primaryHost, config),
+        slugIssuer: issuerOf(tenant.slug, config),
         partition: partitionOf(tenant._id),
         version: tenant.version,
+        signIn: tenant.signIn,
       };
 }
 
@@ -80,7 +110,9 @@ async function attempt<T>(
 }
 
 /**
- * Host to tenant: `<slug>.<CLAVIX_DOMAIN>` with an active tenant of that slug.
+ * Host to tenant: `<slug>.<CLAVIX_DOMAIN>` with a tenant of that slug, whatever
+ * its status (a purged one is none): the callers that open or extend a session
+ * check `isLive`.
  * Only hosts of a valid slug shape reach the cache or Mongo, so arbitrary
  * hosts cannot fill either. A cache failure is logged and Mongo is read.
  */
@@ -92,26 +124,57 @@ export function createTenantResolver(
   const hitTtl = options.hitTtl ?? 60;
   const missTtl = options.missTtl ?? 30;
 
+  // The tenant a host belongs to, from the stores: a slug host by its slug, a
+  // custom host through the domains. `undefined`: not a host of ours.
+  const load = async (
+    host: string,
+    slug: string | null,
+  ): Promise<ResolvedTenant | null> => {
+    let record: TenantRecord | undefined;
+    if (slug !== null) {
+      record = await lookup(slug);
+    } else {
+      const id = await options.domains?.tenantOfHost(host);
+      record = id === undefined ? undefined : await options.lookupById?.(id);
+    }
+    const primary =
+      record === undefined
+        ? undefined
+        : await options.domains?.primaryHostOf(record._id);
+    return toResolved(record, config, primary);
+  };
+  const stamp = (tenant: ResolvedTenant | null) =>
+    tenant === null ? null : [tenant.version, tenant.issuer, tenant.status];
+
   const resolveHost = async (raw: string) => {
     const host = normalizeHost(raw);
     if (host === null) return null;
     const slug = slugOfHost(host, config.domain);
-    if (slug === null) return null;
+    // Only hosts of a valid slug shape (or, with custom domains, any other
+    // host, read from the domains by an indexed lookup) reach Mongo.
+    if (slug === null && options.domains === undefined) return null;
+    // Under the platform apex but not a valid slug: never a custom domain.
+    if (slug === null && host.endsWith(`.${config.domain}`)) return null;
+    if (slug === null && host === config.domain) return null;
 
     const cached = await attempt(log, "read", host, () => cache.get(host));
     if (cached !== undefined) return cached;
 
-    const resolved = toResolved(await lookup(slug), config);
-    await attempt(log, "write", host, () =>
-      cache.set(host, resolved, resolved === null ? missTtl : hitTtl),
-    );
-    // Cache-aside race: a write (suspend, delete, create) may have run its
-    // invalidation between our read and our `set`, leaving a stale entry. Read
-    // the tenant again; if it changed, drop what we just stored.
+    const resolved = await load(host, slug);
+    // An unknown custom host is not cached: any Host header would fill the cache.
+    const keep = slug !== null || resolved !== null;
+    if (keep) {
+      await attempt(log, "write", host, () =>
+        cache.set(host, resolved, resolved === null ? missTtl : hitTtl),
+      );
+    }
+    // Cache-aside race: a write (suspend, delete, create, a domain) may have
+    // run its invalidation between our read and our `set`, leaving a stale
+    // entry. Read again; if it changed, drop what we just stored.
     // Nothing was stored with `noTenantCache`, so there is nothing to drop.
-    if (cache === noTenantCache) return resolved;
-    const after = toResolved(await lookup(slug), config);
-    if (after?.version !== resolved?.version) {
+    if (cache === noTenantCache || !keep) return resolved;
+    const after = await load(host, slug);
+    if (JSON.stringify(stamp(after)) !== JSON.stringify(stamp(resolved))) {
       await attempt(log, "delete", host, () => cache.delete(host));
     }
     return resolved;

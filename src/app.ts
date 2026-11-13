@@ -1,18 +1,34 @@
 import { graphql } from "@alxia/graphql";
+import { serveLogo } from "./config/branding";
+import {
+  serveTlsAsk,
+  serveWebauthnOrigins,
+  TLS_ASK_PATH,
+  WEBAUTHN_WELL_KNOWN,
+} from "./config/domains-routes";
+import { readyz } from "./config/ready";
+import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
+import { CONSOLE_PATH } from "./console/identity";
+import { type ConsoleDeps, useConsole } from "./console/plugin";
+import { consoleSchema } from "./console/schema";
+import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
+import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
+import type { ScopeTextsFor } from "./modules/consent/scope-labels";
 import { version } from "./modules/health";
+import type { ReadyReport } from "./modules/health/ready";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
 // The largest body /graphql reads.
 export const BODY_LIMIT = 100 * 1024;
 
-// `GET /healthz`, the liveness probe (no dependency is checked), the OAuth
+// `GET /healthz`, the liveness probe (no dependency is checked), `GET /readyz`, the OAuth
 // endpoints when `oauth` is given (the issuers of src/oauth, which
 // src/server.ts passes), then POST and GET /graphql behind the base's
 // middlewares. The body limit is declared before the OAuth routes, since it
@@ -26,6 +42,13 @@ export function createApp(
     signInThrottle?: Throttle | undefined;
     // The same for `passkeySignInOptions`.
     passkeyThrottle?: Throttle | undefined;
+    // The console API (`/console/graphql`, src/console): bearer token, its own
+    // schema. Off without it, the route does not exist.
+    console?: ConsoleDeps & { schema?: typeof consoleSchema };
+    // Where the consent page reads the tenants' scope texts; the stored ones by default.
+    scopeTexts?: ScopeTextsFor;
+    // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
+    ready?: () => Promise<ReadyReport>;
   } = {},
 ) {
   const base = createBase(undefined, {
@@ -35,8 +58,21 @@ export function createApp(
       "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
+    // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
+    .all("/readyz", async ({ request }) => {
+      if (request.method !== "GET") return new Response(null, { status: 404 });
+      const report = await (options.ready ?? readyz)();
+      return Response.json(report, {
+        status: report.status === "ok" ? 200 : 503,
+        headers: { "cache-control": "no-store" },
+      });
+    })
+    .all(LOGO_PATH, ({ request }) => serveLogo(request))
+    // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/tls-ask.ts).
+    .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
+    .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
     .bodyLimit(BODY_LIMIT);
-  return (
+  const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)
   ).plugin((app) =>
     graphql(app, {
@@ -44,14 +80,32 @@ export function createApp(
       ide: "apollo-sandbox",
       plugins: [
         useSameOriginJson(),
+        useWithoutQuotedValues(),
         janusPlugin(),
         ...(options.oauth?.serverFor === undefined
           ? []
-          : [oauthContext({ serverFor: options.oauth.serverFor })]),
+          : [
+              oauthContext(
+                { serverFor: options.oauth.serverFor },
+                options.scopeTexts ?? scopeTextsFor,
+              ),
+            ]),
       ],
       maskedErrors: janusMasking,
     }),
   );
+  const consoleOptions = options.console;
+  return consoleOptions === undefined
+    ? mounted
+    : mounted.plugin((app) =>
+        graphql(app, {
+          schema: consoleOptions.schema ?? consoleSchema,
+          path: CONSOLE_PATH,
+          ide: false,
+          plugins: [useWithoutQuotedValues(), useConsole(consoleOptions)],
+          maskedErrors: janusMasking,
+        }),
+      );
 }
 
 // The app the server runs.

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
 import { memoryTenantCache, type TenantCache } from "./tenant-cache";
 
@@ -34,6 +36,7 @@ const acme: TenantRecord = {
   signUp: false,
   status: "active",
   version: 3,
+  signIn: signInPolicySchema.parse(undefined),
 };
 
 describe("resolveHost", () => {
@@ -44,9 +47,12 @@ describe("resolveHost", () => {
       slug: "acme",
       name: "Acme",
       signUp: false,
+      status: "active",
       issuer: "https://acme.clavix.test",
+      slugIssuer: "https://acme.clavix.test",
       partition: acme._id.toHexString(),
       version: 3,
+      signIn: acme.signIn,
     });
   });
 
@@ -111,9 +117,19 @@ describe("resolveHost", () => {
     expect(lookups).toEqual(["acme", "acme", "acme", "acme"]);
   });
 
-  test("a suspended tenant is null", async () => {
-    const { resolver } = setup([{ ...acme, status: "suspended" }]);
-    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+  test("a suspended or deleted tenant resolves with its status; one being purged is null", async () => {
+    const paused = setup([{ ...acme, status: "suspended" }]);
+    expect(
+      (await paused.resolver.resolveHost("acme.clavix.test"))?.status,
+    ).toBe("suspended");
+    const trashed = setup([{ ...acme, deletedAt: new Date() }]);
+    const resolved = await trashed.resolver.resolveHost("acme.clavix.test");
+    expect(resolved?.status).toBe("deleted");
+    expect(resolved && isLive(resolved)).toBe(false);
+    const purging = setup([
+      { ...acme, deletedAt: new Date(), purgeStartedAt: new Date() },
+    ]);
+    expect(await purging.resolver.resolveHost("acme.clavix.test")).toBeNull();
   });
 
   test("hosts that cannot be a tenant never reach the cache or Mongo", async () => {
@@ -167,7 +183,9 @@ describe("invalidate", () => {
     records[0] = { ...acme, status: "suspended", version: 4 };
     expect((await resolver.resolveHost("acme.clavix.test"))?.version).toBe(3);
     await resolver.invalidate(["Acme.clavix.test"]);
-    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+    expect((await resolver.resolveHost("acme.clavix.test"))?.status).toBe(
+      "suspended",
+    );
   });
 });
 
@@ -199,7 +217,9 @@ describe("cache-aside race", () => {
     expect((await resolver.resolveHost("acme.clavix.test"))?.version).toBe(3);
     // The stale entry did not survive: the next caller sees the suspension.
     expect(await inner.get("acme.clavix.test")).toBeUndefined();
-    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+    expect((await resolver.resolveHost("acme.clavix.test"))?.status).toBe(
+      "suspended",
+    );
   });
 
   test("a creation between the read and the set drops the cached null", async () => {
@@ -253,5 +273,59 @@ describe("invalidate failure", () => {
     await expect(resolver.invalidate(["acme.clavix.test"])).rejects.toThrow(
       "down",
     );
+  });
+});
+
+describe("custom domains", () => {
+  function withDomains(
+    record: TenantRecord,
+    verified: Record<string, ObjectId>,
+    primary?: string,
+  ) {
+    return createTenantResolver({
+      lookup: async (slug) => (slug === record.slug ? record : undefined),
+      lookupById: async (id) => (id.equals(record._id) ? record : undefined),
+      domains: {
+        tenantOfHost: async (host) => verified[host],
+        primaryHostOf: async () => primary,
+      },
+      cache: memoryTenantCache(),
+      config,
+      log: () => {},
+    });
+  }
+
+  test("a verified host resolves to its tenant; the issuer stays the slug host without a primary", async () => {
+    const resolver = withDomains(acme, { "auth.acme.com": acme._id });
+    const resolved = await resolver.resolveHost("Auth.Acme.com");
+    expect(resolved?.tenantId).toBe(acme._id.toHexString());
+    expect(resolved?.issuer).toBe("https://acme.clavix.test");
+  });
+
+  test("the issuer follows the primary host while the slug host stays the passkey issuer", async () => {
+    const resolver = withDomains(
+      acme,
+      { "auth.acme.com": acme._id },
+      "auth.acme.com",
+    );
+    for (const host of ["auth.acme.com", "acme.clavix.test"]) {
+      const resolved = await resolver.resolveHost(host);
+      expect(resolved?.issuer).toBe("https://auth.acme.com");
+      expect(resolved?.slugIssuer).toBe("https://acme.clavix.test");
+    }
+  });
+
+  test("a suspended tenant's custom host resolves but is not live", async () => {
+    const suspended = { ...acme, status: "suspended" as const };
+    const resolver = withDomains(suspended, { "auth.acme.com": acme._id });
+    const resolved = await resolver.resolveHost("auth.acme.com");
+    expect(resolved).toBeDefined();
+    expect(resolved && isLive(resolved)).toBe(false);
+  });
+
+  test("an unknown host, or one under the apex that is no slug, resolves to nothing", async () => {
+    const resolver = withDomains(acme, { "auth.acme.com": acme._id });
+    expect(await resolver.resolveHost("other.example.org")).toBeNull();
+    expect(await resolver.resolveHost("a_b.clavix.test")).toBeNull();
   });
 });

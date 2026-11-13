@@ -430,9 +430,10 @@ describe("registration", () => {
 });
 
 // A registration made for another relying party: the tenant's host with a label prepended is a different rpId.
-const otherRelyingParty = (tenant: { issuer: string }) => ({
-  issuer: tenant.issuer.replace("://", "://other."),
-});
+const otherRelyingParty = (tenant: { issuer: string }) => {
+  const issuer = tenant.issuer.replace("://", "://other.");
+  return { issuer, slugIssuer: issuer };
+};
 
 describe("removal", () => {
   test("a removed passkey no longer signs in; another user's cannot be removed", async () => {
@@ -474,10 +475,14 @@ describe("development over http", () => {
   test("a tenant on an http .localhost origin builds a janus with its real rpId and origin, passkeys on", async () => {
     const tenant = await tenantOf("acme");
     const issuer = "http://acme.clavix.localhost:3000";
-    const janus = buildTenantJanus(oauthDb, { ...tenant, issuer });
+    const janus = buildTenantJanus(oauthDb, {
+      ...tenant,
+      issuer,
+      slugIssuer: issuer,
+    });
     expect(janus.passkeys).toBeDefined();
-    expect(rpIdOf({ issuer })).toBe("acme.clavix.localhost");
-    expect(originOf({ issuer })).toBe(issuer);
+    expect(rpIdOf({ slugIssuer: issuer })).toBe("acme.clavix.localhost");
+    expect(originOf({ slugIssuer: issuer })).toBe(issuer);
   });
 });
 

@@ -11,3 +11,6 @@ export const rotationPolicy = {
   retireAfter: "24h",
   alg: "ES256",
 } as const satisfies Omit<RotateSigningKeysOptions, "now">;
+
+/** `rotationPolicy.retireAfter` in milliseconds (24 h): keep the two in step. */
+export const retireAfterMs = 24 * 60 * 60 * 1000;

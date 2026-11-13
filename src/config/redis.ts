@@ -1,11 +1,15 @@
-import { defineRedis, openRedis } from "@softistx/redis";
+import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
+import { domainRecheck } from "@/modules/domains/recheck.queue";
+import { tlsAskLimit } from "@/modules/domains/tls-limit";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
+import { tenantPurge } from "@/modules/tenants/purge-queue";
+import { monthlyActiveUsers } from "@/modules/usage/mau";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
@@ -40,8 +44,12 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
-      queues: { keyRotation },
-      limits: { ...signInLimits(limits), ...passkeyLimits(passkeys) },
+      queues: { keyRotation, tenantPurge, domainRecheck },
+      limits: {
+        ...signInLimits(limits),
+        ...passkeyLimits(passkeys),
+        tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
+      },
       background: {
         onDown: () => log("redis unavailable: tenant cache degraded"),
         onUp: () => log("redis is back"),
@@ -50,6 +58,8 @@ export async function openAppRedis(
   );
   return {
     ...redis,
+    // Active users of the month per tenant (usage, quotas).
+    mau: bindUniqueCounter(client, monthlyActiveUsers),
     close: async () => {
       await redis.close();
       client.close();

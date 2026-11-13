@@ -1,0 +1,154 @@
+"An end user of a tenant: someone who signs in through that tenant's issuer (not a console admin)."
+type TenantUser {
+  id: ID!
+  email: EmailAddress!
+  name: String
+  emailVerified: Boolean!
+  "False once a console admin disabled the user: no sign-in."
+  active: Boolean!
+  createdAt: DateTime!
+}
+
+"""
+A page of a tenant's users, oldest first; `nextCursor` is `null` on the last.
+With `email` the page holds that one user, or none.
+"""
+type TenantUserPage {
+  items: [TenantUser!]!
+  nextCursor: String
+  "How many users match the filter in all (the whole pool without one), not the page's size."
+  totalCount: Int!
+}
+
+"""
+One standing session of a user (not revoked, not lapsed). Never carries the
+token. The console admin cannot tell which one is the viewer's own: it
+reads another tenant's users, so there is no `current` flag.
+"""
+type UserSession {
+  id: ID!
+  "The browser or device the sign-in came from (its User-Agent, cut at 256 characters); `null` on a session opened before it was recorded."
+  device: String
+  createdAt: DateTime!
+  "When the session last proved who it is (the sign-in, or a step-up)."
+  authenticatedAt: DateTime!
+  "When the session last renewed (at most once a day); `null` on an older session."
+  lastUsedAt: DateTime
+  expiresAt: DateTime!
+}
+
+"A pending invitation into a tenant's user pool. The code only goes by e-mail."
+type UserInvitation {
+  id: ID!
+  email: EmailAddress!
+  invitedAt: DateTime!
+  expiresAt: DateTime!
+}
+
+"What a user allowed an application to do (an OAuth grant), standing only."
+type UserGrant {
+  id: ID!
+  clientId: String!
+  "The client's name, or `null` when the client was deleted since."
+  clientName: String
+  "The resource (audience) the grant is for."
+  resource: String!
+  scopes: [String!]!
+  createdAt: DateTime!
+  "When the scopes were last set by a consent."
+  updatedAt: DateTime!
+}
+
+"What a tenant admin may change on a user. The e-mail address is not editable; its verified flag is `setUserEmailVerified`."
+input UpdateUserInput {
+  "The display name: 1 to 200 characters once trimmed."
+  name: String!
+}
+
+extend type Query {
+  """
+  The users of a tenant (tenant viewer). `first` defaults to 25, at most 100.
+  `email` finds the user with exactly that address (any case, spaces around
+  ignored). `emailPrefix` keeps the users whose address, or username, starts
+  with it (any case; plain text, never a pattern); blank means no filter. Give
+  one of the two: both is BAD_USER_INPUT (400). `totalCount` follows the same
+  filter.
+  """
+  users(
+    tenantId: ID!
+    after: String
+    first: Int
+    email: String
+    emailPrefix: String
+  ): TenantUserPage!
+  "One user of the tenant (tenant viewer), or `null`: unknown, or of another tenant."
+  user(tenantId: ID!, id: ID!): TenantUser
+  "The pending, unlapsed invitations into the tenant's user pool (tenant viewer)."
+  userInvitations(tenantId: ID!): [UserInvitation!]!
+  "The user's standing grants, oldest first (tenant viewer). Empty for an unknown user."
+  userGrants(tenantId: ID!, userId: ID!): [UserGrant!]!
+  "The user's standing sessions, newest first (tenant viewer). Empty for an unknown user."
+  userSessions(tenantId: ID!, userId: ID!): [UserSession!]!
+}
+
+extend type Mutation {
+  """
+  Invites an e-mail address into the tenant's user pool (tenant admin). The
+  invitee accepts on the tenant's hosted `/invitation` page, which makes the
+  account (e-mail proved), even when sign-up is closed. A pending invitation of
+  the same address is replaced (a new mail goes out). Errors: USER_EXISTS (409)
+  when the address already has an account in the tenant, NOT_FOUND for an
+  unknown tenant.
+  """
+  inviteUser(tenantId: ID!, email: EmailAddress!): UserInvitation!
+  "Revokes a pending invitation of the tenant (tenant admin). True also when there is none."
+  revokeInvitation(tenantId: ID!, invitationId: ID!): Boolean!
+  """
+  Renames a user (tenant admin). Errors: BAD_USER_INPUT (400) for a name that is
+  empty once trimmed or over 200 characters, NOT_FOUND for an unknown user.
+  The e-mail address and the verified flag are not editable.
+  """
+  updateUser(tenantId: ID!, userId: ID!, input: UpdateUserInput!): TenantUser!
+  """
+  Disables a user (tenant admin): their sessions end at once and they
+  cannot sign in again. Idempotent. Errors: NOT_FOUND for
+  an unknown user; on the `clavix` tenant, FORBIDDEN for an owner or a platform
+  role holder unless the caller can manage the platform, LAST_OWNER (409) when
+  the user is the only owner who can sign in of a tenant or of the platform
+  (not on a repeat: a disabled user is not refused), CONFLICT (409) when
+  the memberships keep changing (retry).
+  """
+  disableUser(tenantId: ID!, userId: ID!): TenantUser!
+  "Enables a disabled user again (tenant admin). Idempotent. Errors: NOT_FOUND for an unknown user."
+  enableUser(tenantId: ID!, userId: ID!): TenantUser!
+  """
+  Deletes a user for good (tenant admin): their sessions and grants (and the
+  tokens those opened) go with them. True also when the user was already gone.
+  On the `clavix` tenant the same FORBIDDEN, LAST_OWNER and CONFLICT errors as
+  `disableUser` apply.
+  """
+  deleteUser(tenantId: ID!, userId: ID!): Boolean!
+  "Ends every session of the user (tenant admin); answers how many it ended. 0 on a repeat or an unknown user."
+  revokeUserSessions(tenantId: ID!, userId: ID!): Int!
+  """
+  Ends one session of the user (tenant admin). True when it was ended; false
+  when it is not this user's, is already ended or lapsed, or does not exist.
+  """
+  revokeUserSession(tenantId: ID!, userId: ID!, sessionId: ID!): Boolean!
+  """
+  Marks the user's address verified or not (tenant admin), touching nothing
+  else: no session, password or second factor changes. Idempotent. Errors:
+  NOT_FOUND for an unknown user.
+  """
+  setUserEmailVerified(
+    tenantId: ID!
+    userId: ID!
+    verified: Boolean!
+  ): TenantUser!
+  """
+  Takes back one grant of the user and the tokens it opened (tenant admin).
+  True also when the grant was already revoked; false when it is not this
+  user's (or does not exist).
+  """
+  revokeGrant(tenantId: ID!, userId: ID!, grantId: ID!): Boolean!
+}

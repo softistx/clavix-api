@@ -1,0 +1,69 @@
+"An admin of a tenant: a user of the `clavix` tenant who holds a role there directly."
+type TenantMember {
+  user: ConsoleUser!
+  role: Role!
+}
+
+"A pending invitation to administer a tenant. The code only goes by e-mail."
+type AdminInvitation {
+  id: ID!
+  email: EmailAddress!
+  role: Role!
+  invitedAt: DateTime!
+  expiresAt: DateTime!
+  "The operator who invited (the first sender; a resend keeps it). Null when a script did."
+  invitedBy: Inviter
+}
+
+"The operator who sent an invitation. `name` is null when the account is gone or has no name or e-mail."
+type Inviter {
+  id: ID!
+  name: String
+}
+
+extend type Query {
+  "The admins of a tenant (tenant viewer). Owners first."
+  memberships(tenantId: ID!): [TenantMember!]!
+  "The pending invitations of a tenant (tenant viewer)."
+  adminInvitations(tenantId: ID!): [AdminInvitation!]!
+}
+
+# `type`, not `extend`: the console SDL has no other Mutation base, and slices merge theirs.
+type Mutation {
+  """
+  Invites an e-mail address to administer a tenant (tenant owner). The invitee
+  accepts on the hosted `/invitation` page of the `clavix` tenant; accepting
+  grants the role, once (an `owner` invitation is refused once its inviter is disabled or
+  deleted, and grants nothing to an account deleted or disabled meanwhile). A pending invitation of the same address is replaced
+  (a new mail goes out). Errors: ALREADY_MEMBER (409) when the address already
+  holds a role there, NOT_FOUND for an unknown tenant.
+  """
+  inviteAdmin(
+    tenantId: ID!
+    email: EmailAddress!
+    role: Role!
+  ): AdminInvitation!
+  """
+  Gives a member another role (tenant owner). Idempotent. Errors: NOT_FOUND for
+  a user who is not a member, LAST_OWNER (409) when it would leave the tenant
+  with no owner who can sign in (a disabled or deleted owner does not count).
+  """
+  changeMembership(tenantId: ID!, userId: ID!, role: Role!): TenantMember!
+  """
+  Removes a member (tenant owner), whatever the role. True also when the user
+  was not a member. Errors: LAST_OWNER (409) for the last owner who can sign in.
+  """
+  removeMembership(tenantId: ID!, userId: ID!): Boolean!
+  """
+  Sends a pending invitation again (tenant owner): a new code and lifetime
+  (the old code stops working) and a new mail, naming the caller. Allowed on a
+  lapsed invitation too. Errors: NOT_FOUND (404) for an unknown tenant or an
+  invitation that is not this tenant's, INVITATION_NOT_PENDING (409) when it
+  was accepted or revoked, RESEND_TOO_SOON (429: it was sent, or sent again,
+  less than 60 s ago; `extensions.retryAfter` is the seconds to wait, nothing
+  was sent). `invitedBy` is unchanged.
+  """
+  resendAdminInvitation(tenantId: ID!, invitationId: ID!): AdminInvitation!
+  "Revokes a pending invitation of the tenant (tenant owner). True also when there is none."
+  revokeAdminInvitation(tenantId: ID!, invitationId: ID!): Boolean!
+}

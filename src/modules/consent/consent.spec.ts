@@ -11,7 +11,8 @@ import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
-import { tenantResolver } from "@/config/tenancy";
+import { catalog } from "@/config/resources";
+import { tenantAdmin, tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -62,12 +63,14 @@ const gql = async (
   query: string,
   variables: Record<string, unknown>,
   cookie?: string,
+  language?: string,
 ): Promise<GqlResult> => {
   const response = await app.request(url(slug, "/graphql"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(cookie === undefined ? {} : { cookie }),
+      ...(language === undefined ? {} : { "accept-language": language }),
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -128,7 +131,7 @@ async function exchange(slug: string, redirectTo: string) {
 }
 
 beforeAll(async () => {
-  for (const slug of ["acme", "globex"]) {
+  for (const slug of ["acme", "globex", "initech"]) {
     await tenants.create({ slug, name: slug });
     const tenant = await tenantResolver.resolveHost(new URL(url(slug)).host);
     if (tenant === null) throw new Error("tenant not resolved");
@@ -183,6 +186,37 @@ describe("the consent screen's data", () => {
       client: { id: "backend", name: "Back end" },
       redirectHost: "app.example",
     });
+  });
+
+  test("a scope's label is the tenant's description, in the viewer's language", async () => {
+    const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
+    if (acme === undefined) throw new Error("no tenant");
+    await catalog.createScope(acme._id, {
+      name: "email",
+      description: { fr: "Votre adresse e-mail", en: "Your email address" },
+      resourceId: null,
+      claims: [],
+    });
+    const labelsOf = async (slug: string, language?: string) => {
+      const id = await authorize(slug);
+      const result = await gql(slug, REQUEST, { id }, cookieOf(slug), language);
+      expect(result.errors).toBeUndefined();
+      const { scopes } = (result.data?.["oauthRequest"] ?? { scopes: [] }) as {
+        scopes: { name: string; label: string }[];
+      };
+      return Object.fromEntries(scopes.map((s) => [s.name, s.label]));
+    };
+    expect((await labelsOf("acme", "fr-CA,en;q=0.8"))["email"]).toBe(
+      "Votre adresse e-mail",
+    );
+    const english = await labelsOf("acme", "en-US");
+    expect(english["email"]).toBe("Your email address");
+    // A scope the tenant did not describe keeps janus's label.
+    expect(english["openid"]).not.toBe("");
+    expect((await labelsOf("acme"))["email"]).toBe("Your email address");
+    // Another tenant never reads acme's texts.
+    const other = await labelsOf("globex", "fr");
+    expect(other["email"]).not.toBe("Votre adresse e-mail");
   });
 
   test("an anonymous viewer is UNAUTHENTICATED", async () => {
@@ -351,5 +385,55 @@ describe("a foreign page cannot decide", () => {
     );
     const body = (await response.json()) as GqlResult;
     expect(body.errors).toBeUndefined();
+  });
+});
+
+// "initech" is this block's own tenant with its own signed-in session, so the
+// refusal does not depend on what the specs before it did to acme's session.
+const expectRefused = (result: GqlResult, code: string) => {
+  expect(result.data?.["approveOAuthRequest"] ?? null).toBeNull();
+  expect(result.data?.["denyOAuthRequest"] ?? null).toBeNull();
+  expect(codeOf(result)).toBe(code);
+};
+
+describe("a tenant that is not live", () => {
+  test("a suspended tenant is TENANT_SUSPENDED on approve and deny, and a resumed one mints a code again", async () => {
+    const initech = await mongo.db.tenants.findFirst({ slug: "initech" });
+    if (initech === undefined) throw new Error("no initech");
+    const id = await authorize("initech");
+    await tenants.suspend(initech._id);
+    try {
+      for (const query of [APPROVE, DENY]) {
+        const result = await gql("initech", query, { id }, cookieOf("initech"));
+        expectRefused(result, "TENANT_SUSPENDED");
+      }
+    } finally {
+      await tenants.reactivate(initech._id);
+    }
+    const resumed = await gql("initech", APPROVE, { id }, cookieOf("initech"));
+    expect(resumed.errors).toBeUndefined();
+    const approved = resumed.data?.["approveOAuthRequest"] as
+      | { redirectTo: string }
+      | undefined;
+    const redirectTo = approved?.redirectTo ?? "";
+    expect(redirectTo).toContain("code=");
+    const token = await exchange("initech", redirectTo);
+    expect(token.status).toBe(200);
+  });
+
+  test("a deleted tenant is TENANT_SUSPENDED too, and a restored one mints a code again", async () => {
+    const initech = await mongo.db.tenants.findFirst({ slug: "initech" });
+    if (initech === undefined) throw new Error("no initech");
+    const id = await authorize("initech");
+    await tenants.delete(initech._id);
+    try {
+      const result = await gql("initech", APPROVE, { id }, cookieOf("initech"));
+      expectRefused(result, "TENANT_SUSPENDED");
+    } finally {
+      await tenantAdmin.restore(initech._id.toHexString());
+      await tenants.reactivate(initech._id);
+    }
+    const restored = await gql("initech", APPROVE, { id }, cookieOf("initech"));
+    expect(restored.errors).toBeUndefined();
   });
 });

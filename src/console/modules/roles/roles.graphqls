@@ -1,0 +1,85 @@
+"""
+A role of a tenant's end users (not a console admin role). Its name goes in the
+`roles` claim of the tokens of the users it is assigned to. A role with no
+`resourceId` applies to the whole tenant and is in every token, the id_token
+and userinfo included; a role scoped to a resource is only in the access tokens
+issued for that resource (its URI is the token's audience).
+"""
+type TenantRole {
+  id: ID!
+  "The claim value: 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`. Unique per tenant and resource; `updateRole` may rename it."
+  name: String!
+  description: String
+  "The resource (API) the role is scoped to, or `null` for the whole tenant. Fixed at creation."
+  resourceId: ID
+  "How many users hold the role."
+  memberCount: Int!
+  createdAt: DateTime!
+}
+
+"A user holding a role."
+type RoleMember {
+  user: TenantUser!
+  assignedAt: DateTime!
+}
+
+"A page of a role's members, oldest assignment first; `nextCursor` is `null` on the last."
+type RoleMemberPage {
+  items: [RoleMember!]!
+  nextCursor: String
+  "How many users hold the role in all, whatever the cursor or the page's size."
+  totalCount: Int!
+}
+
+input CreateRoleInput {
+  name: String!
+  description: String
+  "Scope the role to this resource of the tenant; omit it for a tenant-wide role."
+  resourceId: ID
+}
+
+input UpdateRoleInput {
+  "Renaming changes the claim value of every holder's next token."
+  name: String
+  "An empty string clears it."
+  description: String
+}
+
+extend type Query {
+  """
+  The tenant's roles, by name (tenant viewer). With `resourceId` only the roles
+  scoped to that resource; without it every role.
+  """
+  roles(tenantId: ID!, resourceId: ID): [TenantRole!]!
+  "One role of the tenant (tenant viewer), or `null`: unknown, or of another tenant."
+  role(tenantId: ID!, id: ID!): TenantRole
+  "The members of a role (tenant viewer). `first` defaults to 25, at most 100. Empty for an unknown role."
+  roleMembers(
+    tenantId: ID!
+    roleId: ID!
+    after: String
+    first: Int
+  ): RoleMemberPage!
+  "The roles a user holds, by name (tenant viewer). Empty for an unknown user."
+  userRoles(tenantId: ID!, userId: ID!): [TenantRole!]!
+}
+
+extend type Mutation {
+  """
+  Creates a role (tenant admin). Errors: CONFLICT (409) when the tenant has a
+  role of that name in the same resource (or tenant-wide), NOT_FOUND for an
+  unknown resource, BAD_USER_INPUT for a name that is not a claim value.
+  """
+  createRole(tenantId: ID!, input: CreateRoleInput!): TenantRole!
+  "Changes a role's name or description (tenant admin). Errors: NOT_FOUND, CONFLICT, BAD_USER_INPUT."
+  updateRole(tenantId: ID!, id: ID!, input: UpdateRoleInput!): TenantRole!
+  "Deletes a role and its assignments (tenant admin). True also when it was already gone."
+  deleteRole(tenantId: ID!, id: ID!): Boolean!
+  """
+  Gives the user the role (tenant admin). Idempotent: True also when the user
+  already holds it. Errors: NOT_FOUND for an unknown role or user.
+  """
+  assignRole(tenantId: ID!, roleId: ID!, userId: ID!): Boolean!
+  "Takes the role from the user (tenant admin). True when it was held, false on a repeat."
+  unassignRole(tenantId: ID!, roleId: ID!, userId: ID!): Boolean!
+}

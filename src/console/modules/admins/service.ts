@@ -1,0 +1,148 @@
+import { denial } from "@softistx/janus-graphql";
+import { GraphQLError } from "graphql";
+import type { Access } from "../../access";
+import type { ConsoleDirectory } from "../../context";
+import type { Exclusive } from "../../exclusive";
+import { ROLES, type Role } from "../../model";
+
+const conflict = (code: "LAST_OWNER" | "ALREADY_MEMBER", message: string) =>
+  new GraphQLError(message, { extensions: { code, http: { status: 409 } } });
+
+/** The refusal of a change that would leave a tenant, or the platform, with no owner who can sign in. */
+export const lastOwnerError = (of: "tenant" | "platform" = "tenant") =>
+  conflict("LAST_OWNER", `A ${of} keeps at least one owner`);
+
+/**
+ * The one owner rule, for every write: an owner counts only while they exist
+ * and can sign in. How many of `owners` but `userId` do; the change that
+ * makes it 0 for the last one is `LAST_OWNER`.
+ */
+export async function otherLiveOwners(
+  directory: Pick<ConsoleDirectory, "findUser">,
+  owners: readonly string[],
+  userId: string,
+): Promise<number> {
+  let live = 0;
+  for (const owner of owners) {
+    if (owner === userId) continue;
+    if ((await directory.findUser(owner))?.active === true) live++;
+  }
+  return live;
+}
+
+export type AdminsAccess = Pick<
+  Access,
+  "holders" | "grantTenant" | "revokeTenant"
+>;
+
+/** The `Exclusive` key of a tenant's memberships: every write of them runs under it. */
+export const membersKey = (tenantId: string) => `console:members:${tenantId}`;
+
+/** The `Exclusive` key of the platform owners: the check of the last one runs under it. */
+export const PLATFORM_OWNERS_KEY = "console:platform-owners";
+
+/** The role a user holds directly on the tenant (the strongest), or `null`. */
+export async function roleOf(
+  access: Pick<Access, "holders">,
+  tenantId: string,
+  userId: string,
+): Promise<Role | null> {
+  for (const role of ROLES) {
+    if ((await access.holders(tenantId, role)).includes(userId)) return role;
+  }
+  return null;
+}
+
+/** The tenant's members, owners first. A user who is gone is left out. */
+export async function members(
+  access: AdminsAccess,
+  directory: ConsoleDirectory,
+  tenantId: string,
+) {
+  const found: {
+    user: NonNullable<Awaited<ReturnType<ConsoleDirectory["findUser"]>>>;
+    role: Role;
+  }[] = [];
+  const seen = new Set<string>();
+  for (const role of ROLES) {
+    for (const userId of await access.holders(tenantId, role)) {
+      if (seen.has(userId)) continue; // the strongest role wins
+      seen.add(userId);
+      const user = await directory.findUser(userId);
+      if (user !== null) found.push({ user, role });
+    }
+  }
+  return found;
+}
+
+/**
+ * Gives the user exactly `role` on the tenant (the others are revoked), or
+ * none, unless that leaves the tenant with no owner. The relation store has
+ * no conditional write, so the check and the writes only hold together under
+ * the tenant's `membersKey`: call it through `changeRole` / `removeMember`,
+ * never bare.
+ */
+async function setRole(
+  { access, directory }: Pick<MembersDeps, "access" | "directory">,
+  tenantId: string,
+  userId: string,
+  role: Role | null,
+): Promise<void> {
+  const owners = await access.holders(tenantId, "owner");
+  if (
+    role !== "owner" &&
+    owners.includes(userId) &&
+    (await otherLiveOwners(directory, owners, userId)) === 0
+  ) {
+    throw lastOwnerError();
+  }
+  if (role !== null) await access.grantTenant(tenantId, userId, role);
+  for (const other of ROLES) {
+    if (other !== role) await access.revokeTenant(tenantId, userId, other);
+  }
+}
+
+export interface MembersDeps {
+  access: AdminsAccess;
+  directory: Pick<ConsoleDirectory, "findUser">;
+  exclusive: Exclusive;
+}
+
+/**
+ * Gives a member another role, one change of the tenant's memberships at a
+ * time. `NOT_FOUND` for a user who is not a member, `LAST_OWNER` when it
+ * would leave no owner. Answers the role as stored.
+ */
+export const changeRole = (
+  deps: MembersDeps,
+  tenantId: string,
+  userId: string,
+  role: Role,
+): Promise<Role> =>
+  deps.exclusive(membersKey(tenantId), async () => {
+    if ((await roleOf(deps.access, tenantId, userId)) === null) {
+      throw denial("NOT_FOUND", "Not a member of this tenant");
+    }
+    await setRole(deps, tenantId, userId, role);
+    return (await roleOf(deps.access, tenantId, userId)) ?? role;
+  });
+
+/** Removes a member (a non-member is left as is); `LAST_OWNER` for the last owner who can sign in. */
+export const removeMember = (
+  deps: MembersDeps,
+  tenantId: string,
+  userId: string,
+): Promise<void> =>
+  deps.exclusive(membersKey(tenantId), () =>
+    setRole(deps, tenantId, userId, null),
+  );
+
+export async function assertNotMember(
+  access: AdminsAccess,
+  tenantId: string,
+  userId: string,
+) {
+  if ((await roleOf(access, tenantId, userId)) !== null) {
+    throw conflict("ALREADY_MEMBER", "Already an admin of this tenant");
+  }
+}

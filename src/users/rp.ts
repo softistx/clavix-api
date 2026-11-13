@@ -6,9 +6,9 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 // domain would go through WebAuthn Related Origins, a later slice).
 
 /** The WebAuthn rpId of a tenant: its host, `<slug>.<CLAVIX_DOMAIN>`, no port. */
-export const rpIdOf = (tenant: Pick<ResolvedTenant, "issuer">): string =>
-  new URL(tenant.issuer).hostname;
+export const rpIdOf = (tenant: Pick<ResolvedTenant, "slugIssuer">): string =>
+  new URL(tenant.slugIssuer).hostname;
 
 /** The origin a WebAuthn response of a tenant comes from: `https://<slug>.<CLAVIX_DOMAIN>` (`http://<slug>.clavix.localhost` in development). */
-export const originOf = (tenant: Pick<ResolvedTenant, "issuer">): string =>
-  new URL(tenant.issuer).origin;
+export const originOf = (tenant: Pick<ResolvedTenant, "slugIssuer">): string =>
+  new URL(tenant.slugIssuer).origin;

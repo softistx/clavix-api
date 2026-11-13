@@ -56,9 +56,10 @@ export async function verifySignInCode(
   auth: TenantJanus,
   challenge: string,
   code: string,
+  options?: { deviceLabel?: string },
 ) {
   try {
-    return await auth.signInCode.confirm(challenge, code);
+    return await auth.signInCode.confirm(challenge, code, options);
   } catch (error) {
     if (error instanceof JanusError && error.code !== "STORE_FAILED") {
       throw codeInvalid();

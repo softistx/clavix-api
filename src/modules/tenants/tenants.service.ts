@@ -4,8 +4,10 @@ import {
   OptimisticLockError,
   type TypedCollection,
 } from "@softistx/mongo";
+import { ObjectId } from "mongodb";
 import { env } from "@/config/env";
-import { hostOf, partitionOf } from "./identity";
+import { dropTenantHosts } from "./hosts";
+import { partitionOf } from "./identity";
 import { PLATFORM_TENANT_SLUG, slugProblem } from "./slug";
 import {
   InvalidSlugError,
@@ -26,6 +28,12 @@ export interface TenantsServiceOptions {
    */
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
   /**
+   * Every custom host that resolves to the tenant (verified, or a lapsed primary), dropped with its slug host on each
+   * write: a suspended or deleted tenant must stop resolving on them at once.
+   * Default: none. An error is logged and the slug host is still dropped.
+   */
+  hostsOf?: (tenantId: ObjectId) => string[] | Promise<string[]>;
+  /**
    * Called with the tenant's id (hex, the janus partition) once it is created,
    * to give it its first signing key before any token. Same contract as
    * `onHostsChanged`: an error is logged and swallowed, the tenant stands, and
@@ -40,6 +48,9 @@ export interface TenantsServiceOptions {
 export class TenantsService {
   private readonly domain: string;
   private readonly onHostsChanged: (hosts: string[]) => void | Promise<void>;
+  private readonly hostsOf: (
+    tenantId: ObjectId,
+  ) => string[] | Promise<string[]>;
   private readonly onCreated: (tenantId: string) => void | Promise<void>;
   private readonly log: (message: string) => void;
 
@@ -49,6 +60,7 @@ export class TenantsService {
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
+    this.hostsOf = options.hostsOf ?? (() => []);
     this.onCreated = options.onCreated ?? (() => {});
     this.log = options.log ?? ((message) => console.warn(message));
   }
@@ -57,6 +69,7 @@ export class TenantsService {
     slug: string;
     name: string;
     signUp?: boolean;
+    plan?: Tenant["plan"];
   }): Promise<Tenant> {
     const problem = slugProblem(input.slug);
     if (problem !== undefined) throw new InvalidSlugError(problem);
@@ -68,6 +81,7 @@ export class TenantsService {
         slug: input.slug,
         name,
         ...(input.signUp === undefined ? {} : { signUp: input.signUp }),
+        ...(input.plan === undefined ? {} : { plan: input.plan }),
       });
     } catch (error) {
       if (error instanceof ConflictError) {
@@ -95,6 +109,70 @@ export class TenantsService {
       filter: { status: "active" },
     });
     return active.map((tenant) => partitionOf(tenant._id));
+  }
+
+  /** The ids (hex) of every tenant, the suspended and the trashed included: the partitions that may hold keys. */
+  async allIds(): Promise<string[]> {
+    const all = await this.collection.findMany({ withDeleted: true });
+    return all.map((tenant) => partitionOf(tenant._id));
+  }
+
+  /** The active tenants with these ids (hex); an unknown, suspended or deleted one is left out. */
+  async activeByIds(ids: readonly string[]): Promise<Tenant[]> {
+    const valid = ids.filter((id) => ObjectId.isValid(id));
+    if (valid.length === 0) return [];
+    return this.collection.findMany({
+      filter: {
+        _id: { $in: valid.map((id) => new ObjectId(id)) },
+        status: "active",
+      },
+    });
+  }
+
+  /**
+   * The tenants with these ids (hex) that are active or suspended (ADR-0039:
+   * the console stays readable on a suspended one); an unknown or trashed one
+   * is left out.
+   */
+  async liveByIds(ids: readonly string[]): Promise<Tenant[]> {
+    const valid = ids.filter((id) => ObjectId.isValid(id));
+    if (valid.length === 0) return [];
+    return this.collection.findMany({
+      filter: {
+        _id: { $in: valid.map((id) => new ObjectId(id)) },
+        status: { $in: ["active", "suspended"] },
+      },
+    });
+  }
+
+  /**
+   * Changes the tenant's sign-in policy (slice A5). `change` gets the stored
+   * tenant and answers the new policy, or `null` for no change (no write, no
+   * version bump, so no janus rebuild). The version read is the version
+   * expected; on a lost race the tenant is read again (three attempts, then
+   * the `OptimisticLockError` is thrown).
+   */
+  async updateSignIn(
+    id: IdOf<typeof tenants> | string,
+    change: (tenant: Tenant) => Tenant["signIn"] | null,
+  ): Promise<Tenant> {
+    for (let attempt = 1; ; attempt++) {
+      const tenant = await this.collection.getById(id);
+      const signIn = change(tenant);
+      if (signIn === null) return tenant;
+      try {
+        const updated = await this.collection.update(tenant._id, {
+          signIn,
+          version: tenant.version,
+        });
+        await this.changed(updated);
+        return updated;
+      } catch (error) {
+        if (!(error instanceof OptimisticLockError) || attempt === 3) {
+          throw error;
+        }
+      }
+    }
   }
 
   suspend(id: IdOf<typeof tenants> | string): Promise<Tenant> {
@@ -148,16 +226,15 @@ export class TenantsService {
     }
   }
 
-  private async changed(tenant: Tenant) {
-    const hosts = [hostOf(tenant.slug, this.domain)];
-    try {
-      await this.onHostsChanged(hosts);
-    } catch (error) {
-      this.log(
-        `tenants: onHostsChanged failed for ${hosts.join(", ")}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+  private changed(tenant: Tenant) {
+    return dropTenantHosts(
+      {
+        domain: this.domain,
+        hostsOf: this.hostsOf,
+        onHostsChanged: this.onHostsChanged,
+        log: this.log,
+      },
+      tenant,
+    );
   }
 }

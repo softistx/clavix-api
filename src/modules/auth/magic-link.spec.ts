@@ -3,19 +3,20 @@ import type { MemoryMailer } from "@softistx/mail";
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { secretBox } from "@/config/keys";
 import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
+import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { MAGIC_LINK_LIFESPAN, SESSION_COOKIE } from "@/users/tenant-janus";
 import { settled } from "./outbox";
 
-// The flag is read once at start: `bun run test` runs the "on" half with
-// CLAVIX_MAGIC_LINK=true and the "off" half (the default) in the main pass.
-const on = env.CLAVIX_MAGIC_LINK;
+// Magic link is the tenant's choice, off until it turns it on (its sign-in
+// policy, slice A5): "plain" never did, "acme" and "vault" did.
 const memory = mailer as MemoryMailer;
 const app = createApp();
 const origin = {
@@ -26,6 +27,7 @@ const origin = {
 const service = new TenantsService(mongo.db.tenants, {
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
+const policy = new SignInPolicyService(service, secretBox);
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 
 interface Answer {
@@ -40,10 +42,15 @@ async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   ip = "198.51.100.7",
+  extra: Record<string, string> = {},
 ): Promise<Answer> {
   const response = await app.request(url(slug), {
     method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": ip,
+      ...extra,
+    },
     body: JSON.stringify({ query, variables }),
   });
   const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
@@ -96,15 +103,24 @@ const cleanup = async () => {
 };
 
 beforeAll(async () => {
-  await service.create({ slug: "acme", name: "Acme", signUp: true });
-  await service.create({ slug: "vault", name: "Vault" }); // closed
+  // "plain" never turned magic link on (the default); "acme" and "vault" did.
+  await service.create({ slug: "plain", name: "Plain", signUp: true });
+  for (const [slug, signUp] of [
+    ["acme", true],
+    ["vault", false], // closed
+  ] as const) {
+    const created = await service.create({ slug, name: slug, signUp });
+    await policy.updateMethods(created._id.toHexString(), [
+      { type: "magicLink", enabled: true },
+    ]);
+  }
 });
 afterAll(cleanup);
 
-describe.skipIf(on)("magic link switched off (the default)", () => {
+describe("magic link off for a tenant that did not turn it on", () => {
   test("requestMagicLink is 404 MAGIC_LINK_DISABLED and sends nothing", async () => {
     const before = memory.sent.length;
-    const { answer, mails } = await ask("acme", "ada@example.test");
+    const { answer, mails } = await ask("plain", "ada@example.test");
     expect(answer.status).toBe(404);
     expect(codeOf(answer)).toBe("MAGIC_LINK_DISABLED");
     expect(mails).toHaveLength(0);
@@ -112,14 +128,14 @@ describe.skipIf(on)("magic link switched off (the default)", () => {
   });
 
   test("confirmMagicLink is 404 MAGIC_LINK_DISABLED, whatever the token", async () => {
-    const answer = await gql("acme", CONFIRM, { token: "anything" });
+    const answer = await gql("plain", CONFIRM, { token: "anything" });
     expect(answer.status).toBe(404);
     expect(codeOf(answer)).toBe("MAGIC_LINK_DISABLED");
     expect(answer.cookies).toHaveLength(0);
   });
 
   test("nothing is created", async () => {
-    await gql("acme", REQUEST, { email: "ghost@example.test" });
+    await gql("plain", REQUEST, { email: "ghost@example.test" });
     const users = await oauthDb
       .collection("partitionedUsers")
       .countDocuments({ email: "ghost@example.test" } as never);
@@ -127,7 +143,7 @@ describe.skipIf(on)("magic link switched off (the default)", () => {
   });
 });
 
-describe.skipIf(!on)("magic link switched on", () => {
+describe("magic link turned on by the tenant", () => {
   test("request mails a link, confirm opens the session and proves the e-mail", async () => {
     const { answer, link, token, mails } = await ask(
       "acme",
@@ -173,6 +189,22 @@ describe.skipIf(!on)("magic link switched on", () => {
     expect(((await me.json()) as { data: unknown }).data).toEqual({
       currentUser: { email: "lin@example.test", emailVerified: true },
     });
+  });
+
+  test("the session records the User-Agent as its device label", async () => {
+    const { token } = await ask("acme", "dev-link@example.test");
+    const agent = "Mozilla/5.0 (Macintosh) Safari/605.1";
+    const signedIn = await gql("acme", CONFIRM, { token }, undefined, {
+      "user-agent": agent,
+    });
+    const confirmed = signedIn.data?.["confirmMagicLink"] as {
+      user: { id: string };
+    };
+    const auth = await janusIssuers.forRequest(new Request(url("acme")));
+    const id = confirmed.user.id;
+    expect(
+      (await auth?.sessions.list({ id }))?.map((session) => session.device),
+    ).toEqual([agent]);
   });
 
   test("a link works once: the second confirm is MAGIC_LINK_INVALID, 401", async () => {
@@ -225,7 +257,14 @@ describe.skipIf(!on)("magic link switched on", () => {
   });
 
   test("a link of tenant A is refused on tenant B", async () => {
-    await service.create({ slug: "globex", name: "Globex", signUp: true });
+    const globex = await service.create({
+      slug: "globex",
+      name: "Globex",
+      signUp: true,
+    });
+    await policy.updateMethods(globex._id.toHexString(), [
+      { type: "magicLink", enabled: true },
+    ]);
     const { token } = await ask("acme", "iso@example.test");
     const answer = await gql("globex", CONFIRM, { token });
     expect(codeOf(answer)).toBe("MAGIC_LINK_INVALID");
