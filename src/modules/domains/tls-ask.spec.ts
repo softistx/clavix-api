@@ -51,7 +51,13 @@ describe("tlsAsk", () => {
 
   test("404 for proxied requests and non-GET", async () => {
     const q = `token=${SECRET}&domain=auth.acme.com`;
-    for (const header of ["x-forwarded-for", "x-forwarded-host", "forwarded"]) {
+    for (const header of [
+      "x-forwarded-for",
+      "x-forwarded-host",
+      "x-forwarded-proto",
+      "x-real-ip",
+      "forwarded",
+    ]) {
       expect(
         (await get(ask(), q, { headers: { [header]: "1.2.3.4" } })).status,
       ).toBe(404);

@@ -80,7 +80,8 @@ type Mutation {
   Looks up `_clavix.<host>` TXT and, if it holds the token, marks the domain
   VERIFIED and drops every other tenant's pending claim on the host.
   Idempotent. Errors: NOT_FOUND (404), DOMAIN_TAKEN (409: another tenant
-  verified it first).
+  verified it first), VERIFY_COOLDOWN (429: the claim was checked less than
+  60 s ago; `extensions.retryAfter` is the seconds to wait, no lookup was made).
   """
   verifyDomain(tenantId: ID!, id: ID!): VerifyDomainPayload!
   """

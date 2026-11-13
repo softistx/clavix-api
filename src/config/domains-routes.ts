@@ -4,6 +4,7 @@ import {
   TLS_ASK_PATH,
   tlsAsk,
 } from "@/modules/domains/tls-ask";
+import { tlsAskGate } from "@/modules/domains/tls-limit";
 import {
   relatedOrigins,
   WEBAUTHN_WELL_KNOWN,
@@ -22,38 +23,36 @@ export { TLS_ASK_PATH, WEBAUTHN_WELL_KNOWN };
  */
 const askLimits = redis?.limits;
 
-export const serveTlsAsk = tlsAsk({
-  secret: env.CLAVIX_TLS_ASK_SECRET,
-  platformDomain: env.CLAVIX_DOMAIN,
-  allowed: async (host) => {
-    if ((await domainStore.verifiedHost(host)) === undefined) return false;
-    const tenant = await tenantResolver.resolveHost(host);
-    return tenant !== null && isLive(tenant);
-  },
-  // The platform's own hosts: the apex, the console, and the slug host of a
-  // live tenant (never a deleted, suspended or unknown one).
-  allowedPlatformHost: platformHostPolicy({
-    domain: env.CLAVIX_DOMAIN,
-    isLiveTenantHost: async (host) => {
+/** The ask over the real stores, with the given secret (specs pass their own). */
+export const tlsAskOver = (secret: string | undefined) =>
+  tlsAsk({
+    secret,
+    platformDomain: env.CLAVIX_DOMAIN,
+    allowed: async (host) => {
+      if ((await domainStore.verifiedHost(host)) === undefined) return false;
       const tenant = await tenantResolver.resolveHost(host);
       return tenant !== null && isLive(tenant);
     },
-  }),
-  limit:
-    askLimits === undefined
-      ? undefined
-      : async () => {
-          try {
-            const result = await askLimits.tlsAsk.consume({ scope: "all" }, 1, {
-              timeoutMs: 250,
-            });
-            return result.allowed;
-          } catch {
-            console.warn("redis unavailable: tls ask limit skipped");
-            return true;
-          }
-        },
-});
+    // The platform's own hosts: the apex, the console, and the slug host of a
+    // live tenant (never a deleted, suspended or unknown one).
+    allowedPlatformHost: platformHostPolicy({
+      domain: env.CLAVIX_DOMAIN,
+      isLiveTenantHost: async (host) => {
+        const tenant = await tenantResolver.resolveHost(host);
+        return tenant !== null && isLive(tenant);
+      },
+    }),
+    // Fails closed when Redis is down (`tlsAskGate`); no Redis at all
+    // (development, specs): no limit.
+    limit:
+      askLimits === undefined
+        ? undefined
+        : tlsAskGate(() =>
+            askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),
+          ),
+  });
+
+export const serveTlsAsk = tlsAskOver(env.CLAVIX_TLS_ASK_SECRET);
 
 /** `GET /.well-known/webauthn` on a tenant's slug host: the origins of its verified custom domains (ADR-0036). */
 export async function serveWebauthnOrigins(request: Request) {
@@ -63,7 +62,7 @@ export async function serveWebauthnOrigins(request: Request) {
   if (host === null || tenant === null || !isLive(tenant)) {
     return new Response(null, { status: 404 });
   }
-  const slugHost = new URL(tenant.slugIssuer ?? tenant.issuer).hostname;
+  const slugHost = new URL(tenant.slugIssuer).hostname;
   if (host !== slugHost) return new Response(null, { status: 404 });
   const hosts = await domainStore.verifiedHostsOf(
     new ObjectId(tenant.tenantId),

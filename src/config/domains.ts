@@ -1,5 +1,7 @@
 import { systemTxtResolver } from "@/modules/domains/dns";
 import { DomainStore } from "@/modules/domains/domains.service";
+import { domainEventInput } from "@/modules/domains/events";
+import { adminEventRecorder } from "./admin-events";
 import { mongo } from "./db";
 import { env } from "./env";
 
@@ -16,6 +18,7 @@ export const createDomainStore = (
 ) =>
   new DomainStore(mongo.db.domains, {
     ...options,
+    record: (event) => adminEventRecorder.record(domainEventInput(event)),
     dns: systemTxtResolver(),
     platformDomain: env.CLAVIX_DOMAIN,
   });

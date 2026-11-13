@@ -292,7 +292,7 @@ every other failure a 401).
 
 ### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
 
-Every console mutation writes an append-only admin event (ADR-0037). A slice that adds a mutation
+Every console mutation writes an append-only admin event (ADR-0037). The platform's own changes with no console user write one too, under a `system:<module>:<job>` actor (`domain.lapse`, `domain.evict`: see Custom domains). A slice that adds a mutation
 does two things, and nothing else touches the collection:
 - **Declare** the action beside the module's guards, `export const <name>Audits: Audits = {
   "Mutation.renameTenant": "tenant.rename" }`, and spread it into `audits` in `modules/index.ts`
@@ -426,7 +426,8 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 A tenant adds a host (`addDomain`), publishes `_clavix.<host> TXT clavix-verify=<token>`, then
 `verifyDomain` reads it through the `TxtResolver` port (`dns.ts`; specs inject a fake, only
 `src/config/domains.ts` wires the real resolver). `DomainStore` (`domains.service.ts`) is the
-only way into the `domains` collection.
+only way into the `domains` collection; the periodic recheck is `DomainRecheck`
+(`domains.recheck.ts`, the DNS comparison `domains.check.ts`), which the store builds and delegates to.
 - `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
   tenants (partial unique index on `{ host }` where `status: "verified"`), which the
   tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still
@@ -436,8 +437,17 @@ only way into the `domains` collection.
   verified elsewhere is `DOMAIN_TAKEN`. Hosts are normalised (case, trailing dot, IDN to
   punycode); IPs, localhost, wildcards, reserved suffixes and the platform domain are refused.
 - The quota (`effectiveQuotas(...).domains`) counts pending claims too and is checked on
-  `addDomain` (`assertWithinQuota`, a post-insert recount closes the race; serialising it
-  waits for `exclusive.ts`, A2d). `usage.domains` is `domainStore.count`.
+  `addDomain` (`assertWithinQuota`), which runs under the tenant's `ctx.exclusive` lock
+  (`console:domains:<tenantId>`); the post-insert recount stays as a second guard.
+  `usage.domains` is `domainStore.count`. These slice decisions stand (issue #127): pending
+  claims count toward the quota; a lapsed primary keeps resolving but the TLS ask refuses it;
+  recheck every 6 h with a 7-day grace.
+- `verifyDomain` is held to one check per claim per 60 s (`VERIFY_COOLDOWN_SECONDS`, from the
+  claim's `checkedAt`): `VERIFY_COOLDOWN` (429) with `extensions.retryAfter`, no lookup made.
+- The platform's own changes are admin events too: `domain.lapse` (recheck, actor
+  `system:domains:recheck`) and `domain.evict` (a verification removing another tenant's claim,
+  actor `system:domains:verify`), recorded through `DomainStoreOptions.record` (`events.ts`,
+  wired in `src/config/domains.ts`); a failure to record is logged, never fails the write.
 - The primary is explicit (`setPrimaryDomain`, ADR-0032); the issuer follows it (resolver
   `toResolved`), the passkey rpId stays the slug host (`slugIssuer`, `src/users/rp.ts`,
   ADR-0036). The primary cannot be removed. The slug host keeps serving.
@@ -447,9 +457,9 @@ only way into the `domains` collection.
   flag and keeps resolving: the issuer never moves silently. A DNS failure changes nothing.
 - A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
 - **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
-  domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`, fails open
-  when Redis is down), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
-  proxied requests carrying `X-Forwarded-*`, garbage, unknown, pending, lapsed, suspended).
+  domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
+  when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
+  proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
   The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.sh`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). Janus accepting those origins is not wired yet.

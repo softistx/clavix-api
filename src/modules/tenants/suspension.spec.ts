@@ -109,6 +109,7 @@ describe("withTenantState", () => {
     signUp: false,
     status,
     issuer: "https://acme.clavix.test",
+    slugIssuer: "https://acme.clavix.test",
     partition: "t1",
     version: 1,
     signIn: signInPolicySchema.parse(undefined),

@@ -21,8 +21,9 @@ export const resolvedTenant = z.object({
   // custom domain's once the tenant made one primary (ADR-0032).
   issuer: z.string(),
   // The slug host's issuer, whatever `issuer` is: the passkey rpId stays on it
-  // (ADR-0036). An entry cached before custom domains had none: `issuer` was it.
-  slugIssuer: z.string().optional(),
+  // (ADR-0036). Always set by the resolver; an entry cached before custom
+  // domains has none, fails this schema and reads as a cache miss (60 s TTL).
+  slugIssuer: z.string(),
   partition: z.string(),
   version: z.number(),
   signIn: signInPolicySchema, // slice A5; the social secrets stay sealed here (this value sits in Redis)

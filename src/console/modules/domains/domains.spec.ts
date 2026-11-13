@@ -125,6 +125,48 @@ describe("addDomain", () => {
   });
 });
 
+describe("quota under concurrency", () => {
+  test("parallel claims past the quota leave exactly the quota's worth", async () => {
+    await mongo.db.domains.raw.deleteMany({});
+    await mongo.db.tenants.raw.updateOne(
+      { _id: new ObjectId(tenantA) },
+      { $set: { plan: "free" } },
+    );
+    const results = await Promise.all(
+      ["p1", "p2", "p3", "p4"].map((label) =>
+        admin(ADD, { tenantId: tenantA, host: `${label}.acme.com` }),
+      ),
+    );
+    const accepted = results.filter((r) => r.errors === undefined);
+    expect(accepted).toHaveLength(1);
+    expect(results.filter((r) => codeOf(r) === "QUOTA_EXCEEDED")).toHaveLength(
+      3,
+    );
+    expect(await domainStore.count(new ObjectId(tenantA))).toBe(1);
+    await mongo.db.tenants.raw.updateOne(
+      { _id: new ObjectId(tenantA) },
+      { $set: { plan: "pro" } },
+    );
+  });
+});
+
+describe("verify cooldown", () => {
+  test("a second verify of one claim is VERIFY_COOLDOWN (429) with retryAfter", async () => {
+    const added = await admin(ADD, { tenantId: tenantA, host: "cd.acme.com" });
+    const id = idOf(added);
+    expect(
+      (await admin(VERIFY, { tenantId: tenantA, id })).errors,
+    ).toBeUndefined();
+    const again = await admin(VERIFY, { tenantId: tenantA, id });
+    expect(codeOf(again)).toBe("VERIFY_COOLDOWN");
+    const extensions = again.errors?.[0]?.extensions as
+      | { retryAfter?: number }
+      | undefined;
+    expect(extensions?.retryAfter).toBeGreaterThan(0);
+    expect(extensions?.retryAfter).toBeLessThanOrEqual(60);
+  });
+});
+
 describe("reads, isolation, remove, primary", () => {
   test("list and get are tenant-scoped; a viewer may read", async () => {
     await mongo.db.domains.raw.deleteMany({});

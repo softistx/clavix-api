@@ -4,7 +4,13 @@ import { mongo } from "@/config/db";
 import { QuotaExceededError } from "@/modules/usage/quota";
 import type { TxtAnswer, TxtResolver } from "./dns";
 import { DomainError } from "./domains.errors";
-import { DomainStore, mintToken, RECHECK_GRACE_DAYS } from "./domains.service";
+import {
+  DomainStore,
+  mintToken,
+  RECHECK_GRACE_DAYS,
+  VERIFY_COOLDOWN_SECONDS,
+} from "./domains.service";
+import type { DomainSystemEvent } from "./events";
 
 const collection = mongo.db.domains;
 const records = new Map<string, TxtAnswer>();
@@ -13,12 +19,16 @@ const dns: TxtResolver = {
 };
 let clock = new Date("2026-11-12T12:00:00Z");
 const changed: string[][] = [];
+const events: DomainSystemEvent[] = [];
 const store = new DomainStore(collection, {
   dns,
   platformDomain: "clavix.test",
   now: () => clock,
   onHostsChanged: (hosts) => {
     changed.push(hosts);
+  },
+  record: async (event) => {
+    events.push(event);
   },
   log: () => {},
 });
@@ -38,9 +48,14 @@ const codeOf = async (promise: Promise<unknown>) => {
 afterEach(async () => {
   records.clear();
   changed.length = 0;
+  events.length = 0;
   clock = new Date("2026-11-12T12:00:00Z");
   await collection.raw.deleteMany({});
 });
+
+const afterCooldown = () => {
+  clock = new Date(clock.getTime() + (VERIFY_COOLDOWN_SECONDS + 1) * 1_000);
+};
 
 const addVerified = async (tenant: ObjectId, host: string) => {
   const claim = await store.add(tenant, host, null);
@@ -110,8 +125,10 @@ describe("verify", () => {
     const id = claim._id.toHexString();
     expect((await store.verify(A, id)).failure).toBe("NO_RECORD");
     publish("auth.acme.com", "clavix-verify=wrong");
+    afterCooldown();
     expect((await store.verify(A, id)).failure).toBe("MISMATCH");
     records.set("_clavix.auth.acme.com", { kind: "failed" });
+    afterCooldown();
     const last = await store.verify(A, id);
     expect(last.failure).toBe("LOOKUP_FAILED");
     expect(last.domain.status).toBe("pending");
@@ -137,6 +154,73 @@ describe("verify", () => {
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
     expect(await store.count(B)).toBe(0);
     expect(changed.flat()).toContain("auth.acme.com");
+  });
+
+  test("a second check inside the cooldown is refused with the seconds left", async () => {
+    const claim = await store.add(A, "auth.acme.com", null);
+    const id = claim._id.toHexString();
+    await store.verify(A, id);
+    clock = new Date(clock.getTime() + 20_000);
+    publish("auth.acme.com", claim.txtToken);
+    const refused = await store.verify(A, id).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(DomainError);
+    expect((refused as DomainError).code).toBe("VERIFY_COOLDOWN");
+    expect((refused as DomainError).retryAfter).toBe(
+      VERIFY_COOLDOWN_SECONDS - 20,
+    );
+    // The refused call neither looked up DNS nor moved the claim's checkedAt.
+    expect((await store.find(A, id))?.status).toBe("pending");
+    clock = new Date(clock.getTime() + (VERIFY_COOLDOWN_SECONDS - 20) * 1_000);
+    expect((await store.verify(A, id)).domain.status).toBe("verified");
+  });
+
+  test("the cooldown is per claim, and a first check is never held back", async () => {
+    const one = await store.add(A, "one.acme.com", null);
+    const two = await store.add(A, "two.acme.com", null);
+    await store.verify(A, one._id.toHexString());
+    expect((await store.verify(A, two._id.toHexString())).failure).toBe(
+      "NO_RECORD",
+    );
+    expect(await codeOf(store.verify(A, one._id.toHexString()))).toBe(
+      "VERIFY_COOLDOWN",
+    );
+  });
+
+  test("a claim that is already verified answers inside the cooldown", async () => {
+    const claim = await addVerified(A, "auth.acme.com");
+    expect((await store.verify(A, claim._id.toHexString())).domain.status).toBe(
+      "verified",
+    );
+  });
+
+  test("evicting another tenant's claim records a system event for it", async () => {
+    const a = await store.add(A, "auth.acme.com", null);
+    const b = await store.add(B, "auth.acme.com", null);
+    publish("auth.acme.com", a.txtToken);
+    await store.verify(A, a._id.toHexString());
+    expect(events).toEqual([
+      { action: "domain.evict", tenantId: B, domainId: b._id },
+    ]);
+  });
+
+  test("an event that cannot be recorded does not fail the verification", async () => {
+    const logged: string[] = [];
+    const failing = new DomainStore(collection, {
+      dns,
+      platformDomain: "clavix.test",
+      now: () => clock,
+      record: async () => {
+        throw new Error("db down");
+      },
+      log: (m) => logged.push(m),
+    });
+    const a = await failing.add(A, "auth.acme.com", null);
+    await failing.add(B, "auth.acme.com", null);
+    publish("auth.acme.com", a.txtToken);
+    expect((await failing.verify(A, a._id.toHexString())).domain.status).toBe(
+      "verified",
+    );
+    expect(logged.join()).toContain("event");
   });
 
   test("another tenant cannot see or verify a claim by id", async () => {
@@ -218,6 +302,8 @@ describe("recheckAll", () => {
     expect(await store.verifiedHostsOf(A)).toEqual([]);
     await store.recheckAll(tell);
     expect(told).toHaveLength(1);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ action: "domain.lapse", tenantId: A });
   });
 
   test("the record coming back resets the grace", async () => {
