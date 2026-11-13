@@ -25,8 +25,9 @@ nxgt-janus release says which.
     the scheduled purge waits for janus
     ([nxgt-janus#710](https://github.com/softistx/nxgt-janus/issues/710),
     [#112](https://github.com/softistx/clavix-api/issues/112)).
-  - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users,
-    end-user roles and admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
+  - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users (list, invite, disable, delete, sessions and grants; done on the M2 branch,
+    [#101](https://github.com/softistx/clavix-api/issues/101); the e-mail search is exact until janus
+    offers a prefix filter), end-user roles and admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
   - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
     host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
   - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for

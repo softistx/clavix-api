@@ -83,12 +83,13 @@ const memberOf = (
 
 export const admins: Resolvers = {
   Query: {
+    // The guard lower-cased the id it checked; read with the same spelling.
     memberships: async (_, { tenantId }, ctx) =>
-      (await members(ctx.access, ctx.directory, tenantId)).map(
+      (await members(ctx.access, ctx.directory, tenantIdOf(tenantId))).map(
         ({ user, role }) => memberOf(user, role),
       ),
     adminInvitations: async (_, { tenantId }, ctx) =>
-      (await ctx.admins.invitations(tenantId)).map(invitationOf),
+      (await ctx.admins.invitations(tenantIdOf(tenantId))).map(invitationOf),
   },
   Mutation: {
     inviteAdmin: async (_, { tenantId: given, email, role }, ctx) => {
@@ -133,6 +134,8 @@ export const admins: Resolvers = {
     removeMembership: async (_, { tenantId: given, userId }, ctx) => {
       const tenantId = tenantIdOf(given);
       targetId(userId, "userId");
+      // Like the other writes: a tenant that is gone or suspended is not edited.
+      await activeTenant(ctx.directory, tenantId);
       await removeMember(ctx, tenantId, userId);
       await ctx.audit("membership.remove", {
         type: "user",

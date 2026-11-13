@@ -1,6 +1,7 @@
 import { createConsoleAuthenticator } from "@/console/auth";
 import { consoleAudience } from "@/console/identity";
 import { createJanusAdmins } from "@/console/modules/admins/janus-admins";
+import { createJanusUsers } from "@/console/modules/users/janus-users";
 import type { ConsoleDeps } from "@/console/plugin";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { OAuthHandle } from "@/oauth/routes";
@@ -25,6 +26,14 @@ export const consoleResource = consoleAudience(origin);
 const clavixTenant = () =>
   tenantResolver.resolveHost(`${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`);
 
+/** The live tenant with this id, resolved through its own host; `null` when gone or suspended. */
+async function resolveById(id: string) {
+  const [tenant] = await tenantsService.activeByIds([id]);
+  return tenant === undefined
+    ? null
+    : tenantResolver.resolveHost(`${tenant.slug}.${env.CLAVIX_DOMAIN}`);
+}
+
 /**
  * The console API's wiring: tokens verified in process by the `clavix`
  * tenant's OAuth server, permissions in the relation store, users of the
@@ -45,6 +54,21 @@ export function createConsoleDeps(
     }),
     access,
     admins: createJanusAdmins(invitationsOf(clavixTenant)),
+    users: createJanusUsers({
+      janusOf: async (id) => {
+        const tenant = await resolveById(id);
+        return tenant === null ? null : forTenant(tenant);
+      },
+      grantsOf: async (id) => {
+        const tenant = await resolveById(id);
+        const server =
+          tenant === null
+            ? null
+            : await oauth.serverFor(new Request(tenant.issuer));
+        return server?.grants ?? null;
+      },
+      invitationsOf: (id) => invitationsOf(() => resolveById(id)),
+    }),
     exclusive,
     adminEvents: adminEventRecorder,
     directory: {

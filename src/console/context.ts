@@ -47,6 +47,76 @@ export interface ConsoleAdmins {
   revoke(tenantId: string, invitationId: string): Promise<boolean>;
 }
 
+/** An end user of a tenant, as the console shows it. */
+export interface TenantUserView {
+  id: string;
+  email: string;
+  name?: string | undefined;
+  emailVerified: boolean;
+  active: boolean;
+  createdAt: Date;
+}
+
+/** One standing OAuth grant of a user. */
+export interface UserGrantView {
+  id: string;
+  clientId: string;
+  clientName: string | null;
+  resource: string;
+  scopes: readonly string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** A pending invitation into a tenant's user pool. */
+export interface UserInvitationView {
+  id: string;
+  email: string;
+  invitedAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * The end users of the tenants (their janus partition), their invitations and
+ * grants. Every call names an active tenant by id (the caller checked it);
+ * a user or id of another tenant is unknown. Injected (see `src/config/console.ts`).
+ */
+export interface ConsoleUsers {
+  /** One page, oldest first. A cursor janus refuses rejects with `INVALID_CURSOR`. */
+  list(
+    tenantId: string,
+    page: { after: string | null; limit: number },
+  ): Promise<{ items: TenantUserView[]; nextCursor: string | null }>;
+  find(tenantId: string, id: string): Promise<TenantUserView | null>;
+  findByEmail(tenantId: string, email: string): Promise<TenantUserView | null>;
+  /** The user as written, or `null` when unknown. Disabling ends the user's sessions. */
+  setActive(
+    tenantId: string,
+    id: string,
+    active: boolean,
+  ): Promise<TenantUserView | null>;
+  /** Ends every session; answers how many. */
+  revokeSessions(tenantId: string, id: string): Promise<number>;
+  /** Deletes the user, their sessions and grants; `false` when already gone. */
+  delete(tenantId: string, id: string): Promise<boolean>;
+  invite(input: {
+    tenantId: string;
+    tenantName: string;
+    email: string;
+    invitedBy: { id: string; name?: string | undefined };
+  }): Promise<UserInvitationView>;
+  invitations(tenantId: string): Promise<UserInvitationView[]>;
+  /** `false` when it is not a pending one of this tenant. */
+  revokeInvitation(tenantId: string, invitationId: string): Promise<boolean>;
+  grants(tenantId: string, userId: string): Promise<UserGrantView[]>;
+  /** `false` when the grant is not this user's or does not exist. */
+  revokeGrant(
+    tenantId: string,
+    userId: string,
+    grantId: string,
+  ): Promise<boolean>;
+}
+
 /** What the console's plugin puts on every context, for a request whose bearer token was accepted. */
 export interface ConsoleExtras {
   /** Who the token belongs to (the user, the client, its scopes). */
@@ -64,6 +134,7 @@ export interface ConsoleExtras {
   readonly access: Access;
   readonly directory: ConsoleDirectory;
   readonly admins: ConsoleAdmins;
+  readonly users: ConsoleUsers;
   /** One at a time per key (a tenant's memberships). */
   readonly exclusive: Exclusive;
 }

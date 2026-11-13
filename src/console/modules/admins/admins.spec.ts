@@ -244,6 +244,30 @@ describe("tenant A / B isolation", () => {
     ).toContain(id);
   });
 
+  test("the reads take the id in upper case too (the guard's spelling)", async () => {
+    const upper = tenantA.toUpperCase();
+    const result = await asConsole(
+      ownA,
+      `{ memberships(tenantId: "${upper}") { role } adminInvitations(tenantId: "${upper}") { id } }`,
+    );
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.["memberships"]).toHaveLength(3);
+  });
+
+  test("removing a member of a tenant that does not exist is NOT_FOUND, like the other writes", async () => {
+    const gone = "f".repeat(24);
+    await access.grantTenant(gone, ownA, "owner");
+    expect(
+      code(
+        await asConsole(
+          ownA,
+          `mutation { removeMembership(tenantId: "${gone}", userId: "${vwA}") }`,
+        ),
+      ),
+    ).toBe("NOT_FOUND");
+    await access.revokeTenant(gone, ownA, "owner");
+  });
+
   test("an id that names no tenant is refused", async () => {
     expect(code(await invite(ownA, "0".repeat(24), "x@adm.test"))).toBe(
       "FORBIDDEN",
