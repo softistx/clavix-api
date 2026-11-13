@@ -11,6 +11,7 @@ import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
+import { catalog } from "@/config/resources";
 import { tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
@@ -62,12 +63,14 @@ const gql = async (
   query: string,
   variables: Record<string, unknown>,
   cookie?: string,
+  language?: string,
 ): Promise<GqlResult> => {
   const response = await app.request(url(slug, "/graphql"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(cookie === undefined ? {} : { cookie }),
+      ...(language === undefined ? {} : { "accept-language": language }),
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -183,6 +186,37 @@ describe("the consent screen's data", () => {
       client: { id: "backend", name: "Back end" },
       redirectHost: "app.example",
     });
+  });
+
+  test("a scope's label is the tenant's description, in the viewer's language", async () => {
+    const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
+    if (acme === undefined) throw new Error("no tenant");
+    await catalog.createScope(acme._id, {
+      name: "email",
+      description: { fr: "Votre adresse e-mail", en: "Your email address" },
+      resourceId: null,
+      claims: [],
+    });
+    const labelsOf = async (slug: string, language?: string) => {
+      const id = await authorize(slug);
+      const result = await gql(slug, REQUEST, { id }, cookieOf(slug), language);
+      expect(result.errors).toBeUndefined();
+      const { scopes } = (result.data?.["oauthRequest"] ?? { scopes: [] }) as {
+        scopes: { name: string; label: string }[];
+      };
+      return Object.fromEntries(scopes.map((s) => [s.name, s.label]));
+    };
+    expect((await labelsOf("acme", "fr-CA,en;q=0.8"))["email"]).toBe(
+      "Votre adresse e-mail",
+    );
+    const english = await labelsOf("acme", "en-US");
+    expect(english["email"]).toBe("Your email address");
+    // A scope the tenant did not describe keeps janus's label.
+    expect(english["openid"]).not.toBe("");
+    expect((await labelsOf("acme"))["email"]).toBe("Your email address");
+    // Another tenant never reads acme's texts.
+    const other = await labelsOf("globex", "fr");
+    expect(other["email"]).not.toBe("Votre adresse e-mail");
   });
 
   test("an anonymous viewer is UNAUTHENTICATED", async () => {

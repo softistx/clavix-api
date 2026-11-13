@@ -1,0 +1,82 @@
+"A text in the languages the consent page speaks."
+type LocalizedText {
+  fr: String!
+  en: String!
+}
+
+input LocalizedTextInput {
+  fr: String
+  en: String
+}
+
+"""
+A scope of a tenant: what a client may ask for. The consent page shows its
+description in the viewer's language (French when empty in English, and the
+other way round; the name when both are empty).
+"""
+type Scope {
+  id: ID!
+  "The OAuth scope token. Unique in its resource (or among the standard scopes); never changes."
+  name: String!
+  description: LocalizedText!
+  "The resource it belongs to; `null` for a standard OpenID Connect scope."
+  resourceId: ID
+  "The claims it opens."
+  claims: [String!]!
+}
+
+"A protected API of a tenant (RFC 8707): `uri` is the audience of its access tokens."
+type Resource {
+  id: ID!
+  uri: String!
+  name: String!
+  scopes: [Scope!]!
+  createdAt: DateTime!
+}
+
+input CreateResourceInput {
+  "An https URI (http on a loopback host), canonical form, no fragment; never changes."
+  uri: String!
+  "Default: the URI's host."
+  name: String
+}
+
+input CreateScopeInput {
+  name: String!
+  description: LocalizedTextInput
+  "Leave out for a standard OpenID Connect scope."
+  resourceId: ID
+  claims: [String!]
+}
+
+"The URI never changes: tokens carry it as their audience."
+input UpdateResourceInput {
+  name: String!
+}
+
+"Fields left out stay as they are. The name and the resource never change."
+input UpdateScopeInput {
+  description: LocalizedTextInput
+  claims: [String!]
+}
+
+type Query {
+  "Needs `view` on the tenant."
+  resources(tenantId: ID!): [Resource!]!
+  resource(tenantId: ID!, id: ID!): Resource
+  "All the tenant's scopes, standard ones included; `resourceId` narrows to one resource's."
+  scopes(tenantId: ID!, resourceId: ID): [Scope!]!
+}
+
+type Mutation {
+  "Needs `edit` on the tenant. A URI another resource has is a CONFLICT."
+  createResource(tenantId: ID!, input: CreateResourceInput!): Resource!
+  updateResource(tenantId: ID!, id: ID!, input: UpdateResourceInput!): Resource!
+  "Deletes the resource and its scopes. `false` when it was already gone."
+  deleteResource(tenantId: ID!, id: ID!): Boolean!
+  "A name another scope has is a CONFLICT."
+  createScope(tenantId: ID!, input: CreateScopeInput!): Scope!
+  updateScope(tenantId: ID!, id: ID!, input: UpdateScopeInput!): Scope!
+  "`false` when it was already gone."
+  deleteScope(tenantId: ID!, id: ID!): Boolean!
+}

@@ -13,7 +13,12 @@ import {
 import { userinfoOf } from "@/oauth/building";
 import type { ResourcesFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { Catalog, scopeNamesByResource } from "./catalog";
+import { CatalogError } from "./catalog.errors";
+import { resourceUriProblem } from "./resource-uri";
 import type { resources } from "./resources.model";
+import { scopeNameProblem } from "./scope-name";
+import type { scopes } from "./scopes.model";
 
 export interface RegisterResourceInput {
   /** The tenant's slug. */
@@ -36,33 +41,14 @@ export interface RegisteredResource {
 
 export interface RegisterResourceOptions {
   collection: TypedCollection<typeof resources>;
+  /** The tenant's `Scope` documents: the resource's scopes are stored there. */
+  scopes: TypedCollection<typeof scopes>;
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
   /** The issuer of a tenant, to refuse its userinfo URL as a resource. */
   issuerOf: (slug: string) => string;
 }
 
-// Same shape as an OAuth scope token (RFC 6749 §3.3): printable ASCII, no
-// space, quote or backslash.
-const SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]+$/;
-
-/** The resource URI's problem (RFC 8707 §2: absolute, no fragment), or `null`. */
-export function resourceUriProblem(uri: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(uri);
-  } catch {
-    return "must be an absolute URI";
-  }
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
-    return "must be https (http only on a loopback host)";
-  }
-  if (url.hash !== "" || uri.includes("#")) return "must have no fragment";
-  if (url.username !== "" || url.password !== "") {
-    return "must carry no credentials";
-  }
-  return null;
-}
+export { resourceUriProblem };
 
 // Two spellings of one URL (case of scheme and host, default port, empty path,
 // dot segments) are the same resource.
@@ -79,11 +65,8 @@ function validate(input: RegisterResourceInput) {
     throw new CliInputError("a resource needs at least one scope");
   }
   for (const scope of scopes) {
-    if (!SCOPE_PATTERN.test(scope)) {
-      throw new CliInputError(
-        `scope "${scope}" must be printable ASCII without space, quote or backslash`,
-      );
-    }
+    const scopeProblem = scopeNameProblem(scope);
+    if (scopeProblem !== null) throw new CliInputError(scopeProblem);
   }
   const name = (input.name ?? new URL(uri).host).trim();
   if (name === "") throw new CliInputError("a resource needs a name");
@@ -119,27 +102,34 @@ export async function registerResource(
   }
   const scoped = scopeToTenant(options.collection, tenant._id);
   let existing = await scoped.findFirst({ uri });
+  let created = existing === undefined;
   if (existing === undefined) {
     try {
-      await scoped.create({ uri, name, scopes });
+      existing = await scoped.create({ uri, name });
     } catch (error) {
       // A concurrent run created it between our read and write (the unique
       // index refused): read it again and update it like any re-run.
       if (!(error instanceof ConflictError)) throw error;
       existing = await scoped.findFirst({ uri });
       if (existing === undefined) throw error;
-      await scoped.update(existing._id, { name, scopes });
+      created = false;
+      await scoped.update(existing._id, { name });
     }
   } else {
-    await scoped.update(existing._id, { name, scopes });
+    await scoped.update(existing._id, { name });
   }
-  return {
-    created: existing === undefined,
-    tenant: tenant.slug,
-    uri,
-    name,
-    scopes,
-  };
+  const catalog = new Catalog({
+    resources: options.collection,
+    scopes: options.scopes,
+    userinfoOf: (slug) => userinfoOf(options.issuerOf(slug)),
+  });
+  try {
+    await catalog.replaceResourceScopes(tenant._id, existing._id, scopes);
+  } catch (error) {
+    if (error instanceof CatalogError) throw new CliInputError(error.message);
+    throw error;
+  }
+  return { created, tenant: tenant.slug, uri, name, scopes };
 }
 
 /**
@@ -147,11 +137,18 @@ export async function registerResource(
  * (another tenant's are not visible), by URI.
  */
 export const storedResourcesFor =
-  (collection: TypedCollection<typeof resources>): ResourcesFor =>
+  (
+    collection: TypedCollection<typeof resources>,
+    scopeDocs: TypedCollection<typeof scopes>,
+  ): ResourcesFor =>
   async (tenant: ResolvedTenant) => {
-    const scoped = scopeToTenant(collection, new ObjectId(tenant.tenantId));
-    const found = await scoped.findMany();
+    const tenantId = new ObjectId(tenant.tenantId);
+    const found = await scopeToTenant(collection, tenantId).findMany();
+    const byResource = await scopeNamesByResource(scopeDocs, tenantId);
     return Object.fromEntries(
-      found.map((resource) => [resource.uri, { scopes: resource.scopes }]),
+      found.map((resource) => [
+        resource.uri,
+        { scopes: byResource.get(resource._id.toHexString()) ?? [] },
+      ]),
     );
   };
