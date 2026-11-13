@@ -147,6 +147,19 @@ still create tenants, clients and resources.
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
 
+### Admins of a tenant
+
+A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `viewer` on it.
+`memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
+email, role)`, `changeMembership`, `removeMembership` and `revokeAdminInvitation` need `manage` (the
+tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
+the managed tenant's id, role = the console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
+That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
+host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
+revoked or lapsed code is `INVITATION_INVALID`, 400) and opens the session. Inviting an address that is
+already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it. The
+last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409).
+
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and
 prints the client secret once: save it), then name the first operator, a user who already exists

@@ -1,10 +1,12 @@
 import { createConsoleAuthenticator } from "@/console/auth";
 import { consoleAudience } from "@/console/identity";
+import { createJanusAdmins } from "@/console/modules/admins/janus-admins";
 import type { ConsoleDeps } from "@/console/plugin";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
 import { env } from "./env";
+import { invitationsOf } from "./invitations";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
@@ -40,6 +42,16 @@ export function createConsoleDeps(
       },
     }),
     access,
+    admins: createJanusAdmins({
+      invitations: invitationsOf(clavixTenant),
+      userByEmail: async (email) => {
+        const tenant = await clavixTenant();
+        const janus = tenant === null ? null : await forTenant(tenant);
+        if (janus === null)
+          throw new Error("the clavix tenant is not available");
+        return janus.findByEmail(email);
+      },
+    }),
     directory: {
       findUser: async (id) => {
         const tenant = await clavixTenant();

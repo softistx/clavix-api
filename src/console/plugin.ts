@@ -1,6 +1,7 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { ConsoleDirectory, ConsoleExtras } from "./context";
+import type { ConsoleAdmins } from "./modules/admins/ports";
 
 /** Verifies the request's bearer token: its principal, or `null`. A store outage rejects. */
 export type ConsoleAuthenticate = (
@@ -11,6 +12,7 @@ export interface ConsoleDeps {
   authenticate: ConsoleAuthenticate;
   access: Access;
   directory: ConsoleDirectory;
+  admins: ConsoleAdmins;
 }
 
 const refusal = (
@@ -38,7 +40,12 @@ const refusal = (
  * No cookie is read and no tenant is resolved from the host: the token is the
  * whole credential.
  */
-export function useConsole({ authenticate, access, directory }: ConsoleDeps) {
+export function useConsole({
+  authenticate,
+  access,
+  directory,
+  admins,
+}: ConsoleDeps) {
   const principals = new WeakMap<Request, OAuthPrincipal>();
   return {
     async onRequest({
@@ -88,6 +95,7 @@ export function useConsole({ authenticate, access, directory }: ConsoleDeps) {
         principal,
         access,
         directory,
+        admins,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),
         canPlatform: (permission) =>

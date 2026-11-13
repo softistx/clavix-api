@@ -91,8 +91,8 @@ partitioned: never use them for tenant users.
   passkey is scoped to its rpId for good.
 - **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
   closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
-  Invitations: `createMongoInvitations(db, { partition })`; accepting one has no GraphQL surface
-  until the M2 console.
+  Invitations: `createMongoInvitations(db, { partition })`; accepting one is the hosted
+  `acceptInvitation` (below, "Admins of a tenant and invitations").
 
 ## E-mail code sign-in (`src/modules/auth`, `src/mail`)
 
@@ -206,6 +206,17 @@ every other failure a 401).
   `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards) and lists it
   in `modules/index.ts`; the SDL lives there, never in `src/modules`.
+- **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
+  membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`); every role change goes
+  through `setRole` (`service.ts`), the one place that keeps the last owner (`LAST_OWNER`: checked
+  before the write, counted again after it and put back, so concurrent removals never leave none).
+  Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
+  (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
+  mails, lists and revokes the invitations of any tenant's user pool; the admins use the `clavix`
+  tenant's with scope = the managed tenant's id, and a users slice reuses it for a tenant's own pool
+  (never copy it). Accepting is the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`,
+  `acceptInvitation`, every refusal `INVITATION_INVALID`); what acceptance grants is janus's
+  `invitations.onAccepted` in `src/users/tenant-janus.ts` (on `clavix`: `adminAccepted`, the relation).
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed

@@ -1,4 +1,6 @@
+import { adminAccepted } from "@/console/modules/admins/accept";
 import { createTenantAuth } from "@/users/tenant-auth";
+import { access } from "./access";
 import { env } from "./env";
 import { oauthDb } from "./oauth-db";
 import { tenantResolver } from "./tenancy";
@@ -12,5 +14,6 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     resolver: tenantResolver,
     db: oauthDb,
     magicLink: env.CLAVIX_MAGIC_LINK,
+    onAdminAccepted: adminAccepted(access),
   },
 );

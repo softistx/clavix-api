@@ -2,6 +2,7 @@ import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { YogaInitialContext } from "graphql-yoga";
 import type { Access } from "./access";
 import type { Permission } from "./model";
+import type { ConsoleAdmins } from "./modules/admins/ports";
 
 /** What the console needs to look a user or tenants up, injected (see `src/config/console.ts`). */
 export interface ConsoleDirectory {
@@ -25,6 +26,7 @@ export interface ConsoleExtras {
   canPlatform(permission: Permission): Promise<boolean>;
   readonly access: Access;
   readonly directory: ConsoleDirectory;
+  readonly admins: ConsoleAdmins;
 }
 
 /** A console resolver's context. The generated `Resolvers` takes it (codegen.console.ts). */
