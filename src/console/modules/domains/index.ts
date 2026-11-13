@@ -127,14 +127,19 @@ export const domains: Resolvers = {
     },
     removeDomain: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      const removed = await refusing(() => domainStore.remove(tenant._id, id));
-      if (removed) await ctx.audit("domain.remove", target(tenant._id, id));
+      const removed = await ctx.exclusive(domainsKey(tenant), () =>
+        refusing(() => domainStore.remove(tenant._id, id)),
+      );
+      // Recorded on a repeat too (it may be the event the first run missed).
+      await ctx.audit("domain.remove", target(tenant._id, id));
       return removed;
     },
     setPrimaryDomain: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      const updated = await refusing(() =>
-        domainStore.setPrimary(tenant._id, id),
+      // Two calls at once would each flip a different claim to primary and
+      // then clear the other: one at a time per tenant.
+      const updated = await ctx.exclusive(domainsKey(tenant), () =>
+        refusing(() => domainStore.setPrimary(tenant._id, id)),
       );
       await ctx.audit("domain.setPrimary", target(tenant._id, id));
       return shape(updated);

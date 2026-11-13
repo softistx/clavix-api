@@ -61,7 +61,7 @@ const shape = (client: {
 
 const MAX_PAGE = 100;
 
-/** The `Exclusive` key of a tenant's client creations. */
+/** The `Exclusive` key of a tenant's client writes (create, update, rotate, delete). */
 const clientsKey = (tenant: { _id: { toHexString(): string } }) =>
   `console:clients:${tenant._id.toHexString()}`;
 
@@ -132,22 +132,30 @@ export const clients: Resolvers = {
     },
     updateClient: async (_, { tenantId, id, input }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      const updated = await refusing(() => {
-        keepConsoleClient(tenant, id);
-        return clientsService.update(tenant, id, {
-          name: input.name ?? undefined,
-          redirectUris: input.redirectUris ?? undefined,
-        });
-      });
+      // Under the tenant's lock, as `create` and `delete`: the service reads
+      // the client, then writes it back (the store upserts), so a delete in
+      // between would bring it back. Serialized, the update of a client that
+      // is gone is `NOT_FOUND`, never a new client.
+      const updated = await ctx.exclusive(clientsKey(tenant), () =>
+        refusing(() => {
+          keepConsoleClient(tenant, id);
+          return clientsService.update(tenant, id, {
+            name: input.name ?? undefined,
+            redirectUris: input.redirectUris ?? undefined,
+          });
+        }),
+      );
       await ctx.audit("client.update", target(tenant, updated.clientId));
       return shape(updated);
     },
     rotateClientSecret: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      const rotated = await refusing(() => {
-        keepConsoleClient(tenant, id);
-        return clientsService.rotateSecret(tenant, id);
-      });
+      const rotated = await ctx.exclusive(clientsKey(tenant), () =>
+        refusing(() => {
+          keepConsoleClient(tenant, id);
+          return clientsService.rotateSecret(tenant, id);
+        }),
+      );
       await ctx.audit(
         "client.rotateSecret",
         target(tenant, rotated.client.clientId),
@@ -159,10 +167,14 @@ export const clients: Resolvers = {
     },
     deleteClient: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      const { removed, unmanaged } = await refusing(async () => {
-        keepConsoleClient(tenant, id);
-        return clientsService.delete(tenant, id);
-      });
+      const { removed, unmanaged } = await ctx.exclusive(
+        clientsKey(tenant),
+        () =>
+          refusing(async () => {
+            keepConsoleClient(tenant, id);
+            return clientsService.delete(tenant, id);
+          }),
+      );
       // Recorded on a repeat too (it may be the event the first run missed);
       // an id no client can have names nothing to record, and neither does a
       // record that is not a registered client: it was left untouched, so

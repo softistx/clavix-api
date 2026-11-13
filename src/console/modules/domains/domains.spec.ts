@@ -243,7 +243,7 @@ describe("reads, isolation, remove, primary", () => {
 });
 
 describe("audit", () => {
-  test("each change is recorded once, a refused or no-op remove nothing", async () => {
+  test("each change is recorded, a repeat remove too, a refused one nothing", async () => {
     await mongo.db.adminEvents.raw.deleteMany({});
     await mongo.db.domains.raw.deleteMany({});
     const added = await admin(ADD, { tenantId: tenantA, host: "au.acme.com" });
@@ -251,6 +251,7 @@ describe("audit", () => {
     await viewer(REMOVE, { tenantId: tenantA, id });
     await admin(REMOVE, { tenantId: tenantA, id });
     await admin(REMOVE, { tenantId: tenantA, id });
+    // A repeat is recorded too (the first run's event may have been lost).
     const events = await mongo.db.adminEvents.raw
       .find({})
       .sort({ _id: 1 })
@@ -258,6 +259,28 @@ describe("audit", () => {
     expect(events.map((event) => event.action)).toEqual([
       "domain.add",
       "domain.remove",
+      "domain.remove",
     ]);
+  });
+});
+
+describe("setPrimaryDomain at the very same time", () => {
+  test("exactly one domain is primary afterwards", async () => {
+    await mongo.db.domains.raw.deleteMany({});
+    const ids: string[] = [];
+    for (const host of ["p1.acme.com", "p2.acme.com", "p3.acme.com"]) {
+      const id = idOf(await admin(ADD, { tenantId: tenantA, host }));
+      await mongo.db.domains.raw.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: "verified", verifiedAt: new Date() } },
+      );
+      ids.push(id);
+    }
+    await Promise.all(
+      ids.map((id) => admin(PRIMARY, { tenantId: tenantA, id })),
+    );
+    const listed = await admin(LIST, { tenantId: tenantA });
+    const rows = listed.data?.["domains"] as { primary: boolean }[];
+    expect(rows.filter((row) => row.primary)).toHaveLength(1);
   });
 });
