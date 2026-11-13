@@ -6,6 +6,7 @@ import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
+import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
@@ -41,7 +42,7 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
-      queues: { keyRotation },
+      queues: { keyRotation, tenantPurge },
       limits: { ...signInLimits(limits), ...passkeyLimits(passkeys) },
       background: {
         onDown: () => log("redis unavailable: tenant cache degraded"),

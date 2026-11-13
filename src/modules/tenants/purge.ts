@@ -1,17 +1,17 @@
 import type { ObjectId } from "mongodb";
 import type { Tenant } from "./tenants.model";
 
+/** Documents removed per collection, as the janus purges count them. */
+export type PartitionPurgeCounts = Record<string, number>;
+
 /**
  * Removes what a tenant's janus partition holds: users, sessions, passkeys,
- * invitations, OAuth clients, grants and tokens, and the signing keys.
- * Resumable (a second call removes what the first left) and idempotent.
- *
- * Temporary, until @softistx/janus-oauth-mongo#710 (softistx/nxgt-janus#710):
- * janus cannot purge a partition yet, so there is no implementation, and the
- * job is not scheduled. The wiring is clavix-api#112.
+ * invitations, OAuth clients, grants and tokens, and the signing keys
+ * (`src/config/partition-purger.ts`). Resumable (a second call removes what
+ * the first left) and idempotent; answers the counts per collection.
  */
 export interface PartitionPurger {
-  purgePartition(partition: string): Promise<void>;
+  purgePartition(partition: string): Promise<PartitionPurgeCounts>;
 }
 
 /** One tenant-owned collection of the app, reached through the tenancy helpers (`tenantOwned`). */
@@ -57,13 +57,14 @@ export async function purgeTenants(
   deps: PurgeDeps,
   now: Date = new Date(),
 ): Promise<PurgeReport> {
-  const log = deps.log ?? ((message) => console.warn(message));
+  const log = deps.log ?? ((message) => console.info(message));
   const report: PurgeReport = { purged: [], failed: [] };
   for (const tenant of await deps.registry.purgeDue(now)) {
     const id = tenant._id.toHexString();
     try {
       if (!(await deps.registry.claimPurge(tenant, now))) continue;
-      await deps.partitions.purgePartition(id);
+      const counts = await deps.partitions.purgePartition(id);
+      log(`tenants: purged the partition of ${id}: ${JSON.stringify(counts)}`);
       for (const collection of deps.owned) {
         await collection.deleteOwnedBy(tenant._id);
       }
