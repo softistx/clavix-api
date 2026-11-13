@@ -172,7 +172,9 @@ hold identifiers alone: never a secret, a token or the old and new values of a f
 db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
 reads it yet: the viewer and the export come with M4.
 
-A mutation declares its action and records it once its change is stored:
+A mutation declares its action beside its module's guards (the declaration is spread into `audits`
+in `src/console/modules/index.ts`) and records it once its change is stored; AGENTS.md "Admin
+events" has the rules:
 
 ```ts
 // src/console/modules/tenants/index.ts

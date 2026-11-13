@@ -226,11 +226,15 @@ does two things, and nothing else touches the collection:
 - **Record** it in the resolver, once the change is stored:
   `await ctx.audit("tenant.rename", { type: "tenant", id, tenantId })`. `tenantId` is the hex id of
   the tenant the target belongs to, `null` only for a target of the platform itself (an operator).
-  The actor (the token's user), the time and the request id are filled in for you. A mutation that
+  `id` is the entity's own id (at most 200 characters), never a URI or free text, and `type` a
+  short noun (`client`). The actor (the token's user), the time and the request id are filled in
+  for you. A call the schema refuses (a malformed action, a `tenantId` that is not a tenant's hex
+  id) throws on every try: the slice's spec runs each mutation once and asserts its stored event. A mutation that
   touches several targets records one event each; the same request id ties them.
 - **Awaited, and a failure fails the mutation**: `ctx.audit` rejects when the event cannot be
-  stored, so the resolver throws and the caller retries (mutations are idempotent) rather than a
-  change being left with no record. Never `void` it or catch its error. The declaration is not
+  stored, so the resolver throws and the caller retries rather than a change being left with no
+  record. So a mutation stays safe to repeat (the plan's idempotency rule): its second run stores
+  nothing twice and records the event the first one missed. Never `void` it or catch its error. The declaration is not
   checked against the call: the slice's own spec asserts the stored event.
 - **Never a secret**: an event is identifiers only (`target` is `{ type, id }`). The schema is
   closed (`z.strictObject`, no free-form field), so there is no place for a secret, a token or the
@@ -238,7 +242,7 @@ does two things, and nothing else touches the collection:
 - `adminEvents` is a platform collection: its `tenantId` says which tenant an event is about, so it
   is listed in `platformCollections` (`src/tenancy/owned.ts`) and left out of the tenant-owned
   guards. It is reached only through `AdminEventRecorder.record` (`src/config/admin-events.ts`); a
-  source scan in `audit.spec.ts` refuses any other access. Indexes (`tenantId, at` and `actor, at`,
+  source scan in `src/tenancy/guards.spec.ts` refuses any other access or export. Indexes (`tenantId, at` and `actor, at`,
   newest first) are the definition's, created by `db:sync`. No reader and no SDL until the viewer
   (M4). `ConsoleDeps.adminEvents` takes another recorder in a spec.
 - The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is

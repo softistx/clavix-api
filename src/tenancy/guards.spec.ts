@@ -66,6 +66,12 @@ const allowed = [
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.
+// Where a platform collection with a `tenantId` (owned.ts) may be reached:
+// `adminEvents` by its recorder and the recorder's wiring, nowhere else.
+const platformAllowed = [
+  "src/console/admin-events/",
+  "src/config/admin-events.ts",
+];
 const tenantsAllowed = [
   "src/modules/tenants/",
   "src/config/tenancy.ts",
@@ -101,6 +107,12 @@ const ownedNames = namesOf(
   Object.entries(definitions).filter(([, definition]) => isOwned(definition)),
 );
 
+const platformNames = namesOf(
+  Object.entries(definitions).filter(([, definition]) =>
+    platformCollections.includes(definition.name),
+  ),
+);
+
 async function offendersOf(
   patterns: RegExp[],
   permitted: string[],
@@ -119,8 +131,8 @@ async function offendersOf(
 }
 
 /** Whether a source exposes a tenant-owned collection through an export. */
-function exposesOwned(text: string) {
-  const names = ownedNames.join("|");
+function exposesOwned(text: string, of: string[] = ownedNames) {
+  const names = of.join("|");
   const owned = new RegExp(`\\bdb\\.(?:${names})\\b`);
   // A call argument (`bind(db.notes)`) is a binding, not an exposure.
   const bound = new RegExp(`\\(\\s*(?:\\w+\\.)*db\\.(?:${names})\\s*[,)]`, "g");
@@ -177,6 +189,57 @@ describe("source scan", () => {
 
   test("the tenants collection is reached only by its module, its wiring and the migrations", async () => {
     expect(await offendersOf(direct(["tenants"]), tenantsAllowed)).toEqual([]);
+  });
+
+  // Append-only by construction (ADR-0037): `adminEvents` is bound in one
+  // place and written by its recorder alone, and never exported.
+  test("the platform collections are reached only by their recorder and its wiring", async () => {
+    expect(platformNames).toContain("adminEvents");
+    expect(
+      await offendersOf(direct(platformNames), platformAllowed, true),
+    ).toEqual([]);
+    const exposing: string[] = [];
+    for await (const path of new Glob("src/**/*.ts").scan(".")) {
+      if (path.endsWith(".spec.ts")) continue;
+      if (exposesOwned(await Bun.file(path).text(), platformNames)) {
+        exposing.push(path);
+      }
+    }
+    expect(exposing).toEqual([]);
+  });
+
+  test("the platform scan sees what it is meant to refuse", () => {
+    const patterns = direct(platformNames);
+    for (const refused of [
+      "mongo.db.adminEvents.update(id, patch)",
+      'db["adminEvents"].delete(id)',
+      "const { adminEvents } = mongo.db;",
+      "const { adminEvents: events } = db;",
+      "getCollection(db, adminEvents).create(x)",
+      "adminEvents.raw.deleteMany({})",
+    ]) {
+      expect(reaches(patterns, refused), refused).toBe(true);
+    }
+    for (const refused of [
+      "export const events = mongo.db.adminEvents;",
+      "const x = mongo.db.adminEvents.raw;\nexport { x };",
+    ]) {
+      expect(exposesOwned(refused, platformNames), refused).toBe(true);
+    }
+    for (const fine of [
+      "adminEvents.record(event)",
+      'export { adminEvents } from "../console/admin-events/admin-events.model";',
+    ]) {
+      expect(reaches(patterns, fine), fine).toBe(false);
+      expect(exposesOwned(fine, platformNames), fine).toBe(false);
+    }
+    // The wiring (an allowed path) binds the collection without exporting it.
+    expect(
+      exposesOwned(
+        "export const r = createAdminEventRecorder(\n  mongo.db.adminEvents,\n);",
+        platformNames,
+      ),
+    ).toBe(false);
   });
 
   test("the names include the export key and the collection name", () => {
