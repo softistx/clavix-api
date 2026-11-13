@@ -382,9 +382,9 @@ resolves nowhere and cannot be restored any more. The pass throws so the queue r
 5 minutes of backoff); a failure at server start is only logged.
 
 **Fix:** nothing is lost and nothing needs doing first: the purge is resumable and the next daily tick
-(or a restart) picks up the claimed tenants again. If the same error comes back every day, read the
-`tenants: purge of <id> stopped, the next run resumes it: <reason>` line before it, which names the
-tenant and the cause.
+(or a restart; without Redis only the start pass runs) picks up the claimed tenants again. If the same error comes back every day, read the
+`tenants: purge of <id> stopped, the next run resumes it: <reason>` line (logged at info level, not warn) before it,
+which names the tenant and the cause.
 
 ## `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`, `QUOTA_EXCEEDED` and `TENANT_SUSPENDED`
 

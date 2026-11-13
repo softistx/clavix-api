@@ -131,7 +131,7 @@ async function exchange(slug: string, redirectTo: string) {
 }
 
 beforeAll(async () => {
-  for (const slug of ["acme", "globex"]) {
+  for (const slug of ["acme", "globex", "initech"]) {
     await tenants.create({ slug, name: slug });
     const tenant = await tenantResolver.resolveHost(new URL(url(slug)).host);
     if (tenant === null) throw new Error("tenant not resolved");
@@ -388,34 +388,52 @@ describe("a foreign page cannot decide", () => {
   });
 });
 
-// Refused, no code minted. Which refusal depends on the order of the specs run
-// before this one (TENANT_SUSPENDED alone, UNAUTHENTICATED after the auth
-// specs); both are a refusal with no redirect.
-const expectRefused = (result: GqlResult) => {
+// "initech" is this block's own tenant with its own signed-in session, so the
+// refusal does not depend on what the specs before it did to acme's session.
+const expectRefused = (result: GqlResult, code: string) => {
   expect(result.data?.["approveOAuthRequest"] ?? null).toBeNull();
   expect(result.data?.["denyOAuthRequest"] ?? null).toBeNull();
-  expect(["TENANT_SUSPENDED", "UNAUTHENTICATED"]).toContain(
-    codeOf(result) ?? "",
-  );
+  expect(codeOf(result)).toBe(code);
 };
 
 describe("a tenant that is not live", () => {
-  test("a suspended or deleted tenant mints no code", async () => {
-    const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
-    if (acme === undefined) throw new Error("no acme");
-    const id = await authorize("acme");
+  test("a suspended tenant is TENANT_SUSPENDED on approve and deny, and a resumed one mints a code again", async () => {
+    const initech = await mongo.db.tenants.findFirst({ slug: "initech" });
+    if (initech === undefined) throw new Error("no initech");
+    const id = await authorize("initech");
+    await tenants.suspend(initech._id);
     try {
-      await tenants.suspend(acme._id);
       for (const query of [APPROVE, DENY]) {
-        const result = await gql("acme", query, { id }, cookieOf("acme"));
-        expectRefused(result);
+        const result = await gql("initech", query, { id }, cookieOf("initech"));
+        expectRefused(result, "TENANT_SUSPENDED");
       }
-      await tenants.delete(acme._id);
-      const deleted = await gql("acme", APPROVE, { id }, cookieOf("acme"));
-      expectRefused(deleted);
     } finally {
-      await tenantAdmin.restore(acme._id.toHexString());
-      await tenants.reactivate(acme._id);
+      await tenants.reactivate(initech._id);
     }
+    const resumed = await gql("initech", APPROVE, { id }, cookieOf("initech"));
+    expect(resumed.errors).toBeUndefined();
+    const approved = resumed.data?.["approveOAuthRequest"] as
+      | { redirectTo: string }
+      | undefined;
+    const redirectTo = approved?.redirectTo ?? "";
+    expect(redirectTo).toContain("code=");
+    const token = await exchange("initech", redirectTo);
+    expect(token.status).toBe(200);
+  });
+
+  test("a deleted tenant is TENANT_SUSPENDED too, and a restored one mints a code again", async () => {
+    const initech = await mongo.db.tenants.findFirst({ slug: "initech" });
+    if (initech === undefined) throw new Error("no initech");
+    const id = await authorize("initech");
+    await tenants.delete(initech._id);
+    try {
+      const result = await gql("initech", APPROVE, { id }, cookieOf("initech"));
+      expectRefused(result, "TENANT_SUSPENDED");
+    } finally {
+      await tenantAdmin.restore(initech._id.toHexString());
+      await tenants.reactivate(initech._id);
+    }
+    const restored = await gql("initech", APPROVE, { id }, cookieOf("initech"));
+    expect(restored.errors).toBeUndefined();
   });
 });

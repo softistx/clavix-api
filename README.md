@@ -407,7 +407,8 @@ cannot be restored), then removes:
 - the tenant-owned collections (branding, usage counters, ...);
 - its roles and platform link in the console's permissions.
 
-`adminEvents` stay (the platform's record), and the Redis active-user counters are not deleted (they
+`adminEvents` stay (the platform's record; the purge itself records no event: it has no actor, `tenant.delete` already
+recorded who trashed the tenant, and the per-collection counts are logged), and the Redis active-user counters are not deleted (they
 hold hashed ids and expire after 400 days). A purge is not a transaction: a failing tenant stays
 claimed, the tick fails and the next run resumes it; a second run finds nothing to remove. What is
 left is a tombstone (slug, `deletedAt`, `purgedAt`): the slug stays reserved for good, so
