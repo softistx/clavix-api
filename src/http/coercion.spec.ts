@@ -15,6 +15,8 @@ const post = (query: string, variables: unknown) =>
     body: JSON.stringify({ query, variables }),
   });
 
+// The console API's own case is in sign-in-methods.spec.ts (a clientSecret of
+// the wrong type), which runs the whole app with the console mounted.
 describe("variable coercion errors on the hosted /graphql", () => {
   for (const [name, code] of [
     ["an object", { value: LEAK }],

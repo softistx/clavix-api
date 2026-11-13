@@ -271,13 +271,13 @@ not a plain sign-in, or the user it named can no longer be read. Nothing was ope
 was set. Start again with `socialSignInStart`; if it keeps happening for one account, look for the
 user in the tenant (it may have been deleted since the flow began).
 
-### `BAD_USER_INPUT` `Variable "$x" got an invalid value` without the value
+### `BAD_USER_INPUT` `Variable "$x" got an invalid value` without the value (graphql-js words it `got invalid value`)
 
 **When:** a variable of `/graphql` or `/console/graphql` has the wrong type (a code sent as an object,
 say).
 
 **Why:** graphql-js would quote the value back in the message, and a variable can carry an e-mail
-code, a passkey answer or a client secret. Both endpoints scrub it (`src/console/coercion.ts`): the
+code, a passkey answer or a client secret. Both endpoints scrub it (`src/http/coercion.ts`): the
 error keeps the variable name and the path, never the value.
 
 **Fix:** send the variable with the type the schema declares.

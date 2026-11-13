@@ -9,10 +9,10 @@ import {
 import { readyz } from "./config/ready";
 import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
-import { useWithoutQuotedValues } from "./console/coercion";
 import { CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
+import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
