@@ -1,11 +1,21 @@
 import type { Clock } from "@softistx/janus";
 import { createOAuthIssuers, type OAuthIssuers } from "@softistx/janus-oauth";
-import { createOidcProvider } from "@softistx/janus-oidc";
+import {
+  createOidcProvider,
+  type OidcClaims,
+  type OidcSubject,
+} from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { buildIssuer, userinfoOf } from "./building";
-import type { AuthFor, ClaimsFor, ResourcesFor, SigningKeysFor } from "./ports";
+import type {
+  AuthFor,
+  ClaimsFor,
+  ResourcesFor,
+  RolesFor,
+  SigningKeysFor,
+} from "./ports";
 import { type Keyed, resolveIssuer } from "./resolution";
 
 export interface ClavixOAuthOptions {
@@ -25,6 +35,12 @@ export interface ClavixOAuthOptions {
    * issuer's cache version.
    */
   resourcesFor?: ResourcesFor;
+  /**
+   * The `roles` claim (slice A2c): in the id_token and userinfo (tenant-wide
+   * roles, released by the `openid` scope) and in the JWT access tokens
+   * (tenant-wide plus the roles of the token's resource). Absent: no claim.
+   */
+  rolesFor?: RolesFor;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -53,10 +69,36 @@ export function createClavixOAuthIssuers(
       if (tenant === undefined) {
         throw new Error(`oidc: no tenant built for issuer ${issuer}`);
       }
-      return options.claimsFor(tenant)(subject, scopes);
+      return withRoles(
+        tenant,
+        subject,
+        options.claimsFor(tenant)(subject, scopes),
+      );
     },
+    // `openid` releases nothing else (`sub` aside), so roles go with every
+    // OpenID Connect token, in the id_token as well as at userinfo.
+    scopeClaims: { openid: ["roles"] },
+    idToken: { includeClaims: true },
   });
-  const build = buildIssuer({ db, signingKeysFor, authFor, oidc, clock });
+  const withRoles = async (
+    tenant: ResolvedTenant,
+    subject: OidcSubject,
+    claims: OidcClaims | Promise<OidcClaims>,
+  ): Promise<OidcClaims> =>
+    options.rolesFor === undefined
+      ? claims
+      : {
+          ...(await claims),
+          roles: await options.rolesFor(tenant)(subject.id, null),
+        };
+  const build = buildIssuer({
+    db,
+    signingKeysFor,
+    authFor,
+    oidc,
+    clock,
+    rolesFor: options.rolesFor,
+  });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),
     build: (keyed) => {

@@ -8,6 +8,7 @@ import { clients, clientsAudits, clientsGuards } from "./clients";
 import { domains, domainsAudits, domainsGuards } from "./domains";
 import { me, meGuards } from "./me";
 import { resources, resourcesAudits, resourcesGuards } from "./resources";
+import { roles, rolesAudits, rolesGuards } from "./roles";
 import {
   signInMethods,
   signInMethodsAudits,
@@ -27,6 +28,7 @@ export const resolvers: Resolvers = mergeResolvers([
   clients,
   domains,
   resources,
+  roles,
   tenants,
   users,
 ]);
@@ -37,6 +39,7 @@ export const guards: Guards = {
   ...clientsGuards,
   ...domainsGuards,
   ...resourcesGuards,
+  ...rolesGuards,
   ...tenantsGuards,
   ...signInMethodsGuards,
   ...usersGuards,
@@ -47,6 +50,7 @@ export const audits: Audits = {
   ...clientsAudits,
   ...domainsAudits,
   ...resourcesAudits,
+  ...rolesAudits,
   ...tenantsAudits,
   ...signInMethodsAudits,
   ...usersAudits,

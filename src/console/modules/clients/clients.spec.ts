@@ -1,13 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import { ObjectId } from "mongodb";
 import { registerClient } from "@/clients/register-client";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
+import { usageService } from "@/config/usage";
 import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { codeOf, consoleAs } from "~/console";
+import { createFlow } from "~/oauth-flow";
 
 const REDIRECT = "https://app.example/callback";
 const admin = consoleAs("cli-admin-a");
@@ -60,6 +63,11 @@ beforeAll(async () => {
   await access.grantTenant(tenantA, "cli-viewer-a", "viewer");
   await access.grantTenant(tenantB, "cli-admin-b", "admin");
   await access.grantPlatform("cli-operator", "owner");
+  // The suite makes more clients than the free plan allows; the quota has its own tests below.
+  await mongo.db.tenants.raw.updateMany(
+    { slug: { $in: ["cli-a", "cli-b"] } },
+    { $set: { quotaOverrides: { clients: 1000 } } },
+  );
 });
 
 afterAll(async () => {
@@ -564,5 +572,154 @@ describe("a suspended tenant", () => {
     expect(codeOf(await create(adminB, tenantB, { name: "Nope" }))).toBe(
       "NOT_FOUND",
     );
+  });
+});
+
+const eventsOf = () =>
+  mongo.db.adminEvents.raw.find({}).sort({ _id: 1 }).toArray();
+
+describe("createClient of one id at the very same time", () => {
+  test("exactly one wins, the others are CONFLICT, and the winner's secret is the stored one", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        create(admin, tenantA, {
+          name: "Racer",
+          clientId: "racer",
+          type: "CONFIDENTIAL",
+        }),
+      ),
+    );
+    const winners = results.filter((r) => r.errors === undefined);
+    expect(winners).toHaveLength(1);
+    expect(results.filter((r) => codeOf(r) === "CONFLICT")).toHaveLength(7);
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "racer" }))).toEqual(
+      ["racer"],
+    );
+    // The stored secret is the winner's: rotating is the only way to another.
+    const winner = winners[0]?.data?.["createClient"] as {
+      clientSecret: string;
+    };
+    const stored = await (await storeOf(tenantA)).findClient("racer");
+    expect(stored?.secretHash).toBeString();
+    expect(winner.clientSecret.length).toBeGreaterThan(20);
+  });
+});
+
+describe("the client quota", () => {
+  test("refuses past the limit, counts concurrent creations, frees a slot on delete", async () => {
+    const id = (await tenantsService.create({ slug: "cli-q", name: "Q" })).id;
+    await access.grantTenant(id, "cli-admin-a", "admin");
+    const used = await usageService.count(id, "clients");
+    await mongo.db.tenants.raw.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { quotaOverrides: { clients: used + 2 } } },
+    );
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, n) =>
+        create(admin, id, { name: `Q ${n}`, clientId: `quota-${n}` }),
+      ),
+    );
+    expect(results.filter((r) => r.errors === undefined)).toHaveLength(2);
+    expect(results.filter((r) => codeOf(r) === "QUOTA_EXCEEDED")).toHaveLength(
+      3,
+    );
+    const kept = results.findIndex((r) => r.errors === undefined);
+    expect(
+      codeOf(await create(admin, id, { name: "More", clientId: "more" })),
+    ).toBe("QUOTA_EXCEEDED");
+    expect(
+      (await admin(DELETE, { tenantId: id, id: `quota-${kept}` })).data,
+    ).toEqual({ deleteClient: true });
+    expect(
+      (await create(admin, id, { name: "Fits", clientId: "fits" })).errors,
+    ).toBeUndefined();
+  });
+});
+
+describe("the deleteClient trail", () => {
+  test("a client that is not a registered one is left alone and not recorded", async () => {
+    const store = await storeOf(tenantA);
+    await create(admin, tenantA, { name: "By script", clientId: "by-script" });
+    const record = await store.findClient("by-script");
+    // A record the console did not register (here from a client metadata document).
+    await store.upsertClient({
+      ...(record as NonNullable<typeof record>),
+      source: "metadata",
+    });
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const result = await admin(DELETE, { tenantId: tenantA, id: "by-script" });
+    expect(result.data).toEqual({ deleteClient: false });
+    expect(
+      await (await storeOf(tenantA)).findClient("by-script"),
+    ).not.toBeNull();
+    expect(await eventsOf()).toHaveLength(0);
+  });
+
+  test("a registered client, and a valid id that names nothing, are recorded", async () => {
+    await mongo.db.adminEvents.raw.deleteMany({});
+    await create(admin, tenantA, { name: "Trail", clientId: "trail" });
+    await admin(DELETE, { tenantId: tenantA, id: "trail" });
+    await admin(DELETE, { tenantId: tenantA, id: "trail" });
+    await admin(DELETE, { tenantId: tenantA, id: "never-existed" });
+    // An id no client can have names nothing.
+    await admin(DELETE, { tenantId: tenantA, id: "Not An Id!" });
+    expect((await eventsOf()).map((e) => [e.action, e.target.id])).toEqual([
+      ["client.create", "trail"],
+      ["client.delete", "trail"],
+      ["client.delete", "trail"],
+      ["client.delete", "never-existed"],
+    ]);
+  });
+});
+
+describe("the tokens of a deleted client", () => {
+  test("stop working: the access token, and the refresh token", async () => {
+    const flow = createFlow();
+    const { tenantId } = await flow.setUp("cli-tok", [
+      "https://api.cli-tok.example/v1",
+    ]);
+    await access.grantTenant(tenantId, "cli-admin-a", "admin");
+    const created = await create(admin, tenantId, {
+      name: "Token app",
+      clientId: "token-app",
+      type: "CONFIDENTIAL",
+    });
+    const secret = (
+      (created.data?.["createClient"] ?? {}) as { clientSecret: string }
+    ).clientSecret;
+    const client = { id: "token-app", secret };
+    const tokens = await flow.tokensOf("cli-tok", "openid", {
+      client,
+    });
+    const userinfo = (token: string) =>
+      flow.get("cli-tok", "/userinfo", `Bearer ${token}`);
+    const refresh = (token: string) =>
+      flow.post(
+        "cli-tok",
+        "/token",
+        { grant_type: "refresh_token", refresh_token: token },
+        flow.basic(client.id, client.secret),
+      );
+    expect(tokens.refresh_token).toBeString();
+    const before = await refresh(tokens.refresh_token ?? "");
+    expect(before.status).toBe(200);
+    const live = (await before.json()) as {
+      access_token: string;
+      refresh_token: string;
+    };
+    expect((await userinfo(live.access_token)).status).toBe(200);
+
+    expect((await admin(DELETE, { tenantId, id: "token-app" })).data).toEqual({
+      deleteClient: true,
+    });
+
+    expect((await userinfo(live.access_token)).status).toBe(401);
+    const after = await refresh(live.refresh_token);
+    expect(after.status).toBeGreaterThanOrEqual(400);
+    // The client itself no longer authenticates either.
+    const code = await flow
+      .login("cli-tok", "openid", { client })
+      .catch(() => null);
+    expect(code === null || code.status >= 400).toBe(true);
   });
 });

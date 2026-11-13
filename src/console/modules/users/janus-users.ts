@@ -1,7 +1,11 @@
 import { JanusError } from "@softistx/janus";
+import { denial } from "@softistx/janus-graphql";
 import type { OAuthGrants } from "@softistx/janus-oauth";
 import { userScope } from "@/invitations/scope";
-import type { TenantInvitations } from "@/invitations/tenant-invitations";
+import {
+  type TenantInvitations,
+  TenantUnavailableError,
+} from "@/invitations/tenant-invitations";
 import type { TenantJanus } from "@/users/tenant-janus";
 import type { ConsoleUsers, TenantUserView } from "../../context";
 
@@ -10,6 +14,20 @@ export interface UsersSource {
   janusOf(tenantId: string): Promise<TenantJanus | null>;
   grantsOf(tenantId: string): Promise<OAuthGrants | null>;
   invitationsOf(tenantId: string): TenantInvitations;
+}
+
+// A tenant suspended or deleted since the resolver checked it: not found, as
+// for any other call that names it.
+const gone = () => denial("NOT_FOUND", "No such tenant");
+
+/** Runs an invitation call, a tenant that went away mid-request being "not found". */
+async function invitingly<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof TenantUnavailableError) throw gone();
+    throw error;
+  }
 }
 
 type PoolUser = NonNullable<Awaited<ReturnType<TenantJanus["findUser"]>>>;
@@ -27,12 +45,12 @@ const view = (user: PoolUser): TenantUserView => ({
 export function createJanusUsers(source: UsersSource): ConsoleUsers {
   const janus = async (tenantId: string) => {
     const found = await source.janusOf(tenantId);
-    if (found === null) throw new Error("the tenant is not available");
+    if (found === null) throw gone();
     return found;
   };
   const grants = async (tenantId: string) => {
     const found = await source.grantsOf(tenantId);
-    if (found === null) throw new Error("the tenant is not available");
+    if (found === null) throw gone();
     return found;
   };
   return {
@@ -79,13 +97,15 @@ export function createJanusUsers(source: UsersSource): ConsoleUsers {
       return auth.delete(user);
     },
     async invite({ tenantId, tenantName, email, invitedBy }) {
-      const invitation = await source.invitationsOf(tenantId).invite({
-        scope: userScope(),
-        organization: tenantName,
-        email,
-        role: "user",
-        invitedBy,
-      });
+      const invitation = await invitingly(() =>
+        source.invitationsOf(tenantId).invite({
+          scope: userScope(),
+          organization: tenantName,
+          email,
+          role: "user",
+          invitedBy,
+        }),
+      );
       return {
         id: invitation.id,
         email: invitation.email,
@@ -94,17 +114,20 @@ export function createJanusUsers(source: UsersSource): ConsoleUsers {
       };
     },
     async invitations(tenantId) {
-      return (await source.invitationsOf(tenantId).pending(userScope())).map(
-        ({ id, email, invitedAt, expiresAt }) => ({
-          id,
-          email,
-          invitedAt,
-          expiresAt,
-        }),
+      const pending = await invitingly(() =>
+        source.invitationsOf(tenantId).pending(userScope()),
       );
+      return pending.map(({ id, email, invitedAt, expiresAt }) => ({
+        id,
+        email,
+        invitedAt,
+        expiresAt,
+      }));
     },
     revokeInvitation: (tenantId, invitationId) =>
-      source.invitationsOf(tenantId).revoke(userScope(), invitationId),
+      invitingly(() =>
+        source.invitationsOf(tenantId).revoke(userScope(), invitationId),
+      ),
     async grants(tenantId, userId) {
       return [...(await (await grants(tenantId)).list({ id: userId }))];
     },

@@ -5,6 +5,7 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { MemoryMailer } from "@softistx/mail";
+import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
@@ -13,6 +14,7 @@ import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
+import { rolesService } from "@/config/roles";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, forTenant } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
@@ -169,6 +171,8 @@ afterAll(async () => {
   }
   await oauthDb.collection("grants").deleteMany({});
   await mongo.db.adminEvents.raw.deleteMany({});
+  await mongo.db.roles.raw.deleteMany({});
+  await mongo.db.roleAssignments.raw.deleteMany({});
 });
 
 const MUTATIONS = (tenant: string, user: string) => [
@@ -515,6 +519,26 @@ describe("disabling, sessions, grants and deletion", () => {
     expect((await grantsOf(ownA, tenantA, uA2)).data?.["userGrants"]).toEqual(
       [],
     );
+  });
+
+  test("deleteUser removes the user's role assignments too, on a repeat as well", async () => {
+    const a = await poolOf(slugA);
+    const holder = (await a.auth.create({ email: "holder@end.test" })).id;
+    const tenant = new ObjectId(tenantA);
+    const role = await rolesService.create(tenant, { name: "held" });
+    await rolesService.assign(tenant, role._id.toHexString(), holder);
+    const del = () =>
+      asConsole(
+        ownA,
+        `mutation { deleteUser(tenantId: "${tenantA}", userId: "${holder}") }`,
+      );
+    expect((await del()).data).toEqual({ deleteUser: true });
+    expect(await rolesService.rolesOfUser(tenant, holder)).toEqual([]);
+    expect(await rolesService.memberCount(tenant, role)).toBe(0);
+    // An assignment that outlived a failed first run is removed by the retry.
+    await rolesService.assign(tenant, role._id.toHexString(), holder);
+    expect((await del()).data).toEqual({ deleteUser: true });
+    expect(await rolesService.rolesOfUser(tenant, holder)).toEqual([]);
   });
 
   test("deleteUser removes the user, their sessions and grants; a repeat is true", async () => {

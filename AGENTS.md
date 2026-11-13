@@ -82,7 +82,7 @@ accepts. User claims come in through the `ClaimsFor` port (`src/oauth/ports.ts`)
 so the lookup is in that tenant's user pool. Introspection (`POST /introspect`, a confidential
 client of the same tenant, `client_secret_basic`) answers only for tokens of the tenant's own
 resources (`resourcesFor`), never for userinfo's. janus-oauth's `NoSigningKeyError` is a 503 `temporarily_unavailable` on these paths
-too (janus answers it itself). The `roles` claim is M2.
+too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 
 ## Users and sessions
 
@@ -248,9 +248,17 @@ every other failure a 401).
   no search: `q` is applied by `listClientViews` (`client-listing.ts`), which reads what the page still lacks until it is full
   (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
-  repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. Two
-  `createClient` of one id at the very same time are not told apart (the store has no
-  insert-only write): the last one wins.
+  repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
+  has no insert-only write, so `createClient` runs under `ctx.exclusive(clientsKey(tenant), ...)`
+  (`console:clients:<hex>`, the same queue and Redis lock as the admins): the id check and the
+  upsert of two creations of one id are never interleaved (one wins, the other is `CONFLICT`), and
+  the `clients` quota (`assertClientQuota`: `usageService.count` against `quotasOf`, `QUOTA_EXCEEDED`)
+  is read under it, so concurrent creations cannot pass the limit together. `deleteClient` leaves a
+  record that is not a registered one (`source` other than `registered`: a metadata-document client)
+  alone and answers false, and records `client.delete` only for a registered client or for a valid id
+  that names nothing (a retry may be the event the first run missed); an id no client can have, and an
+  untouched foreign record, name nothing to record. A deleted client's grants are revoked, so its
+  access and refresh tokens stop working (`clients.spec.ts`).
 - **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
   membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
   tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
@@ -311,6 +319,33 @@ does two things, and nothing else touches the collection:
   (M4). `ConsoleDeps.adminEvents` takes another recorder in a spec.
 - The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
   never used.
+
+## End-user roles (`src/modules/roles`, `src/console/modules/roles`)
+
+A role is a named claim value a tenant gives to its end users (not a console admin role, which is
+`access`). Two tenant-owned collections (`roles.model.ts`, purged with the tenant by `ownedPurgers`):
+`roles` (name, description, `resourceId`, unique `{tenantId, resourceId, name}`) and
+`roleAssignments` (`roleId`, `userId`, unique `{tenantId, roleId, userId}`). Everything goes through
+`RolesService` (`src/config/roles.ts`, `scopeToTenant`); the module is in the direct-access allow list of
+`tenancy/guards.spec.ts`.
+- **The claim**: `claimRoles(tenantId, userId, audience)` returns the sorted, de-duplicated names of the
+  tenant-wide roles plus those scoped to the resource whose `uri` is the audience. `RolesFor`
+  (`oauth/ports.ts`) is the port; `building.ts` puts it in janus's `accessTokens.claims` (runs on every
+  exchange and refresh, so a refreshed token carries the current roles) and `issuers.ts` in the id_token
+  and `/userinfo` (`scopeClaims: { openid: ["roles"] }`, `idToken.includeClaims`). No scope is needed. A
+  role scoped to resource X is in a token for X only; the id_token and userinfo have no audience, so they
+  carry the tenant-wide roles only. `includeClaims` also puts the e-mail and profile claims in the id_token.
+- **Console** (`roles` module): reads `onTenant("view")`, writes `onTenant("edit")`; audit actions
+  `role.create|update|delete|assign|unassign` (assign and unassign record the role and the user). `deleteRole`
+  and `unassignRole` are idempotent; `assignRole` needs a user of the tenant's pool (`NOT_FOUND` else).
+  `deleteRole` removes the assignments first, `deleteUser` and `deleteResource` remove theirs (a retry
+  finishes a half run). An assignment left by a delete/assign race is harmless: the claim join ignores a
+  role that is gone and the member list skips a user that is gone.
+- **Shared helpers**: `console/modules/ids.ts` (`lowerTenantArg`, `tenantIdOf`, `idArg`) and
+  `console/modules/directory-tenant.ts` (`activeTenant`, a suspended tenant is `NOT_FOUND`).
+  A tenant suspended mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
+- `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
+  read a token's content).
 
 ## Branding (`src/modules/branding`, `src/console/modules/branding`)
 

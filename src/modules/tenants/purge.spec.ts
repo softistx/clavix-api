@@ -142,6 +142,9 @@ describe("the tenant purge", () => {
     const names = ownedPurgers().map((p) => p.name);
     expect(names).toContain("branding");
     expect(names).toContain("usageCounters");
+    // The roles and their assignments are tenant-owned: purged with it.
+    expect(names).toContain("roles");
+    expect(names).toContain("roleAssignments");
     expect(names).not.toContain("adminEvents");
   });
 

@@ -235,7 +235,7 @@ grant or invitation id of another tenant is unknown, never touched.
 | `disableUser` / `enableUser`                                              | Idempotent. Disabling ends the user's sessions (a repeat ends any new one); an unknown user is `NOT_FOUND`.                                                                                                                                                                                                              |
 | `revokeUserSessions(tenantId, userId)`                                    | Ends every session; answers how many (0 on a repeat or an unknown user).                                                                                                                                                                                                                                                 |
 | `userGrants(tenantId, userId)` / `revokeGrant(tenantId, userId, grantId)` | The OAuth grants the user gave (standing only, with the client's name), and taking one back with the tokens it opened. `revokeGrant` is true also when already revoked, false for a grant that is not this user's.                                                                                                       |
-| `deleteUser(tenantId, userId)`                                            | Revokes the user's grants (and tokens), ends their sessions, deletes the user. True also when already gone.                                                                                                                                                                                                              |
+| `deleteUser(tenantId, userId)`                                            | Revokes the user's grants (and tokens), ends their sessions, removes their role assignments, deletes the user. True also when already gone.                                                                                                                                                                              |
 
 Each mutation records an admin event, repeats included (`user.invite`, `user.revokeInvitation`,
 `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeGrant`; target: the
@@ -247,26 +247,47 @@ curl -s https://api.clavix.example/console/graphql \
   -d '{"query":"mutation { inviteUser(tenantId: \"65f1c0de00000000000000a1\", email: \"bob@example.com\") { id expiresAt } }"}'
 ```
 
+### Roles of a tenant's end users
+
+A role is a name a tenant gives to some of its end users; it is released in their tokens as the
+`roles` claim (not a console admin role). Reads need `view` on the tenant, mutations `edit`. A role
+may be scoped to one of the tenant's resources (`resourceId`), else it applies to the whole tenant.
+A name is 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`, unique per tenant and resource.
+
+| Operation                                            | Does                                                                                                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `roles(tenantId, resourceId)` / `role(tenantId, id)` | The roles by name (only a resource's with `resourceId`), with `memberCount`; one role or `null`.                                                       |
+| `createRole(tenantId, input)` / `updateRole(...)`    | `{ name, description, resourceId }`; update changes the name or description. `CONFLICT` for a taken name, `NOT_FOUND` for an unknown resource or role. |
+| `deleteRole(tenantId, id)`                           | Deletes the role and its assignments. True also when already gone.                                                                                     |
+| `assignRole(tenantId, roleId, userId)`               | Idempotent. The user must be in the tenant's pool, else `NOT_FOUND`.                                                                                   |
+| `unassignRole(tenantId, roleId, userId)`             | True when the user held it, false on a repeat.                                                                                                         |
+| `roleMembers(tenantId, roleId, after, first)`        | A page (25, at most 100) of `{ user, assignedAt }`, oldest assignment first.                                                                           |
+| `userRoles(tenantId, userId)`                        | The roles a user holds.                                                                                                                                |
+
+Each mutation records an admin event (`role.create`, `role.update`, `role.delete`, `role.assign`,
+`role.unassign`; an assignment records the role and the user). Deleting a user or a resource removes
+the assignments and the resource-scoped roles that depended on them.
+
 ### Clients, resources and scopes
 
 Every field takes the `tenantId` it works on. Queries need `view` on that tenant (any role),
 mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another tenant, gets
-`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (also a suspended tenant), `CONFLICT`,
+`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (also a suspended tenant), `CONFLICT`, `QUOTA_EXCEEDED`,
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 
-| Field                                                | What it does                                                                    |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`    |
-| `client(tenantId, id)`                               | one client, or `null`                                                           |
-| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once     |
-| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                 |
-| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client |
-| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens                      |
-| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                       |
-| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                        |
-| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                             |
-| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                         |
+| Field                                                | What it does                                                                                                                                                                                              |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`                                                                                                                              |
+| `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                     |
+| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
+| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                                                                                                                                           |
+| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                           |
+| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                          |
+| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                 |
+| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                  |
+| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                       |
+| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                                                                                                                                                   |
 
 ```graphql
 mutation {
@@ -615,6 +636,12 @@ A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, 
 `resource` is for the tenant's userinfo. Introspection answers only for tokens of the tenant's
 own resources. A tenant with no signing key yet answers 503 `temporarily_unavailable`. The
 claims come from the users of the tenant (see "Users per tenant").
+
+**The `roles` claim** (an array of names, sorted) is in the `id_token`, in `/userinfo` and in the JWT
+access tokens, with no scope to ask for. The tenant-wide roles of the user are in all three; a role
+scoped to a resource is only in the access tokens issued for that resource (its URI is the audience),
+so the `id_token` and userinfo, which have no audience, never carry it. A refreshed token carries the
+roles the user holds then. The `id_token` also carries the `email` and profile claims.
 
 **The `sub` claim** is the janus user id of the signed-in user in that tenant, unchanged
 (`janus-oidc` sets `sub` to the session's `userId` in the id_token and in `/userinfo`; no

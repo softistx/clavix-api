@@ -158,7 +158,7 @@ Constraints to know before relying on it:
   for the tenant's userinfo, so the token's `aud` is the userinfo URL); a client that asks
   `resource=<uri>` gets a token whose `aud` is that URI, and an unregistered URI is refused
   (`invalid_target`).
-- **`roles` is empty**: the `roles` claim is planned. `permissions` come with access rules, later.
+- **`roles`** is the sorted list of the role names the user holds in the tenant (tenant-wide roles, plus those scoped to the token's resource), managed in the console (README "Roles of a tenant's end users"). `permissions` come with access rules, later.
 - **`scopes`** are the scopes granted on the resource, which a console will configure later.
 - A non-alxia API can verify the token itself: the JWT is signed by the tenant's key
   (ES256 default), published at `/jwks.json`; or it calls `/introspect` as a confidential
@@ -222,8 +222,8 @@ Nothing maps an old janus id to the new `sub`, which is why a mapping column is 
   by the Clavix maintainers until then.
 - **Social federation** (Google, GitHub, upstream OIDC; planned): the
   tenant offers passkey and e-mail code only.
-- Also later: MFA and step-up, PAR and DPoP, device code and token exchange, the `roles`
-  claim, permissions and access rules.
+- Also later: MFA and step-up, PAR and DPoP, device code and token exchange,
+  permissions and access rules.
 
 ## Gaps
 

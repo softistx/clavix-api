@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { catalog } from "@/config/resources";
+import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type {
   StoredResourceDoc,
@@ -135,6 +136,21 @@ export const resources: Resolvers = {
           scopes = await catalog.listScopes(tenant._id, {
             resourceId: found._id,
           });
+          // The roles scoped to it go first: were the resource gone before them
+          // a retry would find nothing to clean up.
+          const roles = await rolesService.deleteForResource(
+            tenant._id,
+            found._id,
+          );
+          // Recorded now: were the resource delete to fail, a retry finds no
+          // role left and could not record them.
+          for (const role of roles) {
+            await ctx.audit("role.delete", {
+              type: "role",
+              id: role._id.toHexString(),
+              tenantId: tenant._id.toHexString(),
+            });
+          }
         }
         return catalog.deleteResource(tenant._id, id);
       });

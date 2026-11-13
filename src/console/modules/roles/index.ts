@@ -1,0 +1,208 @@
+import { denial } from "@softistx/janus-graphql";
+import { InvalidCursorError } from "@softistx/mongo";
+import { GraphQLError } from "graphql";
+import { ObjectId } from "mongodb";
+import { rolesService } from "@/config/roles";
+import type { Resolvers } from "@/generated/console/resolvers";
+import { RolesError } from "@/modules/roles/roles.errors";
+import type { RoleDoc } from "@/modules/roles/roles.service";
+import type { Audits } from "../../audit";
+import type { ConsoleContext } from "../../context";
+import { type Guards, onTenant } from "../../guard";
+import { activeTenant } from "../directory-tenant";
+import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
+
+const view = onTenant("view", lowerTenantArg);
+const edit = onTenant("edit", lowerTenantArg);
+
+// Reading roles is `view`; changing them or their holders is `edit`.
+export const rolesGuards: Guards = {
+  "Query.roles": view,
+  "Query.role": view,
+  "Query.roleMembers": view,
+  "Query.userRoles": view,
+  "Mutation.createRole": edit,
+  "Mutation.updateRole": edit,
+  "Mutation.deleteRole": edit,
+  "Mutation.assignRole": edit,
+  "Mutation.unassignRole": edit,
+};
+
+// One event per mutation, once its change is stored; a repeat records again
+// (the retry of a call whose record failed). `assignRole` and `unassignRole`
+// record two, one for the role and one for the user. Ids only.
+export const rolesAudits: Audits = {
+  "Mutation.createRole": "role.create",
+  "Mutation.updateRole": "role.update",
+  "Mutation.deleteRole": "role.delete",
+  "Mutation.assignRole": "role.assign",
+  "Mutation.unassignRole": "role.unassign",
+};
+
+const STATUS = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 } as const;
+
+async function refusing<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof RolesError) {
+      throw new GraphQLError(error.message, {
+        extensions: { code: error.code, http: { status: STATUS[error.code] } },
+      });
+    }
+    throw error;
+  }
+}
+
+const target = (type: "role" | "user", id: string, tenantId: string) => ({
+  type,
+  id,
+  tenantId,
+});
+
+const MAX_PAGE = 100;
+
+const shape = async (tenantId: ObjectId, role: RoleDoc) => ({
+  id: role._id.toHexString(),
+  name: role.name,
+  description: role.description === "" ? null : role.description,
+  resourceId: role.resourceId?.toHexString() ?? null,
+  memberCount: await rolesService.memberCount(tenantId, role),
+  createdAt: role.createdAt,
+});
+
+const shapes = (tenantId: ObjectId, found: RoleDoc[]) =>
+  Promise.all(found.map((role) => shape(tenantId, role)));
+
+/** The active tenant of the call: the id as an ObjectId. */
+async function tenantOf(ctx: ConsoleContext, given: string) {
+  const hex = tenantIdOf(given);
+  await activeTenant(ctx.directory, hex);
+  return { hex, id: new ObjectId(hex) };
+}
+
+export const roles: Resolvers = {
+  Query: {
+    roles: async (_, { tenantId, resourceId }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      return shapes(
+        tenant.id,
+        await rolesService.list(tenant.id, {
+          resourceId: resourceId ?? undefined,
+        }),
+      );
+    },
+    role: async (_, { tenantId, id }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      const found = await rolesService.find(tenant.id, id);
+      return found === undefined ? null : shape(tenant.id, found);
+    },
+    roleMembers: async (_, { tenantId, roleId, after, first }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      let page: Awaited<ReturnType<typeof rolesService.members>>;
+      try {
+        page = await rolesService.members(tenant.id, roleId, {
+          after: after ?? null,
+          limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+        });
+      } catch (error) {
+        if (error instanceof InvalidCursorError) {
+          throw new GraphQLError("The cursor is not valid", {
+            extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+          });
+        }
+        throw error;
+      }
+      const users = await Promise.all(
+        page.items.map((held) => ctx.users.find(tenant.hex, held.userId)),
+      );
+      const items = page.items.flatMap((held, index) => {
+        const user = users[index];
+        return user === null || user === undefined
+          ? []
+          : [
+              {
+                user: {
+                  id: user.id,
+                  email: user.email,
+                  name: user.name ?? null,
+                  emailVerified: user.emailVerified,
+                  active: user.active,
+                  createdAt: user.createdAt,
+                },
+                assignedAt: held.createdAt,
+              },
+            ];
+      });
+      return { items, nextCursor: page.nextCursor };
+    },
+    userRoles: async (_, { tenantId, userId }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      return shapes(
+        tenant.id,
+        await rolesService.rolesOfUser(tenant.id, userId),
+      );
+    },
+  },
+  Mutation: {
+    createRole: async (_, { tenantId, input }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      const created = await refusing(() =>
+        rolesService.create(tenant.id, {
+          name: input.name,
+          description: input.description ?? undefined,
+          resourceId: input.resourceId ?? null,
+        }),
+      );
+      await ctx.audit(
+        "role.create",
+        target("role", created._id.toHexString(), tenant.hex),
+      );
+      return shape(tenant.id, created);
+    },
+    updateRole: async (_, { tenantId, id, input }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      const updated = await refusing(() =>
+        rolesService.update(tenant.id, id, {
+          name: input.name ?? undefined,
+          description: input.description ?? undefined,
+        }),
+      );
+      await ctx.audit(
+        "role.update",
+        target("role", updated._id.toHexString(), tenant.hex),
+      );
+      return shape(tenant.id, updated);
+    },
+    deleteRole: async (_, { tenantId, id }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      idArg(id, "id");
+      await rolesService.delete(tenant.id, id);
+      // Recorded on a repeat too (it may be the event the first run missed).
+      await ctx.audit("role.delete", target("role", id, tenant.hex));
+      return true;
+    },
+    assignRole: async (_, { tenantId, roleId, userId }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      idArg(roleId, "roleId");
+      idArg(userId, "userId");
+      // Only a user of this tenant's pool can hold a role.
+      if ((await ctx.users.find(tenant.hex, userId)) === null) {
+        throw denial("NOT_FOUND", "No such user");
+      }
+      await refusing(() => rolesService.assign(tenant.id, roleId, userId));
+      await ctx.audit("role.assign", target("role", roleId, tenant.hex));
+      await ctx.audit("role.assign", target("user", userId, tenant.hex));
+      return true;
+    },
+    unassignRole: async (_, { tenantId, roleId, userId }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      idArg(roleId, "roleId");
+      idArg(userId, "userId");
+      const removed = await rolesService.unassign(tenant.id, roleId, userId);
+      await ctx.audit("role.unassign", target("role", roleId, tenant.hex));
+      await ctx.audit("role.unassign", target("user", userId, tenant.hex));
+      return removed;
+    },
+  },
+};

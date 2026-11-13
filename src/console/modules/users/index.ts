@@ -1,6 +1,8 @@
 import { JanusError } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
+import { ObjectId } from "mongodb";
+import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { Audits } from "../../audit";
 import type {
@@ -9,26 +11,22 @@ import type {
   UserGrantView,
 } from "../../context";
 import { type Guards, onTenant } from "../../guard";
-import { activeTenant } from "../admins/service";
-
-// Lower-cased as in the admins module: the guard and the resolver act on the
-// same id, whatever case the caller sent.
-const tenantArg = (args: Record<string, unknown>) =>
-  String(args["tenantId"]).toLowerCase();
+import { activeTenant } from "../directory-tenant";
+import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
 
 // Reading the users is `view`; changing them is `edit` (a tenant admin).
 export const usersGuards: Guards = {
-  "Query.users": onTenant("view", tenantArg),
-  "Query.user": onTenant("view", tenantArg),
-  "Query.userInvitations": onTenant("view", tenantArg),
-  "Query.userGrants": onTenant("view", tenantArg),
-  "Mutation.inviteUser": onTenant("edit", tenantArg),
-  "Mutation.revokeInvitation": onTenant("edit", tenantArg),
-  "Mutation.disableUser": onTenant("edit", tenantArg),
-  "Mutation.enableUser": onTenant("edit", tenantArg),
-  "Mutation.deleteUser": onTenant("edit", tenantArg),
-  "Mutation.revokeUserSessions": onTenant("edit", tenantArg),
-  "Mutation.revokeGrant": onTenant("edit", tenantArg),
+  "Query.users": onTenant("view", lowerTenantArg),
+  "Query.user": onTenant("view", lowerTenantArg),
+  "Query.userInvitations": onTenant("view", lowerTenantArg),
+  "Query.userGrants": onTenant("view", lowerTenantArg),
+  "Mutation.inviteUser": onTenant("edit", lowerTenantArg),
+  "Mutation.revokeInvitation": onTenant("edit", lowerTenantArg),
+  "Mutation.disableUser": onTenant("edit", lowerTenantArg),
+  "Mutation.enableUser": onTenant("edit", lowerTenantArg),
+  "Mutation.deleteUser": onTenant("edit", lowerTenantArg),
+  "Mutation.revokeUserSessions": onTenant("edit", lowerTenantArg),
+  "Mutation.revokeGrant": onTenant("edit", lowerTenantArg),
 };
 
 // One event per mutation, recorded once its change is stored. A repeat records
@@ -43,23 +41,6 @@ export const usersAudits: Audits = {
   "Mutation.revokeUserSessions": "user.revokeSessions",
   "Mutation.revokeGrant": "user.revokeGrant",
 };
-
-function tenantIdOf(given: string) {
-  if (!/^[0-9a-f]{24}$/i.test(given)) {
-    throw denial("NOT_FOUND", "No such tenant");
-  }
-  return given.toLowerCase();
-}
-
-// An id the trail can name (200 characters at most): refused before anything is written.
-function idArg(given: string, name: string) {
-  if (given.length === 0 || given.length > 200) {
-    throw new GraphQLError(`${name} is not an id`, {
-      extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
-    });
-  }
-  return given;
-}
 
 const shape = (user: TenantUserView) => ({
   id: user.id,
@@ -171,6 +152,9 @@ export const users: Resolvers = {
       idArg(userId, "userId");
       await activeTenant(ctx.directory, tenantId);
       await ctx.users.delete(tenantId, userId);
+      // Their role assignments go with them; on a repeat too, so a retry
+      // finishes what a failed first run left.
+      await rolesService.removeUser(new ObjectId(tenantId), userId);
       await ctx.audit("user.delete", target("user", userId, tenantId));
       return true;
     },

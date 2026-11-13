@@ -28,13 +28,6 @@ export async function roleOf(
   return null;
 }
 
-/** The tenant when it exists and is active, else a 404. */
-export async function activeTenant(directory: ConsoleDirectory, id: string) {
-  const [tenant] = await directory.tenantsByIds([id]);
-  if (tenant === undefined) throw denial("NOT_FOUND", "No such tenant");
-  return tenant;
-}
-
 /** The tenant's members, owners first. A user who is gone is left out. */
 export async function members(
   access: AdminsAccess,

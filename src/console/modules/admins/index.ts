@@ -4,13 +4,8 @@ import type { Resolvers } from "@/generated/console/resolvers";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import type { Role } from "../../model";
-import {
-  activeTenant,
-  assertNotMember,
-  changeRole,
-  members,
-  removeMember,
-} from "./service";
+import { activeTenant } from "../directory-tenant";
+import { assertNotMember, changeRole, members, removeMember } from "./service";
 
 const GRAPHQL_ROLE = {
   owner: "OWNER",
