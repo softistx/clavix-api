@@ -55,6 +55,8 @@ const allowed = [
   "src/modules/tenants/",
   "src/modules/resources/",
   "src/config/resources.ts",
+  "src/modules/branding/",
+  "src/config/branding.ts",
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.

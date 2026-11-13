@@ -1,0 +1,70 @@
+"""
+A tenant's brand: the theme its hosted pages wear. The colours are checked
+against WCAG AA in light and dark before anything is stored.
+"""
+type Branding {
+  tenantId: ID!
+  displayName: String!
+  "The brand's primary colour, as given."
+  seed: String!
+  "A CSS length in rem or px."
+  radius: String!
+  "A background preset id of @softistx/material-core, or null."
+  backgroundPreset: String
+  "A motif shape id of @softistx/material-core, or null."
+  motif: String
+  "The `data-nxgt-theme` value the CSS is scoped to."
+  themeName: String!
+  "The generated stylesheet (`themeToCss`, attribute scope)."
+  css: String!
+  "Where the logo is served on the tenant's host; null without a logo."
+  logoUrl: String
+  updatedAt: DateTime
+}
+
+input BrandingLogoInput {
+  "image/png, image/jpeg or image/webp."
+  contentType: String!
+  "The image bytes, base64, at most 256 KiB decoded."
+  dataBase64: String!
+}
+
+"""
+The whole brand (a replacement, so repeating a call changes nothing). The logo
+is kept unless `logo` replaces it or `removeLogo` is true.
+"""
+input UpdateBrandingInput {
+  displayName: String!
+  seed: String!
+  radius: String! = "0.5rem"
+  backgroundPreset: String
+  motif: String
+  logo: BrandingLogoInput
+  removeLogo: Boolean
+}
+
+type UpdateBrandingPayload {
+  branding: Branding!
+  "False when the stored brand already was exactly this."
+  changed: Boolean!
+  "What the generator adjusted to reach AA (a colour moved lighter or darker)."
+  warnings: [String!]!
+}
+
+extend type Query {
+  "The tenant's brand, or null while it has none. Needs `view` on the tenant."
+  branding(tenantId: ID!): Branding
+}
+
+type Mutation {
+  """
+  Sets the tenant's brand. Needs `edit` on the tenant. A theme that fails AA
+  is refused with BRANDING_CONTRAST (422, `extensions.failures`); a bad value
+  is BAD_USER_INPUT (400, `extensions.field`). Calls at the same time apply
+  one after the other; one that keeps losing is CONFLICT (409): read and retry.
+  """
+  updateBranding(
+    tenantId: ID!
+    input: UpdateBrandingInput!
+  ): UpdateBrandingPayload!
+}
