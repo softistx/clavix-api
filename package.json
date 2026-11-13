@@ -41,7 +41,7 @@
     "@softistx/janus-oauth-mongo": "^0.12.0",
     "@softistx/janus-oidc": "^0.3.11",
     "@softistx/janus-passkeys": "^0.3.6",
-    "@softistx/janus-social": "^0.2.9",
+    "@softistx/janus-social": "^0.3.0",
     "@softistx/mail": "^1.5.0",
     "@softistx/mail-smtp": "^1.1.0",
     "@softistx/material-core": "^0.84.0",
