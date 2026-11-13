@@ -242,6 +242,14 @@ remove this one. Of two owners removed at the same moment, the second is refused
 
 The address already holds a role on the tenant. Change it with `changeMembership`.
 
+### `BAD_USER_INPUT` (400) `userId is not an id` / `invitationId is not an id`, and `NOT_FOUND` `No such tenant`, on the membership mutations
+
+The id is empty or longer than 200 characters, or `tenantId` is not 24 hexadecimal characters.
+Nothing was written. Send the id the console returned.
+
+A membership mutation that fails after its change because its admin event could not be stored is
+safe to repeat: it changes nothing twice and records the event it missed.
+
 ### `INVITATION_INVALID` (400) on `invitationPreview` or `acceptInvitation`
 
 The code is unknown, already used, revoked or expired; the hosted API gives one answer for all four,

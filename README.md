@@ -169,7 +169,8 @@ Each of the four mutations that succeeds records an admin event (see "Admin even
 `membership.invite` and `membership.revokeInvitation` (target: the invitation's id, never the
 address), `membership.change` and `membership.remove` (target: the user's id). Accepting an
 invitation is the invitee's act on the hosted API and records none. A `userId` or `invitationId`
-longer than 200 characters is `BAD_USER_INPUT` (400).
+longer than 200 characters is `BAD_USER_INPUT` (400); a `tenantId` is 24 hexadecimal characters, in
+any case.
 
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and

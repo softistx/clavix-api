@@ -19,7 +19,10 @@ const GRAPHQL_ROLE = {
 } as const satisfies Record<Role, string>;
 const ROLE_OF = { OWNER: "owner", ADMIN: "admin", VIEWER: "viewer" } as const;
 
-const tenantArg = (args: Record<string, unknown>) => String(args["tenantId"]);
+// Lower-cased here as in `tenantIdOf`: the guard and the resolver act on the
+// same id, whatever case the caller sent.
+const tenantArg = (args: Record<string, unknown>) =>
+  String(args["tenantId"]).toLowerCase();
 
 // Reading the admins is `view`; changing them is `manage` (the tenant's owner,
 // or a platform owner): an admin or a viewer cannot grant roles.
@@ -42,9 +45,8 @@ export const adminsAudits: Audits = {
   "Mutation.revokeAdminInvitation": "membership.revokeInvitation",
 };
 
-// The guard decided who may touch the tenant (a platform role is allowed on
-// any id); this decides the id is a tenant's, in the one spelling the
-// relations and the trail use, whatever case the caller sent.
+// The guard decided who may touch the tenant; this decides the id has a
+// tenant's form, in the one spelling the relations and the trail use.
 function tenantIdOf(given: string) {
   if (!/^[0-9a-f]{24}$/i.test(given)) {
     throw denial("NOT_FOUND", "No such tenant");
@@ -117,14 +119,15 @@ export const admins: Resolvers = {
       const tenantId = tenantIdOf(given);
       targetId(userId, "userId");
       await activeTenant(ctx.directory, tenantId);
+      // Before any write: a refusal leaves no change and no event.
+      const user = await ctx.directory.findUser(userId);
+      if (user === null) throw denial("NOT_FOUND", "No such user");
       const stored = await changeRole(ctx, tenantId, userId, ROLE_OF[role]);
       await ctx.audit("membership.change", {
         type: "user",
         id: userId,
         tenantId,
       });
-      const user = await ctx.directory.findUser(userId);
-      if (user === null) throw denial("NOT_FOUND", "No such user");
       return memberOf(user, stored);
     },
     removeMembership: async (_, { tenantId: given, userId }, ctx) => {

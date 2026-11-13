@@ -706,6 +706,29 @@ describe("admin events", () => {
     expect((await eventsOf()).length).toBe(before);
   });
 
+  test("the id in upper case is the same tenant, in one spelling in the trail; a malformed one stores nothing", async () => {
+    const before = (await eventsOf()).length;
+    expect(
+      (
+        await asConsole(
+          ownB,
+          `mutation { removeMembership(tenantId: "${tenant.toUpperCase()}", userId: "${ownA2}") }`,
+        )
+      ).data?.["removeMembership"],
+    ).toBe(true);
+    expect((await eventsOf()).length).toBe(before + 1);
+    const total = await mongo.db.adminEvents.raw.countDocuments({});
+    expect(
+      code(
+        await asConsole(
+          ownB,
+          `mutation { removeMembership(tenantId: "not-a-tenant", userId: "${ownA2}") }`,
+        ),
+      ),
+    ).toBe("FORBIDDEN");
+    expect(await mongo.db.adminEvents.raw.countDocuments({})).toBe(total);
+  });
+
   test("a repeat records again, so a retry never leaves a change with no event", async () => {
     const before = (await eventsOf()).length;
     const remove = `mutation { removeMembership(tenantId: "${tenant}", userId: "${ownA2}") }`;
