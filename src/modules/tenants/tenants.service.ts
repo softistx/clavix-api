@@ -100,6 +100,12 @@ export class TenantsService {
     return active.map((tenant) => partitionOf(tenant._id));
   }
 
+  /** The ids (hex) of every tenant, the suspended and the trashed included: the partitions that may hold keys. */
+  async allIds(): Promise<string[]> {
+    const all = await this.collection.findMany({ withDeleted: true });
+    return all.map((tenant) => partitionOf(tenant._id));
+  }
+
   /** The active tenants with these ids (hex); an unknown, suspended or deleted one is left out. */
   async activeByIds(ids: readonly string[]): Promise<Tenant[]> {
     const valid = ids.filter((id) => ObjectId.isValid(id));

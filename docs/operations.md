@@ -263,11 +263,60 @@ one is published 48 h before, a retired key stays published 24 h (hourly job,
 plus one pass at API start). Nothing to do in normal operation. To check, read
 `https://<slug>.<domain>/jwks.json`.
 
-Emergency rotation (a key leaked) and a lost or changed master key use the same
-procedure, from the README ("Signing keys"): delete the tenant's `oauthSigningKeys`
-documents, restart the API so the start pass creates new keys, and tell relying
-parties: tokens signed by the old keys stop verifying once the JWKS no longer
-lists them. There is no re-encryption in place and no "rotate now" script yet.
+### Rotating the master key (no downtime)
+
+`CLAVIX_KEYS_MASTER_KEY` is one key, or a comma-separated **keyring**: the first
+key seals every new record, any key of the list opens one. Generate the new key
+with `openssl rand -base64 32`, keep it in the secret manager, and go in this
+order (the order matters: an instance that only knows the old key cannot open a
+record another instance sealed under the new one):
+1. Deploy `CLAVIX_KEYS_MASTER_KEY=<old>,<new>`: the old key still seals, the new
+   one already opens. Wait until every instance runs it.
+2. Deploy `CLAVIX_KEYS_MASTER_KEY=<new>,<old>`: the new key seals.
+3. Re-seal what is still under the old key, from any instance with the same
+   environment: `bun run keys:reseal`. It goes over every tenant (suspended and
+   trashed included), prints `{ tenants, resealed, current, skipped, failed }`
+   and **exits 1 while `skipped` or `failed` is above 0**: run it again. A
+   record is `skipped` when someone changed it meanwhile; a tenant is `failed`
+   when no key of the list opens one of its records (the message names the
+   tenant).
+4. When a run answers `resealed: 0, skipped: 0, failed: 0`, deploy
+   `CLAVIX_KEYS_MASTER_KEY=<new>` alone.
+
+Dropping the old key before step 4 makes the unsealed records unreadable: signing
+fails for those tenants (the JWKS still serves) until the old key is back in the
+list.
+
+The tenants' social client secrets (sign-in methods) use a subkey of the same
+master key. With a keyring they are still opened under any key of the list, but
+`keys:reseal` does not re-wrap them (clavix-api#49): **keep the old key in the
+list while any social secret is sealed under it**, or enter those secrets again.
+
+### Emergency rotation (a signing key leaked)
+
+`bun run keys:rotate <tenant-slug>` (or `--all` for every active tenant) retires
+the tenant's current signing key now and makes a new one sign, using janus's
+`retire` and rotation step; nothing is deleted by hand and no restart is needed.
+It prints, per tenant, the `retired` and the new `current` key id, and exits 1 if
+a tenant failed.
+- By default the retired key stays published for 24 h (the normal retirement
+  window), so tokens already issued keep verifying.
+- If the **private key itself leaked**, add `--drop-old`: the retired key is
+  unpublished at once, so the tokens it signed stop verifying and the leak buys
+  nothing. Users sign in again; tell the relying parties.
+- If a `next` key was already published, it takes over at once; otherwise a new
+  key is created and signs immediately. Relying parties that cached the JWKS
+  and have not fetched it since may fail to verify the new key until they do
+  (the cache lasts 5 minutes).
+- If the **master key** leaked, rotate it first (above), then run
+  `keys:rotate --all --drop-old`: a new master key alone does not change the
+  signing keys.
+
+Check afterwards with `https://<slug>.<domain>/jwks.json`.
+
+A **lost** master key cannot be recovered by rotation: the stored keys are
+unreadable. Drop the tenants' `oauthSigningKeys` documents and restart the API so
+the start pass creates new keys (README, "Signing keys").
 
 ## Troubleshooting
 
