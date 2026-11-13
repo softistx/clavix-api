@@ -60,6 +60,8 @@ const as = async (
         clientId: CONSOLE_CLIENT_ID,
         grantId: "g",
         scopes: ["console"],
+        clientName: null,
+        bound: null,
       }),
       access,
       adminEvents: adminEventRecorder,

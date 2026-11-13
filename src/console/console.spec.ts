@@ -330,6 +330,8 @@ describe("the console's bearer token", () => {
             clientId: CONSOLE_CLIENT_ID,
             grantId: "g",
             scopes: ["console"],
+            clientName: null,
+            bound: null,
           }),
         }) as never,
     });
@@ -383,6 +385,8 @@ describe("the guard", () => {
           clientId: CONSOLE_CLIENT_ID,
           grantId: "g",
           scopes: [],
+          clientName: null,
+          bound: null,
         }),
       },
     });
@@ -685,6 +689,8 @@ describe("the guards over HTTP", () => {
           clientId: CONSOLE_CLIENT_ID,
           grantId: "g",
           scopes,
+          clientName: null,
+          bound: null,
         }),
       },
     })

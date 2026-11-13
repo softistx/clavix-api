@@ -27,7 +27,14 @@ const app = createApp({
         ?.replace(/^Bearer /, "");
       return userId === undefined
         ? null
-        : { userId, clientId: "spec", grantId: "spec", scopes: ["console"] };
+        : {
+            userId,
+            clientId: "spec",
+            grantId: "spec",
+            scopes: ["console"],
+            clientName: null,
+            bound: null,
+          };
     },
   },
 });

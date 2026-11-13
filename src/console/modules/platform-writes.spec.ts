@@ -56,6 +56,8 @@ const app = createApp({
             clientId: CONSOLE_CLIENT_ID,
             grantId: "spec",
             scopes: ["console"],
+            clientName: null,
+            bound: null,
           };
     },
   },
