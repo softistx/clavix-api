@@ -17,7 +17,11 @@ const config: CodegenConfig = {
         useIndexSignature: true,
         enumsAsTypes: true,
         // `Me` has no stored document: its fields read the caller.
-        mappers: { Me: "@/console/modules/me#MeParent" },
+        mappers: {
+          Me: "@/console/modules/me#MeParent",
+          // A tenant by id, slug and name, and its stored document when read.
+          Tenant: "@/console/modules/tenants/parent#TenantParent",
+        },
       },
     },
   },

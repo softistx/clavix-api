@@ -232,7 +232,7 @@ describe("the janus of a tenant", () => {
     ).not.toBeNull();
   });
 
-  test("an unknown or suspended host gives no janus", async () => {
+  test("an unknown host gives no janus; a suspended tenant keeps its instance (sign-in is refused above it)", async () => {
     expect(
       await janusIssuers.forRequest(new Request(url("nobody"))),
     ).toBeNull();
@@ -243,11 +243,11 @@ describe("the janus of a tenant", () => {
     await tenants.suspend(globex.tenantId);
     expect(
       await janusIssuers.forRequest(new Request(url("globex"))),
-    ).toBeNull();
-    expect(await forTenant(globex)).toBeNull();
+    ).not.toBeNull();
+    expect(await forTenant(globex)).not.toBeNull();
     expect(
       await authFor(globex).findUser(sessions["globex"]?.user.id ?? ""),
-    ).toBeNull();
+    ).not.toBeNull();
     await tenants.reactivate(globex.tenantId);
     expect(
       await janusIssuers.forRequest(new Request(url("globex"))),

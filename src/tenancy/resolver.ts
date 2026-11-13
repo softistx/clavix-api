@@ -15,12 +15,16 @@ export interface TenantRecord {
   name: string;
   signUp: boolean;
   status: "active" | "suspended";
+  /** Set while the tenant is in the trash. */
+  deletedAt?: Date | null | undefined;
+  /** Set once the purge claimed the tenant: it resolves nowhere from then on. */
+  purgeStartedAt?: Date | undefined;
   version: number;
   signIn: ResolvedTenant["signIn"];
 }
 
 export interface TenantResolverOptions {
-  /** The live tenant with this slug, or `undefined` (a deleted one is none). */
+  /** The stored tenant with this slug, in the trash or not, or `undefined`. */
   lookup: (slug: string) => Promise<TenantRecord | undefined>;
   cache: TenantCache;
   /** Where issuers live (`CLAVIX_DOMAIN`, scheme, port). */
@@ -48,13 +52,17 @@ function toResolved(
   tenant: TenantRecord | undefined,
   config: PublicOrigin,
 ): ResolvedTenant | null {
-  return tenant === undefined || tenant.status !== "active"
+  return tenant === undefined || tenant.purgeStartedAt !== undefined
     ? null
     : {
         tenantId: tenant._id.toHexString(),
         slug: tenant.slug,
         name: tenant.name,
         signUp: tenant.signUp,
+        status:
+          tenant.deletedAt === null || tenant.deletedAt === undefined
+            ? tenant.status
+            : "deleted",
         issuer: issuerOf(tenant.slug, config),
         partition: partitionOf(tenant._id),
         version: tenant.version,
@@ -82,7 +90,9 @@ async function attempt<T>(
 }
 
 /**
- * Host to tenant: `<slug>.<CLAVIX_DOMAIN>` with an active tenant of that slug.
+ * Host to tenant: `<slug>.<CLAVIX_DOMAIN>` with a tenant of that slug, whatever
+ * its status (a purged one is none): the callers that open or extend a session
+ * check `isLive`.
  * Only hosts of a valid slug shape reach the cache or Mongo, so arbitrary
  * hosts cannot fill either. A cache failure is logged and Mongo is read.
  */

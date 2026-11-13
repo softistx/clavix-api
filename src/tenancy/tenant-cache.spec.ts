@@ -27,6 +27,7 @@ const tenant = {
   slug: "acme",
   name: "Acme",
   signUp: false,
+  status: "active" as const,
   issuer: "https://acme.clavix.test",
   partition: "65f0000000000000000000aa",
   version: 1,

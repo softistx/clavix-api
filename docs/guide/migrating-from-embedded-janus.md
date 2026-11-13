@@ -40,8 +40,8 @@ Facts to hold on to (all Built, see the clavix-api README):
 
 ## 1. Register the application as a client
 
-Until the console exists (planned) a client is registered on a tenant by script, from a
-clavix-api checkout with the deployment's environment:
+A client is registered on a tenant in the console API (`createClient`, which shows the secret
+once) or by script, from a clavix-api checkout with the deployment's environment:
 
 ```sh
 # the application's web back end: a confidential client (client_secret_basic)
@@ -57,7 +57,8 @@ janus keeps only its SHA-256. Re-running is idempotent on the client id and prin
   allowed). List every environment's callback with a repeated `--redirect-uri`.
 - A browser-only app registers a public client (omit `--confidential`): PKCE `S256` only, no
   secret.
-- **Grants**: authorization code and refresh only. `--grants` refuses anything else.
+- **Grants**: authorization code and refresh only. `--grants` refuses anything else; what it
+  records is shown by the console and not enforced.
 - A client belongs to its tenant: another tenant's `/authorize` answers `invalid_client`.
 
 Full flag table: "OAuth clients" in the [README](../../README.md#oauth-clients).
@@ -231,12 +232,12 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
    tenant. Needed: a bulk create that keeps the e-mail (verified) and returns old id to new
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
 2. **No tenant console** before the console exists; a tenant is created by `tenants:create`.
-3. **No resource console** before the console exists: resources are registered by script
-   (`resources:create`), which gives the token for an application's own API that
+3. **Resources and scopes** are managed in the console API or by script (`resources:create`),
+   which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
-5. **Per-client grants and `client_credentials`** are not available (janus-oauth has no
-   per-client grant list), so a back end calling the API as itself cannot yet use a Clavix
+5. **Per-client grants and `client_credentials`** are not available (janus-oauth records a client's
+   grant types but does not enforce them, and has no `client_credentials`), so a back end calling the API as itself cannot yet use a Clavix
    token.
 6. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
    a token with `read:packages`, as in the README's Run section.

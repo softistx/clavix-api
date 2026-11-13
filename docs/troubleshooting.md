@@ -286,10 +286,45 @@ The caller's role does not give the permission the field needs (a viewer cannot 
 admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
 role `bun run operators:grant --email <address> --role <role>`.
 
+### `NOT_FOUND: No such client`, `No such resource`, `No such scope`
+
+The id is unknown in that tenant: it never existed, it belongs to another tenant, or the tenant
+is suspended. A query answers `null` and a delete `false` instead of this error. Read the ids
+again with `clients(tenantId)`, `resources(tenantId)` or `scopes(tenantId)`.
+
+### `CONFLICT` on `createClient`, `createResource`, `createScope`
+
+The client id, the resource URI or the scope name (in that resource) already exists in the
+tenant. Pass another `clientId`, or update the one that exists.
+
+### `BAD_USER_INPUT` on a client, resource or scope mutation
+
+The message says which: a redirect URI or a resource URI janus refuses (HTTPS, no fragment), a
+scope name with a space or a quote, a scope without `resourceId` that is not `openid`, `profile`
+or `email`, an empty name, or `rotateClientSecret` on a public client (`A public client has no
+secret to rotate`).
+
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
 first. Pass `--email`, and a `--role` of owner, admin or viewer.
+
+## `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`, `QUOTA_EXCEEDED` and `TENANT_SUSPENDED`
+
+**`SLUG_TAKEN` (409)** on `createTenant`: the slug belongs to a tenant, one in the trash, or a purged one
+(a purge leaves a tombstone, so a slug is never reused). Pick another slug, or `restoreTenant` the
+one in the trash.
+
+**`PLATFORM_TENANT_PROTECTED` (409)**: `suspendTenant` or `deleteTenant` on the `clavix` tenant, which
+runs the console itself.
+
+**`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
+(`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
+Monthly active users never block: `usage` only reports `exceeded`.
+
+**`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on `updateTenant` by a tenant admin (platform operators can still edit), and as `access_denied` JSON on
+`/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
+`restoreTenant` lifts it at once (the host cache is dropped). Tokens already issued still work until they expire.
 
 ## `BRANDING_CONTRAST` on `updateBranding`
 
@@ -305,3 +340,21 @@ send the call again. A colour the library cannot read, an unsafe radius, an unkn
 a logo that is not a PNG, JPEG or WebP of at most 256 KiB (checked by its bytes) is `BAD_USER_INPUT`
 with `extensions.field` instead. `CONFLICT` (409) means other calls changed the brand at the same
 time: read it and send the call again.
+
+## `BAD_USER_INPUT: Unknown cursor` on `clients`
+
+**When:** `clients(after: ...)` answers `400` with this message.
+
+**Why:** `after` is not a `nextCursor` this API handed out (or it is too long or was edited).
+
+**Fix:** start again without `after`, and pass back only the `nextCursor` of the previous page. A page
+may hold fewer than `first` items, even none, with a `nextCursor`: follow it until it is `null`.
+
+## A refusal on the console's own client or resource
+
+**When:** `updateClient`, `rotateClientSecret`, `deleteClient` or a resource mutation names the
+`console` client or the console resource.
+
+**Why:** they belong to the console itself; changing them would lock operators out.
+
+**Fix:** leave them alone. Manage them with the `2026-11-12-console` migration, not through the API.
