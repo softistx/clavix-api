@@ -405,3 +405,6 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
   past `CLAVIX_TLS_ASK_LIMIT` asks per minute.
 - Caddy: `on_demand_tls { ask http://clavix-api:3000/internal/tls/ask?token=<secret> }` (Caddy
   appends `&domain=<host>`). Never route `/internal/` from the public listener.
+- **`NOT_FOUND` on a domain mutation**: the tenant is unknown or suspended, or the id belongs to
+  another tenant. Pending claims count toward the `domains` quota: remove an abandoned one to free it.
+- Caddy's access log must not record the ask URL: its `token` is the secret.

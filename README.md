@@ -68,21 +68,23 @@ one needs on top:
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                                           |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `PORT`                                                                 | 3000                                                                                                                     |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                   |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off and monthly active users are not counted                |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                     |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                 |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                              |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory             |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                        |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                        |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                         |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                              |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                               |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits") |
+| Variable                                                               | Default / rule                                                                                                                              |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                                 | 3000                                                                                                                                        |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                      |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off and monthly active users are not counted                                   |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                        |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                    |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                 |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                                           |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                           |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                            |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                 |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                  |
+| `CLAVIX_TLS_ASK_SECRET`                                                | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains") |
+| `CLAVIX_TLS_ASK_LIMIT`                                                 | asks per minute, all callers together, default 120; past it 429                                                                             |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                    |
 
 ## Sign-in code limits
 
@@ -796,6 +798,54 @@ the sign-in code mails still being handed to the relay (`drain` in `src/modules/
 `onStop` hook in `src/server.ts`), so a code is not lost; a mail still in flight after that is dropped
 and logged (the visitor asks again).
 
+## Custom domains
+
+A tenant serves sign-in from its own host (`auth.acme.com`). Console operations (tenant `view` to
+read, `edit` to change): `domains`, `domain`, `addDomain`, `verifyDomain`, `removeDomain`,
+`setPrimaryDomain`.
+
+```graphql
+mutation {
+  addDomain(tenantId: "...", host: "Auth.Acme.com") {
+    id
+    host
+    status
+    txtRecord {
+      name
+      value
+    }
+  }
+}
+# publish: _clavix.auth.acme.com  TXT  <value>
+mutation {
+  verifyDomain(tenantId: "...", id: "...") {
+    domain {
+      status
+    }
+    failure
+  }
+}
+```
+
+- `failure` is `NO_RECORD`, `MISMATCH` or `LOOKUP_FAILED`; a verified domain serves, a pending one
+  does nothing. Each claim has its own token, so a record proves one tenant's claim only.
+- Pending claims count toward the plan's `domains` quota (`QUOTA_EXCEEDED`); removing one frees it.
+- Several tenants may claim a host; the first to verify wins and the other claims are dropped. A
+  host another tenant verified is `DOMAIN_TAKEN`. IPs, `localhost`, wildcards and the platform
+  domain are refused (`BAD_USER_INPUT`, field `host`).
+- A primary is chosen explicitly (`setPrimaryDomain`); it becomes the issuer, so relying parties
+  that pinned the old `iss` must be reconfigured. Passkeys keep the slug host as rpId. The primary
+  cannot be removed; the slug host keeps serving.
+- Every 6 hours the TXT records are read again. Missing for 7 days: the domain becomes
+  `UNVERIFIED`, stops serving, gets no certificate, and the owners are e-mailed. A lapsed primary
+  keeps its flag (the issuer never moves by itself).
+- Automatic TLS: Caddy's `on_demand_tls { ask http://<app>/internal/tls/ask?token=<CLAVIX_TLS_ASK_SECRET> }`
+  (Caddy adds `&domain=`). 200 only for a verified domain of a live tenant, 429 past the limit, a
+  bare 404 otherwise. Call the app directly (a request carrying `X-Forwarded-*` is refused) and
+  keep `/internal/` off the public proxy. Redis down: the limit is skipped.
+- `GET /.well-known/webauthn` on the slug host lists the verified domains' origins (WebAuthn Related
+  Origins); janus does not honour it yet.
+
 ## How a host maps to a tenant
 
 A request belongs to the tenant whose slug is the one label before `CLAVIX_DOMAIN`:
@@ -807,6 +857,10 @@ than one label before it, a reserved label (`www`, `console`, `api`, ...), an un
 tenant whose purge started. A suspended or deleted (trash) tenant resolves with its `status`: sign-in,
 `/authorize` and `/token` refuse it with `TENANT_SUSPENDED` (403), while discovery and keys keep answering. A slug is reserved for good: deleting a tenant does not free its slug, and creating a tenant with it fails like any duplicate. In a resolver, `await tenant()` of the context gives
 `{ tenantId, slug, issuer, partition, version }`, resolved once per request.
+
+A host that is the **verified custom domain** of a live tenant resolves to that tenant too (see
+"Custom domains"); a custom host of a suspended tenant behaves like the slug host. The `issuer`
+is the tenant's primary custom domain when it has one, else the slug host.
 
 Resolved hosts are cached in Redis (`tenant-host`, 60 s; 30 s for "no tenant"); creating,
 suspending, reactivating or deleting a tenant drops its host (the delete is retried once),

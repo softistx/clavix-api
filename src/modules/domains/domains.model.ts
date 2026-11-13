@@ -44,6 +44,7 @@ export const domains = defineCollection({
       unique: true,
       name: "domains_tenant_host",
     },
+    { key: { host: 1 }, name: "domains_host" },
     { key: { status: 1, checkedAt: 1 }, name: "domains_status_checked" },
   ],
   timestamps: true,

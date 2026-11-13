@@ -242,3 +242,35 @@ describe("recheckAll", () => {
     expect(await store.verifiedHostsOf(A)).toEqual([]);
   });
 });
+
+describe("cache invalidation", () => {
+  test("setPrimary forgets every verified host of the tenant", async () => {
+    const one = await addVerified(A, "one.acme.com");
+    await addVerified(A, "two.acme.com");
+    changed.length = 0;
+    await store.setPrimary(A, one._id.toHexString());
+    expect(changed.flat().sort()).toEqual(["one.acme.com", "two.acme.com"]);
+  });
+
+  test("verifying over a lapsed primary forgets the loser's hosts", async () => {
+    const old = await addVerified(A, "auth.acme.com");
+    await store.setPrimary(A, old._id.toHexString());
+    await collection.raw.updateOne(
+      { _id: old._id },
+      { $set: { status: "unverified" } },
+    );
+    // B's claim predates the lapse (add() refuses a lapsed primary's host).
+    const mine = await collection.create({
+      tenantId: B,
+      host: "auth.acme.com",
+      status: "pending",
+      txtToken: mintToken(),
+      primary: false,
+    });
+    publish("auth.acme.com", mine.txtToken);
+    changed.length = 0;
+    await store.verify(B, mine._id.toHexString());
+    expect(changed.length).toBeGreaterThanOrEqual(2);
+    expect(await store.tenantOfHost("auth.acme.com")).toEqual(B);
+  });
+});

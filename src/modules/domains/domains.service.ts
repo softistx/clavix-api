@@ -200,7 +200,11 @@ export class DomainStore {
       { tenantId, _id: { $ne: claim._id }, primary: true },
       { primary: false },
     );
-    await this.changed(tenantId, [claim.host, ...(previous ? [previous] : [])]);
+    // Every verified host's cached issuer followed the old primary.
+    await this.changed(tenantId, [
+      ...(await this.verifiedHostsOf(tenantId)),
+      ...(previous ? [previous] : []),
+    ]);
     return updated;
   }
 
@@ -249,47 +253,59 @@ export class DomainStore {
       sort: { checkedAt: 1 },
     });
     for (const claim of verified) {
-      const failure = await this.check(claim);
-      report.checked++;
-      const now = this.now();
-      if (failure === "LOOKUP_FAILED") continue;
-      if (failure === null) {
-        if (claim.failingSince !== null) {
-          await this.collection.update(claim._id, {
-            failingSince: null,
-            checkedAt: now,
-          });
-        } else {
-          await this.collection.update(claim._id, { checkedAt: now });
-        }
-        continue;
-      }
-      const since = claim.failingSince ?? now;
-      if (now.getTime() - since.getTime() < RECHECK_GRACE_DAYS * DAY_MS) {
-        await this.collection.update(claim._id, {
-          failingSince: since,
-          checkedAt: now,
-        });
-        continue;
-      }
-      // Still `primary` when it was: the issuer never changes by itself, and
-      // the console shows the banner. It stops serving all the same.
-      const lapsed = await this.collection.update(claim._id, {
-        status: "unverified",
-        failingSince: since,
-        checkedAt: now,
-      });
-      await this.changed(claim.tenantId, [claim.host]);
-      report.unverified++;
       try {
-        await onUnverified(lapsed);
+        await this.recheckOne(claim, report, onUnverified);
       } catch (error) {
-        this.log(
-          `domains: could not tell the owners of ${claim.host}: ${String(error)}`,
-        );
+        this.log(`domains: recheck of ${claim.host} failed: ${String(error)}`);
       }
     }
     return report;
+  }
+
+  private async recheckOne(
+    claim: DomainDoc,
+    report: { checked: number; unverified: number },
+    onUnverified: (domain: DomainDoc) => Promise<void>,
+  ): Promise<void> {
+    const failure = await this.check(claim);
+    report.checked++;
+    const now = this.now();
+    if (failure === "LOOKUP_FAILED") return;
+    if (failure === null) {
+      if (claim.failingSince !== null) {
+        await this.collection.update(claim._id, {
+          failingSince: null,
+          checkedAt: now,
+        });
+      } else {
+        await this.collection.update(claim._id, { checkedAt: now });
+      }
+      return;
+    }
+    const since = claim.failingSince ?? now;
+    if (now.getTime() - since.getTime() < RECHECK_GRACE_DAYS * DAY_MS) {
+      await this.collection.update(claim._id, {
+        failingSince: since,
+        checkedAt: now,
+      });
+      return;
+    }
+    // Still `primary` when it was: the issuer never changes by itself, and
+    // the console shows the banner. It stops serving all the same.
+    const lapsed = await this.collection.update(claim._id, {
+      status: "unverified",
+      failingSince: since,
+      checkedAt: now,
+    });
+    await this.changed(claim.tenantId, [claim.host]);
+    report.unverified++;
+    try {
+      await onUnverified(lapsed);
+    } catch (error) {
+      this.log(
+        `domains: could not tell the owners of ${claim.host}: ${String(error)}`,
+      );
+    }
   }
 
   // -- internals -----------------------------------------------------------
@@ -335,10 +351,18 @@ export class DomainStore {
       if (error instanceof ConflictError) throw this.taken();
       throw error;
     }
+    const evicted = await this.collection.findMany({
+      filter: { host: claim.host, _id: { $ne: claim._id } },
+    });
     await this.collection.deleteMany({
       host: claim.host,
       _id: { $ne: claim._id },
     });
+    // A lapsed primary evicted here moves its tenant's issuer back to the
+    // slug host: that tenant's cached entries must go too.
+    for (const loser of evicted) {
+      if (loser.primary) await this.changed(loser.tenantId, [claim.host]);
+    }
     await this.changed(claim.tenantId, [claim.host]);
     return verified;
   }
