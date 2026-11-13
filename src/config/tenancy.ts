@@ -1,8 +1,9 @@
 import type { TypedCollection } from "@softistx/mongo";
 import { TenantAdminService, TenantsService } from "@/modules/tenants";
 import type { PublicOrigin } from "@/modules/tenants/identity";
+import { hostOf } from "@/modules/tenants/identity";
 import type { tenants } from "@/modules/tenants/tenants.model";
-import { createTenantResolver } from "@/tenancy/resolver";
+import { createTenantResolver, type DomainDirectory } from "@/tenancy/resolver";
 import {
   noTenantCache,
   redisTenantCache,
@@ -10,6 +11,7 @@ import {
 } from "@/tenancy/tenant-cache";
 import { linkTenantToPlatform } from "./access";
 import { mongo } from "./db";
+import { createDomainStore } from "./domains";
 import { env } from "./env";
 import { ensureSigningKeyOf } from "./keys";
 import { redis } from "./redis";
@@ -18,6 +20,8 @@ export interface TenancyOptions {
   tenants: TypedCollection<typeof tenants>;
   cache: TenantCache;
   config: PublicOrigin;
+  /** The custom domains hosts resolve through (A4). Default: none, only slug hosts resolve. */
+  domains?: DomainDirectory;
   /** Gives a new tenant its first signing key. Default: none. */
   onCreated?: (tenantId: string) => void | Promise<void>;
 }
@@ -30,6 +34,7 @@ export function createTenancy({
   tenants,
   cache,
   config,
+  domains,
   onCreated,
 }: TenancyOptions) {
   const tenantResolver = createTenantResolver({
@@ -37,6 +42,12 @@ export function createTenancy({
     lookup: (slug) => tenants.findFirst({ slug }, { withDeleted: true }),
     cache,
     config,
+    ...(domains === undefined
+      ? {}
+      : {
+          domains,
+          lookupById: (id) => tenants.findById(id, { withDeleted: true }),
+        }),
   });
   const tenantsService = new TenantsService(tenants, {
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -49,6 +60,25 @@ export function createTenancy({
 }
 
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
+// The domain store and the resolver refer to each other (a domain write drops
+// hosts from the cache; a custom host resolves through the store): the
+// closures below are called only after both exist.
+const origin = {
+  scheme: env.CLAVIX_PUBLIC_SCHEME,
+  domain: env.CLAVIX_DOMAIN,
+  port: env.CLAVIX_PUBLIC_PORT,
+} as const;
+
+export const domainStore = createDomainStore({
+  onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+  slugHostOf: async (tenantId) => {
+    const tenant = await tenantAdmin.find(tenantId);
+    return tenant === undefined
+      ? undefined
+      : hostOf(tenant.slug, env.CLAVIX_DOMAIN);
+  },
+});
+
 export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
   tenants: mongo.db.tenants,
   // The first signing key, and the platform link (the console's permissions).
@@ -61,11 +91,11 @@ export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
     redis === undefined
       ? noTenantCache
       : redisTenantCache(redis.cache.tenantHost),
-  config: {
-    scheme: env.CLAVIX_PUBLIC_SCHEME,
-    domain: env.CLAVIX_DOMAIN,
-    port: env.CLAVIX_PUBLIC_PORT,
+  domains: {
+    tenantOfHost: (host) => domainStore.tenantOfHost(host),
+    primaryHostOf: (tenantId) => domainStore.primaryHostOf(tenantId),
   },
+  config: origin,
 });
 
 /** A stored tenant by slug (suspended ones included), for the operator scripts. */

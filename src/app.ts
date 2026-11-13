@@ -1,5 +1,11 @@
 import { graphql } from "@alxia/graphql";
 import { serveLogo } from "./config/branding";
+import {
+  serveTlsAsk,
+  serveWebauthnOrigins,
+  TLS_ASK_PATH,
+  WEBAUTHN_WELL_KNOWN,
+} from "./config/domains-routes";
 import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
 import { CONSOLE_PATH } from "./console/identity";
@@ -48,6 +54,9 @@ export function createApp(
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     .all(LOGO_PATH, ({ request }) => serveLogo(request))
+    // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/tls-ask.ts).
+    .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
+    .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
     .bodyLimit(BODY_LIMIT);
   const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)
