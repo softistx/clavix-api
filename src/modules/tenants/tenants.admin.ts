@@ -26,10 +26,13 @@ export const stateOf = (tenant: {
   return tenant.deletedAt === null ? tenant.status : "deleted";
 };
 
+/** What `list` filters on: a state, or `live` for every tenant not in the trash. */
+export type TenantListState = TenantState | "live";
+
 export interface TenantListOptions {
   /** The start of a slug or a part of a name. */
   q?: string | undefined;
-  state?: TenantState | undefined;
+  state?: TenantListState | undefined;
   after?: string | undefined;
   first: number;
 }
@@ -49,6 +52,7 @@ const STATE_FILTER = {
   active: { status: "active", deletedAt: null },
   suspended: { status: "suspended", deletedAt: null },
   deleted: { deletedAt: { $ne: null } },
+  live: { deletedAt: null },
 } as const;
 
 /**

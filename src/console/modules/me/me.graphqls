@@ -28,6 +28,19 @@ type Membership {
   role: Role!
 }
 
+"A tenant the caller can switch to, with the role they act with there."
+type SwitchableTenant {
+  tenant: Tenant!
+  "The strongest of the caller's direct role on the tenant and their platform role."
+  role: Role!
+}
+
+"A page of switchable tenants, by slug; `nextCursor` is `null` on the last."
+type SwitchableTenantPage {
+  items: [SwitchableTenant!]!
+  nextCursor: String
+}
+
 "The caller: who the bearer token belongs to, and where they have a role."
 type Me {
   user: ConsoleUser!
@@ -35,6 +48,18 @@ type Me {
   platformRole: Role
   "The tenants where the caller holds a role directly. A platform operator is also allowed on every tenant, which `tenants` (platform) lists."
   memberships: [Membership!]!
+  """
+  The tenants the caller can work on, by slug: those of their memberships and,
+  for a platform operator, every tenant not in the trash. A suspended tenant is
+  listed (read `tenant.status`; the console stays readable on it); a tenant in
+  the trash is not. `q` matches the start of the slug or part of the name.
+  `first` is 1 to 100 (default 25). A caller with no role gets an empty page.
+  """
+  switchableTenants(
+    q: String
+    after: String
+    first: Int = 25
+  ): SwitchableTenantPage!
 }
 
 type Query {
