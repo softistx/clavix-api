@@ -12,7 +12,7 @@ import {
   seed,
   state,
   useTenantPurgeHooks,
-} from "./purge.fixtures";
+} from "~/tenant-purge";
 import { SlugTakenError } from "./tenants.errors";
 import { purgeAtOf } from "./trash.schema";
 

@@ -15,8 +15,8 @@ import { oauthDb } from "@/config/oauth-db";
 import { createPartitionPurger } from "@/config/partition-purger";
 import { ownedPurgers } from "@/config/purge";
 import { tenantAdmin, tenantsService } from "@/config/tenancy";
-import { type PartitionPurger, purgeTenants } from "./purge";
-import { PLATFORM_TENANT_SLUG } from "./slug";
+import { type PartitionPurger, purgeTenants } from "@/modules/tenants/purge";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 
 export const DAY = 24 * 60 * 60 * 1000;
 export const at = (date: Date, days: number) =>

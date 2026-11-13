@@ -14,7 +14,7 @@ import {
   seed,
   seedJanus,
   useTenantPurgeHooks,
-} from "./purge.fixtures";
+} from "~/tenant-purge";
 import { purgeAtOf } from "./trash.schema";
 
 useTenantPurgeHooks();
