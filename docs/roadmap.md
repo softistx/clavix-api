@@ -11,11 +11,15 @@ nxgt-janus release says which.
   bearer token of the `clavix` tenant, with platform and tenant roles (owner, admin, viewer), a
   deny-by-default guard on every field, and `operators:grant` to name the first operators
   ([#99](https://github.com/softistx/clavix-api/issues/99)).
+- **Admin events** — every change made from the console is recorded: who did it, what, on which
+  tenant and target, and when, with no secret value ever stored. The viewer and the export come
+  with the audit log ([#107](https://github.com/softistx/clavix-api/issues/107)).
 - **Console** — operators and tenant admins manage Clavix from the console instead of scripts:
   tenants, plans and quotas with usage counters
   ([#8](https://github.com/softistx/clavix-api/issues/8)); a tenant's clients, resources, scopes,
   users and admin roles ([#9](https://github.com/softistx/clavix-api/issues/9)); a theme per
-  tenant with an AA contrast check ([#10](https://github.com/softistx/clavix-api/issues/10));
+  tenant with an AA contrast check, a logo and a public brand query by host
+  ([#10](https://github.com/softistx/clavix-api/issues/10));
   custom domains with DNS TXT verification and automatic TLS
   ([#11](https://github.com/softistx/clavix-api/issues/11)); and sign-in methods and social
   providers per tenant ([#12](https://github.com/softistx/clavix-api/issues/12)).

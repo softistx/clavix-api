@@ -68,6 +68,7 @@ afterAll(async () => {
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
   await mongo.db.clientIndex.raw.deleteMany({});
+  await mongo.db.adminEvents.raw.deleteMany({});
   await oauthDb.collection("relations").deleteMany({});
 });
 
@@ -436,6 +437,61 @@ describe("the console's own client", () => {
     await create(admin, tenantA, { name: "Console", clientId: "console" });
     const deleted = await admin(DELETE, { tenantId: tenantA, id });
     expect(deleted.data?.["deleteClient"]).toBe(true);
+  });
+});
+
+describe("admin events", () => {
+  test("each mutation records its event on the client, and never the secret", async () => {
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const created = await create(admin, tenantA, {
+      name: "Audited",
+      type: "CONFIDENTIAL",
+    });
+    const clientSecret = String(
+      (created.data?.["createClient"] as Record<string, unknown> | undefined)?.[
+        "clientSecret"
+      ],
+    );
+    expect(clientSecret.length).toBeGreaterThan(20);
+    const id = "audited";
+    await admin(UPDATE, {
+      tenantId: tenantA,
+      id,
+      input: { name: "Audited 2" },
+    });
+    const rotated = await admin(ROTATE, { tenantId: tenantA, id });
+    const second = String(
+      (
+        rotated.data?.["rotateClientSecret"] as
+          | Record<string, unknown>
+          | undefined
+      )?.["clientSecret"],
+    );
+    expect(second.length).toBeGreaterThan(20);
+    await admin(DELETE, { tenantId: tenantA, id });
+    await admin(DELETE, { tenantId: tenantA, id });
+    // A refused mutation records nothing.
+    await viewer(DELETE, { tenantId: tenantA, id });
+    await admin(UPDATE, { tenantId: tenantA, id, input: { name: "Gone" } });
+    const events = await mongo.db.adminEvents.raw
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    expect(events.map((event) => event.action)).toEqual([
+      "client.create",
+      "client.update",
+      "client.rotateSecret",
+      "client.delete",
+      "client.delete",
+    ]);
+    for (const event of events) {
+      expect(event.actor).toBe("cli-admin-a");
+      expect(event.target).toEqual({ type: "client", id });
+      expect(event.tenantId?.toHexString()).toBe(tenantA);
+    }
+    const dump = JSON.stringify(events);
+    expect(dump).not.toContain(clientSecret);
+    expect(dump).not.toContain(second);
   });
 });
 

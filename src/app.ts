@@ -1,4 +1,5 @@
 import { graphql } from "@alxia/graphql";
+import { serveLogo } from "./config/branding";
 import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
 import { CONSOLE_PATH } from "./console/identity";
@@ -9,6 +10,7 @@ import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
+import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
 import type { ScopeTextsFor } from "./modules/consent/scope-labels";
 import { version } from "./modules/health";
@@ -45,6 +47,7 @@ export function createApp(
       "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
+    .all(LOGO_PATH, ({ request }) => serveLogo(request))
     .bodyLimit(BODY_LIMIT);
   const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)

@@ -9,8 +9,8 @@ Today it serves:
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- on `POST /console/graphql`, the console API (`me`, and a tenant's clients, resources and
-  scopes), behind a bearer token;
+- on `POST /console/graphql`, the console API (`me`, a tenant's clients, resources, scopes and
+  branding), behind a bearer token;
 - scripts that create tenants (no console field yet), OAuth clients and API resources.
 
 ## Documentation
@@ -142,8 +142,9 @@ Clavix adds no `jose`.
 cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
 tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
-exposes `me { user platformRole memberships { tenant { slug } role } }` and a tenant's clients,
-resources and scopes (below); tenants are still created by script.
+exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
+resources and scopes (below) and the branding fields (see "Branding"); tenants are still created
+by script.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
@@ -244,6 +245,102 @@ mutation {
   or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
 - A client made by `clients:create` is listed too. Deleting a client does not revoke the grants
   users gave it yet.
+
+### Admin events
+
+Every console mutation records what it did in the `adminEvents` collection (ADR-0037): the actor
+(the token's user), the action (`tenant.create`), the tenant it was about (`null` for the platform),
+the target's type and id, the time and the id of the request. Events are only ever added, and they
+hold identifiers alone: never a secret, a token or the old and new values of a field. `bun run
+db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
+reads it yet: the viewer and the export come with M4.
+
+A mutation declares its action beside its module's guards (the declaration is spread into `audits`
+in `src/console/modules/index.ts`) and records it once its change is stored; AGENTS.md "Admin
+events" has the rules:
+
+```ts
+// src/console/modules/tenants/index.ts
+export const tenantsAudits: Audits = {
+  "Mutation.renameTenant": "tenant.rename",
+};
+
+// in the resolver, after the write
+await ctx.audit("tenant.rename", { type: "tenant", id: tenantId, tenantId });
+```
+
+`ctx.audit` is awaited: when the event cannot be stored, the mutation fails (and may be retried)
+rather than leave a change with no record. `src/console/audit.spec.ts` fails for a mutation whose
+module declares no action.
+
+## Branding
+
+A tenant wears its own theme on the hosted pages. The brand is one document per tenant (collection
+`branding`, tenant-owned, run `bun run db:sync` to create it): display name, seed colour, radius,
+optional background preset and motif (ids of `@softistx/material-core/backgrounds`), an optional logo,
+and the generated stylesheet.
+
+`updateBranding` on `/console/graphql` replaces the whole brand (the logo is kept unless `logo` or
+`removeLogo` is sent), so repeating a call changes nothing (`changed: false`). It compiles the seed with
+`defineTheme` and `themeToCss({ scope: "attribute" })`, measures every pair with `checkThemeContrast` in
+light and dark, and stores the CSS only when all pass WCAG AA. A pair that fails is `BRANDING_CONTRAST`
+(422, `extensions.failures`: foreground, background, mode, ratio, minimum). The generator moves a hard
+seed (a yellow) lighter or darker to reach AA on its own; the payload's `warnings` say what it moved.
+A bad value is `BAD_USER_INPUT` (400, `extensions.field`). `branding(tenantId)` needs `view` on the tenant,
+`updateBranding` needs `edit`. Each call that succeeds records the admin event `branding.update`.
+
+The display name is a label only: it is stored as text and never written into the stylesheet. The seed
+and the radius are parsed, and the CSS is built from the parsed values, so a value that is not a colour
+or a length is refused rather than copied. Escape the display name where you print it. Two calls at the
+same time apply one after the other (the document carries a `version`), so a logo one of them sets or
+removes is not undone by the other; a call that keeps losing to others is `CONFLICT` (409) and stored
+nothing: read the brand and send it again.
+
+Limits: `displayName` 1 to 80 characters; `radius` in rem or px up to 3rem (48px); `backgroundPreset`
+and `motif` must be ids of `@softistx/material-core/backgrounds`.
+
+```graphql
+mutation {
+  updateBranding(
+    tenantId: "..."
+    input: { displayName: "Acme", seed: "#0a7ea4", radius: "0.5rem" }
+  ) {
+    changed
+    warnings
+    branding {
+      themeName
+      css
+      logoUrl
+    }
+  }
+}
+```
+
+A logo is a PNG, JPEG or WebP of at most 256 KiB (`logo: { contentType, dataBase64 }`); SVG is refused
+because it can carry script. The hosted pages read `tenantBranding` on `/graphql` (anonymous, by the
+request host; `null` keeps Clavix's own theme): they put `css` in a `<style>` and set
+`data-nxgt-theme="<themeName>"` on the root element, and draw the page's background from
+`backgroundPreset` and `motif` (not part of the CSS; `null` for none).
+
+```graphql
+{
+  tenantBranding {
+    displayName
+    themeName
+    css
+    backgroundPreset
+    motif
+    logoUrl
+  }
+}
+```
+
+`GET /branding/logo` on the tenant's host serves the logo with an `ETag` (its sha256), `304` on
+`If-None-Match`, `nosniff` and a sandboxing CSP; `404` (not stored) for an unknown host or a tenant
+without a logo, `405` for a method other than GET or HEAD. `logoUrl` is
+`/branding/logo?v=<start of the hash>`, so it changes with the image: asked with the current `v` the
+logo is `Cache-Control: public, max-age=31536000, immutable`; the bare path, or an old `v`, is
+`max-age=300, must-revalidate`.
 
 ## Tenants
 

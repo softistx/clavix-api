@@ -4,7 +4,7 @@ import { consoleResource } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
-import { resourcesFor } from "@/config/resources";
+import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -468,6 +468,61 @@ describe("deleting", () => {
   });
 });
 
+describe("admin events", () => {
+  test("each mutation records its event; deleting a resource records its scopes too", async () => {
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const resource = one(
+      await admin(CREATE, {
+        tenantId: tenantA,
+        input: { uri: "https://audit.res-a.example/v1" },
+      }),
+      "createResource",
+    );
+    await admin(UPDATE, {
+      tenantId: tenantA,
+      id: resource.id,
+      input: { name: "Audited" },
+    });
+    const scope = (name: string) =>
+      admin(CREATE_SCOPE, {
+        tenantId: tenantA,
+        input: { name, resourceId: resource.id },
+      });
+    const first = one(await scope("a:read"), "createScope");
+    const second = one(await scope("a:write"), "createScope");
+    await admin(UPDATE_SCOPE, {
+      tenantId: tenantA,
+      id: first.id,
+      input: { description: { en: "Read" } },
+    });
+    await admin(DELETE_SCOPE, { tenantId: tenantA, id: first.id });
+    await admin(DELETE, { tenantId: tenantA, id: resource.id });
+    // Refused: nothing recorded.
+    await viewer(DELETE, { tenantId: tenantA, id: resource.id });
+    const events = await mongo.db.adminEvents.raw
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    expect(
+      events.map((event) => [event.action, event.target.type, event.target.id]),
+    ).toEqual([
+      ["resource.create", "resource", resource.id],
+      ["resource.update", "resource", resource.id],
+      ["scope.create", "scope", first.id],
+      ["scope.create", "scope", second.id],
+      ["scope.update", "scope", first.id],
+      ["scope.delete", "scope", first.id],
+      ["scope.delete", "scope", second.id],
+      ["resource.delete", "resource", resource.id],
+    ]);
+    for (const event of events) {
+      expect(event.actor).toBe("res-admin-a");
+      expect(event.tenantId?.toHexString()).toBe(tenantA);
+    }
+    await mongo.db.adminEvents.raw.deleteMany({});
+  });
+});
+
 describe("limits", () => {
   test("a description, a name or claims too long are BAD_USER_INPUT", async () => {
     const created = one(
@@ -512,6 +567,12 @@ describe("the console's own resource", () => {
     const tenantId = platform?._id.toHexString() ?? "";
     // The specs empty the relations: link the tenant again, as the migration does.
     await linkTenantToPlatform(tenantId);
+    // Idempotent: the migration seeded it, unless another spec removed it.
+    await registerStoredResource({
+      tenant: PLATFORM_TENANT_SLUG,
+      uri: consoleResource,
+      scopes: ["console", "openid"],
+    });
     const found = many(await operator(LIST, { tenantId }), "resources").find(
       (resource) => resource["uri"] === consoleResource,
     );
