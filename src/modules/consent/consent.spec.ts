@@ -394,7 +394,9 @@ describe("a foreign page cannot decide", () => {
 const expectRefused = (result: GqlResult) => {
   expect(result.data?.["approveOAuthRequest"] ?? null).toBeNull();
   expect(result.data?.["denyOAuthRequest"] ?? null).toBeNull();
-  expect(["TENANT_SUSPENDED", "UNAUTHENTICATED"]).toContain(codeOf(result));
+  expect(["TENANT_SUSPENDED", "UNAUTHENTICATED"]).toContain(
+    codeOf(result) ?? "",
+  );
 };
 
 describe("a tenant that is not live", () => {
