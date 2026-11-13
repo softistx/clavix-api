@@ -83,11 +83,13 @@ export const signInMethods: Resolvers = {
           enabled,
         })),
       );
-      // A tenant has one policy, so the tenant's id names it.
+      // A tenant has one policy, so the tenant's id names it: the stored id,
+      // not the argument as the caller spelled it.
+      const id = tenant._id.toHexString();
       await ctx.audit("signInPolicy.update", {
         type: "signInPolicy",
-        id: tenantId,
-        tenantId,
+        id,
+        tenantId: id,
       });
       return policyOf(tenant);
     },
@@ -102,7 +104,7 @@ export const signInMethods: Resolvers = {
       await ctx.audit("socialProvider.set", {
         type: "socialProvider",
         id: provider,
-        tenantId,
+        tenantId: tenant._id.toHexString(),
       });
       return policyOf(tenant);
     },
@@ -112,7 +114,7 @@ export const signInMethods: Resolvers = {
       await ctx.audit("socialProvider.remove", {
         type: "socialProvider",
         id: provider,
-        tenantId,
+        tenantId: tenant._id.toHexString(),
       });
       return policyOf(tenant);
     },

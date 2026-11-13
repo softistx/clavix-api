@@ -509,10 +509,16 @@ describe("admin events", () => {
     const all = await mongo.db.adminEvents.raw.find({}).toArray();
     expect(JSON.stringify(all)).not.toContain(SECRET);
     expect(JSON.stringify(all)).not.toContain("google-id");
-    // Tenant B's refused changes (NO_SIGN_IN_METHOD, unavailable, duplicate) left no event.
-    expect(
-      (await eventsOf(b)).filter((event) => event.actor !== ADMIN_B),
-    ).toEqual([]);
+    // Tenant B's refused changes (NO_SIGN_IN_METHOD, unavailable, duplicate,
+    // tenant A's admin) left no event. Its one accepted call, password off
+    // where it already was, changed nothing and is recorded all the same.
+    expect(await eventsOf(b)).toEqual([
+      {
+        actor: ADMIN_B,
+        action: "signInPolicy.update",
+        target: { type: "signInPolicy", id: b },
+      },
+    ]);
   });
 });
 
