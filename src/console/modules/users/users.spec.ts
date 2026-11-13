@@ -181,6 +181,7 @@ const MUTATIONS = (tenant: string, user: string) => [
   `disableUser(tenantId: "${tenant}", userId: "${user}") { id }`,
   `enableUser(tenantId: "${tenant}", userId: "${user}") { id }`,
   `deleteUser(tenantId: "${tenant}", userId: "${user}")`,
+  `updateUser(tenantId: "${tenant}", userId: "${user}", input: { name: "Zed" }) { id }`,
   `revokeUserSessions(tenantId: "${tenant}", userId: "${user}")`,
   `revokeGrant(tenantId: "${tenant}", userId: "${user}", grantId: "g")`,
 ];
@@ -493,6 +494,69 @@ describe("disabling, sessions, grants and deletion", () => {
     expect((await run()).data).toEqual({ revokeUserSessions: 0 });
   });
 
+  test("updateUser renames the user and keeps the address and the flag", async () => {
+    const a = await poolOf(slugA);
+    const before = await a.auth.findUser(uA2);
+    const done = await asConsole(
+      admA,
+      `mutation { updateUser(tenantId: "${tenantA}", userId: "${uA2}", input: { name: "  Renamed  " }) { id name email emailVerified active } }`,
+    );
+    expect(done.errors).toBeUndefined();
+    expect(done.data?.["updateUser"]).toEqual({
+      id: uA2,
+      name: "Renamed",
+      email: before?.email,
+      emailVerified: before?.emailVerified,
+      active: true,
+    });
+    expect((await a.auth.findUser(uA2))?.name).toBe("Renamed");
+    const renamed = await a.auth.findUser(uA2);
+    if (renamed !== null) await a.auth.update(renamed, { name: "Two" });
+  });
+
+  test("updateUser refuses an empty or too long name, and an unknown user", async () => {
+    for (const name of ['"   "', `"${"x".repeat(201)}"`]) {
+      expect(
+        code(
+          await asConsole(
+            ownA,
+            `mutation { updateUser(tenantId: "${tenantA}", userId: "${uA1}", input: { name: ${name} }) { id } }`,
+          ),
+        ),
+      ).toBe("BAD_USER_INPUT");
+    }
+    expect(
+      code(
+        await asConsole(
+          ownA,
+          `mutation { updateUser(tenantId: "${tenantA}", userId: "ghost", input: { name: "G" }) { id } }`,
+        ),
+      ),
+    ).toBe("NOT_FOUND");
+  });
+
+  test("updateUser cannot reach a user of another tenant", async () => {
+    expect(
+      code(
+        await asConsole(
+          ownA,
+          `mutation { updateUser(tenantId: "${tenantA}", userId: "${uB1}", input: { name: "Hacked" }) { id } }`,
+        ),
+      ),
+    ).toBe("NOT_FOUND");
+    expect((await (await poolOf(SLUG.b)).auth.findUser(uB1))?.name).not.toBe(
+      "Hacked",
+    );
+    expect(
+      code(
+        await asConsole(
+          ownB,
+          `mutation { updateUser(tenantId: "${tenantA}", userId: "${uA1}", input: { name: "Hacked" }) { id } }`,
+        ),
+      ),
+    ).toBe("FORBIDDEN");
+  });
+
   test("userGrants lists the standing grants; revokeGrant takes one back, twice alike", async () => {
     await seedGrant(slugA, uA2, "grant-a2");
     const listed = await grantsOf(ownA, tenantA, uA2);
@@ -578,6 +642,7 @@ describe("admin events", () => {
         a: disableUser(tenantId: "${t}", userId: "${uA2}") { id }
         b: enableUser(tenantId: "${t}", userId: "${uA2}") { id }
         c: revokeUserSessions(tenantId: "${t}", userId: "${uA2}")
+        u: updateUser(tenantId: "${t}", userId: "${uA2}", input: { name: "Two" }) { id }
         d: revokeGrant(tenantId: "${t}", userId: "${uA2}", grantId: "g1")
         e: deleteUser(tenantId: "${t}", userId: "ghost")
         f: revokeInvitation(tenantId: "${t}", invitationId: "inv1")
@@ -593,6 +658,7 @@ describe("admin events", () => {
       ["user.disable", "user", uA2, ownA],
       ["user.enable", "user", uA2, ownA],
       ["user.revokeSessions", "user", uA2, ownA],
+      ["user.update", "user", uA2, ownA],
       ["user.revokeGrant", "grant", "g1", ownA],
       ["user.delete", "user", "ghost", ownA],
       ["user.revokeInvitation", "invitation", "inv1", ownA],

@@ -22,6 +22,7 @@ export const usersGuards: Guards = {
   "Query.userGrants": onTenant("view", lowerTenantArg),
   "Mutation.inviteUser": onTenant("edit", lowerTenantArg),
   "Mutation.revokeInvitation": onTenant("edit", lowerTenantArg),
+  "Mutation.updateUser": onTenant("edit", lowerTenantArg),
   "Mutation.disableUser": onTenant("edit", lowerTenantArg),
   "Mutation.enableUser": onTenant("edit", lowerTenantArg),
   "Mutation.deleteUser": onTenant("edit", lowerTenantArg),
@@ -35,6 +36,7 @@ export const usersGuards: Guards = {
 export const usersAudits: Audits = {
   "Mutation.inviteUser": "user.invite",
   "Mutation.revokeInvitation": "user.revokeInvitation",
+  "Mutation.updateUser": "user.update",
   "Mutation.disableUser": "user.disable",
   "Mutation.enableUser": "user.enable",
   "Mutation.deleteUser": "user.delete",
@@ -57,6 +59,7 @@ const grantShape = (grant: UserGrantView) => ({
 });
 
 const MAX_PAGE = 100;
+const MAX_NAME = 200;
 const target = (type: string, id: string, tenantId: string) => ({
   type,
   id,
@@ -142,6 +145,21 @@ export const users: Resolvers = {
         target("invitation", invitationId, tenantId),
       );
       return true;
+    },
+    updateUser: async (_, { tenantId: given, userId, input }, ctx) => {
+      const tenantId = tenantIdOf(given);
+      idArg(userId, "userId");
+      const name = input.name.trim();
+      if (name === "" || [...name].length > MAX_NAME) {
+        throw new GraphQLError("The name must be 1 to 200 characters", {
+          extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+        });
+      }
+      await activeTenant(ctx.directory, tenantId);
+      const user = await ctx.users.rename(tenantId, userId, name);
+      if (user === null) throw denial("NOT_FOUND", "No such user");
+      await ctx.audit("user.update", target("user", userId, tenantId));
+      return shape(user);
     },
     disableUser: (_, { tenantId, userId }, ctx) =>
       setActive(ctx, tenantId, userId, false),

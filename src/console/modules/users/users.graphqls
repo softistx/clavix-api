@@ -40,6 +40,12 @@ type UserGrant {
   updatedAt: DateTime!
 }
 
+"What a tenant admin may change on a user. The e-mail address and its verified flag are not editable here."
+input UpdateUserInput {
+  "The display name: 1 to 200 characters once trimmed."
+  name: String!
+}
+
 extend type Query {
   """
   The users of a tenant (tenant viewer). `first` defaults to 25, at most 100.
@@ -72,6 +78,12 @@ extend type Mutation {
   inviteUser(tenantId: ID!, email: EmailAddress!): UserInvitation!
   "Revokes a pending invitation of the tenant (tenant admin). True also when there is none."
   revokeInvitation(tenantId: ID!, invitationId: ID!): Boolean!
+  """
+  Renames a user (tenant admin). Errors: BAD_USER_INPUT (400) for a name that is
+  empty once trimmed or over 200 characters, NOT_FOUND for an unknown user.
+  The e-mail address and the verified flag are not editable.
+  """
+  updateUser(tenantId: ID!, userId: ID!, input: UpdateUserInput!): TenantUser!
   """
   Disables a user (tenant admin): their sessions end at once and they
   cannot sign in again. Idempotent. Errors: NOT_FOUND for
