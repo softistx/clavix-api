@@ -15,6 +15,7 @@ import { type Guards, onTenant } from "../../guard";
 import { activeTenant } from "../directory-tenant";
 import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
+import { keepOwners } from "./operators";
 
 // Reading the users is `view`; changing them is `edit` (a tenant admin).
 export const usersGuards: Guards = {
@@ -194,6 +195,7 @@ export const users: Resolvers = {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
       const tenant = await activeTenant(ctx.directory, tenantId);
+      await keepOwners(ctx, tenant, userId);
       // Alone with an `assignRole` of the same user: no assignment can be
       // written between the delete and the sweep.
       await ctx.exclusive(userKey(tenantId, userId), async () => {
@@ -256,7 +258,8 @@ async function setActive(
 ) {
   const tenantId = tenantIdOf(given);
   idArg(userId, "userId");
-  await activeTenant(ctx.directory, tenantId);
+  const tenant = await activeTenant(ctx.directory, tenantId);
+  if (!active) await keepOwners(ctx, tenant, userId);
   const user = await ctx.users.setActive(tenantId, userId, active);
   if (user === null) throw denial("NOT_FOUND", "No such user");
   await ctx.audit(

@@ -10,7 +10,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
-import { tenantResolver } from "@/config/tenancy";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, forTenant } from "@/config/users";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -79,6 +79,8 @@ const platformOwner = as(() => OWNER);
 
 let clavix = "";
 let victim = "";
+let other = "";
+let mkOperator: (email: string) => Promise<string> = async () => "";
 
 const writes = (t: string, u: string) => ({
   disableUser: `mutation { disableUser(tenantId: "${t}", userId: "${u}") { id } }`,
@@ -114,8 +116,9 @@ beforeAll(async () => {
   );
   const auth = resolved === null ? null : await forTenant(resolved);
   if (auth === null) throw new Error("no clavix pool");
-  const operator = async (email: string) =>
+  mkOperator = async (email: string) =>
     (await auth.create({ email, name: email })).id;
+  const operator = mkOperator;
   ADMIN = await operator("admin@pw.test");
   VIEWER = await operator("viewer@pw.test");
   OWNER = await operator("owner@pw.test");
@@ -123,10 +126,15 @@ beforeAll(async () => {
   await access.grantTenant(clavix, VIEWER, "viewer");
   await access.grantTenant(clavix, ADMIN, "owner");
   await access.grantPlatform(OWNER, "owner");
+  other = (await tenantsService.create({ slug: "pw-other", name: "Other" })).id;
+  await access.grantTenant(other, ADMIN, "admin");
   victim = (await auth.create({ email: "victim@pw.test", name: "V" })).id;
 });
 
 afterAll(async () => {
+  await mongo.db.tenants.raw.deleteMany({
+    slug: { $ne: PLATFORM_TENANT_SLUG },
+  });
   await mongo.db.adminEvents.raw.deleteMany({});
   await oauthDb.collection("relations").deleteMany({});
 });
@@ -134,6 +142,17 @@ afterAll(async () => {
 describe("writes on the clavix tenant", () => {
   test("a tenant-level owner of clavix is FORBIDDEN on every write", async () => {
     for (const [name, query] of Object.entries(writes(clavix, victim))) {
+      expect([name, codeOf(await tenantAdmin(query))]).toEqual([
+        name,
+        "FORBIDDEN",
+      ]);
+    }
+  });
+
+  test("an upper-case spelling of the clavix id is the same tenant", async () => {
+    for (const [name, query] of Object.entries(
+      writes(clavix.toUpperCase(), victim),
+    )) {
       expect([name, codeOf(await tenantAdmin(query))]).toEqual([
         name,
         "FORBIDDEN",
@@ -172,14 +191,27 @@ describe("writes on the clavix tenant", () => {
   });
 
   test("another tenant's writes keep the tenant-level guard", async () => {
-    // Editing is enough there: a tenant admin of clavix has no role on it.
+    // A tenant admin of an ordinary tenant still writes there.
     expect(
-      codeOf(
-        await tenantAdmin(
-          writes("0123456789abcdef01234567", victim).disableUser,
-        ),
-      ),
-    ).toBe("FORBIDDEN");
+      codeOf(await tenantAdmin(writes(other, "ghost").disableUser)),
+    ).not.toBe("FORBIDDEN");
+    expect(codeOf(await tenantViewer(writes(other, "ghost").disableUser))).toBe(
+      "FORBIDDEN",
+    );
+  });
+});
+
+describe("platform owners", () => {
+  test("a platform admin cannot disable or delete one, an owner can", async () => {
+    const admin = await mkOperator("padmin@pw.test");
+    await access.grantPlatform(admin, "admin");
+    const asAdmin = as(() => admin);
+    const owner2 = await mkOperator("owner2@pw.test");
+    await access.grantPlatform(owner2, "owner");
+    const t = writes(clavix, owner2);
+    expect(codeOf(await asAdmin(t.disableUser))).toBe("FORBIDDEN");
+    expect(codeOf(await asAdmin(t.deleteUser))).toBe("FORBIDDEN");
+    expect((await platformOwner(t.disableUser)).errors).toBeUndefined();
   });
 });
 
