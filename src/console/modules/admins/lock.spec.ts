@@ -173,3 +173,39 @@ describe("the operator invitation (operators:grant --create)", () => {
     expect(await access.platformRole(user?.id ?? "")).toBe("owner");
   });
 });
+
+describe("an owner invitation for an account that is gone", () => {
+  test("is INVITATION_INVALID and grants nothing", async () => {
+    const clavix = await tenantResolver.resolveHost(
+      `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
+    );
+    if (clavix === null) throw new Error("no clavix tenant");
+    held = false;
+    const auth = buildTenantJanus(
+      oauthDb,
+      clavix,
+      undefined,
+      adminInvitationHooks({
+        access,
+        exclusive,
+        tenantActive: async () => true,
+        findUser: async () => null,
+      }),
+    );
+    const { code } = await auth.invitations.issue({
+      scope: operatorScope(),
+      email: "ghost@owner.test",
+      name: "ghost",
+      role: "owner",
+      invitedBy: null,
+    });
+    const failed = await auth.invitations
+      .accept({ code })
+      .catch((e: unknown) => e);
+    expect((failed as { code?: string }).code).toBe("INVITATION_INVALID");
+    const user = await auth.findByEmail("ghost@owner.test");
+    expect(
+      user === null ? null : await access.platformRole(user.id),
+    ).toBeNull();
+  });
+});

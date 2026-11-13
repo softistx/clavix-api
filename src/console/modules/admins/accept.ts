@@ -1,3 +1,4 @@
+import { InvitationInvalidError } from "@softistx/janus";
 import { adminTenantOf, isOperatorScope } from "@/invitations/scope";
 import type { Access } from "../../access";
 import type { Exclusive } from "../../exclusive";
@@ -44,7 +45,11 @@ export function adminInvitationHooks({
   /** An owner is granted only to a live account (nothing to grant to a ghost). */
   const assertLive = async (userId: string, role: string) => {
     if (role === "owner" && (await findUser(userId))?.active !== true) {
-      throw new Error("the account is gone or disabled: no owner is granted");
+      // A janus refusal: the hosted API answers `INVITATION_INVALID` (400),
+      // not a 500, and the claim is released.
+      throw new InvitationInvalidError(
+        "the account is gone or disabled: no owner is granted",
+      );
     }
   };
   /** An owner invitation outlives its inviter: not accepted once they are gone. */
