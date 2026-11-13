@@ -383,7 +383,8 @@ resolves nowhere and cannot be restored any more. The pass throws so the queue r
 
 **Fix:** nothing is lost and nothing needs doing first: the purge is resumable and the next daily tick
 (or a restart) picks up the claimed tenants again. If the same error comes back every day, read the
-line before it in the logs, which names the tenant and the failing step.
+`tenants: purge of <id> stopped, the next run resumes it: <reason>` line before it, which names the
+tenant and the cause.
 
 ## `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`, `QUOTA_EXCEEDED` and `TENANT_SUSPENDED`
 
