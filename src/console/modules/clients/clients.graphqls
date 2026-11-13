@@ -55,7 +55,7 @@ input CreateClientInput {
   name: String!
   type: ClientType!
   redirectUris: [String!]!
-  "The client_id (a-z, 0-9, `-`); default: the name. Creating an existing id is a CONFLICT."
+  "The client_id (a-z, 0-9, `-`); default: the name. Creating an existing id is a CONFLICT, unless the call repeats it (same name, type and redirect URIs)."
   clientId: String
 }
 

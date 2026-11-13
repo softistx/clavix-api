@@ -866,5 +866,56 @@ describe("a repeat after a failed record", () => {
     expect(
       codeOf(await create(admin, tenantA, { ...input, type: "PUBLIC" })),
     ).toBe("CONFLICT");
+    expect(
+      codeOf(
+        await create(admin, tenantA, {
+          ...input,
+          redirectUris: ["https://other.example/callback"],
+        }),
+      ),
+    ).toBe("CONFLICT");
+  });
+
+  test("eight identical concurrent calls: one secret, seven null, one stored client", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        create(admin, tenantA, {
+          name: "Twin",
+          clientId: "twin",
+          type: "CONFIDENTIAL",
+        }),
+      ),
+    );
+    expect(results.every((r) => r.errors === undefined)).toBe(true);
+    const secrets = results.map(
+      (r) =>
+        (
+          r.data?.["createClient"] as
+            | { clientSecret: string | null }
+            | undefined
+        )?.clientSecret,
+    );
+    expect(secrets.filter((secret) => typeof secret === "string")).toHaveLength(
+      1,
+    );
+    expect(secrets.filter((secret) => secret === null)).toHaveLength(7);
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "twin" }))).toEqual([
+      "twin",
+    ]);
+  });
+
+  test("a replay at a full client quota succeeds; a new client does not", async () => {
+    const id = (await tenantsService.create({ slug: "cli-qr", name: "QR" })).id;
+    await access.grantTenant(id, "cli-admin-a", "admin");
+    const input = { name: "Full", clientId: "full" };
+    await mongo.db.tenants.raw.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { quotaOverrides: { clients: 1 } } },
+    );
+    expect((await create(admin, id, input)).errors).toBeUndefined();
+    expect((await create(admin, id, input)).errors).toBeUndefined();
+    expect(codeOf(await create(admin, id, { name: "Two" }))).toBe(
+      "QUOTA_EXCEEDED",
+    );
   });
 });

@@ -45,14 +45,6 @@ function checkSizes(input: {
   }
 }
 
-/**
- * A tenant's OAuth clients for the console. The janus store is the truth (one
- * partition per tenant, so another tenant's client is "not found") and lists
- * them (`listClients`); a record is mapped to a `ClientView`, so its
- * `secretHash` never leaves this class. Creating reuses `registerClient`, so a console client follows the same rules
- * as one made by script. Deleting revokes the client's grants and tokens and
- * is idempotent.
- */
 /** The stored client has the input's name, type and redirect URIs. */
 function sameClient(
   stored: ClientView,
@@ -71,6 +63,14 @@ function sameClient(
   );
 }
 
+/**
+ * A tenant's OAuth clients for the console. The janus store is the truth (one
+ * partition per tenant, so another tenant's client is "not found") and lists
+ * them (`listClients`); a record is mapped to a `ClientView`, so its
+ * `secretHash` never leaves this class. Creating reuses `registerClient`, so a console client follows the same rules
+ * as one made by script. Deleting revokes the client's grants and tokens and
+ * is idempotent.
+ */
 export class ClientsService {
   constructor(private readonly options: ClientsServiceOptions) {}
 
