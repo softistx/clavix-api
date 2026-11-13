@@ -221,6 +221,8 @@ describe("clients and client", () => {
       pageOf(await as(LIST, { tenantId, q })).totalCount;
     expect(await count(adminB, tenantB, "b only")).toBe(1);
     expect(await count(admin, tenantA, "b only")).toBe(0);
+    // Later tests list tenant B whole: leave it as it was.
+    await adminB(DELETE, { tenantId: tenantB, id: "b-only" });
   });
 
   test("the grant types a script recorded are shown", async () => {
