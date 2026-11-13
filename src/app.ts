@@ -1,4 +1,5 @@
 import { graphql } from "@alxia/graphql";
+import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
 import { CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
@@ -9,6 +10,7 @@ import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import { oauthContext } from "./modules/consent";
+import type { ScopeTextsFor } from "./modules/consent/scope-labels";
 import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
@@ -31,6 +33,8 @@ export function createApp(
     passkeyThrottle?: Throttle | undefined;
     // The console API (`/console/graphql`, src/console): bearer token, its own
     // schema. Off without it, the route does not exist.
+    // Where the consent page reads the tenants' scope texts; the stored ones by default.
+    scopeTexts?: ScopeTextsFor;
     console?: ConsoleDeps & { schema?: typeof consoleSchema };
   } = {},
 ) {
@@ -53,7 +57,12 @@ export function createApp(
         janusPlugin(),
         ...(options.oauth?.serverFor === undefined
           ? []
-          : [oauthContext({ serverFor: options.oauth.serverFor })]),
+          : [
+              oauthContext(
+                { serverFor: options.oauth.serverFor },
+                options.scopeTexts ?? scopeTextsFor,
+              ),
+            ]),
       ],
       maskedErrors: janusMasking,
     }),

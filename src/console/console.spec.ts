@@ -20,6 +20,7 @@ import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { registerResource } from "@/modules/resources/register-resource";
 import { resources } from "@/modules/resources/resources.model";
+import { scopes } from "@/modules/resources/scopes.model";
 import { issuerOf, partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { tenants } from "@/modules/tenants/tenants.model";
@@ -183,6 +184,7 @@ beforeAll(async () => {
   await registerResource(
     {
       collection: getCollection(oauthDb, resources),
+      scopes: getCollection(oauthDb, scopes),
       findTenant,
       issuerOf: (slug) => issuerOf(slug, origin),
     },

@@ -1,15 +1,29 @@
+import { scopeToTenant } from "@softistx/mongo";
+import { ObjectId } from "mongodb";
+import type { ScopeTextsFor } from "@/modules/consent/scope-labels";
+import { Catalog } from "@/modules/resources/catalog";
 import {
   type RegisterResourceInput,
   registerResource,
   storedResourcesFor,
 } from "@/modules/resources/register-resource";
 import { issuerOf } from "@/modules/tenants/identity";
+import { userinfoOf } from "@/oauth/building";
 import { mongo } from "./db";
 import { env } from "./env";
-import { tenantBySlug } from "./tenancy";
+import { tenantBySlug, tenantResolver } from "./tenancy";
 
-/** The real `ResourcesFor`: the tenants' stored resources (`resources:create`). */
-export const resourcesFor = storedResourcesFor(mongo.db.resources);
+const origin = {
+  scheme: env.CLAVIX_PUBLIC_SCHEME,
+  domain: env.CLAVIX_DOMAIN,
+  port: env.CLAVIX_PUBLIC_PORT,
+} as const;
+
+/** The real `ResourcesFor`: the tenants' stored resources and their scopes (console, `resources:create`). */
+export const resourcesFor = storedResourcesFor(
+  mongo.db.resources,
+  mongo.db.scopes,
+);
 
 /**
  * `registerResource` bound to the real store, for the `resources:create`
@@ -21,13 +35,27 @@ export const registerStoredResource = (input: RegisterResourceInput) =>
   registerResource(
     {
       collection: mongo.db.resources,
+      scopes: mongo.db.scopes,
       findTenant: tenantBySlug,
-      issuerOf: (slug) =>
-        issuerOf(slug, {
-          scheme: env.CLAVIX_PUBLIC_SCHEME,
-          domain: env.CLAVIX_DOMAIN,
-          port: env.CLAVIX_PUBLIC_PORT,
-        }),
+      issuerOf: (slug) => issuerOf(slug, origin),
     },
     input,
   );
+
+/** A tenant's resources and scopes, for the console. */
+export const catalog = new Catalog({
+  resources: mongo.db.resources,
+  scopes: mongo.db.scopes,
+  userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
+});
+
+/** The tenant's scope texts the consent page shows, for the request's host. */
+export const scopeTextsFor: ScopeTextsFor = async (request) => {
+  const tenant = await tenantResolver.resolveRequest(request);
+  if (tenant === null) return new Map();
+  const found = await scopeToTenant(
+    mongo.db.scopes,
+    new ObjectId(tenant.tenantId),
+  ).findMany();
+  return new Map(found.map((scope) => [scope.name, scope.description]));
+};

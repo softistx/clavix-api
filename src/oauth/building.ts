@@ -3,15 +3,13 @@ import type { SigningKeyStore } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
+import { OIDC_SCOPES } from "@/modules/resources/scope-name";
 import { lifetimes } from "./lifetimes";
 import type { AuthFor, SigningKeysFor } from "./ports";
 import type { Keyed } from "./resolution";
 
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
 export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
-
-/** The scopes the userinfo resource offers: the standard OpenID Connect ones. */
-const OIDC_SCOPES = ["openid", "profile", "email"];
 
 export interface BuildDeps {
   db: Db;
@@ -35,7 +33,7 @@ export const buildIssuer =
       auth: authFor(tenant),
       store: createMongoOAuth(db, { partition: tenant.partition }),
       issuer: tenant.issuer,
-      resources: { ...resources, [userinfo]: { scopes: OIDC_SCOPES } },
+      resources: { ...resources, [userinfo]: { scopes: [...OIDC_SCOPES] } },
       defaultResource: userinfo,
       lifetimes,
       accessTokens: { format: "jwt" as const, keys },

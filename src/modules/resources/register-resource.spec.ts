@@ -28,6 +28,7 @@ const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const options = {
   collection: mongo.db.resources,
+  scopes: mongo.db.scopes,
   findTenant,
   issuerOf: (slug: string) => issuerOf(slug, config),
 };
@@ -59,7 +60,7 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(mongo.db.resources),
+  resourcesFor: storedResourcesFor(mongo.db.resources, mongo.db.scopes),
 });
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
@@ -348,12 +349,14 @@ describe("a registered resource in the issuer", () => {
     });
     const alpha = await findTenant("resalpha");
     const beta = await findTenant("resbeta");
-    const forAlpha = await storedResourcesFor(mongo.db.resources)(
-      (await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never,
-    );
-    const forBeta = await storedResourcesFor(mongo.db.resources)(
-      (await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never,
-    );
+    const forAlpha = await storedResourcesFor(
+      mongo.db.resources,
+      mongo.db.scopes,
+    )((await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never);
+    const forBeta = await storedResourcesFor(
+      mongo.db.resources,
+      mongo.db.scopes,
+    )((await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never);
     expect(alpha?._id.equals(beta?._id as never)).toBe(false);
     expect(Object.keys(forAlpha)).not.toContain(API_B);
     expect(Object.keys(forBeta)).toEqual([API_B]);

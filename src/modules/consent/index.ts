@@ -2,6 +2,12 @@ import type { IResolvers } from "@graphql-tools/utils";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
 import type { OAuthHandle } from "@/oauth/routes";
+import {
+  localeOf,
+  type ScopeTexts,
+  type ScopeTextsFor,
+  textOf,
+} from "./scope-labels";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -10,16 +16,42 @@ export const consentTypeDefs = oauthTypeDefs;
 // read by the resolvers, which pick the request host's server.
 const SERVERS = "oauthServers" as const;
 type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
-type WithServers = { [SERVERS]?: ServerSource };
+const TEXTS = "scopeTextsFor" as const;
+type WithServers = {
+  [SERVERS]?: ServerSource;
+  [TEXTS]?: ScopeTextsFor;
+};
 
-/** Puts the app's OAuth servers on the GraphQL context (`createApp({ oauth })`). */
-export const oauthContext = (oauth: ServerSource) => ({
+/**
+ * Puts the app's OAuth servers on the GraphQL context (`createApp({ oauth })`),
+ * and the reader of the tenants' scope texts, which the consent page shows
+ * instead of the bare scope names.
+ */
+export const oauthContext = (oauth: ServerSource, texts?: ScopeTextsFor) => ({
   onContextBuilding: ({
     extendContext,
   }: {
     extendContext: (extension: WithServers) => void;
-  }) => extendContext({ [SERVERS]: oauth }),
+  }) =>
+    extendContext({
+      [SERVERS]: oauth,
+      ...(texts === undefined ? {} : { [TEXTS]: texts }),
+    }),
 });
+
+// One read of the tenant's texts per request, shared by the scopes of a page.
+const readTexts = new WeakMap<Request, Promise<ScopeTexts>>();
+function textsOf(ctx: WithServers & { request?: Request }) {
+  const { request } = ctx;
+  const read = ctx[TEXTS];
+  if (request === undefined || read === undefined) return undefined;
+  let texts = readTexts.get(request);
+  if (texts === undefined) {
+    texts = read(request);
+    readTexts.set(request, texts);
+  }
+  return texts;
+}
 
 const requestOf = (ctx: unknown): Request => {
   const { request } = ctx as { request?: Request };
@@ -45,4 +77,20 @@ export const consentResolvers: IResolvers = {
       return server;
     },
   }),
+  // The label of a scope is the tenant's description of it, in the viewer's
+  // language (`Accept-Language`); the scope's name when it wrote none.
+  OAuthScope: {
+    label: async (
+      scope: { name: string; label: string },
+      _: unknown,
+      ctx: WithServers & { request?: Request },
+    ) => {
+      const texts = await textsOf(ctx);
+      if (texts === undefined) return scope.label;
+      const locale = localeOf(
+        ctx.request?.headers.get("accept-language") ?? null,
+      );
+      return textOf(texts, scope.name, locale) ?? scope.label;
+    },
+  },
 };

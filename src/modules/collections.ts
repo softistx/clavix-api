@@ -3,5 +3,7 @@
 // adds its models here.
 
 export { oauthSigningKeys } from "@softistx/janus-oauth-mongo";
+export { clientIndex } from "./clients/clients.model";
 export { resources } from "./resources/resources.model";
+export { scopes } from "./resources/scopes.model";
 export { tenants } from "./tenants/tenants.model";

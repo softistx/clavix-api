@@ -56,6 +56,21 @@ export interface RegisterClientOptions {
   db: Db;
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
   now?: () => Date;
+  /**
+   * The console's list of clients (Temporary, until @softistx/janus-oauth#706):
+   * told of every client registered, so a client made by script is listed too.
+   */
+  index?: {
+    upsert(
+      tenantId: CliTenant["_id"],
+      record: {
+        clientId: string;
+        name: string;
+        type: "public" | "confidential";
+        redirectUris: readonly string[];
+      },
+    ): Promise<void>;
+  };
 }
 
 const ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
@@ -169,6 +184,12 @@ export async function registerClient(
       : {}),
   };
   await store.upsertClient(record);
+  await options.index?.upsert(tenant._id, {
+    clientId,
+    name,
+    type,
+    redirectUris,
+  });
   return {
     created: existing === null,
     tenant: tenant.slug,
