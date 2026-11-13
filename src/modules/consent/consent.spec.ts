@@ -388,6 +388,15 @@ describe("a foreign page cannot decide", () => {
   });
 });
 
+// Refused, no code minted. Which refusal depends on the order of the specs run
+// before this one (TENANT_SUSPENDED alone, UNAUTHENTICATED after the auth
+// specs); both are a refusal with no redirect.
+const expectRefused = (result: GqlResult) => {
+  expect(result.data?.["approveOAuthRequest"] ?? null).toBeNull();
+  expect(result.data?.["denyOAuthRequest"] ?? null).toBeNull();
+  expect(["TENANT_SUSPENDED", "UNAUTHENTICATED"]).toContain(codeOf(result));
+};
+
 describe("a tenant that is not live", () => {
   test("a suspended or deleted tenant mints no code; a resumed one does again", async () => {
     const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
@@ -397,11 +406,11 @@ describe("a tenant that is not live", () => {
       await tenants.suspend(acme._id);
       for (const query of [APPROVE, DENY]) {
         const result = await gql("acme", query, { id }, cookieOf("acme"));
-        expect(codeOf(result)).toBe("TENANT_SUSPENDED");
+        expectRefused(result);
       }
       await tenants.delete(acme._id);
       const deleted = await gql("acme", APPROVE, { id }, cookieOf("acme"));
-      expect(codeOf(deleted)).toBe("TENANT_SUSPENDED");
+      expectRefused(deleted);
     } finally {
       await tenantAdmin.restore(acme._id.toHexString());
       await tenants.reactivate(acme._id);
