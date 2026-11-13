@@ -197,11 +197,54 @@ await auth.changeEmail.confirm(token);
 
 **When:** the operation is answered with HTTP 404 and `"extensions":{"code":"MAGIC_LINK_DISABLED"}`.
 
-**Why:** magic-link sign-in is off, which is the default. Nothing was counted, written or mailed, and a
-link mailed earlier is not spent.
+**Why:** magic-link sign-in is off for this tenant, which is the default. Nothing was counted, written
+or mailed, and a link mailed earlier is not spent.
 
-**Fix:** set `CLAVIX_MAGIC_LINK=true` (or `1`) and restart; every tenant then has it. The hosted page
-should hide its "e-mail me a link" button when the operation answers 404.
+**Fix:** a tenant admin turns it on in the tenant's sign-in policy (console API
+`updateSignInMethods(tenantId, methods: [{ type: MAGIC_LINK, enabled: true }])`); it applies at once,
+without a restart. The `CLAVIX_MAGIC_LINK` variable no longer exists and is ignored. The hosted page
+reads `hostedSignInMethods` and hides its "e-mail me a link" button when `MAGIC_LINK` is not listed.
+
+## `SIGN_IN_METHOD_DISABLED` (404) on a sign-in operation
+
+**When:** `requestSignInCode`, `verifySignInCode`, `passkeySignInOptions`, `signInWithPasskey`,
+`socialSignInStart` or `socialSignInComplete` answers HTTP 404 with
+`"extensions":{"code":"SIGN_IN_METHOD_DISABLED"}`.
+
+**Why:** the tenant of the host turned that method off, or does not offer that social provider (not
+configured, disabled, or its stored secret can no longer be opened). Nothing was counted or mailed.
+
+**Fix:** offer only what `hostedSignInMethods` lists. To turn a method on, a tenant admin calls
+`updateSignInMethods` or `setSocialProvider` on the console API. If a configured, enabled provider is
+missing, look for `social: <provider> of tenant <id> is off (...)` in the server log: the master key
+changed, so enter the client secret again with `setSocialProvider`.
+
+## Sign-in policy refusals (console API)
+
+### `NO_SIGN_IN_METHOD` (409)
+
+The change would leave the tenant with no enabled sign-in method and no enabled social provider, so
+nobody could sign in. Enable another method or provider first, then repeat the change.
+
+### `SIGN_IN_METHOD_UNAVAILABLE` (409)
+
+The method cannot be enabled yet: `PASSWORD` is listed with `available: false` until password
+sign-in ships. Leave it off.
+
+### `SOCIAL_SECRET_REQUIRED` (400)
+
+`setSocialProvider` configures a provider for the first time without `clientSecret`. Send the client
+id and the secret together; later calls may leave the secret out to keep the stored one.
+
+### `BAD_USER_INPUT` (400)
+
+A method type is given twice in `updateSignInMethods`, a new provider has no `clientId`, or a
+`clientId` or `clientSecret` is empty or longer than allowed.
+
+### `SIGN_UP_DISABLED` (403) on `socialSignInComplete`
+
+The provider account's e-mail belongs to no user of the tenant, and the tenant's sign-up is closed.
+Invite the user, or open the tenant's sign-up.
 
 ## `MAGIC_LINK_INVALID` (401) on `confirmMagicLink`
 
