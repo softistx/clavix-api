@@ -9,7 +9,7 @@ Today it serves:
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- on `POST /console/graphql`, the console API (`me` and the admins of a tenant: memberships and invitations), behind a bearer token;
+- on `POST /console/graphql`, the console API (`me`, the admins of a tenant and its branding), behind a bearer token;
 - scripts that create tenants, OAuth clients and API resources until the console can.
 
 ## Documentation
