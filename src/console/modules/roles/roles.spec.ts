@@ -33,7 +33,7 @@ const LIST = `query($t: ID!, $res: ID) { roles(tenantId: $t, resourceId: $res) {
 const GET = `query($t: ID!, $id: ID!) { role(tenantId: $t, id: $id) { ${ROLE} } }`;
 const MEMBERS = `query($t: ID!, $r: ID!, $after: String, $first: Int) {
   roleMembers(tenantId: $t, roleId: $r, after: $after, first: $first) {
-    items { assignedAt user { id email } } nextCursor
+    items { assignedAt user { id email } } nextCursor totalCount
   }
 }`;
 const OF_USER = `query($t: ID!, $u: ID!) { userRoles(tenantId: $t, userId: $u) { id name } }`;
@@ -324,6 +324,40 @@ describe("assignments", () => {
     expect(
       codeOf(await viewer(MEMBERS, { t: tenantA, r: id, after: "garbage!" })),
     ).toBe("BAD_USER_INPUT");
+  });
+
+  test("totalCount is every holder, whatever the page; a role of another tenant counts 0", async () => {
+    const id = await make(admin, tenantA, "counted");
+    await admin(ASSIGN, { t: tenantA, r: id, u: userA1 });
+    await admin(ASSIGN, { t: tenantA, r: id, u: userA2 });
+    const page = (result: Awaited<ReturnType<typeof viewer>>) =>
+      result.data?.["roleMembers"] as {
+        items: unknown[];
+        nextCursor: string | null;
+        totalCount: number;
+      };
+    expect(page(await viewer(MEMBERS, { t: tenantA, r: id })).totalCount).toBe(
+      2,
+    );
+    const first = page(await viewer(MEMBERS, { t: tenantA, r: id, first: 1 }));
+    expect(first.totalCount).toBe(2);
+    const second = page(
+      await viewer(MEMBERS, {
+        t: tenantA,
+        r: id,
+        first: 1,
+        after: first.nextCursor,
+      }),
+    );
+    expect(second.totalCount).toBe(2);
+    // Tenant B's admin asks for tenant A's role id under its own tenant.
+    expect(page(await adminB(MEMBERS, { t: tenantB, r: id }))).toMatchObject({
+      totalCount: 0,
+      items: [],
+    });
+    expect(
+      page(await viewer(MEMBERS, { t: tenantA, r: "0".repeat(24) })).totalCount,
+    ).toBe(0);
   });
 
   test("deleting a role removes its assignments", async () => {

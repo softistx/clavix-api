@@ -7,6 +7,7 @@ import { partitionOf } from "@/modules/tenants/identity";
 import {
   type ClientView,
   capability,
+  countClientViews,
   listClientViews,
   viewOf,
 } from "./client-listing";
@@ -84,12 +85,7 @@ export class ClientsService {
     tenant: CliTenant,
     options: { after?: string | null; limit: number; q?: string | undefined },
   ) {
-    if ((options.q?.length ?? 0) > MAX_QUERY) {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        `a search has at most ${MAX_QUERY} characters`,
-      );
-    }
+    this.checkQuery(options.q);
     if ((options.after?.length ?? 0) > MAX_CURSOR) {
       throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
     }
@@ -97,6 +93,24 @@ export class ClientsService {
       capability(this.storeOf(tenant).listClients, "listClients"),
       options,
     );
+  }
+
+  /** How many clients of the tenant match `q`, whatever the page. */
+  async count(tenant: CliTenant, options: { q?: string | undefined } = {}) {
+    this.checkQuery(options.q);
+    return countClientViews(
+      capability(this.storeOf(tenant).listClients, "listClients"),
+      options,
+    );
+  }
+
+  private checkQuery(q: string | undefined) {
+    if ((q?.length ?? 0) > MAX_QUERY) {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        `a search has at most ${MAX_QUERY} characters`,
+      );
+    }
   }
 
   async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {

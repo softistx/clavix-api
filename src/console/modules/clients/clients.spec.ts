@@ -34,8 +34,14 @@ const ROTATE = `mutation($tenantId: ID!, $id: ID!) {
 }`;
 const DELETE = `mutation($tenantId: ID!, $id: ID!) { deleteClient(tenantId: $tenantId, id: $id) }`;
 const LIST = `query($tenantId: ID!, $q: String, $after: String, $first: Int) {
-  clients(tenantId: $tenantId, q: $q, after: $after, first: $first) { items { ${CLIENT} } nextCursor }
+  clients(tenantId: $tenantId, q: $q, after: $after, first: $first) { items { ${CLIENT} } nextCursor totalCount }
 }`;
+const pageOf = (result: Awaited<ReturnType<typeof admin>>) =>
+  result.data?.["clients"] as {
+    items: unknown[];
+    nextCursor: string | null;
+    totalCount: number;
+  };
 const GET = `query($tenantId: ID!, $id: ID!) { client(tenantId: $tenantId, id: $id) { ${CLIENT} } }`;
 
 const storeOf = async (tenantId: string) => {
@@ -185,6 +191,38 @@ describe("clients and client", () => {
           ?.nextCursor ?? null;
     } while (after !== null);
     expect(found).toEqual(["mobile-app"]);
+  });
+
+  test("totalCount ignores the cursor and the page size, and follows q", async () => {
+    const all = pageOf(await admin(LIST, { tenantId: tenantA }));
+    expect(all.totalCount).toBe(all.items.length);
+    expect(all.totalCount).toBeGreaterThanOrEqual(2);
+    const first = pageOf(await admin(LIST, { tenantId: tenantA, first: 1 }));
+    expect(first.totalCount).toBe(all.totalCount);
+    // Page 2: the same total, whatever the cursor.
+    const second = pageOf(
+      await admin(LIST, {
+        tenantId: tenantA,
+        first: 1,
+        after: first.nextCursor,
+      }),
+    );
+    expect(second.totalCount).toBe(all.totalCount);
+    const search = (q: string, size?: number) =>
+      admin(LIST, { tenantId: tenantA, q, first: size });
+    expect(pageOf(await search("MOB")).totalCount).toBe(1);
+    expect(pageOf(await search("MOB", 1)).totalCount).toBe(1);
+    expect(pageOf(await search(".*")).totalCount).toBe(0);
+  });
+
+  test("totalCount counts only the tenant's own clients", async () => {
+    await create(adminB, tenantB, { name: "B only" });
+    const count = async (as: typeof admin, tenantId: string, q: string) =>
+      pageOf(await as(LIST, { tenantId, q })).totalCount;
+    expect(await count(adminB, tenantB, "b only")).toBe(1);
+    expect(await count(admin, tenantA, "b only")).toBe(0);
+    // Later tests list tenant B whole: leave it as it was.
+    await adminB(DELETE, { tenantId: tenantB, id: "b-only" });
   });
 
   test("the grant types a script recorded are shown", async () => {

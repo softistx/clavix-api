@@ -161,11 +161,11 @@ tenant; every field is refused unless its guard allows it.
 
 ### Switchable tenants
 
-`me { switchableTenants(q, after, first) { items { role tenant { id slug name status } } nextCursor } }`
+`me { switchableTenants(q, after, first) { items { role tenant { id slug name status } } nextCursor totalCount } }`
 is the console shell's tenant switcher. For a tenant admin it lists the tenants of their roles; for a
 platform operator, every tenant not in the trash. Each item carries the role they act with there (the
 stronger of their direct role and their platform role). Items are ordered by slug and paged by cursor
-(`first` is clamped to 1 to 100, default 25; pass `nextCursor` as `after`: any other cursor is `BAD_USER_INPUT` (400), `The cursor is not valid`); `q` matches the start of the slug or part
+(`first` is clamped to 1 to 100, default 25; `totalCount` is how many tenants the caller can switch to that match `q`, whatever the cursor or `first`; pass `nextCursor` as `after`: any other cursor is `BAD_USER_INPUT` (400), `The cursor is not valid`); `q` matches the start of the slug or part
 of the name, case-insensitively. A suspended tenant stays listed (`tenant.status` is `SUSPENDED`; the
 console stays readable on it); a tenant in the trash is left out, and a caller with no role gets an
 empty page. Any signed-in caller may ask; it never lists a tenant the caller holds no role on.
@@ -174,7 +174,7 @@ empty page. Any signed-in caller may ask; it never lists a tenant the caller hol
 ```sh
 curl -s https://api.clavix.example/console/graphql \
   -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
-  -d '{"query":"{ me { switchableTenants(q: \"acme\", first: 10) { items { role tenant { slug name status } } nextCursor } } }"}'
+  -d '{"query":"{ me { switchableTenants(q: \"acme\", first: 10) { items { role tenant { slug name status } } nextCursor totalCount } } }"}'
 ```
 
 ### Admins of a tenant
@@ -283,7 +283,7 @@ A name is 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`, unique p
 | `deleteRole(tenantId, id)`                           | Deletes the role and its assignments. True also when already gone.                                                                                     |
 | `assignRole(tenantId, roleId, userId)`               | Idempotent. The user must be in the tenant's pool, else `NOT_FOUND`.                                                                                   |
 | `unassignRole(tenantId, roleId, userId)`             | True when the user held it, false on a repeat.                                                                                                         |
-| `roleMembers(tenantId, roleId, after, first)`        | A page (25, at most 100) of `{ user, assignedAt }`, oldest assignment first.                                                                           |
+| `roleMembers(tenantId, roleId, after, first)`        | A page (25, at most 100) of `{ user, assignedAt }`, oldest assignment first, with `totalCount` (all the holders, whatever the cursor).                 |
 | `userRoles(tenantId, userId)`                        | The roles a user holds.                                                                                                                                |
 
 Each mutation records an admin event (`role.create`, `role.update`, `role.delete`, `role.assign`,
@@ -300,7 +300,7 @@ update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`
 
 | Field                                                | What it does                                                                                                                                                                                              |
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`                                                                                                                              |
+| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                             |
 | `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                     |
 | `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
 | `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                                                                                                                                           |
@@ -386,17 +386,17 @@ platform (`owner` or `admin` operator). Every mutation is audited (`tenant.creat
 `extensions.code`: `NOT_FOUND`, `BAD_USER_INPUT`, `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`,
 `TENANT_SUSPENDED`, `FORBIDDEN`.
 
-| Field                                   | What it does                                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `tenants(q, status, after, first)`      | a page of tenants by slug, the trash included (status `DELETED`), purged ones left out           |
-| `tenant(id)`                            | one tenant; a tenant in the trash is `null` unless the caller is a platform operator             |
-| `plans`                                 | `free`, `pro`, `enterprise`, with their quotas (`mau`, `clients`, `domains`; `null` is no limit) |
-| `usage(tenantId, month)`                | monthly active users, clients and domains against the quotas that apply                          |
-| `createTenant(input)`                   | slug (for ever), name, `signUp`, `plan`; `SLUG_TAKEN` for a slug in use, in the trash or purged  |
-| `updateTenant(id, input)`               | the name and `signUp`; the slug never changes                                                    |
-| `setTenantPlan(id, input)`              | the plan and the whole set of quota overrides (`null` follows the plan)                          |
-| `suspendTenant(id)`, `resumeTenant(id)` | sign-in, authorize and token are refused with `TENANT_SUSPENDED` until resumed; idempotent       |
-| `deleteTenant(id)`, `restoreTenant(id)` | the trash (below)                                                                                |
+| Field                                   | What it does                                                                                                                  |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `tenants(q, status, after, first)`      | a page of tenants by slug, the trash included (status `DELETED`), purged ones left out, `totalCount` follows `q` and `status` |
+| `tenant(id)`                            | one tenant; a tenant in the trash is `null` unless the caller is a platform operator                                          |
+| `plans`                                 | `free`, `pro`, `enterprise`, with their quotas (`mau`, `clients`, `domains`; `null` is no limit)                              |
+| `usage(tenantId, month)`                | monthly active users, clients and domains against the quotas that apply                                                       |
+| `createTenant(input)`                   | slug (for ever), name, `signUp`, `plan`; `SLUG_TAKEN` for a slug in use, in the trash or purged                               |
+| `updateTenant(id, input)`               | the name and `signUp`; the slug never changes                                                                                 |
+| `setTenantPlan(id, input)`              | the plan and the whole set of quota overrides (`null` follows the plan)                                                       |
+| `suspendTenant(id)`, `resumeTenant(id)` | sign-in, authorize and token are refused with `TENANT_SUSPENDED` until resumed; idempotent                                    |
+| `deleteTenant(id)`, `restoreTenant(id)` | the trash (below)                                                                                                             |
 
 The `Tenant` type carries `status` (`ACTIVE`, `SUSPENDED`, `DELETED`), `plan`, `quotas`, `deletedAt`
 and `purgeAt`. The `clavix` tenant cannot be suspended or deleted (`PLATFORM_TENANT_PROTECTED`).

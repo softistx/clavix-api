@@ -88,16 +88,20 @@ export const clients: Resolvers = {
   Query: {
     clients: async (_, { tenantId, q, after, first }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const page = await refusing(() =>
-        clientsService.list(tenant, {
-          after: after ?? null,
-          limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
-          q: q ?? undefined,
-        }),
+      const [page, totalCount] = await refusing(() =>
+        Promise.all([
+          clientsService.list(tenant, {
+            after: after ?? null,
+            limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+            q: q ?? undefined,
+          }),
+          clientsService.count(tenant, { q: q ?? undefined }),
+        ]),
       );
       return {
         items: page.items.map(shape),
         nextCursor: page.nextCursor,
+        totalCount,
       };
     },
     client: async (_, { tenantId, id }, ctx) => {
