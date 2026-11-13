@@ -13,6 +13,7 @@ import type {
 import { type Guards, onTenant } from "../../guard";
 import { activeTenant } from "../directory-tenant";
 import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
+import { userKey } from "../user-key";
 
 // Reading the users is `view`; changing them is `edit` (a tenant admin).
 export const usersGuards: Guards = {
@@ -192,10 +193,14 @@ export const users: Resolvers = {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
       await activeTenant(ctx.directory, tenantId);
-      await ctx.users.delete(tenantId, userId);
-      // Their role assignments go with them; on a repeat too, so a retry
-      // finishes what a failed first run left.
-      await rolesService.removeUser(new ObjectId(tenantId), userId);
+      // Alone with an `assignRole` of the same user: no assignment can be
+      // written between the delete and the sweep.
+      await ctx.exclusive(userKey(tenantId, userId), async () => {
+        await ctx.users.delete(tenantId, userId);
+        // Their role assignments go with them; on a repeat too, so a retry
+        // finishes what a failed first run left.
+        await rolesService.removeUser(new ObjectId(tenantId), userId);
+      });
       await ctx.audit("user.delete", target("user", userId, tenantId));
       return true;
     },

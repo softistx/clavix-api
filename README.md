@@ -149,7 +149,8 @@ No token, or a forged, expired or other-audience one, is a 401; the store down i
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
 resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
 tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, their plans and their
-trash are managed here too (below); `tenants:create` remains for the first tenants.
+trash are managed here too (below); `tenants:create` remains for the first tenants. The console shell's
+tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.

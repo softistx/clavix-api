@@ -343,8 +343,11 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   `role.create|update|delete|assign|unassign` (assign and unassign record the role and the user). `deleteRole`
   and `unassignRole` are idempotent; `assignRole` needs a user of the tenant's pool (`NOT_FOUND` else).
   `deleteRole` removes the assignments first, `deleteUser` and `deleteResource` remove theirs (a retry
-  finishes a half run). An assignment left by a delete/assign race is harmless: the claim join ignores a
-  role that is gone and the member list skips a user that is gone.
+  finishes a half run). `assignRole` (check the user, write) and `deleteUser` (delete, sweep) run under
+  `ctx.exclusive(userKey(tenant, user))` (`console/modules/user-key.ts`), so no assignment outlives its
+  user. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role.
+  `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
+  `RolesError`.
 - **Shared helpers**: `console/modules/ids.ts` (`lowerTenantArg`, `tenantIdOf`, `idArg`) and
   `console/modules/directory-tenant.ts` (`activeTenant`, a suspended tenant is `NOT_FOUND`).
   A tenant suspended mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).

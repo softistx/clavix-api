@@ -3,6 +3,7 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { registerClient } from "@/clients/register-client";
 import { access, linkTenantToPlatform } from "@/config/access";
+import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
@@ -653,6 +654,37 @@ describe("the deleteClient trail", () => {
       await (await storeOf(tenantA)).findClient("by-script"),
     ).not.toBeNull();
     expect(await eventsOf()).toHaveLength(0);
+  });
+
+  test("the service answers from one read: unmanaged, removed, then absent", async () => {
+    const store = await storeOf(tenantA);
+    const tenant = {
+      _id: new ObjectId(tenantA),
+      slug: "cli-a",
+      status: "active",
+    } as const;
+    await create(admin, tenantA, { name: "One read", clientId: "one-read" });
+    const record = await store.findClient("one-read");
+    await store.upsertClient({
+      ...(record as NonNullable<typeof record>),
+      source: "metadata",
+    });
+    expect(await clientsService.delete(tenant, "one-read")).toEqual({
+      removed: false,
+      unmanaged: true,
+    });
+    await store.upsertClient({
+      ...(record as NonNullable<typeof record>),
+      source: "registered",
+    });
+    expect(await clientsService.delete(tenant, "one-read")).toEqual({
+      removed: true,
+      unmanaged: false,
+    });
+    expect(await clientsService.delete(tenant, "one-read")).toEqual({
+      removed: false,
+      unmanaged: false,
+    });
   });
 
   test("a registered client, and a valid id that names nothing, are recorded", async () => {

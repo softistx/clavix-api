@@ -191,29 +191,28 @@ export class ClientsService {
   }
 
   /**
-   * Whether the id names a client this service does not manage (a record that
-   * was not registered through the console or the script): `delete` leaves it
-   * alone and the caller has nothing to record.
+   * Deletes the client. `unmanaged` is a record this service does not manage (not
+   * registered through the console or the script): it is left alone, and the
+   * caller has nothing to record. `removed` is `false` when it was not there.
+   * One read decides both, so the answer cannot disagree with what was done.
+   * The client goes first (nothing new can be granted to it), then its
+   * standing grants and their tokens are revoked: on a repeat too, so a run
+   * that stopped between the two is finished.
    */
-  async isUnmanaged(tenant: CliTenant, clientId: string): Promise<boolean> {
-    const record = await this.storeOf(tenant).findClient(clientId);
-    return record !== null && record.source !== "registered";
-  }
-
-  /**
-   * `false` when it was not there. The client goes first (nothing new can be
-   * granted to it), then its standing grants and their tokens are revoked: on
-   * a repeat too, so a run that stopped between the two is finished.
-   */
-  async delete(tenant: CliTenant, clientId: string): Promise<boolean> {
+  async delete(
+    tenant: CliTenant,
+    clientId: string,
+  ): Promise<{ removed: boolean; unmanaged: boolean }> {
     const store = this.storeOf(tenant);
     const record = await store.findClient(clientId);
-    if (record !== null && record.source !== "registered") return false;
+    if (record !== null && record.source !== "registered") {
+      return { removed: false, unmanaged: true };
+    }
     const removed = record !== null && (await store.deleteClient(clientId));
     await capability(store.revokeClientGrants, "revokeClientGrants")(
       clientId,
       (this.options.now ?? (() => new Date()))(),
     );
-    return removed;
+    return { removed, unmanaged: false };
   }
 }

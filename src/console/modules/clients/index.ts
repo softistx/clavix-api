@@ -159,10 +159,8 @@ export const clients: Resolvers = {
     },
     deleteClient: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      let unmanaged = false;
-      const removed = await refusing(async () => {
+      const { removed, unmanaged } = await refusing(async () => {
         keepConsoleClient(tenant, id);
-        unmanaged = await clientsService.isUnmanaged(tenant, id);
         return clientsService.delete(tenant, id);
       });
       // Recorded on a repeat too (it may be the event the first run missed);

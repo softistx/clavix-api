@@ -25,6 +25,22 @@ async function tenantOf(ctx: Context) {
   return tenant;
 }
 
+// The tenant's janus instance, resolved once per request: the mutation's own
+// checks and janus's per-field `auth` call share it. Keyed on the request, never
+// on an instance, so a provider changed between two requests is read afresh.
+const resolved = new WeakMap<
+  Request,
+  Promise<Awaited<ReturnType<typeof janusIssuers.forRequest>>>
+>();
+const authOf = (request: Request) => {
+  let found = resolved.get(request);
+  if (found === undefined) {
+    found = janusIssuers.forRequest(request);
+    resolved.set(request, found);
+  }
+  return found;
+};
+
 // The social sign-in is janus-graphql's (`socialResolvers`): the flow, the
 // account link, the session cookie and the `no-store` header are janus's. The
 // auth source is a per-request function, called on every social field: it
@@ -33,14 +49,14 @@ async function tenantOf(ctx: Context) {
 const social = socialResolvers({
   auth: async (ctx) => {
     if (ctx.request === undefined) return null;
-    const auth = await janusIssuers.forRequest(ctx.request);
+    const auth = await authOf(ctx.request);
     return auth === null ? null : socialOf(auth);
   },
 });
 
 /** The tenant's social instance; `SIGN_IN_METHOD_DISABLED` for a tenant with no social provider. */
 async function socialOfTenant(ctx: Context) {
-  const auth = await janusIssuers.forRequest(ctx.request);
+  const auth = await authOf(ctx.request);
   if (auth === null) throw denial("NOT_FOUND", "No such tenant");
   const instance = socialOf(auth);
   if (instance === null) throw methodDisabled("social");

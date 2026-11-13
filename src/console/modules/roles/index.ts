@@ -4,13 +4,14 @@ import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { RolesError } from "@/modules/roles/roles.errors";
 import type { RoleDoc } from "@/modules/roles/roles.service";
 import type { Audits } from "../../audit";
 import type { ConsoleContext } from "../../context";
 import { type Guards, onTenant } from "../../guard";
+import { refusing } from "../catalog-support";
 import { activeTenant } from "../directory-tenant";
 import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
+import { userKey } from "../user-key";
 
 const view = onTenant("view", lowerTenantArg);
 const edit = onTenant("edit", lowerTenantArg);
@@ -39,21 +40,6 @@ export const rolesAudits: Audits = {
   "Mutation.unassignRole": "role.unassign",
 };
 
-const STATUS = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 } as const;
-
-async function refusing<T>(call: () => Promise<T>): Promise<T> {
-  try {
-    return await call();
-  } catch (error) {
-    if (error instanceof RolesError) {
-      throw new GraphQLError(error.message, {
-        extensions: { code: error.code, http: { status: STATUS[error.code] } },
-      });
-    }
-    throw error;
-  }
-}
-
 const target = (type: "role" | "user", id: string, tenantId: string) => ({
   type,
   id,
@@ -62,17 +48,25 @@ const target = (type: "role" | "user", id: string, tenantId: string) => ({
 
 const MAX_PAGE = 100;
 
-const shape = async (tenantId: ObjectId, role: RoleDoc) => ({
+const shape = (role: RoleDoc, memberCount: number) => ({
   id: role._id.toHexString(),
   name: role.name,
   description: role.description === "" ? null : role.description,
   resourceId: role.resourceId?.toHexString() ?? null,
-  memberCount: await rolesService.memberCount(tenantId, role),
+  memberCount,
   createdAt: role.createdAt,
 });
 
-const shapes = (tenantId: ObjectId, found: RoleDoc[]) =>
-  Promise.all(found.map((role) => shape(tenantId, role)));
+/** Several roles at once: their member counts come from one query. */
+async function shapes(tenantId: ObjectId, found: RoleDoc[]) {
+  const counts = await rolesService.memberCounts(tenantId, found);
+  return found.map((role) =>
+    shape(role, counts.get(role._id.toHexString()) ?? 0),
+  );
+}
+
+const shapeOne = async (tenantId: ObjectId, role: RoleDoc) =>
+  shape(role, await rolesService.memberCount(tenantId, role));
 
 /** The active tenant of the call: the id as an ObjectId. */
 async function tenantOf(ctx: ConsoleContext, given: string) {
@@ -95,7 +89,7 @@ export const roles: Resolvers = {
     role: async (_, { tenantId, id }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
       const found = await rolesService.find(tenant.id, id);
-      return found === undefined ? null : shape(tenant.id, found);
+      return found === undefined ? null : shapeOne(tenant.id, found);
     },
     roleMembers: async (_, { tenantId, roleId, after, first }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
@@ -158,7 +152,7 @@ export const roles: Resolvers = {
         "role.create",
         target("role", created._id.toHexString(), tenant.hex),
       );
-      return shape(tenant.id, created);
+      return shapeOne(tenant.id, created);
     },
     updateRole: async (_, { tenantId, id, input }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
@@ -172,7 +166,7 @@ export const roles: Resolvers = {
         "role.update",
         target("role", updated._id.toHexString(), tenant.hex),
       );
-      return shape(tenant.id, updated);
+      return shapeOne(tenant.id, updated);
     },
     deleteRole: async (_, { tenantId, id }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
@@ -186,11 +180,15 @@ export const roles: Resolvers = {
       const tenant = await tenantOf(ctx, tenantId);
       idArg(roleId, "roleId");
       idArg(userId, "userId");
-      // Only a user of this tenant's pool can hold a role.
-      if ((await ctx.users.find(tenant.hex, userId)) === null) {
-        throw denial("NOT_FOUND", "No such user");
-      }
-      await refusing(() => rolesService.assign(tenant.id, roleId, userId));
+      // Only a user of this tenant's pool can hold a role. Alone with a
+      // `deleteUser` of the same user, so the user cannot go (and its
+      // assignments be swept) between the check and the write.
+      await ctx.exclusive(userKey(tenant.hex, userId), async () => {
+        if ((await ctx.users.find(tenant.hex, userId)) === null) {
+          throw denial("NOT_FOUND", "No such user");
+        }
+        await refusing(() => rolesService.assign(tenant.id, roleId, userId));
+      });
       await ctx.audit("role.assign", target("role", roleId, tenant.hex));
       await ctx.audit("role.assign", target("user", userId, tenant.hex));
       return true;

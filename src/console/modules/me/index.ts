@@ -1,4 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
+import { InvalidCursorError } from "@softistx/mongo";
+import { GraphQLError } from "graphql";
 import { tenantAdmin } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { type Guards, signedIn } from "../../guard";
@@ -21,8 +23,19 @@ const MAX_PAGE = 100;
 const stronger = (a: Role, b: Role | null): Role =>
   b !== null && ROLES.indexOf(b) < ROLES.indexOf(a) ? b : a;
 
-const escapeRegex = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A page of tenants; a cursor that is not valid is the caller's mistake. */
+async function listing<T>(page: () => Promise<T>): Promise<T> {
+  try {
+    return await page();
+  } catch (error) {
+    if (error instanceof InvalidCursorError) {
+      throw new GraphQLError("The cursor is not valid", {
+        extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+      });
+    }
+    throw error;
+  }
+}
 
 export const me: Resolvers = {
   Query: { me: () => ({}) },
@@ -63,12 +76,14 @@ export const me: Resolvers = {
 
       // An operator may work on every tenant outside the trash.
       if (platform !== null) {
-        const page = await tenantAdmin.list({
-          q: text,
-          state: "live",
-          after: after ?? undefined,
-          first: limit,
-        });
+        const page = await listing(() =>
+          tenantAdmin.list({
+            q: text,
+            state: "live",
+            after: after ?? undefined,
+            first: limit,
+          }),
+        );
         return {
           items: page.items.map((tenant) => ({
             tenant: parentOf(tenant),
@@ -81,26 +96,25 @@ export const me: Resolvers = {
       }
 
       // Everyone else: the tenants of their roles, a suspended one included
-      // (the console stays readable on it), the trash left out.
-      const slug = new RegExp(`^${escapeRegex(text.toLowerCase())}`);
-      const name = new RegExp(escapeRegex(text), "i");
-      const visible = (await tenantAdmin.visibleByIds([...direct.keys()]))
-        .filter(
-          (tenant) =>
-            text === "" || slug.test(tenant.slug) || name.test(tenant.name),
-        )
-        .sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))
-        .filter((tenant) => after == null || tenant.slug > after);
-      const items = visible.slice(0, limit);
+      // (the console stays readable on it), the trash left out. Paged by the
+      // database like the operator's, so the cursor is the same opaque one.
+      const page = await listing(() =>
+        tenantAdmin.list({
+          q: text,
+          state: "live",
+          ids: [...direct.keys()],
+          after: after ?? undefined,
+          first: limit,
+        }),
+      );
       return {
-        items: items.flatMap((tenant) => {
+        items: page.items.flatMap((tenant) => {
           const role = direct.get(tenant._id.toHexString());
           return role === undefined
             ? []
             : [{ tenant: parentOf(tenant), role: GRAPHQL_ROLE[role] }];
         }),
-        nextCursor:
-          visible.length > limit ? (items.at(-1)?.slug ?? null) : null,
+        nextCursor: page.nextCursor,
       };
     },
   },

@@ -229,6 +229,22 @@ describe("social sign-in", () => {
     }
   });
 
+  test("a provider changed while the app runs is read afresh on the next call", async () => {
+    const mid = (await tenants.create({ slug: "sih-mid", name: "Mid" })).id;
+    for (const clientId of ["gh-mid-1", "gh-mid-2", "gh-mid-1"]) {
+      await policy.setSocial(mid, {
+        provider: "github",
+        clientId,
+        clientSecret: `${SECRET}-mid`,
+      });
+      const start = await startOn("sih-mid");
+      expect(new URL(start.url).searchParams.get("client_id")).toBe(clientId);
+    }
+    await policy.removeSocial(mid, "github");
+    const gone = await gql("sih-mid", START, { p: "github", r: null });
+    expect(codeOf(gone)).toBeDefined();
+  });
+
   test("complete exchanges the code with the tenant's secret, creates the user and opens the session", async () => {
     const start = await startOn("sih-social");
     const { calls, run } = github("ada@social.example");
