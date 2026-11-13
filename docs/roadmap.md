@@ -14,15 +14,26 @@ nxgt-janus release says which.
 - **Admin events** — every change made from the console is recorded: who did it, what, on which
   tenant and target, and when, with no secret value ever stored. The viewer and the export come
   with the audit log ([#107](https://github.com/softistx/clavix-api/issues/107)).
-- **Console** — operators and tenant admins manage Clavix from the console instead of scripts:
-  tenants, plans and quotas with usage counters
-  ([#8](https://github.com/softistx/clavix-api/issues/8)); a tenant's clients, resources, scopes,
-  users and admin roles ([#9](https://github.com/softistx/clavix-api/issues/9)); a theme per
-  tenant with an AA contrast check, a logo and a public brand query by host
-  ([#10](https://github.com/softistx/clavix-api/issues/10));
-  custom domains with DNS TXT verification and automatic TLS
-  ([#11](https://github.com/softistx/clavix-api/issues/11)); and sign-in methods and social
-  providers per tenant ([#12](https://github.com/softistx/clavix-api/issues/12)).
+- **Console** (in progress; the foundation, branding and admin events above are in the M2
+  integration branch, nothing of M2 is in `develop` yet) — operators and tenant admins manage
+  Clavix from the console instead of scripts:
+  - Platform: tenants with plans, quotas and usage counters
+    ([#8](https://github.com/softistx/clavix-api/issues/8)). A suspended tenant refuses
+    sign-ins and new tokens (tokens already issued live to expiry, the console stays readable).
+    A deleted tenant goes to a 30-day trash, can be restored, then is purged; its slug stays
+    reserved.
+  - Tenant: clients, resources, scopes with consent texts, users, end-user roles and admin
+    roles ([#9](https://github.com/softistx/clavix-api/issues/9)).
+  - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
+    host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
+  - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for
+    verified domains of active tenants
+    ([#11](https://github.com/softistx/clavix-api/issues/11)).
+  - Sign-in methods and social providers per tenant
+    ([#12](https://github.com/softistx/clavix-api/issues/12)).
+  - Going live: container images, a compose file with a reverse proxy (wildcard and on-demand
+    TLS), health and readiness endpoints, a MongoDB backup and restore script with a restore
+    drill, and a runbook.
 
 ## Next
 
@@ -40,7 +51,7 @@ nxgt-janus release says which.
 ## Later
 
 **Advanced protocols**
-- PAR mandatory by default; DPoP-bound tokens.
+- PAR required per tenant and per client (on for new tenants); DPoP-bound tokens.
 - Device authorization and its verification page; token exchange.
 - Rich authorization requests and their consent.
 - MCP and agents: dynamic registration policy, RFC 9728, consent per agent.
@@ -48,7 +59,12 @@ nxgt-janus release says which.
 **Federation, step-up and events**
 - Enterprise OIDC connections and home-realm discovery.
 - MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
-- Audit log, viewer and export; webhooks per tenant; telemetry.
+- Admin events and OAuth events: viewer, export and retention per plan; webhooks per tenant;
+  telemetry.
+
+**Before v1**
+- Master-key rotation, a security review of the whole surface, a load test of the token and
+  JWKS paths, and a restore drill.
 
 **Authorization authoring**
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary
