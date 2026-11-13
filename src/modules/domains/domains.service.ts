@@ -1,28 +1,25 @@
-import {
-  ConflictError,
-  type ReadDocumentOf,
-  type TypedCollection,
-} from "@softistx/mongo";
+import { ConflictError, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { assertWithinQuota } from "@/modules/usage/quota";
 import type { TxtResolver } from "./dns";
-import { normalizeDomainHost, txtNameOf } from "./domain-host";
+import { normalizeDomainHost } from "./domain-host";
+import { type CheckFailure, checkClaim } from "./domains.check";
 import { DomainError } from "./domains.errors";
-import type { domains } from "./domains.model";
+import type { DomainDoc, domains } from "./domains.model";
+import { DomainRecheck, RECHECK_GRACE_DAYS } from "./domains.recheck";
+import type { DomainSystemEvent } from "./events";
 
-export type DomainDoc = ReadDocumentOf<typeof domains>;
+export type { CheckFailure, DomainDoc };
+export { RECHECK_GRACE_DAYS };
 
-/** Days a verified domain may fail its recheck before it becomes `unverified`. */
-export const RECHECK_GRACE_DAYS = 7;
-const DAY_MS = 24 * 60 * 60 * 1_000;
+/** Seconds a claim must wait between two checks of its DNS record (`verify`). */
+export const VERIFY_COOLDOWN_SECONDS = 60;
 
 /** The TXT value to publish: random per claim, so it names this tenant's claim on this host. */
 export const mintToken = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return `clavix-verify=${Buffer.from(bytes).toString("base64url")}`;
 };
-
-export type CheckFailure = "NO_RECORD" | "MISMATCH" | "LOOKUP_FAILED";
 
 export interface DomainStoreOptions {
   dns: TxtResolver;
@@ -36,6 +33,11 @@ export interface DomainStoreOptions {
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
   /** The slug host of a tenant, for the cache invalidation of its issuer. */
   slugHostOf?: (tenantId: string) => Promise<string | undefined>;
+  /**
+   * Records what the platform did to a claim by itself (a lapse, an eviction)
+   * as an admin event. A failure is logged and never fails the write.
+   */
+  record?: (event: DomainSystemEvent) => Promise<void>;
   now?: () => Date;
   log?: (message: string) => void;
 }
@@ -48,6 +50,7 @@ export interface DomainStoreOptions {
 export class DomainStore {
   private readonly now: () => Date;
   private readonly log: (message: string) => void;
+  private readonly rechecker: DomainRecheck;
 
   constructor(
     private readonly collection: TypedCollection<typeof domains>,
@@ -55,6 +58,13 @@ export class DomainStore {
   ) {
     this.now = options.now ?? (() => new Date());
     this.log = options.log ?? ((message) => console.warn(message));
+    this.rechecker = new DomainRecheck(collection, {
+      dns: options.dns,
+      now: this.now,
+      log: this.log,
+      changed: (tenantId, hosts) => this.changed(tenantId, hosts),
+      emit: (event) => this.emit(event),
+    });
   }
 
   // -- reads ---------------------------------------------------------------
@@ -162,7 +172,9 @@ export class DomainStore {
   /**
    * Asks DNS for `_clavix.<host>` and verifies the claim when the token is
    * there. Returns the claim as it stands and why it did not verify. A claim
-   * already verified is returned as it is, without a lookup.
+   * already verified is returned as it is, without a lookup. A claim checked
+   * less than `VERIFY_COOLDOWN_SECONDS` ago is refused (`VERIFY_COOLDOWN`,
+   * `retryAfter`) without a lookup: the console cannot be used to hammer DNS.
    */
   async verify(
     tenantId: ObjectId,
@@ -171,8 +183,9 @@ export class DomainStore {
     const claim = await this.find(tenantId, id);
     if (claim === undefined) throw notFound();
     if (claim.status === "verified") return { domain: claim, failure: null };
-    const failure = await this.check(claim);
     const now = this.now();
+    this.assertOutsideCooldown(claim, now);
+    const failure = await checkClaim(this.options.dns, claim);
     if (failure !== null) {
       const domain = await this.collection.update(claim._id, {
         checkedAt: now,
@@ -237,75 +250,11 @@ export class DomainStore {
 
   // -- recheck -------------------------------------------------------------
 
-  /**
-   * One pass over the verified domains: the TXT record is read again. A
-   * lookup that could not be answered changes nothing. A domain that fails
-   * for `RECHECK_GRACE_DAYS` becomes `unverified` (a primary one keeps its
-   * flag and its issuer: nothing moves silently, the owners are told) and
-   * `onUnverified` is called once for it.
-   */
-  async recheckAll(
-    onUnverified: (domain: DomainDoc) => Promise<void> = async () => {},
+  /** One recheck pass (`DomainRecheck`, `domains.recheck.ts`). */
+  recheckAll(
+    onUnverified?: (domain: DomainDoc) => Promise<void>,
   ): Promise<{ checked: number; unverified: number }> {
-    const report = { checked: 0, unverified: 0 };
-    const verified = await this.collection.findMany({
-      filter: { status: "verified" },
-      sort: { checkedAt: 1 },
-    });
-    for (const claim of verified) {
-      try {
-        await this.recheckOne(claim, report, onUnverified);
-      } catch (error) {
-        this.log(`domains: recheck of ${claim.host} failed: ${String(error)}`);
-      }
-    }
-    return report;
-  }
-
-  private async recheckOne(
-    claim: DomainDoc,
-    report: { checked: number; unverified: number },
-    onUnverified: (domain: DomainDoc) => Promise<void>,
-  ): Promise<void> {
-    const failure = await this.check(claim);
-    report.checked++;
-    const now = this.now();
-    if (failure === "LOOKUP_FAILED") return;
-    if (failure === null) {
-      if (claim.failingSince !== null) {
-        await this.collection.update(claim._id, {
-          failingSince: null,
-          checkedAt: now,
-        });
-      } else {
-        await this.collection.update(claim._id, { checkedAt: now });
-      }
-      return;
-    }
-    const since = claim.failingSince ?? now;
-    if (now.getTime() - since.getTime() < RECHECK_GRACE_DAYS * DAY_MS) {
-      await this.collection.update(claim._id, {
-        failingSince: since,
-        checkedAt: now,
-      });
-      return;
-    }
-    // Still `primary` when it was: the issuer never changes by itself, and
-    // the console shows the banner. It stops serving all the same.
-    const lapsed = await this.collection.update(claim._id, {
-      status: "unverified",
-      failingSince: since,
-      checkedAt: now,
-    });
-    await this.changed(claim.tenantId, [claim.host]);
-    report.unverified++;
-    try {
-      await onUnverified(lapsed);
-    } catch (error) {
-      this.log(
-        `domains: could not tell the owners of ${claim.host}: ${String(error)}`,
-      );
-    }
+    return this.rechecker.recheckAll(onUnverified);
   }
 
   // -- internals -----------------------------------------------------------
@@ -325,15 +274,17 @@ export class DomainStore {
     );
   }
 
-  private async check(claim: DomainDoc): Promise<CheckFailure | null> {
-    const answer = await this.options.dns.resolveTxt(txtNameOf(claim.host));
-    if (answer.kind === "failed") return "LOOKUP_FAILED";
-    if (answer.kind === "none" || answer.values.length === 0) {
-      return "NO_RECORD";
-    }
-    return answer.values.some((value) => value.trim() === claim.txtToken)
-      ? null
-      : "MISMATCH";
+  private assertOutsideCooldown(claim: DomainDoc, now: Date) {
+    if (claim.checkedAt === null) return;
+    const waitMs =
+      VERIFY_COOLDOWN_SECONDS * 1_000 -
+      (now.getTime() - claim.checkedAt.getTime());
+    if (waitMs <= 0) return;
+    throw new DomainError(
+      "VERIFY_COOLDOWN",
+      "This domain was checked a moment ago; try again shortly",
+      Math.ceil(waitMs / 1_000),
+    );
   }
 
   // Verification: the unique index on verified hosts decides a race; the
@@ -362,9 +313,24 @@ export class DomainStore {
     // slug host: that tenant's cached entries must go too.
     for (const loser of evicted) {
       if (loser.primary) await this.changed(loser.tenantId, [claim.host]);
+      await this.emit({
+        action: "domain.evict",
+        tenantId: loser.tenantId,
+        domainId: loser._id,
+      });
     }
     await this.changed(claim.tenantId, [claim.host]);
     return verified;
+  }
+
+  private async emit(event: DomainSystemEvent) {
+    try {
+      await this.options.record?.(event);
+    } catch (error) {
+      this.log(
+        `domains: could not record the ${event.action} event: ${String(error)}`,
+      );
+    }
   }
 
   private async changed(tenantId: ObjectId, hosts: string[]) {

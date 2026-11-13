@@ -37,6 +37,7 @@ const STATUS = {
   DOMAIN_TAKEN: 409,
   DOMAIN_PRIMARY: 409,
   DOMAIN_NOT_VERIFIED: 409,
+  VERIFY_COOLDOWN: 429,
 } as const;
 
 // The service's refusals as the contract's GraphQL errors (the quota one too).
@@ -49,7 +50,15 @@ async function refusing<T>(call: () => Promise<T>): Promise<T> {
       throw new GraphQLError(failure.message, {
         extensions: {
           code: failure.code,
-          http: { status: STATUS[failure.code] },
+          http: {
+            status: STATUS[failure.code],
+            ...(failure.retryAfter === undefined
+              ? {}
+              : { headers: { "retry-after": String(failure.retryAfter) } }),
+          },
+          ...(failure.retryAfter === undefined
+            ? {}
+            : { retryAfter: failure.retryAfter }),
           ...(failure.code === "BAD_USER_INPUT" ? { field: "host" } : {}),
         },
       });
@@ -64,6 +73,10 @@ const target = (tenantId: ObjectId, id: string) => ({
   id,
   tenantId: tenantId.toHexString(),
 });
+
+/** The `Exclusive` key of a tenant's domain claims. */
+const domainsKey = (tenant: { _id: ObjectId }) =>
+  `console:domains:${tenant._id.toHexString()}`;
 
 const shape = (doc: DomainDoc) => ({
   id: doc._id.toHexString(),
@@ -93,8 +106,10 @@ export const domains: Resolvers = {
       const tenant = await activeTenant(ctx, tenantId);
       const stored = await tenantAdmin.find(tenantId);
       const quota = stored === undefined ? 0 : effectiveQuotas(stored).domains;
-      const created = await refusing(() =>
-        domainStore.add(tenant._id, host, quota),
+      // The quota count and the insert are not atomic: one claim at a time
+      // per tenant, across processes when there is a shared lock.
+      const created = await ctx.exclusive(domainsKey(tenant), () =>
+        refusing(() => domainStore.add(tenant._id, host, quota)),
       );
       await ctx.audit(
         "domain.add",

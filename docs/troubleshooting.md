@@ -436,7 +436,7 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 
 **Fix:** leave them alone. Manage them with the `2026-11-12-console` migration, not through the API.
 
-## Custom domains: `BAD_USER_INPUT` on `host`, `DOMAIN_TAKEN`, `DOMAIN_PRIMARY`, `DOMAIN_NOT_VERIFIED`
+## Custom domains: `BAD_USER_INPUT` on `host`, `DOMAIN_TAKEN`, `DOMAIN_PRIMARY`, `DOMAIN_NOT_VERIFIED`, `VERIFY_COOLDOWN`
 
 - **`BAD_USER_INPUT` (field `host`)**: the host is not a public domain name. IPs, `localhost`,
   wildcards, a scheme, port or path, reserved suffixes (`.local`, `.internal`, `.test`, ...) and
@@ -447,6 +447,8 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 - **`verifyDomain` returns `failure`**: `NO_RECORD` (no `_clavix.<host>` TXT yet; DNS may take
   minutes to propagate), `MISMATCH` (the record does not hold this domain's token; each tenant has
   its own), `LOOKUP_FAILED` (the resolver did not answer; retry).
+- **`VERIFY_COOLDOWN` (429)**: a claim is checked at most once every 60 seconds. No DNS lookup was
+  made; `extensions.retryAfter` is the seconds left. Wait, then call `verifyDomain` again.
 - **`DOMAIN_PRIMARY`**: make another verified domain primary first, then remove this one.
 - **`DOMAIN_NOT_VERIFIED`**: only a verified domain can be made primary.
 - **A domain turned `UNVERIFIED`**: its TXT record was missing for 7 days. It stopped serving and
@@ -455,9 +457,11 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 - **`/readyz` answers 503**: the body's `checks` names `mongo` or `redis` as `down`; see
   [operations.md](operations.md), "Troubleshooting". `/healthz` stays 200 meanwhile.
 - **The TLS ask always answers 404**: `CLAVIX_TLS_ASK_SECRET` is unset or Caddy's `token` differs;
-  the request went through a proxy (`X-Forwarded-*` is refused: Caddy must call the app directly);
+  the request went through a proxy (`X-Forwarded-*`, `X-Real-IP` and `Forwarded` are refused: Caddy must call the app directly);
   the domain is pending, unverified, unknown, or its tenant is suspended or in the trash. **429**:
-  past `CLAVIX_TLS_ASK_LIMIT` asks per minute.
+  past `CLAVIX_TLS_ASK_LIMIT` asks per minute, **or Redis is down**: the limit fails closed
+  (every ask is refused and `tls ask: rate limit unavailable, refusing` is logged). Restore Redis;
+  Caddy retries and certificates already issued keep serving.
 - Caddy: `on_demand_tls { ask http://api:3000/internal/tls/ask?token=<secret> }` (Caddy
   appends `&domain=<host>`). Never route `/internal/` from the public listener.
 - **`NOT_FOUND` on a domain mutation**: the tenant is unknown or suspended, or the id belongs to

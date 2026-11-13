@@ -17,7 +17,7 @@ export interface TlsAskDeps {
    * none is, only custom domains are served.
    */
   allowedPlatformHost?: ((host: string) => Promise<boolean>) | undefined;
-  /** Spends one ask; `false` past the limit. Redis down: `true` (logged by the implementation). */
+  /** Spends one ask; `false` past the limit, and when the limiter cannot answer (fails closed, see `tlsAskGate`). */
   limit?: (() => Promise<boolean>) | undefined;
   log?: (message: string) => void;
 }
@@ -50,7 +50,7 @@ const answer = (status: number) =>
  * everything else, 429 past the rate limit. It reveals
  * nothing: a wrong secret, a missing or malformed domain, an unknown, pending,
  * lapsed or suspended one all answer the same bare 404. A request that went
- * through a proxy (it carries `X-Forwarded-*`) is public traffic and is
+ * through a proxy (it carries `X-Forwarded-*`, `X-Real-IP` or `Forwarded`) is public traffic and is
  * refused too: Caddy calls this URL itself.
  */
 export function tlsAsk(deps: TlsAskDeps) {
@@ -61,6 +61,8 @@ export function tlsAsk(deps: TlsAskDeps) {
     const forwarded =
       request.headers.has("x-forwarded-for") ||
       request.headers.has("x-forwarded-host") ||
+      request.headers.has("x-forwarded-proto") ||
+      request.headers.has("x-real-ip") ||
       request.headers.has("forwarded");
     if (forwarded) return answer(404);
     const url = new URL(request.url);

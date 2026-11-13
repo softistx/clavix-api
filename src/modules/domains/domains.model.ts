@@ -1,4 +1,9 @@
-import { defineCollection, id, objectId } from "@softistx/mongo";
+import {
+  defineCollection,
+  id,
+  objectId,
+  type ReadDocumentOf,
+} from "@softistx/mongo";
 import { z } from "zod";
 
 export const DOMAIN_STATUSES = ["pending", "verified", "unverified"] as const;
@@ -49,3 +54,5 @@ export const domains = defineCollection({
   ],
   timestamps: true,
 });
+
+export type DomainDoc = ReadDocumentOf<typeof domains>;
