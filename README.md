@@ -229,7 +229,7 @@ the first one with `--create` (mailed link; the account and role are made when i
 
 ```sh
 bun run operators:grant --email ada@example.com --create   # first operator on a fresh database
-bun run operators:grant --email ada@example.com            # platform owner (account exists)
+bun run operators:grant --email ada@example.com            # platform owner (account exists and enabled)
 bun run operators:grant --email bob@example.com --role viewer
 ```
 

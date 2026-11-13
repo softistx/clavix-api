@@ -161,3 +161,22 @@ describe("an accept racing a deleteUser", () => {
     expect(granted).toEqual([]);
   });
 });
+
+describe("an accept racing a disableUser", () => {
+  test("an owner is not granted to an account disabled under the user lock", async () => {
+    const known: Record<string, boolean> = { vic: true };
+    const { hooks, granted, exclusive } = setup(known);
+    const disabling = exclusive(lockOf("vic"), async () => {
+      known.vic = false;
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await expect(
+      hooks.onAccepted({
+        invitation: invitation("owner", null),
+        user: { id: "vic" },
+      }),
+    ).rejects.toThrow();
+    await disabling;
+    expect(granted).toEqual([]);
+  });
+});
