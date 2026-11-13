@@ -1,4 +1,3 @@
-import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import type { ScopeTextsFor } from "@/modules/consent/scope-labels";
 import { Catalog } from "@/modules/resources/catalog";
@@ -52,10 +51,22 @@ export const catalog = new Catalog({
 /** The tenant's scope texts the consent page shows, for the request's host. */
 export const scopeTextsFor: ScopeTextsFor = async (request) => {
   const tenant = await tenantResolver.resolveRequest(request);
-  if (tenant === null) return new Map();
-  const found = await scopeToTenant(
-    mongo.db.scopes,
-    new ObjectId(tenant.tenantId),
-  ).findMany();
-  return new Map(found.map((scope) => [scope.name, scope.description]));
+  if (tenant === null) return [];
+  const tenantId = new ObjectId(tenant.tenantId);
+  const [scopes, resources] = await Promise.all([
+    catalog.listScopes(tenantId),
+    catalog.listResources(tenantId),
+  ]);
+  const uris = new Map(
+    resources.map((resource) => [resource._id.toHexString(), resource.uri]),
+  );
+  return scopes.flatMap((scope) => {
+    const resource =
+      scope.resourceId === null
+        ? null
+        : uris.get(scope.resourceId.toHexString());
+    return resource === undefined
+      ? []
+      : [{ name: scope.name, resource, description: scope.description }];
+  });
 };

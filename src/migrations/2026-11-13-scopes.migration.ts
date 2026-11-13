@@ -14,57 +14,20 @@ export const id = "2026-11-13-scopes";
  * Moves each resource's `scopes` strings to `Scope` documents (empty consent
  * texts, the resource as owner; one the resource has already is left alone),
  * then removes the strings. Returns how many scopes it created.
- *
- * A scope name is unique in a tenant now. Two resources of one tenant that
- * both list a name cannot both keep it: the migration stops before writing
- * anything and names them, so an operator renames one (`resources:create`
- * with the previous code) rather than a resource silently losing a scope.
  */
 export async function moveScopesToDocuments(db: Db): Promise<number> {
   const resourceDocs = db.collection("resources");
   const scopeDocs = getCollection(db, scopes);
-  const legacy = await resourceDocs
-    .find({ scopes: { $exists: true } })
-    .sort({ _id: 1 })
-    .toArray();
-  const namesOf = (resource: (typeof legacy)[number]) => [
-    ...new Set(
-      Array.isArray(resource["scopes"]) ? (resource["scopes"] as string[]) : [],
-    ),
-  ];
-
-  // First pass, no write: who would own each name.
-  const owners = new Map<string, string>();
-  const clashes: string[] = [];
-  for (const resource of legacy) {
-    const owned = scopeToTenant(scopeDocs, resource["tenantId"]);
-    for (const name of namesOf(resource)) {
-      const key = `${String(resource["tenantId"])} ${name}`;
-      const existing = await owned.findFirst({ name });
-      const owner =
-        owners.get(key) ??
-        (existing === undefined
-          ? undefined
-          : (existing.resourceId?.toHexString() ?? "a standard scope"));
-      if (owner !== undefined && owner !== String(resource._id)) {
-        clashes.push(
-          `scope "${name}" of resource ${resource["uri"]} (tenant ${String(resource["tenantId"])}) is already ${owner}'s`,
-        );
-      }
-      owners.set(key, owner ?? String(resource._id));
-    }
-  }
-  if (clashes.length > 0) {
-    throw new Error(
-      `a scope name is unique in a tenant; rename before migrating: ${clashes.join("; ")}`,
-    );
-  }
-
   let created = 0;
-  for (const resource of legacy) {
+  for (const resource of await resourceDocs
+    .find({ scopes: { $exists: true } })
+    .toArray()) {
+    const names = Array.isArray(resource["scopes"])
+      ? (resource["scopes"] as string[])
+      : [];
     const owned = scopeToTenant(scopeDocs, resource["tenantId"]);
-    for (const name of namesOf(resource)) {
-      if (await owned.exists({ name })) continue;
+    for (const name of new Set(names)) {
+      if (await owned.exists({ name, resourceId: resource._id })) continue;
       await owned.create({
         name,
         description: { fr: "", en: "" },
@@ -82,8 +45,24 @@ export async function moveScopesToDocuments(db: Db): Promise<number> {
 }
 
 /**
+ * The client id inside a key of the partitioned janus store
+ * (`JSON.stringify([partition, id])`), or null when the key has another shape.
+ */
+function clientIdOf(key: unknown): string | null {
+  try {
+    const parts: unknown = JSON.parse(String(key));
+    const id = Array.isArray(parts) ? parts[1] : undefined;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Lists the clients the janus store already holds in the console's
- * `clientIndex` (Temporary, until @softistx/janus-oauth#706). Idempotent.
+ * `clientIndex`. Idempotent. The store cannot list its clients yet, so this
+ * reads its collection for the ids only (each record is then read through the
+ * store): Temporary, until @softistx/janus-oauth#706 (`listClients`).
  */
 export async function backfillClientIndex(db: Db): Promise<number> {
   const index = createClientIndex(getCollection(db, clientIndex));
@@ -96,7 +75,9 @@ export async function backfillClientIndex(db: Db): Promise<number> {
       .find({ partition })
       .toArray();
     for (const doc of docs) {
-      const record = await store.findClient(String(doc._id));
+      const clientId = clientIdOf(doc._id);
+      if (clientId === null) continue;
+      const record = await store.findClient(clientId);
       if (record === null || record.source !== "registered") continue;
       await index.upsert(tenant._id, {
         clientId: record.id,

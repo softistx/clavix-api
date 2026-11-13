@@ -102,7 +102,7 @@ export async function registerResource(
   }
   const scoped = scopeToTenant(options.collection, tenant._id);
   let existing = await scoped.findFirst({ uri });
-  const created = existing === undefined;
+  let created = existing === undefined;
   if (existing === undefined) {
     try {
       existing = await scoped.create({ uri, name });
@@ -112,6 +112,7 @@ export async function registerResource(
       if (!(error instanceof ConflictError)) throw error;
       existing = await scoped.findFirst({ uri });
       if (existing === undefined) throw error;
+      created = false;
       await scoped.update(existing._id, { name });
     }
   } else {

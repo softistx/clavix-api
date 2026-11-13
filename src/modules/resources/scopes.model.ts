@@ -4,8 +4,9 @@ import { z } from "zod";
 // A scope of a tenant (ADR-0025): what a client may ask for, with the text the
 // consent page shows in French and English, the resource it belongs to (`null`
 // for a standard OpenID Connect scope such as `openid`) and the claims it
-// opens. The name is the OAuth scope token and unique in the tenant: a token
-// carries the bare name, so two resources cannot both own `read`.
+// opens. The name is the OAuth scope token, unique in its resource (and among
+// the standard ones): an access token is for one resource (RFC 8707), so two
+// APIs of a tenant may each have their own `read`.
 // Tenant-owned (ADR-0006): reached only through `scopeToTenant`.
 export const scopes = defineCollection({
   name: "scopes",
@@ -22,11 +23,10 @@ export const scopes = defineCollection({
   }),
   indexes: [
     {
-      key: { tenantId: 1, name: 1 },
+      key: { tenantId: 1, resourceId: 1, name: 1 },
       unique: true,
-      name: "scopes_tenant_name_unique",
+      name: "scopes_tenant_resource_name_unique",
     },
-    { key: { tenantId: 1, resourceId: 1 }, name: "scopes_tenant_resource" },
   ],
   timestamps: true,
 });

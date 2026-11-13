@@ -53,6 +53,28 @@ function textsOf(ctx: WithServers & { request?: Request }) {
   return texts;
 }
 
+interface Labelled {
+  name: string;
+  label: string;
+}
+
+// The scopes of a pending request or of a connected app, relabelled.
+async function labelled(
+  parent: { resource: string; scopes: Labelled[] },
+  _: unknown,
+  ctx: WithServers & { request?: Request },
+): Promise<Labelled[]> {
+  const texts = await textsOf(ctx);
+  if (texts === undefined) return parent.scopes;
+  const locale = localeOf(ctx.request?.headers.get("accept-language") ?? null);
+  return parent.scopes.map((scope) => ({
+    name: scope.name,
+    label:
+      textOf(texts, { name: scope.name, resource: parent.resource }, locale) ??
+      scope.label,
+  }));
+}
+
 const requestOf = (ctx: unknown): Request => {
   const { request } = ctx as { request?: Request };
   if (request === undefined) throw denial("NOT_FOUND");
@@ -77,20 +99,10 @@ export const consentResolvers: IResolvers = {
       return server;
     },
   }),
-  // The label of a scope is the tenant's description of it, in the viewer's
-  // language (`Accept-Language`); the scope's name when it wrote none.
-  OAuthScope: {
-    label: async (
-      scope: { name: string; label: string },
-      _: unknown,
-      ctx: WithServers & { request?: Request },
-    ) => {
-      const texts = await textsOf(ctx);
-      if (texts === undefined) return scope.label;
-      const locale = localeOf(
-        ctx.request?.headers.get("accept-language") ?? null,
-      );
-      return textOf(texts, scope.name, locale) ?? scope.label;
-    },
-  },
+  // The label of a scope is the tenant's description of it (console, `Scope`),
+  // in the viewer's language (`Accept-Language`); janus's own (the scope's
+  // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one
+  // static map, not per tenant, resource and language, hence these two fields.
+  OAuthRequest: { scopes: labelled },
+  OAuthConnectedApp: { scopes: labelled },
 };

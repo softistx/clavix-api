@@ -192,12 +192,6 @@ export class Catalog {
         `scope "${name}" needs a resource: only ${OIDC_SCOPES.join(", ")} have none`,
       );
     }
-    if (resourceId !== null && isOidcScope(name)) {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        `scope "${name}" is a standard OpenID Connect scope: it belongs to no resource`,
-      );
-    }
     try {
       return await this.scopesOf(tenantId).create({
         name,
@@ -212,7 +206,9 @@ export class Catalog {
       if (error instanceof ConflictError) {
         throw new CatalogError(
           "CONFLICT",
-          `A scope is already named "${name}"`,
+          resourceId === null
+            ? `The standard scope "${name}" is already described`
+            : `The resource already has a scope named "${name}"`,
         );
       }
       throw error;
@@ -255,8 +251,7 @@ export class Catalog {
   /**
    * Makes `names` the scopes of the resource (the `resources:create` script's
    * meaning of "the scopes are replaced"): missing ones are created with empty
-   * texts, the others keep theirs, the rest are removed. A name another
-   * resource owns is refused.
+   * texts, the others keep theirs, the rest are removed.
    */
   async replaceResourceScopes(
     tenantId: ObjectId,
@@ -264,23 +259,7 @@ export class Catalog {
     names: readonly string[],
   ): Promise<void> {
     const scoped = this.scopesOf(tenantId);
-    const all = await scoped.findMany();
-    for (const name of names) {
-      if (isOidcScope(name)) {
-        throw new CatalogError(
-          "BAD_USER_INPUT",
-          `scope "${name}" is a standard OpenID Connect scope: it belongs to no resource`,
-        );
-      }
-      const owner = all.find((scope) => scope.name === name);
-      if (owner !== undefined && !owner.resourceId?.equals(resource)) {
-        throw new CatalogError(
-          "CONFLICT",
-          `scope "${name}" already belongs to another resource or is a standard scope`,
-        );
-      }
-    }
-    const own = all.filter((scope) => scope.resourceId?.equals(resource));
+    const own = await scoped.findMany({ filter: { resourceId: resource } });
     for (const scope of own) {
       if (!names.includes(scope.name)) {
         await scoped.hardDeleteMany({ _id: scope._id });

@@ -63,6 +63,15 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor: storedResourcesFor(mongo.db.resources, mongo.db.scopes),
 });
 
+const scopeNamesOf = async (resourceId: unknown) =>
+  (
+    await mongo.db.scopes.raw
+      .find({ resourceId: resourceId as never })
+      .toArray()
+  )
+    .map((scope) => scope.name)
+    .sort();
+
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
 const VERIFIER = "v".repeat(64);
 
@@ -177,7 +186,10 @@ describe("resources:create", () => {
       .find({ tenantId: alpha?._id as never })
       .toArray();
     expect(stored).toHaveLength(1);
-    expect(stored[0]).toMatchObject({ name: "Alpha API", scopes: ["read"] });
+    expect(stored[0]).toMatchObject({ name: "Alpha API" });
+    // The scopes are `Scope` documents of the resource, replaced by the re-run.
+    expect(stored[0]?.["scopes"]).toBeUndefined();
+    expect(await scopeNamesOf(stored[0]?._id)).toEqual(["read"]);
   });
 
   test("refuses bad input, an unknown or suspended tenant and the userinfo URL", async () => {
@@ -241,13 +253,13 @@ describe("resources:create", () => {
       { ...options, collection: stale },
       { tenant: "resalpha", uri: API_RACE, scopes: ["write"] },
     );
-    expect(result).toMatchObject({ scopes: ["write"] });
+    expect(result).toMatchObject({ created: false, scopes: ["write"] });
     const alpha = await findTenant("resalpha");
     const stored = await mongo.db.resources.raw
       .find({ tenantId: alpha?._id as never, uri: API_RACE })
       .toArray();
     expect(stored).toHaveLength(1);
-    expect(stored[0]?.scopes).toEqual(["write"]);
+    expect(await scopeNamesOf(stored[0]?._id)).toEqual(["write"]);
   });
 
   test("a store failure is not an input error: it reaches the script as it is", async () => {
