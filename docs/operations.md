@@ -249,6 +249,13 @@ refuse a damaged archive). It needs `mongodump` and `mongorestore` on the PATH
 (`brew install mongodb-database-tools`, or set `MONGODUMP` / `MONGORESTORE`) and
 is skipped without them.
 
+The drill also covers the tenant purge (see the README, "The trash"): a backup older than a purge
+brings the purged tenant's data back, still marked as trashed and long due. After a real restore the
+API's start pass purges it again (`tenants: purged the partition of <id>` in the logs, then the
+tenant-owned collections), so do not restore a backup into production just to read a purged
+tenant. In the scratch database of the drill, check that a tenant in the trash (`deletedAt` set) is
+listed with its `purgeAt`, and that the `tenant-purge` queue still ticks at 03:17 UTC.
+
 ## Signing keys
 
 Each tenant's ES256 keys rotate by themselves: a key signs for 90 days, the next
