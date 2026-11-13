@@ -7,7 +7,6 @@ import { catalog } from "@/config/resources";
 import { rolesFor, rolesService } from "@/config/roles";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createFlow } from "~/oauth-flow";
-import { userinfoOf } from "./issuers";
 
 const X = "https://x.roles.test/api";
 const Y = "https://y.roles.test/api";
@@ -131,7 +130,10 @@ describe("the roles claim", () => {
     expect(claimsOf(body.access_token)).toEqual(["late"]);
   });
 
-  test("the userinfo audience is the tenant-wide view", () => {
-    expect(userinfoOf("https://roles-a.clavix.test")).toContain("/userinfo");
+  test("a token with no resource (the userinfo one) carries the tenant-wide roles only", async () => {
+    const tokens = await flow.tokensOf("roles-a", "openid", {
+      userId: "user-roles-a",
+    });
+    expect(claimsOf(tokens.access_token)).toEqual(["auditor", "member"]);
   });
 });

@@ -70,10 +70,10 @@ type Query {
 }
 
 type Mutation {
-  "Needs `edit` on the tenant."
+  "Needs `edit` on the tenant. Errors: CONFLICT (id taken, also when two calls race), QUOTA_EXCEEDED (409, past the plan's `clients` quota)."
   createClient(tenantId: ID!, input: CreateClientInput!): CreatedClient!
   updateClient(tenantId: ID!, id: ID!, input: UpdateClientInput!): Client!
   rotateClientSecret(tenantId: ID!, id: ID!): RotatedClientSecret!
-  "Deletes the client and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone."
+  "Deletes the client and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
   deleteClient(tenantId: ID!, id: ID!): Boolean!
 }

@@ -359,11 +359,17 @@ describe("assignments", () => {
     const rid = found?._id.toHexString() as string;
     const role = await make(admin, tenantA, "res-bound", { resourceId: rid });
     await admin(ASSIGN, { t: tenantA, r: role, u: userA1 });
+    await mongo.db.adminEvents.raw.deleteMany({});
     const removed = await admin(
       `mutation($t: ID!, $id: ID!) { deleteResource(tenantId: $t, id: $id) }`,
       { t: tenantA, id: rid },
     );
     expect(removed.errors).toBeUndefined();
+    expect(
+      (await events())
+        .filter((e) => e.action === "role.delete")
+        .map((e) => e.target.id),
+    ).toEqual([role]);
     expect(
       (await viewer(GET, { t: tenantA, id: role })).data?.["role"],
     ).toBeNull();
@@ -372,6 +378,18 @@ describe("assignments", () => {
         roleId: new ObjectId(role),
       }),
     ).toBe(0);
+  });
+});
+
+describe("a suspended tenant", () => {
+  test("its roles are NOT_FOUND, even for its admin", async () => {
+    const id = (await tenantsService.create({ slug: "rl-s", name: "S" })).id;
+    await access.grantTenant(id, "rl-admin-a", "admin");
+    await tenantsService.suspend(id);
+    expect(codeOf(await admin(LIST, { t: id }))).toBe("NOT_FOUND");
+    expect(
+      codeOf(await admin(CREATE, { t: id, input: { name: "nope" } })),
+    ).toBe("NOT_FOUND");
   });
 });
 

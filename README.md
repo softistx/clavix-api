@@ -272,7 +272,7 @@ the assignments and the resource-scoped roles that depended on them.
 
 Every field takes the `tenantId` it works on. Queries need `view` on that tenant (any role),
 mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another tenant, gets
-`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (also a suspended tenant), `CONFLICT`,
+`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (also a suspended tenant), `CONFLICT`, `QUOTA_EXCEEDED`,
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 
@@ -283,7 +283,7 @@ update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`
 | `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
 | `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                                                                                                                                           |
 | `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                           |
-| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens                                                                                                                                                |
+| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                          |
 | `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                 |
 | `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                  |
 | `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                       |

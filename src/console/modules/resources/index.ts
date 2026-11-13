@@ -129,7 +129,6 @@ export const resources: Resolvers = {
     deleteResource: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
       let scopes: StoredScopeDoc[] = [];
-      let roles: { _id: ObjectId }[] = [];
       const removed = await refusing(async () => {
         const found = await catalog.findResource(tenant._id, id);
         keepConsoleResource(tenant, found);
@@ -139,7 +138,19 @@ export const resources: Resolvers = {
           });
           // The roles scoped to it go first: were the resource gone before them
           // a retry would find nothing to clean up.
-          roles = await rolesService.deleteForResource(tenant._id, found._id);
+          const roles = await rolesService.deleteForResource(
+            tenant._id,
+            found._id,
+          );
+          // Recorded now: were the resource delete to fail, a retry finds no
+          // role left and could not record them.
+          for (const role of roles) {
+            await ctx.audit("role.delete", {
+              type: "role",
+              id: role._id.toHexString(),
+              tenantId: tenant._id.toHexString(),
+            });
+          }
         }
         return catalog.deleteResource(tenant._id, id);
       });
@@ -147,13 +158,6 @@ export const resources: Resolvers = {
       // recorded on a repeat too (it may be the event the first run missed).
       for (const scope of scopes) {
         await ctx.audit("scope.delete", target("scope", tenant._id, scope._id));
-      }
-      for (const role of roles) {
-        await ctx.audit("role.delete", {
-          type: "role",
-          id: role._id.toHexString(),
-          tenantId: tenant._id.toHexString(),
-        });
       }
       if (ObjectId.isValid(id)) {
         await ctx.audit(

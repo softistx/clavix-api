@@ -119,11 +119,21 @@ export class RolesService {
       resourceId = resource?._id ?? null;
     }
     try {
-      return await this.rolesOf(tenantId).create({
+      const created = await this.rolesOf(tenantId).create({
         name,
         description,
         resourceId,
       });
+      // The resource may have been deleted since it was read, after its roles
+      // were cleaned up: take the role back rather than leave it dangling.
+      if (
+        resourceId !== null &&
+        (await this.resourcesOf(tenantId).findById(resourceId)) === undefined
+      ) {
+        await this.rolesOf(tenantId).hardDeleteMany({ _id: created._id });
+        refuse("NOT_FOUND", "No such resource");
+      }
+      return created;
     } catch (error) {
       if (error instanceof ConflictError) throw conflict(name);
       throw error;
