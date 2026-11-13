@@ -10,7 +10,7 @@ Today it serves:
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
 - on `POST /console/graphql`, the console API (`me`, tenants with plans, quotas, usage, suspension and
-  trash, a tenant's clients, resources, scopes and branding), behind a bearer token;
+  trash, the admins of a tenant, a tenant's clients, resources, scopes and branding), behind a bearer token;
 - scripts that create tenants, OAuth clients and API resources. Emptying the trash after 30 days is not
   scheduled yet (clavix-api#112); the console's refusals are in `docs/troubleshooting.md`.
 
@@ -144,11 +144,35 @@ cookie and resolves no tenant from the host: the credential is an access token o
 tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
-resources and scopes (below) and the branding fields (see "Branding"); tenants are still created
+resources and scopes, the admins of a tenant (below) and the branding fields (see "Branding"); tenants are still created
 by script.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
+
+### Admins of a tenant
+
+A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `viewer` on it.
+`memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
+email, role)`, `changeMembership`, `removeMembership` and `revokeAdminInvitation` need `manage` (the
+tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
+`admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
+That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
+host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
+revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session. Inviting an address that is
+already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it. The
+last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409). Role changes of one
+tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
+within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
+already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they
+sign in as usual. An invitation to a suspended or deleted tenant is `INVITATION_INVALID` until it is back.
+
+Each of the four mutations that succeeds records an admin event (see "Admin events"), repeats included:
+`membership.invite` and `membership.revokeInvitation` (target: the invitation's id, never the
+address), `membership.change` and `membership.remove` (target: the user's id). Accepting an
+invitation is the invitee's act on the hosted API and records none. A `userId` or `invitationId`
+longer than 200 characters is `BAD_USER_INPUT` (400); a `tenantId` is 24 hexadecimal characters, in
+any case.
 
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and

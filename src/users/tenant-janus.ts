@@ -36,10 +36,34 @@ export interface TenantJanusOptions {
   db: Db;
   /** The global magic-link switch (`CLAVIX_MAGIC_LINK`); off when left out. */
   magicLink?: boolean;
+  /** What accepting an invitation of this tenant checks and does; nothing when left out. */
+  invitationHooks?: InvitationHooksFor;
 }
 
+/** janus's `invitations.beforeAccept` and `onAccepted` of one tenant. */
+export interface InvitationHooks {
+  /** `false` refuses (`INVITATION_REFUSED`), nothing written. Free of side effects. */
+  beforeAccept(accepting: {
+    invitation: { scope: string; role: string };
+  }): boolean | Promise<boolean>;
+  /** Runs once per accepted invitation; throwing releases it. */
+  onAccepted(accepted: {
+    invitation: { scope: string; role: string };
+    user: { id: string };
+  }): void | Promise<void>;
+}
+
+export type InvitationHooksFor = (
+  tenant: ResolvedTenant,
+) => InvitationHooks | undefined;
+
 /** The janus instance of a tenant: its own partition of the user stores (ADR-0006, ADR-0008). */
-function buildJanus(db: Db, tenant: ResolvedTenant, magicLink: boolean) {
+function buildJanus(
+  db: Db,
+  tenant: ResolvedTenant,
+  magicLink: boolean,
+  hooks?: InvitationHooks,
+) {
   return janus({
     user: userSchema,
     email: "email",
@@ -70,14 +94,17 @@ function buildJanus(db: Db, tenant: ResolvedTenant, magicLink: boolean) {
     },
     // How a user enters a tenant that closed sign-up (`tenant.signUp`): the
     // invitation makes the user, e-mail proved. Who may invite and the role
-    // are M2 (`onAccepted` adds the membership then).
+    // are the caller's (`invitationHooks`): what the scope and the role mean,
+    // and what accepting grants. janus claims an invitation once, so
+    // `onAccepted` runs once.
     invitations: {
       store: createMongoInvitations(db, { partition: tenant.partition }),
       create: (invitation) => ({
         email: invitation.email,
         name: invitation.name,
       }),
-      onAccepted: () => {},
+      ...(hooks === undefined ? {} : { beforeAccept: hooks.beforeAccept }),
+      onAccepted: hooks?.onAccepted ?? (() => {}),
     },
   });
 }
@@ -88,8 +115,9 @@ export function buildTenantJanus(
   db: Db,
   tenant: ResolvedTenant,
   magicLink = false,
+  hooks?: InvitationHooks,
 ): TenantJanus {
-  return buildJanus(db, tenant, magicLink);
+  return buildJanus(db, tenant, magicLink, hooks);
 }
 
 /**
@@ -100,6 +128,7 @@ export function createTenantJanusIssuers({
   resolver,
   db,
   magicLink = false,
+  invitationHooks,
 }: TenantJanusOptions) {
   return createJanusIssuers({
     resolve: async (request) => {
@@ -108,6 +137,7 @@ export function createTenantJanusIssuers({
         ? null
         : { issuer: tenant.issuer, version: String(tenant.version), tenant };
     },
-    build: ({ tenant }) => buildTenantJanus(db, tenant, magicLink),
+    build: ({ tenant }) =>
+      buildTenantJanus(db, tenant, magicLink, invitationHooks?.(tenant)),
   });
 }

@@ -104,8 +104,8 @@ partitioned: never use them for tenant users.
   passkey is scoped to its rpId for good.
 - **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
   closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
-  Invitations: `createMongoInvitations(db, { partition })`; accepting one has no GraphQL surface
-  until the M2 console.
+  Invitations: `createMongoInvitations(db, { partition })`; accepting one is the hosted
+  `acceptInvitation` (below, "Admins of a tenant and invitations").
 
 ## E-mail code sign-in (`src/modules/auth`, `src/mail`)
 
@@ -243,6 +243,26 @@ every other failure a 401).
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. Two
   `createClient` of one id at the very same time are not told apart (the store has no
   insert-only write): the last one wins.
+- **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
+  membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
+  tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
+  per key in the process, plus the app's Redis lock when there is one, `config/exclusive.ts`): the
+  relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
+  Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
+  Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
+  (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
+  mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
+  (never copy it). An admin invitation is one of the `clavix` tenant under the scope
+  `adminScope(tenantId)` (`src/invitations/scope.ts`, `admin:<id>`); **only that scope grants a console
+  role**, so an invitation into a pool (the `clavix` pool included) uses any other scope. Accepting is
+  the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`, `acceptInvitation`, every
+  refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
+  `onAccepted`, given per tenant by `invitationHooks` (`src/config/users.ts`; on `clavix`:
+  `adminInvitationHooks`, which refuses a suspended or deleted tenant and grants the relation).
+  Its events are `membership.invite` / `.revokeInvitation` (target `invitation`) and `membership.change`
+  / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
+  canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse
+  after a write. Accepting (hosted, no console caller) records none.
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
