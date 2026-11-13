@@ -91,6 +91,25 @@ describe("a suspended or deleted tenant's hosted pages", () => {
     expect((await gql("frozen", REQUEST)).errors).toBeUndefined();
   });
 
+  test("social sign-in and invitation acceptance are refused like code sign-in, then work again", async () => {
+    const social = [
+      'mutation { socialSignInStart(provider: "github", returnTo: null) { url } }',
+      'mutation { socialSignInComplete(callbackUrl: "https://x.test/cb", flow: "f") { created } }',
+      'mutation { acceptInvitation(code: "abc") { signedIn } }',
+    ];
+    await tenantsService.suspend(id);
+    for (const query of social) {
+      const refused = await gql("frozen", query);
+      expect(refused.status).toBe(403);
+      expect(refused.errors?.[0]?.extensions?.code).toBe("TENANT_SUSPENDED");
+    }
+    await tenantsService.reactivate(id);
+    for (const query of social) {
+      const answer = await gql("frozen", query);
+      expect(answer.errors?.[0]?.extensions?.code).not.toBe("TENANT_SUSPENDED");
+    }
+  });
+
   test("a deleted tenant is refused like a suspended one, a restored one is not", async () => {
     await tenantsService.delete(id);
     const refused = await gql("frozen", REQUEST);

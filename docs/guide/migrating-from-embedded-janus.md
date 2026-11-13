@@ -32,7 +32,7 @@ Facts to hold on to (all Built, see the clavix-api README):
 
 ## 0. Prerequisites
 
-- A tenant for the application. Create it with `bun run tenants:create --slug <slug> --name <name>` (see the README, "Tenants"); a console for it is planned (see the [roadmap](../roadmap.md)), and the `clavix` tenant is seeded by a migration. See [Gaps](#gaps).
+- A tenant for the application. Create it with `bun run tenants:create --slug <slug> --name <name>` (see the README, "Tenants"); the console API's `createTenant` does the same, and the `clavix` tenant is seeded by a migration. See [Gaps](#gaps).
 - The hosted pages (sign-in, consent) are a later clavix-ui release
   ([clavix-ui#1](https://github.com/softistx/clavix-ui/issues/1)); check that issue's state.
   The API behind them (e-mail code, passkeys, consent) is Built.
@@ -153,13 +153,12 @@ package's guide ([`packages/clavix/docs`](https://github.com/softistx/alxia/tree
 Constraints to know before relying on it:
 - **The token's `aud` must contain the API's identifier, and that identifier is a Clavix
   resource.** Register it with
-  `bun run resources:create --tenant <slug> --uri <api audience> --scope <scope>` (the console
-  is planned). Sign-in itself works without one (a request with no `resource` is
+  `bun run resources:create --tenant <slug> --uri <api audience> --scope <scope>` (or `createResource` in the console API). Sign-in itself works without one (a request with no `resource` is
   for the tenant's userinfo, so the token's `aud` is the userinfo URL); a client that asks
   `resource=<uri>` gets a token whose `aud` is that URI, and an unregistered URI is refused
   (`invalid_target`).
 - **`roles`** is the sorted list of the role names the user holds in the tenant (tenant-wide roles, plus those scoped to the token's resource), managed in the console (README "Roles of a tenant's end users"). `permissions` come with access rules, later.
-- **`scopes`** are the scopes granted on the resource, which a console will configure later.
+- **`scopes`** are the scopes granted on the resource, configured in the console API (README "Clients, resources and scopes").
 - A non-alxia API can verify the token itself: the JWT is signed by the tenant's key
   (ES256 default), published at `/jwks.json`; or it calls `/introspect` as a confidential
   client of the same tenant.
@@ -218,8 +217,8 @@ Nothing maps an old janus id to the new `sub`, which is why a mapping column is 
 - **User import** (old users into a tenant, with their e-mail verified flag, passkeys and
   credentials): not built. Passkeys and password hashes cannot be carried over; the user
   registers a passkey, or signs in by e-mail code.
-- **The console**: tenants, clients, resources, scopes and users are managed by script or
-  by the Clavix maintainers until then.
+- **The console**: tenants, clients, resources, scopes and users are managed in the console
+  API (or by script).
 - **Social federation** (Google, GitHub, upstream OIDC; planned): the
   tenant offers passkey and e-mail code only.
 - Also later: MFA and step-up, PAR and DPoP, device code and token exchange,
@@ -231,7 +230,7 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
 1. **No user import.** No script, GraphQL operation or file format loads existing users into a
    tenant. Needed: a bulk create that keeps the e-mail (verified) and returns old id to new
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
-2. **No tenant console** before the console exists; a tenant is created by `tenants:create`.
+2. **Tenants** are created in the console API (`createTenant`) or by `tenants:create`.
 3. **Resources and scopes** are managed in the console API or by script (`resources:create`),
    which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.

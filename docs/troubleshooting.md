@@ -351,10 +351,12 @@ scope name with a space or a quote, a scope without `resourceId` that is not `op
 or `email`, an empty name, or `rotateClientSecret` on a public client (`A public client has no
 secret to rotate`).
 
-### `LAST_OWNER` (409) on `changeMembership` or `removeMembership`
+### `LAST_OWNER` (409) on `changeMembership`, `removeMembership`, `disableUser` or `deleteUser`
 
-The change would leave the tenant with no owner. Name or invite another owner first, then demote or
-remove this one. Of two owners removed at the same moment, the second is refused.
+The change would leave the tenant with no owner. For `disableUser` and `deleteUser` on a `clavix`
+user, the user is the only owner of a tenant who can sign in (a disabled owner does not count). Name or invite another owner first, then demote or
+remove this one. Of two owners removed at the same moment, the second is refused. `CONFLICT` (409)
+on the same two mutations means the user's roles kept changing during the call: retry.
 
 ### `ALREADY_MEMBER` (409) on `inviteAdmin`
 

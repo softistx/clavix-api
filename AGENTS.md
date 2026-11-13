@@ -4,8 +4,8 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (
 issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
-services behind them; tenants are created by script until the M2 console; clients, resources and
-scopes are managed in the console API or by script.
+services behind them; tenants, clients, resources and scopes are managed in the console API
+(the M2 console) or by script.
 The UI is `softistx/clavix-ui`.
 
 The owner's rules for every repository (worktrees, Conventional Commits, integration
@@ -206,8 +206,8 @@ outside the specs.
 
 ## Tenants by script
 
-`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant until the
-M2 console. It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
+`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant by script (the console API's
+`createTenant` does too). It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
 (`register-tenant.ts`), which goes through `TenantsService.create` (the one place for slug rules,
 reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
 `created: false`, other values are refused, a deleted tenant's slug stays reserved.
@@ -258,7 +258,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
-  has no insert-only write, so `createClient` runs under `ctx.exclusive(clientsKey(tenant), ...)`
+  has no insert-only write, so `createClient`, `updateClient`, `rotateClientSecret` and `deleteClient` run under `ctx.exclusive(clientsKey(tenant), ...)` (a racing delete never brings a client back; an update or rotation of a missing client is `NOT_FOUND`, from `ClientsService.require` inside the lock)
   (`console:clients:<hex>`, the same queue and Redis lock as the admins): the id check and the
   upsert of two creations of one id are never interleaved (one wins, the other is `CONFLICT`), and
   the `clients` quota (`assertClientQuota`: `usageService.count` against `quotasOf`, `QUOTA_EXCEEDED`)
@@ -404,16 +404,17 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
   `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  `socialSignInStart`, `socialSignInComplete`, `acceptInvitation`,
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
   already issued live to expiry, and the console stays readable.
 - **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
   `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
 - **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
-  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey sign-in and a successful `/token` (the `sub`
+  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
   of the access token, so refreshes count); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
-  `oauthPartitionedClients` by `partition`; domains count 0 until A4 (clavix-api#11). `assertWithinQuota`
+  `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
   clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
 - **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
@@ -457,7 +458,9 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   punycode); IPs, localhost, wildcards, reserved suffixes and the platform domain are refused.
 - The quota (`effectiveQuotas(...).domains`) counts pending claims too and is checked on
   `addDomain` (`assertWithinQuota`), which runs under the tenant's `ctx.exclusive` lock
-  (`console:domains:<tenantId>`); the post-insert recount stays as a second guard.
+  (`console:domains:<tenantId>`, shared by `removeDomain` and `setPrimaryDomain`, so two
+  concurrent `setPrimaryDomain` leave one primary); the post-insert recount stays as a second guard.
+  `removeDomain` records `domain.remove` on a repeat too (an id the trail cannot hold is not recorded).
   `usage.domains` is `domainStore.count`. These slice decisions stand (issue #127): pending
   claims count toward the quota; a lapsed primary keeps resolving but the TLS ask refuses it;
   recheck every 6 h with a 7-day grace.
@@ -479,7 +482,7 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
   when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
-  The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.sh`, `/readyz`) is in `docs/operations.md`.
+  The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). Janus accepting those origins is not wired yet.
 

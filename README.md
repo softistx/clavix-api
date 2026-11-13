@@ -153,7 +153,7 @@ No token, or a forged, expired or other-audience one, is a 401; the store down i
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
 resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
 tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, their plans and their
-trash are managed here too (below); `tenants:create` remains for the first tenants. The console shell's
+trash are managed here too (below); `tenants:create` stays for scripted setups. The console shell's
 tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
@@ -461,7 +461,7 @@ Each tenant chooses how its users sign in
   `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) on the tenant's host.
 - **Social providers**: Google, GitHub and Microsoft through `@softistx/janus-social`, each tenant
   with its own client id and secret. The redirect URI to register at the provider is the
-  `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback`.
+  `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback` (the host is the tenant's issuer: its primary custom domain when set, else the slug host).
 - **At least one way in**: a change that would leave no enabled method and no enabled provider is
   refused, 409 `NO_SIGN_IN_METHOD`.
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from

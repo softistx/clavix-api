@@ -220,6 +220,20 @@ describe("suspend, resume, delete, restore", () => {
     }
   });
 
+  test("delete and restore take the id in upper case too", async () => {
+    const { id } = await create();
+    const del = await as(
+      OPERATOR,
+      `mutation { deleteTenant(id: "${id.toUpperCase()}") { status } }`,
+    );
+    expect(del.errors).toBeUndefined();
+    const res = await as(
+      OPERATOR,
+      `mutation { restoreTenant(id: "${id.toUpperCase()}") { status } }`,
+    );
+    expect(res.errors).toBeUndefined();
+  });
+
   test("delete puts the tenant in the trash with a purgeAt 30 days on; restore brings back its status", async () => {
     const { id } = await create();
     await as(OPERATOR, `mutation { suspendTenant(id: "${id}") { id } }`);
@@ -358,6 +372,13 @@ describe("queries", () => {
       clients: { used: 0, quota: 3 },
       domains: { used: 0, quota: 1 },
     });
+    // The id in upper case is the same tenant (the guard and the read agree).
+    const upper = await as(
+      ADMIN,
+      `{ usage(tenantId: "${id.toUpperCase()}", month: "2026-10") { month } }`,
+    );
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data?.["usage"]).toEqual({ month: "2026-10" });
     const bad = await as(
       ADMIN,
       `{ usage(tenantId: "${id}", month: "2026-13") { month } }`,

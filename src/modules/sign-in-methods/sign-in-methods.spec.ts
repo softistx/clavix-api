@@ -1,10 +1,20 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
+import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -91,6 +101,10 @@ beforeAll(async () => {
     clientId: "gh-client-other",
     clientSecret: `${SECRET}-other`,
   });
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 afterAll(async () => {
@@ -269,6 +283,7 @@ describe("social sign-in", () => {
     expect(wrongTenant.errors).toBeDefined();
     expect(wrongTenant.cookies).toEqual([]);
 
+    const active = spyOn(usageService, "recordActive");
     const answer = await run(() =>
       gql("sih-social", COMPLETE, {
         u: callbackOf("sih-social", start.state),
@@ -281,6 +296,8 @@ describe("social sign-in", () => {
       user: { id: string; email: string; name: string; emailVerified: boolean };
     };
     expect(done.created).toBe(true);
+    expect(active).toHaveBeenCalledTimes(1);
+    expect(active.mock.calls[0]?.[1]).toBe(done.user.id);
     expect(done.user).toMatchObject({
       email: "ada@social.example",
       name: "Ada Lovelace",

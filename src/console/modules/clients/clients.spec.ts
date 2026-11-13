@@ -755,3 +755,51 @@ describe("the tokens of a deleted client", () => {
     expect(code === null || code.status >= 400).toBe(true);
   });
 });
+
+describe("update and rotate of a client that is being deleted", () => {
+  test("a missing client is NOT_FOUND, never created by the write", async () => {
+    const id = "never-registered";
+    expect(
+      codeOf(
+        await admin(UPDATE, { tenantId: tenantA, id, input: { name: "X" } }),
+      ),
+    ).toBe("NOT_FOUND");
+    expect(codeOf(await admin(ROTATE, { tenantId: tenantA, id }))).toBe(
+      "NOT_FOUND",
+    );
+    expect(await (await storeOf(tenantA)).findClient(id)).toBeNull();
+  });
+
+  test("a racing delete is never undone: the client stays deleted", async () => {
+    for (let round = 0; round < 10; round++) {
+      const id = `undead-${round}`;
+      await create(admin, tenantA, {
+        name: id,
+        clientId: id,
+        type: "CONFIDENTIAL",
+      });
+      const results = await Promise.all([
+        admin(UPDATE, { tenantId: tenantA, id, input: { name: "Renamed" } }),
+        admin(ROTATE, { tenantId: tenantA, id }),
+        admin(DELETE, { tenantId: tenantA, id }),
+        admin(UPDATE, { tenantId: tenantA, id, input: { name: "Again" } }),
+      ]);
+      // Serialized, a write either ran before the delete or found no client.
+      for (const result of results.slice(0, 2).concat(results.slice(3))) {
+        if (result.errors !== undefined) {
+          expect(codeOf(result)).toBe("NOT_FOUND");
+        }
+      }
+      expect(await (await storeOf(tenantA)).findClient(id)).toBeNull();
+    }
+  });
+});
+
+describe("the tenant id's spelling", () => {
+  test("an upper-case tenant id is the same tenant, as on every module", async () => {
+    const lower = await admin(LIST, { tenantId: tenantA });
+    const upper = await admin(LIST, { tenantId: tenantA.toUpperCase() });
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data).toEqual(lower.data);
+  });
+});

@@ -66,7 +66,7 @@ mutation ($tenantId: ID!) {
 
 ### Bring a social app
 
-1. Read the provider's `callbackUrl` after a first `setSocialProvider` (or build it:
+1. Read the provider's `callbackUrl` after a first `setSocialProvider` (on the tenant's issuer host, its primary custom domain when set; or build it:
    `https://<tenant host>/sign-in/social/<google|github|microsoft>/callback`) and register it as the
    redirect URI of the app in the provider's console.
 2. Send the app's client id and secret:

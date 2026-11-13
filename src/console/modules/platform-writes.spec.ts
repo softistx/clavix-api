@@ -301,6 +301,21 @@ describe("the last owner of a tenant", () => {
     expect(await access.owners(tenant)).toHaveLength(1);
   });
 
+  test("disabled owners do not count: disabling the second one is refused", async () => {
+    const tenant = await fresh("pw-disabled");
+    const x = await operatorOf("dis-x@pw.test", tenant);
+    const y = await operatorOf("dis-y@pw.test", tenant);
+    expect(
+      (await platformOwner(writes(clavix, x).disableUser)).errors,
+    ).toBeUndefined();
+    expect(codeOf(await platformOwner(writes(clavix, y).disableUser))).toBe(
+      "LAST_OWNER",
+    );
+    expect(codeOf(await platformOwner(writes(clavix, y).deleteUser))).toBe(
+      "LAST_OWNER",
+    );
+  });
+
   test("a platform admin is still FORBIDDEN before the last-owner check", async () => {
     const sole = await operatorOf("sole2@pw.test", await fresh("pw-solo2"));
     const admin = await mkOperator("padmin3@pw.test");

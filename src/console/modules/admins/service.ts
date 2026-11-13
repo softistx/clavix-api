@@ -8,6 +8,10 @@ import { ROLES, type Role } from "../../model";
 const conflict = (code: "LAST_OWNER" | "ALREADY_MEMBER", message: string) =>
   new GraphQLError(message, { extensions: { code, http: { status: 409 } } });
 
+/** The refusal of a change that would leave a tenant with no owner. */
+export const lastOwnerError = () =>
+  conflict("LAST_OWNER", "A tenant keeps at least one owner");
+
 export type AdminsAccess = Pick<
   Access,
   "holders" | "grantTenant" | "revokeTenant"
@@ -65,7 +69,7 @@ async function setRole(
 ): Promise<void> {
   const owners = await access.holders(tenantId, "owner");
   if (role !== "owner" && owners.length === 1 && owners[0] === userId) {
-    throw conflict("LAST_OWNER", "A tenant keeps at least one owner");
+    throw lastOwnerError();
   }
   if (role !== null) await access.grantTenant(tenantId, userId, role);
   for (const other of ROLES) {

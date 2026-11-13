@@ -112,7 +112,10 @@ extend type Mutation {
   """
   Disables a user (tenant admin): their sessions end at once and they
   cannot sign in again. Idempotent. Errors: NOT_FOUND for
-  an unknown user.
+  an unknown user; on the `clavix` tenant, FORBIDDEN for an owner or a platform
+  role holder unless the caller can manage the platform, LAST_OWNER (409) when
+  the user is the only owner who can sign in of a tenant, CONFLICT (409) when
+  the memberships keep changing (retry).
   """
   disableUser(tenantId: ID!, userId: ID!): TenantUser!
   "Enables a disabled user again (tenant admin). Idempotent. Errors: NOT_FOUND for an unknown user."
@@ -120,6 +123,8 @@ extend type Mutation {
   """
   Deletes a user for good (tenant admin): their sessions and grants (and the
   tokens those opened) go with them. True also when the user was already gone.
+  On the `clavix` tenant the same FORBIDDEN, LAST_OWNER and CONFLICT errors as
+  `disableUser` apply.
   """
   deleteUser(tenantId: ID!, userId: ID!): Boolean!
   "Ends every session of the user (tenant admin); answers how many it ended. 0 on a repeat or an unknown user."

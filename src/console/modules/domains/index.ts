@@ -9,7 +9,8 @@ import type { DomainDoc } from "@/modules/domains/domains.service";
 import { effectiveQuotas } from "@/modules/tenants/plan.schema";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
-import { activeTenant, tenantArg } from "../catalog-support";
+import { catalogTenant } from "../catalog-support";
+import { tenantArg } from "../ids";
 import { refusal } from "../tenants/errors";
 
 const view = onTenant("view", tenantArg);
@@ -92,19 +93,19 @@ const shape = (doc: DomainDoc) => ({
 export const domains: Resolvers = {
   Query: {
     domains: async (_, { tenantId }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       return (await domainStore.list(tenant._id)).map(shape);
     },
     domain: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const found = await domainStore.find(tenant._id, id);
       return found === undefined ? null : shape(found);
     },
   },
   Mutation: {
     addDomain: async (_, { tenantId, host }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
-      const stored = await tenantAdmin.find(tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
+      const stored = await tenantAdmin.find(tenant._id.toHexString());
       const quota = stored === undefined ? 0 : effectiveQuotas(stored).domains;
       // The quota count and the insert are not atomic: one claim at a time
       // per tenant, across processes when there is a shared lock.
@@ -118,7 +119,7 @@ export const domains: Resolvers = {
       return shape(created);
     },
     verifyDomain: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const { domain, failure } = await refusing(() =>
         domainStore.verify(tenant._id, id),
       );
@@ -126,15 +127,23 @@ export const domains: Resolvers = {
       return { domain: shape(domain), failure };
     },
     removeDomain: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
-      const removed = await refusing(() => domainStore.remove(tenant._id, id));
-      if (removed) await ctx.audit("domain.remove", target(tenant._id, id));
+      const tenant = await catalogTenant(ctx, tenantId);
+      const removed = await ctx.exclusive(domainsKey(tenant), () =>
+        refusing(() => domainStore.remove(tenant._id, id)),
+      );
+      // Recorded on a repeat too (it may be the event the first run missed).
+      // An id the trail cannot hold (empty, over 200) names no claim.
+      if (id.length >= 1 && id.length <= 200) {
+        await ctx.audit("domain.remove", target(tenant._id, id));
+      }
       return removed;
     },
     setPrimaryDomain: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
-      const updated = await refusing(() =>
-        domainStore.setPrimary(tenant._id, id),
+      const tenant = await catalogTenant(ctx, tenantId);
+      // Two calls at once would each flip a different claim to primary and
+      // then clear the other: one at a time per tenant.
+      const updated = await ctx.exclusive(domainsKey(tenant), () =>
+        refusing(() => domainStore.setPrimary(tenant._id, id)),
       );
       await ctx.audit("domain.setPrimary", target(tenant._id, id));
       return shape(updated);

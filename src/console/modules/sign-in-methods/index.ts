@@ -1,4 +1,5 @@
 import { env } from "@/config/env";
+import { tenantResolver } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
   isAvailable,
@@ -7,19 +8,18 @@ import {
   type SocialProviderId,
 } from "@/modules/sign-in-methods/sign-in.schema";
 import { callbackUrlOf } from "@/modules/sign-in-methods/social";
-import { issuerOf } from "@/modules/tenants/identity";
+import { hostOf, issuerOf } from "@/modules/tenants/identity";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
+import { tenantArg } from "../ids";
 import { signInPolicyService as service } from "./wiring";
 
-const tenantOf = (args: Record<string, unknown>) => String(args["tenantId"]);
-
 export const signInMethodsGuards: Guards = {
-  "Query.signInPolicy": onTenant("view", tenantOf),
-  "Mutation.updateSignInMethods": onTenant("edit", tenantOf),
-  "Mutation.setSocialProvider": onTenant("edit", tenantOf),
-  "Mutation.removeSocialProvider": onTenant("edit", tenantOf),
+  "Query.signInPolicy": onTenant("view", tenantArg),
+  "Mutation.updateSignInMethods": onTenant("edit", tenantArg),
+  "Mutation.setSocialProvider": onTenant("edit", tenantArg),
+  "Mutation.removeSocialProvider": onTenant("edit", tenantArg),
 };
 
 const METHOD = {
@@ -51,13 +51,25 @@ const storedOf = <K extends string, V extends string>(
   return key;
 };
 
+async function issuerFor(tenant: Tenant) {
+  const resolved = await tenantResolver.resolveHost(
+    hostOf(tenant.slug, env.CLAVIX_DOMAIN),
+  );
+  return (
+    resolved?.issuer ??
+    issuerOf(tenant.slug, {
+      scheme: env.CLAVIX_PUBLIC_SCHEME,
+      domain: env.CLAVIX_DOMAIN,
+      port: env.CLAVIX_PUBLIC_PORT,
+    })
+  );
+}
+
 /** The policy as the console shows it: no secret, only that one is stored. */
-function policyOf(tenant: Tenant) {
-  const issuer = issuerOf(tenant.slug, {
-    scheme: env.CLAVIX_PUBLIC_SCHEME,
-    domain: env.CLAVIX_DOMAIN,
-    port: env.CLAVIX_PUBLIC_PORT,
-  });
+async function policyOf(tenant: Tenant) {
+  // The issuer the runtime uses: the primary custom domain when there is one,
+  // so the redirect URI shown is the one the callback really answers on.
+  const issuer = await issuerFor(tenant);
   return {
     tenantId: tenant._id.toHexString(),
     methods: methodsOf(tenant.signIn).map(({ type, enabled }) => ({
@@ -79,7 +91,7 @@ function policyOf(tenant: Tenant) {
 export const signInMethods: Resolvers = {
   Query: {
     signInPolicy: async (_, { tenantId }) =>
-      policyOf(await service.get(tenantId)),
+      await policyOf(await service.get(tenantId.toLowerCase())),
   },
   Mutation: {
     // Each records its admin event once the change is stored, and on a repeat
@@ -87,7 +99,7 @@ export const signInMethods: Resolvers = {
     // not leave the change with no event). Identifiers only, never a secret.
     updateSignInMethods: async (_, { tenantId, methods }, ctx) => {
       const tenant = await service.updateMethods(
-        tenantId,
+        tenantId.toLowerCase(),
         methods.map(({ type, enabled }) => ({
           type: storedOf(METHOD, type),
           enabled,
@@ -101,11 +113,11 @@ export const signInMethods: Resolvers = {
         id,
         tenantId: id,
       });
-      return policyOf(tenant);
+      return await policyOf(tenant);
     },
     setSocialProvider: async (_, { tenantId, input }, ctx) => {
       const provider = storedOf(KIND, input.provider);
-      const tenant = await service.setSocial(tenantId, {
+      const tenant = await service.setSocial(tenantId.toLowerCase(), {
         provider,
         clientId: input.clientId ?? undefined,
         clientSecret: input.clientSecret ?? undefined,
@@ -116,17 +128,20 @@ export const signInMethods: Resolvers = {
         id: provider,
         tenantId: tenant._id.toHexString(),
       });
-      return policyOf(tenant);
+      return await policyOf(tenant);
     },
     removeSocialProvider: async (_, { tenantId, provider: kind }, ctx) => {
       const provider = storedOf(KIND, kind);
-      const tenant = await service.removeSocial(tenantId, provider);
+      const tenant = await service.removeSocial(
+        tenantId.toLowerCase(),
+        provider,
+      );
       await ctx.audit("socialProvider.remove", {
         type: "socialProvider",
         id: provider,
         tenantId: tenant._id.toHexString(),
       });
-      return policyOf(tenant);
+      return await policyOf(tenant);
     },
   },
 };
