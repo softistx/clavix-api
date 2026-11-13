@@ -116,9 +116,11 @@ services:
   # mongodump and mongorestore against the mongo service (docs/operations.md).
   backup:
     profiles: ["tools"]
-    image: mongo:8
-    entrypoint: ["bash"]
-    command: ["/scripts/mongo-backup.sh", "/backups"]
+    build:
+      context: .
+      dockerfile: tools.Dockerfile
+    entrypoint: ["bun"]
+    command: ["/scripts/mongo-backup.ts", "/backups"]
     environment:
       MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
       KEEP: ${BACKUP_KEEP:-14}
@@ -130,8 +132,10 @@ services:
 
   restore:
     profiles: ["tools"]
-    image: mongo:8
-    entrypoint: ["bash", "/scripts/mongo-restore.sh"]
+    build:
+      context: .
+      dockerfile: tools.Dockerfile
+    entrypoint: ["bun", "/scripts/mongo-restore.ts"]
     environment:
       MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
       CONFIRM: ${CONFIRM:-}

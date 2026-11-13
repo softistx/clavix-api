@@ -56,6 +56,16 @@ afterAll(async () => {
   await oauthDb.collection("relations").deleteMany({});
 });
 
+describe("the tenant id's spelling on a write", () => {
+  test("addDomain with an upper-case tenant id adds the domain and keeps the quota", async () => {
+    const result = await admin(ADD, {
+      tenantId: tenantA.toUpperCase(),
+      host: "upper.acme.com",
+    });
+    expect(result.errors).toBeUndefined();
+  });
+});
+
 describe("addDomain", () => {
   test("claims a normalised host and shows the TXT record to publish", async () => {
     const result = await admin(ADD, {
@@ -259,5 +269,14 @@ describe("audit", () => {
       "domain.add",
       "domain.remove",
     ]);
+  });
+});
+
+describe("the tenant id's spelling", () => {
+  test("an upper-case tenant id is the same tenant, as on every module", async () => {
+    const lower = await admin(LIST, { tenantId: tenantA });
+    const upper = await admin(LIST, { tenantId: tenantA.toUpperCase() });
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data).toEqual(lower.data);
   });
 });

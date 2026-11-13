@@ -180,6 +180,12 @@ describe("the contract", () => {
 });
 
 describe("permissions", () => {
+  test("an upper-case tenant id reads the same policy", async () => {
+    expect(await policyOf(VIEWER_A, a.toUpperCase())).toEqual(
+      await policyOf(VIEWER_A, a),
+    );
+  });
+
   test("a viewer reads the policy and cannot change it", async () => {
     expect(enabledOf(await policyOf(VIEWER_A, a))).toEqual([
       "PASSKEY",
