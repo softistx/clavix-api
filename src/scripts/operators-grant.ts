@@ -10,9 +10,9 @@ import { forTenant } from "@/config/users";
 import {
   grantOperator,
   OPERATORS_USAGE,
+  operatorGrantDeps,
   parseOperatorArgs,
 } from "@/console/operators";
-import { operatorScope } from "@/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 
 // Grants a platform role (default owner) to a user of the clavix tenant, until
@@ -37,26 +37,12 @@ try {
   console.log(
     JSON.stringify(
       await grantOperator(
-        {
+        operatorGrantDeps({
           findByEmail: (e) => janus.findByEmail(e),
           access,
-          invite: (email, role) =>
-            invitationsOf(async () => tenant).invite({
-              scope: operatorScope(),
-              organization: "Clavix",
-              email,
-              role,
-              invitedBy: null,
-            }),
-          record: (target) =>
-            adminEventRecorder.record({
-              actor: "cli:operators:grant",
-              action: "operator.grant",
-              tenantId: null,
-              target,
-              requestId: crypto.randomUUID(),
-            }),
-        },
+          invitations: invitationsOf(async () => tenant),
+          recorder: adminEventRecorder,
+        }),
         input,
       ),
       null,

@@ -237,7 +237,8 @@ every other failure a 401).
   `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
   its admin event (`client.create`, `client.rotateSecret`, `resource.delete`, `scope.update`, ...:
   the target is the client id or the document id, never a secret; a delete records on a repeat
-  too, and `deleteResource` one `scope.delete` per scope it removed). `test/console.ts`
+  too, and `deleteResource` one `scope.delete` per scope it removed). The `operators:grant` script records
+  `operator.grant` the same way (platform target, no tenant). `test/console.ts`
   (`consoleAs(userId)`) runs the real console app with a stubbed token check.
 - **The console's own client and resource** (`console` in the `clavix` tenant, the migration's) are
   refused by `modules/reserved.ts`: no update, rotation or deletion of the client, no deletion of

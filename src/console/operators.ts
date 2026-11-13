@@ -1,5 +1,8 @@
 import { CliInputError } from "@/cli/errors";
+import { operatorScope } from "@/invitations/scope";
+import type { TenantInvitations } from "@/invitations/tenant-invitations";
 import type { Access } from "./access";
+import type { AdminEventRecorder } from "./admin-events/recorder";
 import type { Role } from "./model";
 
 export const OPERATORS_USAGE = `Usage: bun run operators:grant --email <address> [--role owner|admin|viewer] [--create]
@@ -85,4 +88,40 @@ export async function grantOperator(
   await deps.access.grantPlatform(user.id, input.role);
   await deps.record({ type: "user", id: user.id });
   return { userId: user.id, email: user.email, role: input.role };
+}
+
+type GrantDeps = Parameters<typeof grantOperator>[0];
+
+/**
+ * The script's wiring: the operator invitation (operator scope, issued by the
+ * system for "Clavix") and the `operator.grant` admin event (platform target,
+ * no tenant, actor `cli:operators:grant`).
+ */
+export function operatorGrantDeps(parts: {
+  findByEmail: GrantDeps["findByEmail"];
+  access: GrantDeps["access"];
+  invitations: Pick<TenantInvitations, "invite">;
+  recorder: Pick<AdminEventRecorder, "record">;
+}): GrantDeps {
+  return {
+    findByEmail: parts.findByEmail,
+    access: parts.access,
+    invite: (email, role) =>
+      parts.invitations.invite({
+        scope: operatorScope(),
+        organization: "Clavix",
+        email,
+        role,
+        invitedBy: null,
+      }),
+    record: async (target) => {
+      await parts.recorder.record({
+        actor: "cli:operators:grant",
+        action: "operator.grant",
+        tenantId: null,
+        target,
+        requestId: crypto.randomUUID(),
+      });
+    },
+  };
 }

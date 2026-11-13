@@ -18,6 +18,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
+import type { AdminEventInput } from "@/console/admin-events/recorder";
 import { registerResource } from "@/modules/resources/register-resource";
 import { resources } from "@/modules/resources/resources.model";
 import { scopes } from "@/modules/resources/scopes.model";
@@ -468,6 +469,54 @@ describe("operators:grant", () => {
     });
     expect("userId" in known).toBe(true);
     expect(invited).toHaveLength(1);
+  });
+
+  test("the script's wiring invites in the operator scope and records the event", async () => {
+    const { operatorGrantDeps } = await import("./operators");
+    const invites: unknown[] = [];
+    const events: AdminEventInput[] = [];
+    const wired = operatorGrantDeps({
+      findByEmail: async () => null,
+      access,
+      invitations: {
+        invite: async (input) => {
+          invites.push(input);
+          return {
+            id: "inv-9",
+            email: input.email,
+            role: input.role,
+            invitedAt: new Date(),
+            expiresAt: new Date(),
+          };
+        },
+      },
+      recorder: {
+        record: async (event) => {
+          events.push(event);
+        },
+      },
+    });
+    expect(await wired.invite("c@console.test", "viewer")).toMatchObject({
+      id: "inv-9",
+    });
+    expect(invites).toEqual([
+      {
+        scope: "operator",
+        organization: "Clavix",
+        email: "c@console.test",
+        role: "viewer",
+        invitedBy: null,
+      },
+    ]);
+    await wired.record({ type: "invitation", id: "inv-9" });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actor: "cli:operators:grant",
+      action: "operator.grant",
+      tenantId: null,
+      target: { type: "invitation", id: "inv-9" },
+    });
+    expect(typeof events[0]?.requestId).toBe("string");
   });
 });
 
