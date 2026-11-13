@@ -467,7 +467,7 @@ Each tenant chooses how its users sign in
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
-  and it is never logged. Losing or changing the master key makes it unreadable: the provider is
+  and it is never logged. Losing the master key, or dropping the old key from the keyring while a secret is still sealed under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
 
 ```sh

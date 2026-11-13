@@ -307,7 +307,7 @@ a tenant failed.
 - If a `next` key was already published, it takes over at once; otherwise a new
   key is created and signs immediately. Relying parties that cached the JWKS
   and have not fetched it since may fail to verify the new key until they do
-  (the cache lasts 5 minutes).
+  (typically a few minutes, depending on the client).
 - If the **master key** leaked, rotate it first (above), then run
   `keys:rotate --all --drop-old`: a new master key alone does not change the
   signing keys.
