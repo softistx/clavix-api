@@ -8,5 +8,5 @@ export const tenantPurge = defineQueue({
   schema: z.object({}),
   attempts: 3,
   backoff: { base: "5m" },
-  schedules: { daily: { cron: "17 3 * * *", data: {} } },
+  schedules: { daily: { cron: "17 3 * * *", timezone: "UTC", data: {} } },
 });

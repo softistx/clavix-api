@@ -372,6 +372,19 @@ deleted, and on any host but the `clavix` tenant's. Have an owner of the tenant 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
 first. Pass `--email`, and a `--role` of owner, admin or viewer.
 
+### `tenants: purge failed for N tenant(s)` in the logs
+
+**When:** the daily purge of the trash (`tenant-purge`, 03:17 UTC) or the pass at server start could not
+finish N tenants.
+
+**Why:** a step failed for those tenants (a database error, a timeout). Each one is already claimed: it
+resolves nowhere and cannot be restored any more. The pass throws so the queue retries it (3 attempts,
+5 minutes of backoff); a failure at server start is only logged.
+
+**Fix:** nothing is lost and nothing needs doing first: the purge is resumable and the next daily tick
+(or a restart) picks up the claimed tenants again. If the same error comes back every day, read the
+line before it in the logs, which names the tenant and the failing step.
+
 ## `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`, `QUOTA_EXCEEDED` and `TENANT_SUSPENDED`
 
 **`SLUG_TAKEN` (409)** on `createTenant`: the slug belongs to a tenant, one in the trash, or a purged one
