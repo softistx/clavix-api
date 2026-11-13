@@ -4,13 +4,26 @@ import type { BrandingService } from "./branding.service";
 /** Where a tenant's logo is served, on its own host. */
 export const LOGO_PATH = "/branding/logo";
 
-/** The URL the hosted pages put in an `<img>`; the hash makes it immutable-cacheable. */
-export const logoUrl = (hash: string) => `${LOGO_PATH}?v=${hash.slice(0, 16)}`;
+const versionOf = (hash: string) => hash.slice(0, 16);
+
+/**
+ * The URL the hosted pages put in an `<img>`. `v` is the start of the image's
+ * hash, so the URL changes with the image: asked with the current `v`, the
+ * logo is served `immutable`.
+ */
+export const logoUrl = (hash: string) => `${LOGO_PATH}?v=${versionOf(hash)}`;
+
+// Only a URL that names the image it gets may be kept for good.
+const IMMUTABLE = "public, max-age=31536000, immutable";
+// The bare path (or a stale `v`) is whatever the logo is now: revalidated.
+const REVALIDATED = "public, max-age=300, must-revalidate";
 
 /**
  * `GET /branding/logo`: the logo of the tenant the host names, with an ETag
- * (the image's sha256) and a 304 on `If-None-Match`. 404 for an unknown host or
- * a tenant with no logo. Never sniffed, never scripted.
+ * (the image's sha256) and a 304 on `If-None-Match`. `immutable` only when
+ * `?v=` is the current image's (`logoUrl`), five minutes then revalidated
+ * otherwise. 404 for an unknown host or a tenant with no logo. Never sniffed,
+ * never scripted.
  */
 export function logoRoute(deps: {
   resolver: TenantResolver;
@@ -36,7 +49,10 @@ export function logoRoute(deps: {
     const etag = `"${logo.hash}"`;
     const headers = {
       etag,
-      "cache-control": "public, max-age=300, must-revalidate",
+      "cache-control":
+        new URL(request.url).searchParams.get("v") === versionOf(logo.hash)
+          ? IMMUTABLE
+          : REVALIDATED,
       "x-content-type-options": "nosniff",
       "content-security-policy": "default-src 'none'; sandbox",
     };

@@ -1,5 +1,6 @@
 import {
   ConflictError,
+  OptimisticLockError,
   scopeToTenant,
   type TypedCollection,
 } from "@softistx/mongo";
@@ -11,6 +12,7 @@ import {
   type CompileTheme,
   compileTheme,
   type ThemeInput,
+  type ValidThemeInput,
 } from "./theme";
 
 export type StoredBrandingDoc = Awaited<
@@ -61,10 +63,36 @@ export class BrandingService {
     const { input: valid, compiled } = buildTheme(input, this.compile);
     const newLogo: StoredLogo | undefined =
       input.logo === undefined ? undefined : checkLogo(input.logo);
+    // Each attempt reads the brand, decides, and writes at the version it
+    // read. A concurrent writer makes the write fail (`OptimisticLockError`),
+    // and the next attempt decides again on what that writer stored, so a
+    // logo it replaced or removed is never put back by this call.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.write(tenantId, valid, newLogo, input.removeLogo, {
+          warnings: compiled.warnings,
+          css: compiled.css,
+        });
+      } catch (error) {
+        if (!(error instanceof OptimisticLockError) || attempt >= ATTEMPTS) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async write(
+    tenantId: string,
+    valid: ValidThemeInput,
+    newLogo: StoredLogo | undefined,
+    removeLogo: boolean | undefined,
+    compiled: { css: string; warnings: string[] },
+  ): Promise<UpdateBrandingResult> {
+    const { warnings } = compiled;
     const scoped = this.scoped(tenantId);
     let existing = await scoped.findFirst({});
     const logo =
-      input.removeLogo === true && newLogo === undefined
+      removeLogo === true && newLogo === undefined
         ? null
         : (newLogo ?? existing?.logo ?? null);
     const fields = {
@@ -77,31 +105,32 @@ export class BrandingService {
       logo,
     };
     if (existing !== undefined && same(existing, fields)) {
-      return {
-        branding: existing,
-        changed: false,
-        warnings: compiled.warnings,
-      };
+      return { branding: existing, changed: false, warnings };
     }
     if (existing === undefined) {
       try {
         const created = await scoped.create(fields);
-        return {
-          branding: created,
-          changed: true,
-          warnings: compiled.warnings,
-        };
+        return { branding: created, changed: true, warnings };
       } catch (error) {
         // A concurrent first write won the unique index: update it instead.
         if (!(error instanceof ConflictError)) throw error;
         existing = await scoped.findFirst({});
         if (existing === undefined) throw error;
+        if (newLogo === undefined && removeLogo !== true) {
+          fields.logo = existing.logo;
+        }
       }
     }
-    const updated = await scoped.update(existing._id, fields);
-    return { branding: updated, changed: true, warnings: compiled.warnings };
+    const updated = await scoped.update(existing._id, {
+      ...fields,
+      version: existing.version,
+    });
+    return { branding: updated, changed: true, warnings };
   }
 }
+
+/** How many times `update` decides again after a concurrent write. */
+const ATTEMPTS = 3;
 
 function same(
   stored: StoredBrandingDoc,

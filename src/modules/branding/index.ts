@@ -15,6 +15,8 @@ export const branding: Resolvers = {
             displayName: found.displayName,
             themeName: THEME_NAME,
             css: found.css,
+            backgroundPreset: found.backgroundPreset,
+            motif: found.motif,
             logoUrl: found.logo === null ? null : logoUrl(found.logo.hash),
           };
     },

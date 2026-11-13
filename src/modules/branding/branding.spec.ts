@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { defineTheme } from "@softistx/material-core/theme";
 import { graphql } from "graphql";
+import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { brandingService } from "@/config/branding";
@@ -14,9 +16,12 @@ import { LOGO_MAX_BYTES } from "./logo";
 import {
   BrandingContrastError,
   buildTheme,
-  type CompiledTheme,
+  type CompileTheme,
   compileTheme,
+  failuresOf,
+  measureTheme,
   THEME_NAME,
+  validateThemeInput,
 } from "./theme";
 
 // 1x1 PNG.
@@ -31,8 +36,21 @@ const base = {
   motif: null,
 };
 
+// A real theme the library cannot bring to AA: the label of the primary fill
+// is overridden to the fill's own colour (the `tokens` escape hatch, which a
+// brand's input never reaches).
+const failingCompile: CompileTheme = (input) =>
+  measureTheme(
+    defineTheme({
+      name: THEME_NAME,
+      colors: { primary: input.seed },
+      tokens: { light: { "primary-foreground": input.seed } },
+    }),
+  );
+
 let tenantA = "";
 let tenantB = "";
+let tenantC = "";
 let slugA = "";
 const users = {
   adminA: "u-admin-a",
@@ -83,6 +101,8 @@ beforeAll(async () => {
   const b = await tenantsService.create({ slug: "brand-b", name: "B" });
   tenantA = a._id.toHexString();
   tenantB = b._id.toHexString();
+  const c = await tenantsService.create({ slug: "brand-c", name: "C" });
+  tenantC = c._id.toHexString();
   slugA = a.slug;
   await access.grantTenant(tenantA, users.adminA, "admin");
   await access.grantTenant(tenantA, users.viewerA, "viewer");
@@ -107,23 +127,79 @@ describe("the theme", () => {
     expect(compiled.warnings.length).toBeGreaterThan(0);
   });
 
-  test("a failing pair is BRANDING_CONTRAST", () => {
-    const failing = (): CompiledTheme => ({
-      ...compileTheme(base),
-      results: [
-        {
-          fg: "primary-foreground",
-          bg: "primary",
-          min: 4.5,
-          modes: ["dark"],
-          why: "x",
-          mode: "dark",
-          ratio: 2.1,
-          pass: false,
-        },
+  test("a theme the library cannot bring to AA is BRANDING_CONTRAST, with the measured pair once", () => {
+    const compiled = failingCompile(validateThemeInput(base));
+    expect(compiled.unsolved.map((w) => w.code)).toEqual([
+      "override-breaks-pair",
+    ]);
+    // The pair is measured and warned about: one failure, with its real ratio.
+    const failures = failuresOf(compiled);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      foreground: "primary-foreground",
+      background: "primary",
+      mode: "light",
+      minimum: 4.5,
+    });
+    expect(failures[0]?.ratio).toBeGreaterThan(0);
+    expect(failures[0]?.ratio).toBeLessThan(4.5);
+    expect(() => buildTheme(base, failingCompile)).toThrow(
+      BrandingContrastError,
+    );
+  });
+
+  test("a pair the generator gave up on fails even when no measure names it", () => {
+    const unsolved: CompileTheme = (input) => ({
+      ...compileTheme(input),
+      unsolved: [
+        { code: "unsolvable", token: "ring", mode: "dark", message: "x" },
+        { code: "unsolvable", message: "y" },
       ],
     });
-    expect(() => buildTheme(base, failing)).toThrow(BrandingContrastError);
+    const failures = failuresOf(unsolved(validateThemeInput(base)));
+    expect(failures).toEqual([
+      {
+        foreground: "ring",
+        background: "",
+        mode: "dark",
+        ratio: 0,
+        minimum: 4.5,
+      },
+      {
+        foreground: "unknown",
+        background: "",
+        mode: "light",
+        ratio: 0,
+        minimum: 4.5,
+      },
+    ]);
+    expect(() => buildTheme(base, unsolved)).toThrow(BrandingContrastError);
+  });
+
+  test("a display name or a seed that would break out of the stylesheet never reaches the css", () => {
+    const plain = buildTheme(base).compiled.css;
+    for (const displayName of [
+      '"]}</style><script>alert(1)</script>{',
+      "x */ } body{display:none} /*",
+      "\\3c /style>",
+    ]) {
+      // The name is a label, not CSS: the stylesheet is the same without it.
+      expect(buildTheme({ ...base, displayName }).compiled.css).toBe(plain);
+    }
+    expect(plain).not.toContain("<");
+    for (const seed of [
+      "#0a7ea4;} body{display:none}",
+      "#0a7ea4 */ body{display:none} /*",
+      "red;}</style><script>alert(1)</script>",
+      "oklch(0.5 0.1 200)}</style>",
+      "url(javascript:alert(1))",
+      "var(--x)",
+      "rgb(1 2 3 / </style>)",
+    ]) {
+      expect(() => buildTheme({ ...base, seed })).toThrow(
+        expect.objectContaining({ code: "BAD_USER_INPUT", field: "seed" }),
+      );
+    }
   });
 
   test("an unreadable colour, radius, preset or motif is refused", () => {
@@ -196,26 +272,51 @@ describe("updateBranding", () => {
   });
 
   test("a failing contrast is BRANDING_CONTRAST (422) with the pairs, and stores nothing", async () => {
-    const failing = new BrandingService(mongo.db.branding, () => ({
-      ...compileTheme(base),
-      results: [
-        {
-          fg: "foreground",
-          bg: "background",
-          min: 4.5,
-          modes: ["light"],
-          why: "x",
-          mode: "light",
-          ratio: 2,
-          pass: false,
-        },
-      ],
-    }));
+    const failing = new BrandingService(mongo.db.branding, failingCompile);
     // The resolver maps this error to a 422; the service is the unit under test here.
     await expect(failing.update(tenantB, base)).rejects.toBeInstanceOf(
       BrandingContrastError,
     );
     expect(await brandingService.get(tenantB)).toBeUndefined();
+  });
+
+  test("a hostile display name is stored as text and leaves the css alone", async () => {
+    const hostile = "</style><script>alert(1)</script>";
+    const result = await run(UPDATE, users.adminA, {
+      t: tenantC,
+      i: { ...base, displayName: hostile },
+    });
+    // Tenant C has no member: refused before anything is compiled.
+    expect(result.errors?.[0]?.extensions?.["code"]).toBe("FORBIDDEN");
+    const stored = await brandingService.update(tenantC, {
+      ...base,
+      displayName: hostile,
+    });
+    expect(stored.branding.displayName).toBe(hostile);
+    expect(stored.branding.css).not.toContain("<");
+    expect(stored.branding.css).not.toContain("alert");
+  });
+
+  test("concurrent updates apply one after the other: one document, no lost decision", async () => {
+    const mine = { tenantId: new ObjectId(tenantC) };
+    await mongo.db.branding.raw.deleteMany(mine);
+    const seeds = ["#0a7ea4", "#7a3cff", "#d4381c"];
+    const results = await Promise.all(
+      seeds.map((seed) => brandingService.update(tenantC, { ...base, seed })),
+    );
+    expect(results.every((r) => r.changed)).toBe(true);
+    const docs = await mongo.db.branding.raw.find(mine).toArray();
+    expect(docs).toHaveLength(1);
+    expect(seeds).toContain(String(docs[0]?.["seed"]));
+
+    // A logo set while another call (sending none) is under way is kept.
+    await Promise.all([
+      brandingService.update(tenantC, { ...base, seed: "#0a7ea4", logo: LOGO }),
+      brandingService.update(tenantC, { ...base, seed: "#7a3cff" }),
+      brandingService.update(tenantC, { ...base, seed: "#d4381c" }),
+    ]);
+    expect((await brandingService.get(tenantC))?.logo).not.toBeNull();
+    await mongo.db.branding.raw.deleteMany(mine);
   });
 
   test("logos: only small, real PNG/JPEG/WebP", async () => {
@@ -291,7 +392,10 @@ describe("the public side", () => {
   const host = (slug: string) => `http://${slug}.${env.CLAVIX_DOMAIN}`;
 
   beforeAll(async () => {
-    await run(UPDATE, users.adminA, { t: tenantA, i: { ...base, logo: LOGO } });
+    await run(UPDATE, users.adminA, {
+      t: tenantA,
+      i: { ...base, logo: LOGO, backgroundPreset: "aurora", motif: "star" },
+    });
   });
 
   test("GET /branding/logo serves the host tenant's logo with an ETag, and 304s", async () => {
@@ -309,6 +413,19 @@ describe("the public side", () => {
       headers: { "if-none-match": '"other"' },
     });
     expect(other.status).toBe(200);
+
+    // Kept for good only under the URL that names this image.
+    const revalidated = "public, max-age=300, must-revalidate";
+    expect(response.headers.get("cache-control")).toBe(revalidated);
+    const versioned = await app.request(
+      `${host(slugA)}/branding/logo?v=${etag.slice(1, 17)}`,
+    );
+    expect(versioned.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    const stale = await app.request(`${host(slugA)}/branding/logo?v=0000`);
+    expect(stale.status).toBe(200);
+    expect(stale.headers.get("cache-control")).toBe(revalidated);
   });
 
   test("a tenant with no logo, and an unknown host, are 404", async () => {
@@ -331,7 +448,8 @@ describe("the public side", () => {
           method: "POST",
           headers: { "content-type": "application/json", origin: h },
           body: JSON.stringify({
-            query: "{ tenantBranding { displayName themeName css logoUrl } }",
+            query:
+              "{ tenantBranding { displayName themeName css logoUrl backgroundPreset motif } }",
           }),
         })
       ).json()) as {
@@ -342,6 +460,8 @@ describe("the public side", () => {
     expect(a.data?.tenantBranding).toMatchObject({
       displayName: "Acme",
       themeName: THEME_NAME,
+      backgroundPreset: "aurora",
+      motif: "star",
     });
     expect(a.data?.tenantBranding?.logoUrl).toStartWith("/branding/logo?v=");
     const none = await ask(host("no-such-tenant"));

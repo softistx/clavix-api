@@ -179,19 +179,53 @@ seed (a yellow) lighter or darker to reach AA on its own; the payload's `warning
 A bad value is `BAD_USER_INPUT` (400, `extensions.field`). `branding(tenantId)` needs `view` on the tenant,
 `updateBranding` needs `edit`.
 
+The display name is a label only: it is stored as text and never written into the stylesheet. The seed
+and the radius are parsed, and the CSS is built from the parsed values, so a value that is not a colour
+or a length is refused rather than copied. Escape the display name where you print it. Two calls at the
+same time apply one after the other (the document carries a `version`), so a logo one of them sets or
+removes is not undone by the other.
+
 ```graphql
 mutation {
-  updateBranding(tenantId: "...", input: { displayName: "Acme", seed: "#0a7ea4", radius: "0.5rem" }) {
-    changed warnings branding { themeName css logoUrl }
+  updateBranding(
+    tenantId: "..."
+    input: { displayName: "Acme", seed: "#0a7ea4", radius: "0.5rem" }
+  ) {
+    changed
+    warnings
+    branding {
+      themeName
+      css
+      logoUrl
+    }
   }
 }
 ```
 
 A logo is a PNG, JPEG or WebP of at most 256 KiB (`logo: { contentType, dataBase64 }`); SVG is refused
 because it can carry script. The hosted pages read `tenantBranding` on `/graphql` (anonymous, by the
-request host; `null` keeps Clavix's own theme) and inject `css` with `data-nxgt-theme="<themeName>"`.
+request host; `null` keeps Clavix's own theme): they put `css` in a `<style>` and set
+`data-nxgt-theme="<themeName>"` on the root element, and draw the page's background from
+`backgroundPreset` and `motif` (not part of the CSS; `null` for none).
+
+```graphql
+{
+  tenantBranding {
+    displayName
+    themeName
+    css
+    backgroundPreset
+    motif
+    logoUrl
+  }
+}
+```
+
 `GET /branding/logo` on the tenant's host serves the logo with an `ETag` (its sha256), `304` on
-`If-None-Match`, `nosniff` and a sandboxing CSP; `404` without a logo.
+`If-None-Match`, `nosniff` and a sandboxing CSP; `404` without a logo. `logoUrl` is
+`/branding/logo?v=<start of the hash>`, so it changes with the image: asked with the current `v` the
+logo is `Cache-Control: public, max-age=31536000, immutable`; the bare path, or an old `v`, is
+`max-age=300, must-revalidate`.
 
 ## Tenants
 

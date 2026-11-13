@@ -1,11 +1,15 @@
 import {
   BACKGROUND_PRESETS,
+  type BackgroundPreset,
   MOTIF_SHAPES_ALL,
+  type MotifShape,
 } from "@softistx/material-core/backgrounds";
 import {
   type ContrastResult,
   checkThemeContrast,
   defineTheme,
+  type Theme,
+  type ThemeDefinition,
   type ThemeWarning,
   themeToCss,
 } from "@softistx/material-core/theme";
@@ -21,6 +25,12 @@ export interface ThemeInput {
   radius: string;
   backgroundPreset: string | null;
   motif: string | null;
+}
+
+/** A `ThemeInput` that passed `validateThemeInput`: trimmed, its preset and motif known ids. */
+export interface ValidThemeInput extends ThemeInput {
+  backgroundPreset: BackgroundPreset | null;
+  motif: MotifShape | null;
 }
 
 export const DEFAULT_RADIUS = "0.5rem";
@@ -67,14 +77,17 @@ export interface CompiledTheme {
 }
 
 /** Compiles a theme and measures it; what `updateBranding` runs. Injectable for specs. */
-export type CompileTheme = (input: ThemeInput) => CompiledTheme;
+export type CompileTheme = (input: ValidThemeInput) => CompiledTheme;
 
 const RADIUS = /^(\d{1,2}(?:\.\d{1,3})?)(rem|px)$/;
 const PRESETS = new Set<string>(BACKGROUND_PRESETS.map((p) => p.id));
 const SHAPES = new Set<string>(MOTIF_SHAPES_ALL);
+const isPreset = (value: string): value is BackgroundPreset =>
+  PRESETS.has(value);
+const isShape = (value: string): value is MotifShape => SHAPES.has(value);
 
 /** Checks the input's shape; throws `BrandingInputError`. Returns it trimmed. */
-export function validateThemeInput(input: ThemeInput): ThemeInput {
+export function validateThemeInput(input: ThemeInput): ValidThemeInput {
   const displayName = input.displayName.trim();
   if (displayName === "" || displayName.length > 80) {
     throw new BrandingInputError("displayName", "1 to 80 characters");
@@ -89,55 +102,60 @@ export function validateThemeInput(input: ThemeInput): ThemeInput {
       "a length in rem or px, up to 3rem (48px)",
     );
   }
-  if (input.backgroundPreset !== null && !PRESETS.has(input.backgroundPreset)) {
+  const { backgroundPreset, motif } = input;
+  if (backgroundPreset !== null && !isPreset(backgroundPreset)) {
     throw new BrandingInputError(
       "backgroundPreset",
       "an unknown background preset",
     );
   }
-  if (input.motif !== null && !SHAPES.has(input.motif)) {
+  if (motif !== null && !isShape(motif)) {
     throw new BrandingInputError("motif", "an unknown motif shape");
   }
   return {
     displayName,
     seed: input.seed.trim(),
     radius,
-    backgroundPreset: input.backgroundPreset,
-    motif: input.motif,
+    backgroundPreset,
+    motif,
   };
 }
 
-/** The real compiler: `defineTheme`, `themeToCss({ scope: "attribute" })` and `checkThemeContrast`. */
-export const compileTheme: CompileTheme = (input) => {
-  let theme: ReturnType<typeof defineTheme>;
-  try {
-    theme = defineTheme({
-      name: THEME_NAME,
-      label: input.displayName,
-      colors: { primary: input.seed },
-      radius: input.radius,
-      ...(input.backgroundPreset === null
-        ? {}
-        : {
-            background: {
-              preset: input.backgroundPreset as never,
-              intensity: "subtle",
-              ...(input.motif === null
-                ? {}
-                : { motif: { shapes: [input.motif as never] } }),
-            },
-          }),
-    });
-  } catch (error) {
-    // ThemeDefinitionError: an unreadable colour or an unsafe value.
-    throw new BrandingInputError(
-      "seed",
-      error instanceof Error ? error.message : "invalid theme",
-    );
-  }
+/** The theme definition of a brand: one seed, a radius, and the background when a preset is chosen. */
+export function themeDefinitionOf(input: ValidThemeInput): ThemeDefinition {
+  return {
+    name: THEME_NAME,
+    label: input.displayName,
+    colors: { primary: input.seed },
+    radius: input.radius,
+    ...(input.backgroundPreset === null
+      ? {}
+      : {
+          background: {
+            preset: input.backgroundPreset,
+            intensity: "subtle",
+            ...(input.motif === null
+              ? {}
+              : { motif: { shapes: [input.motif] } }),
+          },
+        }),
+  };
+}
+
+/**
+ * Generates a theme's stylesheet (`themeToCss`, attribute scope) and measures
+ * every pair in light and dark (`checkThemeContrast`).
+ */
+export function measureTheme(theme: Theme): CompiledTheme {
   const { css, palette, warnings } = themeToCss(theme, {
     scope: "attribute",
   });
+  // The hosted pages put this text in a `<style>`: the generator writes
+  // colours and lengths it parsed, never the input, and this refuses anything
+  // that could close the element should that ever change.
+  if (css.includes("<")) {
+    throw new BrandingInputError("seed", "the theme's CSS is not safe");
+  }
   return {
     css,
     warnings: warnings.map((w) => w.message),
@@ -149,6 +167,21 @@ export const compileTheme: CompileTheme = (input) => {
       (w) => w.code === "unsolvable" || w.code === "override-breaks-pair",
     ),
   };
+}
+
+/** The real compiler: `defineTheme`, then `measureTheme`. */
+export const compileTheme: CompileTheme = (input) => {
+  let theme: Theme;
+  try {
+    theme = defineTheme(themeDefinitionOf(input));
+  } catch (error) {
+    // ThemeDefinitionError: an unreadable colour or an unsafe value.
+    throw new BrandingInputError(
+      "seed",
+      error instanceof Error ? error.message : "invalid theme",
+    );
+  }
+  return measureTheme(theme);
 };
 
 /** The failing pairs of a compiled theme, without duplicates. */
@@ -168,11 +201,20 @@ export function failuresOf(compiled: CompiledTheme): ContrastFailure[] {
       minimum: r.min,
     });
   }
+  // A pair the generator gave up on normally fails its measure above too; the
+  // warning adds a line only when no measured pair already names its token.
   for (const w of compiled.unsolved) {
+    const mode = w.mode ?? "light";
+    const measured = failures.some(
+      (f) =>
+        f.mode === mode &&
+        (f.foreground === w.token || f.background === w.token),
+    );
+    if (measured) continue;
     failures.push({
       foreground: w.token ?? "unknown",
       background: "",
-      mode: w.mode ?? "light",
+      mode,
       ratio: 0,
       minimum: 4.5,
     });
@@ -184,7 +226,7 @@ export function failuresOf(compiled: CompiledTheme): ContrastFailure[] {
 export function buildTheme(
   input: ThemeInput,
   compile: CompileTheme = compileTheme,
-): { input: ThemeInput; compiled: CompiledTheme } {
+): { input: ValidThemeInput; compiled: CompiledTheme } {
   const valid = validateThemeInput(input);
   const compiled = compile(valid);
   const failures = failuresOf(compiled);
