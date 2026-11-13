@@ -7,6 +7,11 @@ import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
 import { me, meGuards } from "./me";
 import { resources, resourcesAudits, resourcesGuards } from "./resources";
+import {
+  signInMethods,
+  signInMethodsAudits,
+  signInMethodsGuards,
+} from "./sign-in-methods";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 
 // One entry per module: its resolvers, the guard of each root field it adds
@@ -16,6 +21,7 @@ export const resolvers: Resolvers = mergeResolvers([
   me,
   admins,
   branding,
+  signInMethods,
   clients,
   resources,
   tenants,
@@ -27,6 +33,7 @@ export const guards: Guards = {
   ...clientsGuards,
   ...resourcesGuards,
   ...tenantsGuards,
+  ...signInMethodsGuards,
 };
 export const audits: Audits = {
   ...adminsAudits,
@@ -34,4 +41,5 @@ export const audits: Audits = {
   ...clientsAudits,
   ...resourcesAudits,
   ...tenantsAudits,
+  ...signInMethodsAudits,
 };

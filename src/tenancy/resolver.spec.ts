@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
 import { memoryTenantCache, type TenantCache } from "./tenant-cache";
@@ -35,6 +36,7 @@ const acme: TenantRecord = {
   signUp: false,
   status: "active",
   version: 3,
+  signIn: signInPolicySchema.parse(undefined),
 };
 
 describe("resolveHost", () => {
@@ -49,6 +51,7 @@ describe("resolveHost", () => {
       issuer: "https://acme.clavix.test",
       partition: acme._id.toHexString(),
       version: 3,
+      signIn: acme.signIn,
     });
   });
 

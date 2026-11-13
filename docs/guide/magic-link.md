@@ -1,7 +1,7 @@
 # Magic-link sign-in
 
-A user signs in from a link sent to their e-mail. Off by default; `CLAVIX_MAGIC_LINK=true` turns it
-on for every tenant. Built on janus's `magicLink` (prepare, send, confirm).
+A user signs in from a link sent to their e-mail. Off by default; each tenant turns it on in its
+sign-in policy ([sign-in-methods.md](sign-in-methods.md)). Built on janus's `magicLink` (prepare, send, confirm).
 
 ## What the hosted page calls
 
@@ -18,7 +18,7 @@ Flow of the page `/sign-in/link`:
 3. The button POSTs `confirmMagicLink(token)` (from the BFF, forwarding the `Set-Cookie`), then goes on.
 4. `MAGIC_LINK_INVALID`: show "this link is no longer valid" and a form that calls `requestMagicLink`.
 
-Hide the "e-mail me a link" button when `requestMagicLink` answers 404 `MAGIC_LINK_DISABLED`.
+Show the "e-mail me a link" button only when `hostedSignInMethods.methods` lists `MAGIC_LINK`.
 
 ## Behaviour
 
