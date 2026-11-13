@@ -43,12 +43,14 @@ async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   cookie?: string,
+  extra: Record<string, string> = {},
 ): Promise<Answer> {
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(cookie === undefined ? {} : { cookie }),
+      ...extra,
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -257,6 +259,36 @@ describe("tenant isolation", () => {
     expect(idA).not.toBe(idB);
     expect(await (await janusOf("acme")).findUser(idB)).toBeNull();
     expect(await (await janusOf("globex")).findUser(idA)).toBeNull();
+  });
+
+  test("the session records the User-Agent as its device label", async () => {
+    const agent = "Mozilla/5.0 (X11; Linux) Firefox/130.0";
+    const { challenge, code } = await ask("acme", "device@example.test");
+    const signed = await gql(
+      "acme",
+      VERIFY,
+      { challenge, code: code ?? "" },
+      undefined,
+      { "user-agent": agent },
+    );
+    expect(signed.errors).toBeUndefined();
+    const auth = await janusOf("acme");
+    const verified = signed.data?.["verifySignInCode"] as {
+      user: { id: string };
+    };
+    const id = verified.user.id;
+    expect((await auth.sessions.list({ id })).map((s) => s.device)).toEqual([
+      agent,
+    ]);
+    // No User-Agent: a session with no label.
+    const again = await ask("acme", "device@example.test");
+    await gql("acme", VERIFY, {
+      challenge: again.challenge,
+      code: again.code ?? "",
+    });
+    const labels = (await auth.sessions.list({ id })).map((s) => s.device);
+    expect(labels).toHaveLength(2);
+    expect(labels).toContain(agent);
   });
 
   test("a session from A is anonymous on B through GraphQL", async () => {

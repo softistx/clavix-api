@@ -57,6 +57,18 @@ export interface TenantUserView {
   createdAt: Date;
 }
 
+/** One standing session of a user, without its token. */
+export interface UserSessionView {
+  id: string;
+  /** The `deviceLabel` the sign-in recorded (the User-Agent); absent on an older session. */
+  device?: string | undefined;
+  createdAt: Date;
+  authenticatedAt: Date;
+  /** Moves when the session is renewed; absent on an older session. */
+  lastUsedAt?: Date | undefined;
+  expiresAt: Date;
+}
+
 /** One standing OAuth grant of a user. */
 export interface UserGrantView {
   id: string;
@@ -82,11 +94,16 @@ export interface UserInvitationView {
  * a user or id of another tenant is unknown. Injected (see `src/config/console.ts`).
  */
 export interface ConsoleUsers {
-  /** One page, oldest first. A cursor janus refuses rejects with `INVALID_CURSOR`. */
+  /**
+   * One page, oldest first. `emailPrefix` keeps the users whose login starts
+   * with it, in any case. A cursor janus refuses rejects with `INVALID_CURSOR`.
+   */
   list(
     tenantId: string,
-    page: { after: string | null; limit: number },
+    page: { after: string | null; limit: number; emailPrefix?: string },
   ): Promise<{ items: TenantUserView[]; nextCursor: string | null }>;
+  /** How many users the tenant has, or those `emailPrefix` keeps. */
+  count(tenantId: string, filter?: { emailPrefix?: string }): Promise<number>;
   find(tenantId: string, id: string): Promise<TenantUserView | null>;
   findByEmail(tenantId: string, email: string): Promise<TenantUserView | null>;
   /** The user as written, or `null` when unknown. Disabling ends the user's sessions. */
@@ -101,8 +118,22 @@ export interface ConsoleUsers {
     id: string,
     name: string,
   ): Promise<TenantUserView | null>;
+  /** Sets or clears the verified flag only; the user as written, or `null` when unknown. */
+  setEmailVerified(
+    tenantId: string,
+    id: string,
+    verified: boolean,
+  ): Promise<TenantUserView | null>;
   /** Ends every session; answers how many. */
   revokeSessions(tenantId: string, id: string): Promise<number>;
+  /** The user's standing sessions, newest first; empty for an unknown user. */
+  sessions(tenantId: string, id: string): Promise<UserSessionView[]>;
+  /** `false` when the session is not this user's, is gone, or already revoked. */
+  revokeSession(
+    tenantId: string,
+    id: string,
+    sessionId: string,
+  ): Promise<boolean>;
   /** Deletes the user, their sessions and grants; `false` when already gone. */
   delete(tenantId: string, id: string): Promise<boolean>;
   invite(input: {

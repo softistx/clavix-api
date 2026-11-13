@@ -54,9 +54,58 @@ export function createJanusUsers(source: UsersSource): ConsoleUsers {
     return found;
   };
   return {
-    async list(tenantId, { after, limit }) {
-      const page = await (await janus(tenantId)).list({ after, limit });
+    async list(tenantId, { after, limit, emailPrefix }) {
+      const page = await (await janus(tenantId)).list({
+        after,
+        limit,
+        ...(emailPrefix === undefined ? {} : { emailPrefix }),
+      });
       return { items: page.items.map(view), nextCursor: page.nextCursor };
+    },
+    async count(tenantId, { emailPrefix } = {}) {
+      return (await janus(tenantId)).count(
+        emailPrefix === undefined ? {} : { emailPrefix },
+      );
+    },
+    async setEmailVerified(tenantId, id, verified) {
+      const auth = await janus(tenantId);
+      const user = await auth.findUser(id);
+      if (user === null) return null;
+      try {
+        return view(await auth.setEmailVerified(user, verified));
+      } catch (error) {
+        if (error instanceof JanusError && error.code === "NOT_FOUND")
+          return null;
+        throw error;
+      }
+    },
+    async sessions(tenantId, id) {
+      const auth = await janus(tenantId);
+      const user = await auth.findUser(id);
+      if (user === null) return [];
+      return (await auth.sessions.list(user)).map(
+        ({
+          id,
+          device,
+          createdAt,
+          authenticatedAt,
+          lastUsedAt,
+          expiresAt,
+        }) => ({
+          id,
+          device,
+          createdAt,
+          authenticatedAt,
+          lastUsedAt,
+          expiresAt,
+        }),
+      );
+    },
+    async revokeSession(tenantId, id, sessionId) {
+      const auth = await janus(tenantId);
+      const user = await auth.findUser(id);
+      if (user === null) return false;
+      return auth.sessions.revoke(user, sessionId);
     },
     async find(tenantId, id) {
       const user = await (await janus(tenantId)).findUser(id);

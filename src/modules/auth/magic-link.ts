@@ -39,9 +39,13 @@ export const magicLinkInvalid = () =>
     extensions: { code: "MAGIC_LINK_INVALID", http: { status: 401 } },
   });
 
-export async function confirmMagicLink(auth: TenantJanus, token: string) {
+export async function confirmMagicLink(
+  auth: TenantJanus,
+  token: string,
+  options?: { deviceLabel?: string },
+) {
   try {
-    const result = await auth.magicLink.confirm(token);
+    const result = await auth.magicLink.confirm(token, options);
     // No second factor is configured, so the link always opens a session.
     if ("session" in result && result.status === "signedIn") return result;
     throw magicLinkInvalid();

@@ -16,6 +16,25 @@ With `email` the page holds that one user, or none.
 type TenantUserPage {
   items: [TenantUser!]!
   nextCursor: String
+  "How many users match the filter in all (the whole pool without one), not the page's size."
+  totalCount: Int!
+}
+
+"""
+One standing session of a user (not revoked, not lapsed). Never carries the
+token. The console admin cannot tell which one is the viewer's own: it
+reads another tenant's users, so there is no `current` flag.
+"""
+type UserSession {
+  id: ID!
+  "The browser or device the sign-in came from (its User-Agent, cut at 256 characters); `null` on a session opened before it was recorded."
+  device: String
+  createdAt: DateTime!
+  "When the session last proved who it is (the sign-in, or a step-up)."
+  authenticatedAt: DateTime!
+  "When the session last renewed (at most once a day); `null` on an older session."
+  lastUsedAt: DateTime
+  expiresAt: DateTime!
 }
 
 "A pending invitation into a tenant's user pool. The code only goes by e-mail."
@@ -40,7 +59,7 @@ type UserGrant {
   updatedAt: DateTime!
 }
 
-"What a tenant admin may change on a user. The e-mail address and its verified flag are not editable here."
+"What a tenant admin may change on a user. The e-mail address is not editable; its verified flag is `setUserEmailVerified`."
 input UpdateUserInput {
   "The display name: 1 to 200 characters once trimmed."
   name: String!
@@ -50,13 +69,17 @@ extend type Query {
   """
   The users of a tenant (tenant viewer). `first` defaults to 25, at most 100.
   `email` finds the user with exactly that address (any case, spaces around
-  ignored); a prefix search waits on janus.
+  ignored). `emailPrefix` keeps the users whose address, or username, starts
+  with it (any case; plain text, never a pattern); blank means no filter. Give
+  one of the two: both is BAD_USER_INPUT (400). `totalCount` follows the same
+  filter.
   """
   users(
     tenantId: ID!
     after: String
     first: Int
     email: String
+    emailPrefix: String
   ): TenantUserPage!
   "One user of the tenant (tenant viewer), or `null`: unknown, or of another tenant."
   user(tenantId: ID!, id: ID!): TenantUser
@@ -64,6 +87,8 @@ extend type Query {
   userInvitations(tenantId: ID!): [UserInvitation!]!
   "The user's standing grants, oldest first (tenant viewer). Empty for an unknown user."
   userGrants(tenantId: ID!, userId: ID!): [UserGrant!]!
+  "The user's standing sessions, newest first (tenant viewer). Empty for an unknown user."
+  userSessions(tenantId: ID!, userId: ID!): [UserSession!]!
 }
 
 extend type Mutation {
@@ -99,6 +124,21 @@ extend type Mutation {
   deleteUser(tenantId: ID!, userId: ID!): Boolean!
   "Ends every session of the user (tenant admin); answers how many it ended. 0 on a repeat or an unknown user."
   revokeUserSessions(tenantId: ID!, userId: ID!): Int!
+  """
+  Ends one session of the user (tenant admin). True when it was ended; false
+  when it is not this user's, is already ended or lapsed, or does not exist.
+  """
+  revokeUserSession(tenantId: ID!, userId: ID!, sessionId: ID!): Boolean!
+  """
+  Marks the user's address verified or not (tenant admin), touching nothing
+  else: no session, password or second factor changes. Idempotent. Errors:
+  NOT_FOUND for an unknown user.
+  """
+  setUserEmailVerified(
+    tenantId: ID!
+    userId: ID!
+    verified: Boolean!
+  ): TenantUser!
   """
   Takes back one grant of the user and the tokens it opened (tenant admin).
   True also when the grant was already revoked; false when it is not this

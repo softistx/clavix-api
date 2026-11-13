@@ -127,11 +127,18 @@ const grantsOf = (who: string, tenant: string, user: string) =>
     who,
     `{ userGrants(tenantId: "${tenant}", userId: "${user}") { id clientId clientName resource scopes } }`,
   );
-const sessionsOf = async (slug: string, userId: string) => {
+const sessionsOf = async (
+  slug: string,
+  userId: string,
+  deviceLabel?: string,
+) => {
   const { auth } = await poolOf(slug);
   const user = await auth.findUser(userId);
   if (user === null) throw new Error("no user");
-  return auth.signInProven(user);
+  return auth.signInProven(
+    user,
+    deviceLabel === undefined ? undefined : { deviceLabel },
+  );
 };
 
 beforeAll(async () => {
@@ -183,6 +190,8 @@ const MUTATIONS = (tenant: string, user: string) => [
   `deleteUser(tenantId: "${tenant}", userId: "${user}")`,
   `updateUser(tenantId: "${tenant}", userId: "${user}", input: { name: "Zed" }) { id }`,
   `revokeUserSessions(tenantId: "${tenant}", userId: "${user}")`,
+  `revokeUserSession(tenantId: "${tenant}", userId: "${user}", sessionId: "s")`,
+  `setUserEmailVerified(tenantId: "${tenant}", userId: "${user}", verified: true) { id }`,
   `revokeGrant(tenantId: "${tenant}", userId: "${user}", grantId: "g")`,
 ];
 const READS = (tenant: string, user: string) => [
@@ -190,6 +199,7 @@ const READS = (tenant: string, user: string) => [
   `user(tenantId: "${tenant}", id: "${user}") { id }`,
   `userInvitations(tenantId: "${tenant}") { id }`,
   `userGrants(tenantId: "${tenant}", userId: "${user}") { id }`,
+  `userSessions(tenantId: "${tenant}", userId: "${user}") { id }`,
 ];
 
 describe("permission per role", () => {
@@ -261,6 +271,254 @@ describe("listing", () => {
         ),
       ),
     ).toBe("BAD_USER_INPUT");
+  });
+});
+
+describe("search by e-mail prefix", () => {
+  test("matches any case, counts, pages, and keeps the exact e-mail working", async () => {
+    const a = await poolOf(SLUG.a);
+    const pre = (await a.auth.create({ email: "Prefix.One@find.test" })).id;
+    await a.auth.create({ email: "prefix.two@find.test" });
+    await a.auth.create({ email: "other@find.test" });
+    const all = await asConsole(
+      ownA,
+      `{ users(tenantId: "${tenantA}", emailPrefix: "PREFIX.") { items { id email } nextCursor totalCount } }`,
+    );
+    expect(all.errors).toBeUndefined();
+    expect(all.data?.["users"].totalCount).toBe(2);
+    expect(all.data?.["users"].items).toHaveLength(2);
+    expect(all.data?.["users"].items[0].id).toBe(pre);
+    const paged = await asConsole(
+      ownA,
+      `{ users(tenantId: "${tenantA}", emailPrefix: "prefix.", first: 1) { items { id } nextCursor totalCount } }`,
+    );
+    expect(paged.data?.["users"].items).toHaveLength(1);
+    expect(paged.data?.["users"].totalCount).toBe(2);
+    expect(paged.data?.["users"].nextCursor).not.toBeNull();
+    // No prefix: every user of the tenant, and the total says so.
+    const whole = await asConsole(
+      ownA,
+      `{ users(tenantId: "${tenantA}") { items { id } totalCount } }`,
+    );
+    expect(whole.data?.["users"].totalCount).toBeGreaterThanOrEqual(5);
+    // A blank prefix is no filter; none found is an empty page.
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `{ users(tenantId: "${tenantA}", emailPrefix: "  ") { totalCount } }`,
+        )
+      ).data?.["users"].totalCount,
+    ).toBe(whole.data?.["users"].totalCount);
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `{ users(tenantId: "${tenantA}", emailPrefix: "zzz") { items { id } totalCount } }`,
+        )
+      ).data?.["users"],
+    ).toEqual({ items: [], totalCount: 0 });
+    // The exact match still answers, with its total.
+    const exact = await asConsole(
+      ownA,
+      `{ users(tenantId: "${tenantA}", email: "prefix.two@find.test") { items { email } totalCount } }`,
+    );
+    expect(exact.data?.["users"]).toEqual({
+      items: [{ email: "prefix.two@find.test" }],
+      totalCount: 1,
+    });
+    // The other tenant's pool is not searched.
+    expect(
+      (
+        await asConsole(
+          ownB,
+          `{ users(tenantId: "${tenantB}", emailPrefix: "prefix.") { totalCount } }`,
+        )
+      ).data?.["users"].totalCount,
+    ).toBe(0);
+    expect(
+      code(
+        await asConsole(
+          ownA,
+          `{ users(tenantId: "${tenantA}", emailPrefix: "${"a".repeat(255)}") { totalCount } }`,
+        ),
+      ),
+    ).toBe("BAD_USER_INPUT");
+    // Both filters at once is ambiguous.
+    expect(
+      code(
+        await asConsole(
+          ownA,
+          `{ users(tenantId: "${tenantA}", email: "a@b.test", emailPrefix: "a") { totalCount } }`,
+        ),
+      ),
+    ).toBe("BAD_USER_INPUT");
+  });
+});
+
+describe("user sessions", () => {
+  test("lists a user's sessions with their device, newest first; revokes one", async () => {
+    const a = await poolOf(SLUG.a);
+    const id = (await a.auth.create({ email: "devices@end.test" })).id;
+    const other = (await a.auth.create({ email: "devices2@end.test" })).id;
+    await sessionsOf(SLUG.a, id, "Firefox on Linux");
+    await sessionsOf(SLUG.a, id, "Safari on iPhone");
+    await sessionsOf(SLUG.a, id);
+    await sessionsOf(SLUG.a, other, "Not yours");
+    const listed = await asConsole(
+      vwA,
+      `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { id device createdAt lastUsedAt expiresAt authenticatedAt } }`,
+    );
+    expect(listed.errors).toBeUndefined();
+    const rows = listed.data?.["userSessions"] as {
+      id: string;
+      device: string | null;
+      createdAt: string;
+      expiresAt: string;
+    }[];
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.device)).toEqual([
+      null,
+      "Safari on iPhone",
+      "Firefox on Linux",
+    ]);
+    for (const row of rows) {
+      expect(new Date(row.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    }
+    const target = rows[1]?.id as string;
+    // Another user's session id, named under this user, revokes nothing.
+    const foreignRows = (
+      await asConsole(
+        ownA,
+        `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { id } }`,
+      )
+    ).data?.["userSessions"] as { id: string }[];
+    const foreign = foreignRows[0]?.id as string;
+    expect(
+      (
+        await asConsole(
+          admA,
+          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${id}", sessionId: "${foreign}") }`,
+        )
+      ).data,
+    ).toEqual({ revokeUserSession: false });
+    expect(
+      (
+        await asConsole(
+          admA,
+          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${id}", sessionId: "${target}") }`,
+        )
+      ).data,
+    ).toEqual({ revokeUserSession: true });
+    // Revoked once: a repeat is false.
+    expect(
+      (
+        await asConsole(
+          admA,
+          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${id}", sessionId: "${target}") }`,
+        )
+      ).data,
+    ).toEqual({ revokeUserSession: false });
+    const after = await asConsole(
+      ownA,
+      `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
+    );
+    expect(after.data?.["userSessions"]).toHaveLength(2);
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { device } }`,
+        )
+      ).data?.["userSessions"],
+    ).toEqual([{ device: "Not yours" }]);
+    // An unknown user has none.
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `{ userSessions(tenantId: "${tenantA}", userId: "ghost") { id } }`,
+        )
+      ).data,
+    ).toEqual({ userSessions: [] });
+  });
+
+  test("a user of B has no sessions listed or revoked under A", async () => {
+    const uB2 = (
+      await (await poolOf(SLUG.b)).auth.create({ email: "devs@end.test" })
+    ).id;
+    const session = await sessionsOf(SLUG.b, uB2, "B device");
+    expect(session.status).toBe("signedIn");
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `{ userSessions(tenantId: "${tenantA}", userId: "${uB2}") { id } }`,
+        )
+      ).data,
+    ).toEqual({ userSessions: [] });
+    const ownRows = (
+      await asConsole(
+        ownB,
+        `{ userSessions(tenantId: "${tenantB}", userId: "${uB2}") { id device } }`,
+      )
+    ).data?.["userSessions"] as { id: string; device: string }[];
+    const own = ownRows.find((s) => s.device === "B device");
+    expect(own).toBeDefined();
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${uB2}", sessionId: "${own?.id}") }`,
+        )
+      ).data,
+    ).toEqual({ revokeUserSession: false });
+    expect(
+      (
+        await asConsole(
+          ownB,
+          `{ userSessions(tenantId: "${tenantB}", userId: "${uB2}") { id } }`,
+        )
+      ).data?.["userSessions"].length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe("e-mail verified flag", () => {
+  test("sets and clears it without touching anything else; an unknown user is NOT_FOUND", async () => {
+    const a = await poolOf(SLUG.a);
+    const id = (await a.auth.create({ email: "verify@end.test", name: "V" }))
+      .id;
+    await sessionsOf(SLUG.a, id, "kept");
+    const set = (verified: boolean, user = id) =>
+      asConsole(
+        ownA,
+        `mutation { setUserEmailVerified(tenantId: "${tenantA}", userId: "${user}", verified: ${verified}) { id emailVerified name active } }`,
+      );
+    expect((await set(true)).data?.["setUserEmailVerified"]).toEqual({
+      id,
+      emailVerified: true,
+      name: "V",
+      active: true,
+    });
+    expect((await set(true)).data?.["setUserEmailVerified"].emailVerified).toBe(
+      true,
+    );
+    expect((await set(false)).data?.["setUserEmailVerified"]).toMatchObject({
+      emailVerified: false,
+      name: "V",
+    });
+    expect(code(await set(true, "ghost"))).toBe("NOT_FOUND");
+    expect(code(await set(true, uB1))).toBe("NOT_FOUND");
+    // No session was revoked by it.
+    expect(
+      (
+        await asConsole(
+          ownA,
+          `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
+        )
+      ).data?.["userSessions"],
+    ).toEqual([{ device: "kept" }]);
   });
 });
 
@@ -646,6 +904,8 @@ describe("admin events", () => {
         d: revokeGrant(tenantId: "${t}", userId: "${uA2}", grantId: "g1")
         e: deleteUser(tenantId: "${t}", userId: "ghost")
         f: revokeInvitation(tenantId: "${t}", invitationId: "inv1")
+        g: revokeUserSession(tenantId: "${t}", userId: "${uA2}", sessionId: "s1")
+        h: setUserEmailVerified(tenantId: "${t}", userId: "${uA2}", verified: true) { id }
       }`,
     );
     const events = await mongo.db.adminEvents.raw
@@ -662,6 +922,8 @@ describe("admin events", () => {
       ["user.revokeGrant", "grant", "g1", ownA],
       ["user.delete", "user", "ghost", ownA],
       ["user.revokeInvitation", "invitation", "inv1", ownA],
+      ["user.revokeSession", "session", "s1", ownA],
+      ["user.setEmailVerified", "user", uA2, ownA],
     ]);
   });
 });
