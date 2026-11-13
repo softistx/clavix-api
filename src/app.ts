@@ -35,9 +35,9 @@ export function createApp(
     passkeyThrottle?: Throttle | undefined;
     // The console API (`/console/graphql`, src/console): bearer token, its own
     // schema. Off without it, the route does not exist.
+    console?: ConsoleDeps & { schema?: typeof consoleSchema };
     // Where the consent page reads the tenants' scope texts; the stored ones by default.
     scopeTexts?: ScopeTextsFor;
-    console?: ConsoleDeps & { schema?: typeof consoleSchema };
   } = {},
 ) {
   const base = createBase(undefined, {

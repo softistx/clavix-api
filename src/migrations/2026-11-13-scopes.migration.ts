@@ -58,6 +58,7 @@ export const scopesMigration = defineMigration({
         .collection("resources")
         .updateOne({ _id: resource._id }, { $set: { scopes: names } });
     }
-    await scopeDocs.deleteMany({});
+    // Standard OIDC scopes (no resource) have no string form: they are kept.
+    await scopeDocs.deleteMany({ resourceId: { $ne: null } });
   },
 });

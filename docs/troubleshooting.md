@@ -270,3 +270,21 @@ send the call again. A colour the library cannot read, an unsafe radius, an unkn
 a logo that is not a PNG, JPEG or WebP of at most 256 KiB (checked by its bytes) is `BAD_USER_INPUT`
 with `extensions.field` instead. `CONFLICT` (409) means other calls changed the brand at the same
 time: read it and send the call again.
+
+## `BAD_USER_INPUT: Unknown cursor` on `clients`
+
+**When:** `clients(after: ...)` answers `400` with this message.
+
+**Why:** `after` is not a `nextCursor` this API handed out (or it is too long or was edited).
+
+**Fix:** start again without `after`, and pass back only the `nextCursor` of the previous page. A page
+may hold fewer than `first` items, even none, with a `nextCursor`: follow it until it is `null`.
+
+## A refusal on the console's own client or resource
+
+**When:** `updateClient`, `rotateClientSecret`, `deleteClient` or a resource mutation names the
+`console` client or the console resource.
+
+**Why:** they belong to the console itself; changing them would lock operators out.
+
+**Fix:** leave them alone. Manage them with the `2026-11-12-console` migration, not through the API.

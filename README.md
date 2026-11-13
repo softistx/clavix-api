@@ -152,7 +152,7 @@ tenant; every field is refused unless its guard allows it.
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and
 prints the client secret once: save it; the `2026-11-13-scopes` migration turns each resource's
-scope strings into `Scope` documents and lists the clients that already exist), then name the first
+scope strings into `Scope` documents), then name the first
 operator, a user who already exists in the `clavix` tenant:
 
 ```sh
