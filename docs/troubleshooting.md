@@ -343,6 +343,15 @@ again with `clients(tenantId)`, `resources(tenantId)` or `scopes(tenantId)`.
 The client id, the resource URI or the scope name (in that resource) already exists in the
 tenant. Pass another `clientId`, or update the one that exists.
 
+A repeat of a call that already stored the same thing is not a conflict: the first run stored the
+change but its audit record failed, so the call failed and was retried. When the stored client,
+resource, scope or role has exactly the values of the call (for a client: name, type and redirect
+URIs), the call returns it and records the missed event. `createClient` then answers
+`clientSecret: null`: the secret was shown once by the first run and only its hash is kept, so
+call `rotateClientSecret` if it was lost. `createRole` answers `CONFLICT` only when the
+description differs, `createResource` when the name differs, `createScope` when the description or
+the claims differ.
+
 ### `BAD_USER_INPUT` on a client, resource or scope mutation
 
 The message says which: a redirect URI or a resource URI janus refuses (HTTPS, no fragment), a

@@ -340,7 +340,7 @@ does two things, and nothing else touches the collection:
 - **Awaited, and a failure fails the mutation**: `ctx.audit` rejects when the event cannot be
   stored, so the resolver throws and the caller retries rather than a change being left with no
   record. So a mutation stays safe to repeat (the plan's idempotency rule): its second run stores
-  nothing twice and records the event the first one missed. Never `void` it or catch its error. The declaration is not
+  nothing twice and records the event the first one missed. So `createTenant`, `createClient` (`clientSecret: null`), `createRole`, `createResource` and `createScope` return the stored record, not `CONFLICT`, when a repeat has the same values. Never `void` it or catch its error. The declaration is not
   checked against the call: the slice's own spec asserts the stored event.
 - **Never a secret**: an event is identifiers only (`target` is `{ type, id }`). The schema is
   closed (`z.strictObject`, no free-form field), so there is no place for a secret, a token or the

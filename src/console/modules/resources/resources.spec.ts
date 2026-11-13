@@ -95,7 +95,12 @@ describe("resources", () => {
 
   test("the same URI again is a CONFLICT; bad URIs and the userinfo URL are refused", async () => {
     expect(
-      codeOf(await admin(CREATE, { tenantId: tenantA, input: { uri: API } })),
+      codeOf(
+        await admin(CREATE, {
+          tenantId: tenantA,
+          input: { uri: API, name: "Another name" },
+        }),
+      ),
     ).toBe("CONFLICT");
     const origin = {
       scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -313,6 +318,54 @@ describe("scopes", () => {
         }),
       ),
     ).toBe("NOT_FOUND");
+  });
+});
+
+describe("a repeat after a failed record", () => {
+  test("createResource and createScope return the stored one and record the event", async () => {
+    const actions = async () =>
+      (await mongo.db.adminEvents.raw.find({}).toArray()).map(
+        (event) => event["action"],
+      );
+    const uri = "https://api.res-a.example/replay";
+    const resource = one(
+      await admin(CREATE, { tenantId: tenantA, input: { uri } }),
+      "createResource",
+    );
+    await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
+    const again = one(
+      await admin(CREATE, { tenantId: tenantA, input: { uri } }),
+      "createResource",
+    );
+    expect(again.id).toBe(resource.id);
+    expect(await actions()).toEqual(["resource.create"]);
+
+    const input = {
+      name: "replay:read",
+      resourceId: resource.id,
+      description: { fr: "Lire", en: "Read" },
+      claims: ["a"],
+    };
+    const scope = one(
+      await admin(CREATE_SCOPE, { tenantId: tenantA, input }),
+      "createScope",
+    );
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const repeated = one(
+      await admin(CREATE_SCOPE, { tenantId: tenantA, input }),
+      "createScope",
+    );
+    expect(repeated.id).toBe(scope.id);
+    expect(await actions()).toEqual(["scope.create"]);
+    expect(
+      codeOf(
+        await admin(CREATE_SCOPE, {
+          tenantId: tenantA,
+          input: { ...input, claims: ["b"] },
+        }),
+      ),
+    ).toBe("CONFLICT");
+    await admin(DELETE, { tenantId: tenantA, id: resource.id }); // and its scope
   });
 });
 

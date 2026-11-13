@@ -620,9 +620,9 @@ const eventsOf = () =>
 describe("createClient of one id at the very same time", () => {
   test("exactly one wins, the others are CONFLICT, and the winner's secret is the stored one", async () => {
     const results = await Promise.all(
-      Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, (_, index) =>
         create(admin, tenantA, {
-          name: "Racer",
+          name: `Racer ${index}`,
           clientId: "racer",
           type: "CONFIDENTIAL",
         }),
@@ -839,5 +839,32 @@ describe("the tenant id's spelling", () => {
     const upper = await admin(LIST, { tenantId: tenantA.toUpperCase() });
     expect(upper.errors).toBeUndefined();
     expect(upper.data).toEqual(lower.data);
+  });
+});
+
+describe("a repeat after a failed record", () => {
+  test("createClient returns the stored client with no secret and records the event", async () => {
+    const input = {
+      name: "Replayed",
+      type: "CONFIDENTIAL",
+      redirectUris: [REDIRECT],
+    };
+    const first = await create(admin, tenantA, input);
+    expect(first.errors).toBeUndefined();
+    await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
+    const again = await create(admin, tenantA, input);
+    expect(again.errors).toBeUndefined();
+    const result = again.data?.["createClient"] as {
+      client: { id: string };
+      clientSecret: string | null;
+    };
+    expect(result.client.id).toBe("replayed");
+    expect(result.clientSecret).toBeNull();
+    const events = await mongo.db.adminEvents.raw.find({}).toArray();
+    expect(events.map((event) => event["action"])).toEqual(["client.create"]);
+    // Another type under the same id is still a CONFLICT.
+    expect(
+      codeOf(await create(admin, tenantA, { ...input, type: "PUBLIC" })),
+    ).toBe("CONFLICT");
   });
 });

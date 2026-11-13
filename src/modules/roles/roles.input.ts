@@ -4,9 +4,9 @@ const NAME = /^[A-Za-z0-9._:-]{1,64}$/;
 const MAX_DESCRIPTION = 300;
 export const MAX_ID = 200;
 
-export const refuse = (code: RolesError["code"], message: string): never => {
+export function refuse(code: RolesError["code"], message: string): never {
   throw new RolesError(code, message);
-};
+}
 
 export function cleanName(name: string) {
   const clean = name.trim();

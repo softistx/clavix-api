@@ -118,15 +118,20 @@ export const clients: Resolvers = {
       // The existence check and the write of `create`, and the quota count,
       // are not atomic (the janus store has no insert-only write): one create
       // at a time per tenant, across processes when there is a shared lock.
+      const wanted = {
+        name: input.name,
+        type: input.type === "CONFIDENTIAL" ? "confidential" : "public",
+        redirectUris: input.redirectUris,
+        clientId: input.clientId ?? undefined,
+      } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
-          await assertClientQuota(tenant);
-          return clientsService.create(tenant, {
-            name: input.name,
-            type: input.type === "CONFIDENTIAL" ? "confidential" : "public",
-            redirectUris: input.redirectUris,
-            clientId: input.clientId ?? undefined,
-          });
+          // A repeat of a call whose record failed adds no client, so it
+          // needs no quota; the service returns the stored one, no secret.
+          if (!(await clientsService.matches(tenant, wanted))) {
+            await assertClientQuota(tenant);
+          }
+          return clientsService.create(tenant, wanted);
         }),
       );
       await ctx.audit("client.create", target(tenant, created.client.clientId));

@@ -127,7 +127,17 @@ export class RolesService {
       }
       return created;
     } catch (error) {
-      if (error instanceof ConflictError) throw conflict(name);
+      if (error instanceof ConflictError) {
+        // A repeat of a call whose audit record failed: the stored role is
+        // returned when it is the one asked for.
+        const [existing] = await this.rolesOf(tenantId).findMany({
+          filter: { name, resourceId },
+        });
+        if (existing !== undefined && existing.description === description) {
+          return existing;
+        }
+        throw conflict(name);
+      }
       throw error;
     }
   }
@@ -140,7 +150,7 @@ export class RolesService {
   ): Promise<RoleDoc> {
     const existing = await this.find(tenantId, roleId);
     if (existing === undefined) refuse("NOT_FOUND", "No such role");
-    const found = existing as RoleDoc;
+    const found = existing;
     const name = input.name === undefined ? found.name : cleanName(input.name);
     const description =
       input.description === undefined

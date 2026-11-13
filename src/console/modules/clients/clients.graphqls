@@ -72,7 +72,7 @@ type Query {
 }
 
 type Mutation {
-  "Needs `edit` on the tenant. Errors: CONFLICT (id taken, also when two calls race), QUOTA_EXCEEDED (409, past the plan's `clients` quota)."
+  "Needs `edit` on the tenant. Errors: CONFLICT (id taken by a client with other values, also when two calls race), QUOTA_EXCEEDED (409, past the plan's `clients` quota). A repeat of a call whose audit record failed (same id, name, type and redirect URIs) returns the stored client with `clientSecret: null` and records the missed event."
   createClient(tenantId: ID!, input: CreateClientInput!): CreatedClient!
   updateClient(tenantId: ID!, id: ID!, input: UpdateClientInput!): Client!
   rotateClientSecret(tenantId: ID!, id: ID!): RotatedClientSecret!

@@ -53,6 +53,24 @@ function checkSizes(input: {
  * as one made by script. Deleting revokes the client's grants and tokens and
  * is idempotent.
  */
+/** The stored client has the input's name, type and redirect URIs. */
+function sameClient(
+  stored: ClientView,
+  input: {
+    name: string;
+    type: "public" | "confidential";
+    redirectUris: readonly string[];
+  },
+) {
+  const wanted = new Set(input.redirectUris);
+  return (
+    stored.name === input.name.trim() &&
+    stored.type === input.type &&
+    stored.redirectUris.length === wanted.size &&
+    stored.redirectUris.every((uri) => wanted.has(uri))
+  );
+}
+
 export class ClientsService {
   constructor(private readonly options: ClientsServiceOptions) {}
 
@@ -125,6 +143,17 @@ export class ClientsService {
     return found;
   }
 
+  /** Whether `input` describes the stored client: a repeat of its creation. */
+  async matches(
+    tenant: CliTenant,
+    input: Parameters<ClientsService["create"]>[1],
+  ): Promise<boolean> {
+    const clientId = input.clientId ?? clientIdOf(input.name);
+    if (clientId === "") return false;
+    const existing = await this.find(tenant, clientId);
+    return existing !== null && sameClient(existing, input);
+  }
+
   /** A new client; `clientSecret` (confidential only) is returned here and nowhere else. */
   async create(
     tenant: CliTenant,
@@ -137,12 +166,19 @@ export class ClientsService {
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
     checkSizes(input);
     const clientId = input.clientId ?? clientIdOf(input.name);
-    const taken = new CatalogError(
-      "CONFLICT",
-      `A client already has the id "${clientId}"`,
-    );
-    if (clientId !== "" && (await this.find(tenant, clientId)) !== null) {
-      throw taken;
+    if (clientId !== "") {
+      const existing = await this.find(tenant, clientId);
+      if (existing !== null) {
+        // A repeat of a call whose audit record failed: the same client, no
+        // secret (it was returned, once, by the first run).
+        if (sameClient(existing, input)) {
+          return { client: existing, clientSecret: null };
+        }
+        throw new CatalogError(
+          "CONFLICT",
+          `A client already has the id "${clientId}"`,
+        );
+      }
     }
     const registered = await this.register(tenant, {
       name: input.name,

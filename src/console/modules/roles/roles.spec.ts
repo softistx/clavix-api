@@ -168,7 +168,12 @@ describe("CRUD", () => {
   test("names are validated and unique per resource", async () => {
     await make(admin, tenantA, "dup");
     expect(
-      codeOf(await admin(CREATE, { t: tenantA, input: { name: "dup" } })),
+      codeOf(
+        await admin(CREATE, {
+          t: tenantA,
+          input: { name: "dup", description: "another" },
+        }),
+      ),
     ).toBe("CONFLICT");
     for (const name of ["", "has space", "x".repeat(65)]) {
       expect(codeOf(await admin(CREATE, { t: tenantA, input: { name } }))).toBe(
@@ -182,7 +187,7 @@ describe("CRUD", () => {
       codeOf(
         await admin(CREATE, {
           t: tenantA,
-          input: { name: "dup", resourceId: resourceA },
+          input: { name: "dup", resourceId: resourceA, description: "x" },
         }),
       ),
     ).toBe("CONFLICT");
@@ -486,5 +491,29 @@ describe("audit", () => {
       "role.delete",
       "role.delete",
     ]);
+  });
+});
+
+describe("a repeat after a failed record", () => {
+  test("createRole returns the stored role and records the event; another description stays CONFLICT", async () => {
+    const input = { name: "replayed", description: "same" };
+    const id = await make(admin, tenantA, "replayed", { description: "same" });
+    await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
+    const again = await admin(CREATE, { t: tenantA, input });
+    expect(again.errors).toBeUndefined();
+    expect((again.data?.["createRole"] as { id: string } | undefined)?.id).toBe(
+      id,
+    );
+    expect((await events()).map((event) => event["action"])).toEqual([
+      "role.create",
+    ]);
+    expect(
+      codeOf(
+        await admin(CREATE, {
+          t: tenantA,
+          input: { name: "replayed", description: "other" },
+        }),
+      ),
+    ).toBe("CONFLICT");
   });
 });

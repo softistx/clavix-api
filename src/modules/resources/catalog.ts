@@ -46,9 +46,9 @@ const MAX_NAME = 100;
 const MAX_DESCRIPTION = 300;
 const MAX_CLAIMS = 50;
 
-const refuse = (message: string): never => {
+function refuse(message: string): never {
   throw new CatalogError("BAD_USER_INPUT", message);
-};
+}
 
 function cleanClaims(claims: readonly string[] | undefined) {
   const clean = [...new Set((claims ?? []).map((claim) => claim.trim()))];
@@ -165,6 +165,12 @@ export class Catalog {
       return await this.resourcesOf(tenantId).create({ uri, name });
     } catch (error) {
       if (error instanceof ConflictError) {
+        // A repeat of a call whose audit record failed: the stored resource
+        // is returned when it is the one asked for.
+        const [existing] = await this.resourcesOf(tenantId).findMany({
+          filter: { uri },
+        });
+        if (existing !== undefined && existing.name === name) return existing;
         throw new CatalogError(
           "CONFLICT",
           `A resource already has the URI "${uri}"`,
@@ -249,6 +255,20 @@ export class Catalog {
       });
     } catch (error) {
       if (error instanceof ConflictError) {
+        // A repeat of a call whose audit record failed: the stored scope is
+        // returned when it is the one asked for.
+        const [existing] = await this.scopesOf(tenantId).findMany({
+          filter: { name, resourceId },
+        });
+        if (
+          existing !== undefined &&
+          existing.description.fr === description.fr &&
+          existing.description.en === description.en &&
+          existing.claims.length === claims.length &&
+          existing.claims.every((claim) => claims.includes(claim))
+        ) {
+          return existing;
+        }
         throw new CatalogError(
           "CONFLICT",
           resourceId === null
