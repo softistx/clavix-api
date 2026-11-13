@@ -1,5 +1,4 @@
 import type { ObjectId } from "mongodb";
-import type { AdminEventInput } from "@/console/admin-events/recorder";
 
 /**
  * What the platform itself does to a claim, with no console user behind it:
@@ -21,10 +20,22 @@ const ACTOR: Record<DomainSystemEvent["action"], string> = {
   "domain.evict": "system:domains:verify",
 };
 
-/** The admin event of a system event: identifiers only, a request id of its own. */
+/**
+ * The admin event of a system event: identifiers only, a request id of its
+ * own. Shaped like the console's `AdminEventInput`, which `config/domains.ts`
+ * hands it to (this module does not import from the console).
+ */
+export interface DomainEventInput {
+  actor: string;
+  action: DomainSystemEvent["action"];
+  tenantId: string;
+  target: { type: "domain"; id: string };
+  requestId: string;
+}
+
 export const domainEventInput = (
   event: DomainSystemEvent,
-): AdminEventInput => ({
+): DomainEventInput => ({
   actor: ACTOR[event.action],
   action: event.action,
   tenantId: event.tenantId.toHexString(),
