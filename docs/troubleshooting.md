@@ -425,8 +425,8 @@ to remove.
 
 The message says which: a name that is not 1 to 64 characters of letters, digits, `.`, `_`, `:` and
 `-`; a description over 300 characters; a `userId` that is empty or over 200 characters; an `id`,
-`roleId` or `tenantId` that is not an id; or, on `roleMembers`, `The cursor is not valid` (send
-`nextCursor` back as it came). Nothing was written.
+`roleId` or `tenantId` that is not an id; or, on `roleMembers` or `me.switchableTenants`, `The cursor is not valid` (send
+`nextCursor` back as it came, with the same `q`). Nothing was written.
 
 ## `BRANDING_CONTRAST` on `updateBranding`
 
