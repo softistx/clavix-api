@@ -16,7 +16,7 @@ other way round; the name when both are empty).
 """
 type Scope {
   id: ID!
-  "The OAuth scope token. Unique in the tenant; never changes."
+  "The OAuth scope token. Unique in its resource (or among the standard scopes); never changes."
   name: String!
   description: LocalizedText!
   "The resource it belongs to; `null` for a standard OpenID Connect scope."

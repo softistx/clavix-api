@@ -46,16 +46,26 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 ## Resources (`src/modules/resources`)
 
 A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the access tokens asked with
-`resource=<uri>`, its `scopes` what a client may request on it. `bun run resources:create --tenant
+`resource=<uri>`, its scopes what a client may request on it. `bun run resources:create --tenant
 <slug> --uri <https uri> --scope <s> [--scope <s>] [--name <label>]` stores or updates one
-(idempotent on the URI; the scopes are replaced), until the console (M2). The `resources`
-collection is tenant-owned and reached only through `scopeToTenant` (`storedResourcesFor`,
-`registerResource`; `src/config/resources.ts` exports `registerStoredResource`, never the collection), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
+(idempotent on the URI; the scopes are replaced), beside the console. The `resources` and `scopes`
+collections are tenant-owned and reached only through `scopeToTenant` (`Catalog` in `catalog.ts`,
+`storedResourcesFor`, `registerResource`; `src/config/resources.ts` exports `catalog`,
+`registerStoredResource` and `scopeTextsFor`, never the collections), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
 in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/resources.ts`.
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
-URL cannot be registered: it is built in, with the OpenID Connect scopes. Scopes are a plain list
-for now (assumed; the Scope entity with consent texts is M2).
+URL cannot be registered: it is built in, with the OpenID Connect scopes.
+- **A scope is a document** (`scopes.model.ts`, ADR-0025): `name`, `description { fr, en }`,
+  `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
+  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
+  or `email` (`scope-name.ts`); it exists once a tenant describes it. `claims` is stored only.
+- **`Catalog`** is the one writer (console resolvers, `registerResource`); it throws `CatalogError`
+  (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`.
+- **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
+  `scopes` documents), so a scope added or removed in the console serves at once.
+- **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
+  texts) and backfills `clientIndex`; `resources.scopes` stays optional in the model for its `down`.
 
 ## OpenID Connect
 
@@ -160,7 +170,10 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
-not worked around). Passkeys are the next section.
+not worked around). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
+resource's scope, else the standard one; `Accept-Language` French else English, then the other
+language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 
@@ -206,6 +219,16 @@ every other failure a 401).
   `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards) and lists it
   in `modules/index.ts`; the SDL lives there, never in `src/modules`.
+- **`clients` and `resources`** (issue #9) are thin: resolvers call `ClientsService`
+  (`src/modules/clients`, wired in `src/config/clients.ts`) and `Catalog`
+  (`src/modules/resources`), after `activeTenant` (`catalog-support.ts`: a suspended tenant is
+  `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`. `test/console.ts`
+  (`consoleAs(userId)`) runs the real console app with a stubbed token check.
+- **`clientIndex`** (`src/modules/clients`) is a tenant-owned copy of each client's id, name, type
+  and redirect URIs, written by `registerClient`, read by `clients(...)` for listing and search:
+  janus-oauth 0.9 cannot list clients. It is marked `Temporary, until @softistx/janus-oauth#706`
+  (`listClients`); the janus store stays the source of truth, and a secret or its hash never goes
+  in the index or in a GraphQL type.
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
