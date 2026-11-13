@@ -307,7 +307,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   of the `clavix` tenant a platform role (default owner), until the console can. The user must exist,
   unless `--create`: an unknown address is then invited (operator scope, `operatorScope()`, issued by
   the system, mailed by the tenant's mail path) and accepting the invitation makes the account and
-  grants the role (`adminInvitationHooks`). Each run records the admin event `operator.grant`.
+  grants the role (`adminInvitationHooks`, under the user's `userKey` lock, inside the tenant's members lock, the order `keepOwners` keeps: platform owners, members by id, user). A disabled account is refused. Each run records the admin event `operator.grant`.
 
 ### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
 

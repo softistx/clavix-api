@@ -1,5 +1,7 @@
 import { adminInvitationHooks } from "@/console/modules/admins/accept";
+import { userKey } from "@/console/modules/user-key";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
 import { env } from "./env";
@@ -10,19 +12,21 @@ import { tenantResolver, tenantsService } from "./tenancy";
 
 // What accepting an invitation does: on the `clavix` tenant (the console's
 // users) an admin invitation grants its console role; nothing more elsewhere.
-const adminHooks = adminInvitationHooks({
-  access,
-  exclusive,
-  tenantActive: async (id) =>
-    (await tenantsService.activeByIds([id])).length === 1,
-  findUser: async (id) => {
-    const tenant = await tenantResolver.resolveHost(
-      `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
-    );
-    const janus = tenant === null ? null : await forTenant(tenant);
-    return (await janus?.findUser(id)) ?? null;
-  },
-});
+const adminHooks = (tenant: ResolvedTenant) =>
+  adminInvitationHooks({
+    access,
+    exclusive,
+    userLock: (id) => userKey(tenant.tenantId, id),
+    tenantActive: async (id) =>
+      (await tenantsService.activeByIds([id])).length === 1,
+    findUser: async (id) => {
+      const tenant = await tenantResolver.resolveHost(
+        `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
+      );
+      const janus = tenant === null ? null : await forTenant(tenant);
+      return (await janus?.findUser(id)) ?? null;
+    },
+  });
 
 // The users of every tenant: one janus instance per tenant over its partition
 // of the janus user stores (`syncMongoStoresPartitioned`). `authFor` and
@@ -34,6 +38,6 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     db: oauthDb,
     secrets: secretBox,
     invitationHooks: (tenant) =>
-      tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks : undefined,
+      tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks(tenant) : undefined,
   },
 );

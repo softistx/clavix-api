@@ -8,7 +8,7 @@ import type { Role } from "./model";
 export const OPERATORS_USAGE = `Usage: bun run operators:grant --email <address> [--role owner|admin|viewer] [--create]
 
 Grants a user of the clavix tenant a platform role (default: owner), so they
-manage every tenant in the console. Idempotent.
+manage every tenant in the console. A disabled account is refused. Idempotent.
 
 Without --create the user must already exist in the clavix tenant. With
 --create, an address with no user is invited instead: the clavix tenant mails
@@ -57,11 +57,14 @@ export type OperatorGrant =
  * and records it as the admin event `operator.grant`. An address with no user
  * is refused, unless `create`: it is then invited (the e-mail goes out through
  * the tenant's mail path), and accepting the invitation makes the account and
- * grants the role (`adminInvitationHooks`). Idempotent either way.
+ * grants the role (`adminInvitationHooks`). A disabled account is refused.
+ * Idempotent either way.
  */
 export async function grantOperator(
   deps: {
-    findByEmail(email: string): Promise<{ id: string; email: string } | null>;
+    findByEmail(
+      email: string,
+    ): Promise<{ id: string; email: string; active: boolean } | null>;
     access: Pick<Access, "grantPlatform">;
     /** Issues and mails the operator invitation; the id of the invitation. */
     invite(email: string, role: Role): Promise<{ id: string }>;
@@ -84,6 +87,11 @@ export async function grantOperator(
       role: input.role,
       invited: true,
     };
+  }
+  if (!user.active) {
+    throw new CliInputError(
+      `the account "${input.email}" is disabled: enable it before granting a platform role`,
+    );
   }
   await deps.access.grantPlatform(user.id, input.role);
   await deps.record({ type: "user", id: user.id });

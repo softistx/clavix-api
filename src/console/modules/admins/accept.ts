@@ -15,6 +15,11 @@ export interface AdminInvitationHooksOptions {
     "holders" | "grantTenant" | "grantPlatform" | "platformRole"
   >;
   exclusive: Exclusive;
+  /**
+   * The `Exclusive` key of a user of the `clavix` tenant (`userKey`), the one
+   * `deleteUser` holds while it removes the account and sweeps its roles.
+   */
+  userLock(userId: string): string;
   /** Whether the tenant exists and is active. */
   tenantActive(tenantId: string): Promise<boolean>;
   /** A user of the `clavix` tenant, or `null` when gone; `active` is false once disabled. */
@@ -35,16 +40,27 @@ export interface AdminInvitationHooksOptions {
  * granted to an account that was deleted or disabled meanwhile (no ghost
  * owner): it throws, and the invitation is released. Someone who already holds
  * a role there keeps it: a role only changes through `changeMembership`.
+ *
+ * The grant runs under the user's lock (`userLock`), inside the tenant's
+ * members lock for a tenant role: the order of `keepOwners`, members then
+ * user. It is then serialised with `deleteUser`: an account deleted meanwhile
+ * is found gone and gets no role (any role; an owner also needs it active),
+ * and one granted just before is swept by the delete.
  */
 export function adminInvitationHooks({
   access,
   exclusive,
+  userLock,
   tenantActive,
   findUser,
 }: AdminInvitationHooksOptions) {
-  /** An owner is granted only to a live account (nothing to grant to a ghost). */
+  /**
+   * No role goes to a ghost: the account must exist, and an owner must also be
+   * active. Called under the user's lock, so a `deleteUser` is not half done.
+   */
   const assertLive = async (userId: string, role: string) => {
-    if (role === "owner" && (await findUser(userId))?.active !== true) {
+    const found = await findUser(userId);
+    if (found === null || (role === "owner" && !found.active)) {
       // A janus refusal: the hosted API answers `INVITATION_INVALID` (400),
       // not a 500, and the claim is released.
       throw new InvitationInvalidError(
@@ -77,10 +93,13 @@ export function adminInvitationHooks({
         if (!isRole(invitation.role)) {
           throw new Error(`unknown console role "${invitation.role}"`);
         }
-        await assertLive(user.id, invitation.role);
-        if ((await access.platformRole(user.id)) === null) {
-          await access.grantPlatform(user.id, invitation.role);
-        }
+        const { role } = invitation;
+        await exclusive(userLock(user.id), async () => {
+          await assertLive(user.id, role);
+          if ((await access.platformRole(user.id)) === null) {
+            await access.grantPlatform(user.id, role);
+          }
+        });
         return;
       }
       const tenantId = adminTenantOf(invitation.scope);
@@ -88,12 +107,14 @@ export function adminInvitationHooks({
       const { role } = invitation;
       // Throwing releases the invitation: nothing is granted.
       if (!isRole(role)) throw new Error(`unknown console role "${role}"`);
-      await exclusive(membersKey(tenantId), async () => {
-        await assertLive(user.id, role);
-        if ((await roleOf(access, tenantId, user.id)) === null) {
-          await access.grantTenant(tenantId, user.id, role);
-        }
-      });
+      await exclusive(membersKey(tenantId), () =>
+        exclusive(userLock(user.id), async () => {
+          await assertLive(user.id, role);
+          if ((await roleOf(access, tenantId, user.id)) === null) {
+            await access.grantTenant(tenantId, user.id, role);
+          }
+        }),
+      );
     },
   };
 }

@@ -477,7 +477,11 @@ describe("operators:grant", () => {
   const deps = {
     access,
     findByEmail: async (email: string) =>
-      email === "bob@console.test" ? { id: bob, email } : null,
+      email === "bob@console.test"
+        ? { id: bob, email, active: true }
+        : email === "off@console.test"
+          ? { id: "off-user", email, active: false }
+          : null,
     invite: async (email: string, role: string) => {
       invited.push({ email, role });
       return { id: "inv-1" };
@@ -510,6 +514,20 @@ describe("operators:grant", () => {
     ).rejects.toThrow("--create");
     expect(invited).toEqual([]);
     expect(() => parseOperatorArgs([])).toThrow();
+  });
+
+  test("refuses a disabled account, with or without --create, and grants nothing", async () => {
+    const { grantOperator } = await import("./operators");
+    for (const create of [false, true]) {
+      await expect(
+        grantOperator(deps, {
+          email: "off@console.test",
+          role: "owner",
+          create,
+        }),
+      ).rejects.toThrow("disabled");
+    }
+    expect(await access.platformRole("off-user")).toBeNull();
   });
 
   test("--create invites an unknown e-mail and records it; a known one is granted, not invited", async () => {

@@ -10,6 +10,7 @@ import { adminScope, operatorScope } from "@/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { buildTenantJanus } from "@/users/tenant-janus";
 import { createExclusive } from "../../exclusive";
+import { userKey } from "../user-key";
 import { adminInvitationHooks } from "./accept";
 import { changeRole, removeMember } from "./service";
 
@@ -96,6 +97,7 @@ describe("the tenant's membership lock cannot be taken", () => {
       adminInvitationHooks({
         access,
         exclusive,
+        userLock: (id) => userKey(clavix.tenantId, id),
         tenantActive: async () => true,
         findUser: async (id) => auth.findUser(id),
       }),
@@ -148,6 +150,7 @@ describe("the operator invitation (operators:grant --create)", () => {
       adminInvitationHooks({
         access,
         exclusive,
+        userLock: (id) => userKey(clavix.tenantId, id),
         tenantActive: async () => true,
         findUser: async (id) => auth.findUser(id),
       }),
@@ -188,6 +191,7 @@ describe("an owner invitation for an account that is gone", () => {
       adminInvitationHooks({
         access,
         exclusive,
+        userLock: (id) => userKey(clavix.tenantId, id),
         tenantActive: async () => true,
         findUser: async () => null,
       }),
