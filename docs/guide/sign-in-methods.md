@@ -106,15 +106,22 @@ mutation ($tenantId: ID!, $secret: String!) {
 
 ### Errors
 
-| Code                         | HTTP | When                                                                                    |
-| ---------------------------- | ---- | --------------------------------------------------------------------------------------- |
-| `FORBIDDEN`                  |      | the caller lacks the permission on that tenant                                          |
-| `NOT_FOUND`                  | 404  | a platform operator names an unknown or inactive tenant                                 |
-| `CONFLICT`                   | 409  | other changes to the tenant kept winning; nothing stored, read and retry                |
-| `NO_SIGN_IN_METHOD`          | 409  | the change would leave no enabled method and no enabled provider                        |
-| `SIGN_IN_METHOD_UNAVAILABLE` | 409  | enabling a method with `available: false` (`PASSWORD`)                                  |
-| `SOCIAL_SECRET_REQUIRED`     | 400  | a provider set for the first time without `clientSecret`                                |
-| `BAD_USER_INPUT`             | 400  | a type given twice; a new provider without `clientId`; an empty or >512-character value |
+| Code                          | HTTP | When                                                                                    |
+| ----------------------------- | ---- | --------------------------------------------------------------------------------------- |
+| `FORBIDDEN`                   |      | the caller lacks the permission on that tenant                                          |
+| `NOT_FOUND`                   | 404  | a platform operator names an unknown or inactive tenant                                 |
+| `CONFLICT`                    | 409  | other changes to the tenant kept winning; nothing stored, read and retry                |
+| `NO_SIGN_IN_METHOD`           | 409  | the change would leave no enabled method and no enabled provider                        |
+| `PLATFORM_FIRST_PARTY_METHOD` | 409  | the change would leave the platform tenant with neither `PASSKEY` nor `EMAIL_CODE`      |
+| `SIGN_IN_METHOD_UNAVAILABLE`  | 409  | enabling a method with `available: false` (`PASSWORD`)                                  |
+| `SOCIAL_SECRET_REQUIRED`      | 400  | a provider set for the first time without `clientSecret`                                |
+| `BAD_USER_INPUT`              | 400  | a type given twice; a new provider without `clientId`; an empty or >512-character value |
+
+The platform tenant (the one that signs the console's operators in) is stricter than the others: it
+always keeps a first-party method, `PASSKEY` or `EMAIL_CODE`, enabled, because a social provider
+depends on an outside service. `updateSignInMethods` refuses a change that would turn both off with
+`PLATFORM_FIRST_PARTY_METHOD`, whatever social providers it has. Other tenants only need one method
+or one provider.
 
 Every mutation is idempotent: the same call again changes nothing, and `version` stays the same.
 `version` is the tenant's version; when it rises, the tenant's sign-in follows within a minute.

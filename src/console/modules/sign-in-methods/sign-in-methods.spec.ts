@@ -100,12 +100,22 @@ const OWNER_A = "sim-owner-a";
 const ADMIN_A = "sim-admin-a";
 const VIEWER_A = "sim-viewer-a";
 const ADMIN_B = "sim-admin-b";
+const ADMIN_C = "sim-admin-c";
+const ADMIN_PLATFORM = "sim-admin-platform";
 let a = "";
 let b = "";
+let c = "";
 
 const stored = async (id: string) => {
   const [tenant] = await tenantsService.activeByIds([id]);
   if (tenant === undefined) throw new Error("no tenant");
+  return tenant;
+};
+const platformTenant = async () => {
+  const tenant = await mongo.db.tenants.raw.findOne({
+    slug: PLATFORM_TENANT_SLUG,
+  });
+  if (tenant === null) throw new Error("no platform tenant");
   return tenant;
 };
 const policyOf = async (user: string, tenantId: string) => {
@@ -124,6 +134,8 @@ beforeAll(async () => {
   await access.grantTenant(a, ADMIN_A, "admin");
   await access.grantTenant(a, VIEWER_A, "viewer");
   await access.grantTenant(b, ADMIN_B, "admin");
+  c = (await tenantsService.create({ slug: "sim-c", name: "C" })).id;
+  await access.grantTenant(c, ADMIN_C, "admin");
 });
 
 afterAll(async () => {
@@ -293,6 +305,70 @@ describe("the methods", () => {
     ]);
   });
 
+  test("the platform tenant keeps a first-party method: PLATFORM_FIRST_PARTY_METHOD", async () => {
+    const platform = (await platformTenant())._id.toHexString();
+    await access.grantTenant(platform, ADMIN_PLATFORM, "admin");
+    const before = await stored(platform);
+    // Social providers do not count for the platform tenant.
+    const refused = await as(ADMIN_PLATFORM, METHODS, {
+      t: platform,
+      m: [
+        { type: "PASSKEY", enabled: false },
+        { type: "EMAIL_CODE", enabled: false },
+      ],
+    });
+    expect(codeOf(refused)).toBe("PLATFORM_FIRST_PARTY_METHOD");
+    expect((await stored(platform)).version).toBe(before.version);
+    // One first-party method left is enough; the same change again writes nothing.
+    const one = [{ type: "PASSKEY", enabled: false }];
+    const first = await as(ADMIN_PLATFORM, METHODS, { t: platform, m: one });
+    expect(first.errors).toBeUndefined();
+    const version = (await stored(platform)).version;
+    const again = await as(ADMIN_PLATFORM, METHODS, { t: platform, m: one });
+    expect(again.data?.["updateSignInMethods"]?.version).toBe(version);
+    expect((await stored(platform)).version).toBe(version);
+    // Turning the last one off is refused, magic link on or not.
+    const last = await as(ADMIN_PLATFORM, METHODS, {
+      t: platform,
+      m: [
+        { type: "MAGIC_LINK", enabled: true },
+        { type: "EMAIL_CODE", enabled: false },
+      ],
+    });
+    expect(codeOf(last)).toBe("PLATFORM_FIRST_PARTY_METHOD");
+    await as(ADMIN_PLATFORM, METHODS, {
+      t: platform,
+      m: [{ type: "PASSKEY", enabled: true }],
+    });
+  });
+
+  test("another tenant may keep only a social provider", async () => {
+    const set = await as(ADMIN_C, SET, {
+      t: c,
+      i: { provider: "GITHUB", clientId: "id", clientSecret: SECRET },
+    });
+    expect(set.errors).toBeUndefined();
+    const result = await as(ADMIN_C, METHODS, {
+      t: c,
+      m: [
+        { type: "PASSKEY", enabled: false },
+        { type: "EMAIL_CODE", enabled: false },
+      ],
+    });
+    expect(result.errors).toBeUndefined();
+    expect(enabledOf(result.data?.["updateSignInMethods"] as Policy)).toEqual(
+      [],
+    );
+    await as(ADMIN_C, METHODS, {
+      t: c,
+      m: [
+        { type: "PASSKEY", enabled: true },
+        { type: "EMAIL_CODE", enabled: true },
+      ],
+    });
+    await as(ADMIN_C, REMOVE, { t: c, p: "GITHUB" });
+  });
+
   test("password cannot be turned on yet: SIGN_IN_METHOD_UNAVAILABLE", async () => {
     const result = await as(ADMIN_B, METHODS, {
       t: b,
@@ -345,6 +421,20 @@ describe("the social providers", () => {
         }),
       ),
     ).toBe("BAD_USER_INPUT");
+    expect((await stored(a)).signIn.social).toEqual([]);
+  });
+
+  test("a clientSecret of the wrong type is refused without quoting it back", async () => {
+    const leaked = "GOCSPX-typed-wrong-do-not-quote";
+    for (const clientSecret of [{ value: leaked }, [leaked], 123456789]) {
+      const result = await as(ADMIN_A, SET, {
+        t: a,
+        i: { provider: "GOOGLE", clientId: "id", clientSecret },
+      });
+      expect(result.errors).toBeDefined();
+      expect(result.text).not.toContain(leaked);
+      expect(result.text).not.toContain("123456789");
+    }
     expect((await stored(a)).signIn.social).toEqual([]);
   });
 
