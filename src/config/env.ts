@@ -104,6 +104,13 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
+  // custom domains, A4): the shared secret of that URL, at least 32 characters.
+  // Unset, the endpoint does not exist. The route is internal: never expose
+  // `/internal/*` publicly (it also refuses a request carrying X-Forwarded-*).
+  CLAVIX_TLS_ASK_SECRET: z.string().min(32).optional(),
+  // Asks the endpoint answers per minute, all callers together (Redis only).
+  CLAVIX_TLS_ASK_LIMIT: z.coerce.number().int().min(1).default(120),
   // How many reverse proxies stand in front of the app. 0 (default): the
   // client address is the connection's. N: it is the entry N places from the
   // right of X-Forwarded-For, which the proxies append to. Required in

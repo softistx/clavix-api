@@ -49,6 +49,7 @@ describe("resolveHost", () => {
       signUp: false,
       status: "active",
       issuer: "https://acme.clavix.test",
+      slugIssuer: "https://acme.clavix.test",
       partition: acme._id.toHexString(),
       version: 3,
       signIn: acme.signIn,
@@ -272,5 +273,59 @@ describe("invalidate failure", () => {
     await expect(resolver.invalidate(["acme.clavix.test"])).rejects.toThrow(
       "down",
     );
+  });
+});
+
+describe("custom domains", () => {
+  function withDomains(
+    record: TenantRecord,
+    verified: Record<string, ObjectId>,
+    primary?: string,
+  ) {
+    return createTenantResolver({
+      lookup: async (slug) => (slug === record.slug ? record : undefined),
+      lookupById: async (id) => (id.equals(record._id) ? record : undefined),
+      domains: {
+        tenantOfHost: async (host) => verified[host],
+        primaryHostOf: async () => primary,
+      },
+      cache: memoryTenantCache(),
+      config,
+      log: () => {},
+    });
+  }
+
+  test("a verified host resolves to its tenant; the issuer stays the slug host without a primary", async () => {
+    const resolver = withDomains(acme, { "auth.acme.com": acme._id });
+    const resolved = await resolver.resolveHost("Auth.Acme.com");
+    expect(resolved?.tenantId).toBe(acme._id.toHexString());
+    expect(resolved?.issuer).toBe("https://acme.clavix.test");
+  });
+
+  test("the issuer follows the primary host while the slug host stays the passkey issuer", async () => {
+    const resolver = withDomains(
+      acme,
+      { "auth.acme.com": acme._id },
+      "auth.acme.com",
+    );
+    for (const host of ["auth.acme.com", "acme.clavix.test"]) {
+      const resolved = await resolver.resolveHost(host);
+      expect(resolved?.issuer).toBe("https://auth.acme.com");
+      expect(resolved?.slugIssuer).toBe("https://acme.clavix.test");
+    }
+  });
+
+  test("a suspended tenant's custom host resolves but is not live", async () => {
+    const suspended = { ...acme, status: "suspended" as const };
+    const resolver = withDomains(suspended, { "auth.acme.com": acme._id });
+    const resolved = await resolver.resolveHost("auth.acme.com");
+    expect(resolved).toBeDefined();
+    expect(resolved && isLive(resolved)).toBe(false);
+  });
+
+  test("an unknown host, or one under the apex that is no slug, resolves to nothing", async () => {
+    const resolver = withDomains(acme, { "auth.acme.com": acme._id });
+    expect(await resolver.resolveHost("other.example.org")).toBeNull();
+    expect(await resolver.resolveHost("a_b.clavix.test")).toBeNull();
   });
 });

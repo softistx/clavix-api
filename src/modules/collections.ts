@@ -5,6 +5,7 @@
 export { oauthSigningKeys } from "@softistx/janus-oauth-mongo";
 export { adminEvents } from "../console/admin-events/admin-events.model";
 export { branding } from "./branding/branding.model";
+export { domains } from "./domains/domains.model";
 export { resources } from "./resources/resources.model";
 export { scopes } from "./resources/scopes.model";
 export { tenants } from "./tenants/tenants.model";

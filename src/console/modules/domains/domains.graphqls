@@ -1,0 +1,98 @@
+"""
+Where a custom domain stands. A new claim is PENDING until its TXT record is
+seen; VERIFIED serves the tenant (and gets a TLS certificate); UNVERIFIED is a
+verified domain whose record failed its recheck for 7 days (no certificate is
+issued or renewed for it until `verifyDomain` succeeds again; when it is the
+primary domain it keeps serving the issuer, which never changes silently).
+"""
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  UNVERIFIED
+}
+
+"The DNS record that proves the tenant controls a domain."
+type DomainTxtRecord {
+  "The record's name, `_clavix.<host>`."
+  name: String!
+  "The record's value: unguessable, bound to this tenant and this domain."
+  value: String!
+}
+
+"A custom domain a tenant claimed (ADR-0015)."
+type Domain {
+  id: ID!
+  "Normalised: lower case, no trailing dot, IDN as punycode."
+  host: String!
+  status: DomainStatus!
+  "The TXT record to publish. Returned for every status (a recheck may need it again)."
+  txtRecord: DomainTxtRecord!
+  """
+  The domain the tenant's issuer follows (ADR-0032). At most one per tenant,
+  VERIFIED when set (a recheck lapse keeps the flag: the issuer never moves
+  silently). The slug host keeps serving either way.
+  """
+  primary: Boolean!
+  "When the record was last seen, or `null`."
+  verifiedAt: DateTime
+  "When the last check ran (verify or recheck), or `null`."
+  checkedAt: DateTime
+  createdAt: DateTime!
+}
+
+"""
+Why a verification did not succeed. Not an error: `verifyDomain` returns it so
+the UI can say what DNS answered.
+"""
+enum DomainCheckFailure {
+  "No TXT record at `_clavix.<host>`."
+  NO_RECORD
+  "TXT records exist but none holds the token."
+  MISMATCH
+  "The resolver could not be asked (timeout, SERVFAIL): try again later."
+  LOOKUP_FAILED
+}
+
+type VerifyDomainPayload {
+  domain: Domain!
+  "`null` when the domain is verified."
+  failure: DomainCheckFailure
+}
+
+type Query {
+  "Needs `view` on the tenant. Newest first."
+  domains(tenantId: ID!): [Domain!]!
+  domain(tenantId: ID!, id: ID!): Domain
+}
+
+type Mutation {
+  """
+  Claims a host for the tenant and mints its TXT token. Needs `edit` on the
+  tenant. Idempotent: the same host again returns the existing claim.
+  Several tenants may hold a PENDING claim on one host; the first to verify it
+  owns it. Errors: BAD_USER_INPUT (400, `extensions.field` `host`: not a
+  domain name, an IP, localhost, a wildcard, or one of the platform's own
+  domains), DOMAIN_TAKEN (409: another tenant has verified this host),
+  QUOTA_EXCEEDED (409, `extensions.field` `domains`). A suspended or unknown tenant is NOT_FOUND (404).
+  """
+  addDomain(tenantId: ID!, host: String!): Domain!
+  """
+  Looks up `_clavix.<host>` TXT and, if it holds the token, marks the domain
+  VERIFIED and drops every other tenant's pending claim on the host.
+  Idempotent. Errors: NOT_FOUND (404), DOMAIN_TAKEN (409: another tenant
+  verified it first).
+  """
+  verifyDomain(tenantId: ID!, id: ID!): VerifyDomainPayload!
+  """
+  Removes the claim. `false` when it was already gone. Errors:
+  DOMAIN_PRIMARY (409: make another domain primary first, the issuer would
+  change otherwise).
+  """
+  removeDomain(tenantId: ID!, id: ID!): Boolean!
+  """
+  Makes a VERIFIED domain the tenant's issuer host. Relying parties that
+  pinned the old issuer must be reconfigured: tokens carry the new `iss` from
+  then on. Idempotent. Errors: NOT_FOUND (404), DOMAIN_NOT_VERIFIED (409).
+  """
+  setPrimaryDomain(tenantId: ID!, id: ID!): Domain!
+}
