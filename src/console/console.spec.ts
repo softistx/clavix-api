@@ -28,7 +28,12 @@ import { tenants } from "@/modules/tenants/tenants.model";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
-import { CONSOLE_PATH, consoleAudience } from "./identity";
+import {
+  CONSOLE_CLIENT_ID,
+  CONSOLE_PATH,
+  consoleAudience,
+  consoleRedirectUri,
+} from "./identity";
 import { createConsoleSchema } from "./schema";
 
 const origin = {
@@ -38,9 +43,11 @@ const origin = {
 } as const;
 const AUDIENCE = consoleAudience(origin);
 const OTHER = "https://other.test/api";
-const REDIRECT = "https://console.example/callback";
+// The console client is the migration's: its seed resets it to this URI.
+const REDIRECT = consoleRedirectUri(origin);
 const VERIFIER = "v".repeat(64);
-const CLIENT = { id: "spec-console", secret: "" };
+const CLIENT = { id: CONSOLE_CLIENT_ID, secret: "" };
+const FOREIGN = { id: "spec-foreign", secret: "" };
 
 const clock = fixedClock(new Date());
 const keys = new Map<string, SigningKeyStore>();
@@ -100,6 +107,7 @@ async function tokenFor(
   userId: string,
   resource: string,
   scope: string,
+  client: { id: string; secret: string } = CLIENT,
 ): Promise<string> {
   const server = await serverOfClavix();
   if (server === null) throw new Error("no clavix server");
@@ -108,7 +116,7 @@ async function tokenFor(
     new Request(
       `${issuer}/authorize?${new URLSearchParams({
         response_type: "code",
-        client_id: CLIENT.id,
+        client_id: client.id,
         redirect_uri: REDIRECT,
         code_challenge: await s256Challenge(VERIFIER),
         code_challenge_method: "S256",
@@ -131,7 +139,7 @@ async function tokenFor(
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
-        authorization: `Basic ${btoa(`${CLIENT.id}:${CLIENT.secret}`)}`,
+        authorization: `Basic ${btoa(`${client.id}:${client.secret}`)}`,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
@@ -179,9 +187,24 @@ beforeAll(async () => {
       clientId: CLIENT.id,
       redirectUris: [REDIRECT],
       type: "confidential",
+      // The migration's `console` client may already be there: a fresh secret.
+      rotateSecret: true,
     },
   );
   CLIENT.secret = registered.clientSecret ?? "";
+  FOREIGN.secret =
+    (
+      await registerClient(
+        { db: oauthDb, findTenant },
+        {
+          tenant: PLATFORM_TENANT_SLUG,
+          name: "Spec foreign",
+          clientId: FOREIGN.id,
+          redirectUris: [REDIRECT],
+          type: "confidential",
+        },
+      )
+    ).clientSecret ?? "";
   await registerResource(
     {
       collection: getCollection(oauthDb, resources),
@@ -311,7 +334,7 @@ describe("the guard", () => {
         schema,
         authenticate: async () => ({
           userId: ada,
-          clientId: "c",
+          clientId: CONSOLE_CLIENT_ID,
           grantId: "g",
           scopes: [],
         }),
@@ -543,7 +566,7 @@ describe("the guards over HTTP", () => {
         schema,
         authenticate: async () => ({
           userId,
-          clientId: "c",
+          clientId: CONSOLE_CLIENT_ID,
           grantId: "g",
           scopes,
         }),
@@ -623,6 +646,11 @@ describe("authentication failures", () => {
         })
       ).status,
     ).toBe(503);
+  });
+
+  test("a console-audience token of another client is a 401", async () => {
+    const token = await tokenFor(ada, AUDIENCE, "console", FOREIGN);
+    expect((await call(ME, token)).status).toBe(401);
   });
 
   test("a token without the console scope is a 401", async () => {

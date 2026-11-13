@@ -12,6 +12,7 @@ import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantAdmin, tenantsService } from "@/config/tenancy";
+import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { CONSOLE_PATH } from "../../identity";
 
@@ -35,7 +36,12 @@ const request = (userId: string | null, query: string) =>
       authenticate: async () =>
         userId === null
           ? null
-          : { userId, clientId: "c", grantId: "g", scopes: ["console"] },
+          : {
+              userId,
+              clientId: CONSOLE_CLIENT_ID,
+              grantId: "g",
+              scopes: ["console"],
+            },
     },
   }).request(`http://localhost${CONSOLE_PATH}`, {
     method: "POST",

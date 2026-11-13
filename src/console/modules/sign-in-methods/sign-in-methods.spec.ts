@@ -13,6 +13,7 @@ import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
+import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { secretContext } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { socialProvidersOf } from "@/modules/sign-in-methods/social";
@@ -56,7 +57,7 @@ const as = async (
     console: {
       authenticate: async () => ({
         userId,
-        clientId: "c",
+        clientId: CONSOLE_CLIENT_ID,
         grantId: "g",
         scopes: ["console"],
       }),

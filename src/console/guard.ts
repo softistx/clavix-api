@@ -1,6 +1,8 @@
 import { MapperKind, mapSchema } from "@graphql-tools/utils";
 import { denial } from "@softistx/janus-graphql";
 import type { GraphQLSchema } from "graphql";
+import { ObjectId } from "mongodb";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ConsoleContext } from "./context";
 import type { Permission } from "./model";
 
@@ -36,6 +38,13 @@ export const onPlatform = (permission: Permission): Guard => ({
 /** The guards by root field, keyed `Query.me`. */
 export type Guards = Readonly<Record<string, Guard>>;
 
+/** Whether `tenantId` is the `clavix` tenant itself (an unknown or malformed id is not). */
+async function isPlatformTenant(ctx: ConsoleContext, tenantId: string) {
+  if (!ObjectId.isValid(tenantId)) return false;
+  const [found] = await ctx.directory.tenantsByIds([tenantId]);
+  return found?.slug === PLATFORM_TENANT_SLUG;
+}
+
 async function allowed(
   guard: Guard,
   args: Record<string, unknown>,
@@ -44,8 +53,19 @@ async function allowed(
   switch (guard.kind) {
     case "signedIn":
       return true;
-    case "tenant":
-      return ctx.can(guard.permission, guard.tenant(args));
+    case "tenant": {
+      const tenantId = guard.tenant(args);
+      // A write on Clavix's own tenant is the platform's: a tenant-level role
+      // there (an operator's) must not reach the operators, the issuer's
+      // domains, its sign-in policy or its clients.
+      if (
+        guard.permission !== "view" &&
+        (await isPlatformTenant(ctx, tenantId))
+      ) {
+        return ctx.canPlatform(guard.permission);
+      }
+      return ctx.can(guard.permission, tenantId);
+    }
     case "platform":
       return ctx.canPlatform(guard.permission);
   }
