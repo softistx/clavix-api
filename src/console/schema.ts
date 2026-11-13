@@ -17,11 +17,13 @@ const sources = bundled
   ? join(import.meta.dir, "..", "src", "console")
   : import.meta.dir;
 
-export const consoleTypeDefs = mergeTypeDefs([
+const consoleSources = [
   scalarTypeDefs,
   constraintTypeDefs,
   ...loadFilesSync(sources, { extensions: ["graphqls"] }),
-]);
+];
+
+export const consoleTypeDefs = mergeTypeDefs(consoleSources);
 
 /**
  * The console API's schema with every root field behind its guard. Extra SDL,
@@ -31,10 +33,12 @@ export function createConsoleSchema(
   extra: { typeDefs?: string; resolvers?: IResolvers; guards?: Guards } = {},
 ) {
   const base = createSchema<ConsoleContext>({
-    typeDefs: mergeTypeDefs([
-      consoleTypeDefs,
-      ...(extra.typeDefs === undefined ? [] : [extra.typeDefs]),
-    ]),
+    // Merged from the sources each time: merging into `consoleTypeDefs` would
+    // write a spec's root types into its shared `schema { ... }` definition.
+    typeDefs:
+      extra.typeDefs === undefined
+        ? consoleTypeDefs
+        : mergeTypeDefs([...consoleSources, extra.typeDefs]),
     resolvers: mergeResolvers([
       scalarResolvers,
       resolvers,

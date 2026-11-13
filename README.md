@@ -163,6 +163,33 @@ curl -s https://api.clavix.example/console/graphql \
   -d '{"query":"{ me { platformRole } }"}'
 ```
 
+### Admin events
+
+Every console mutation records what it did in the `adminEvents` collection (ADR-0037): the actor
+(the token's user), the action (`tenant.create`), the tenant it was about (`null` for the platform),
+the target's type and id, the time and the id of the request. Events are only ever added, and they
+hold identifiers alone: never a secret, a token or the old and new values of a field. `bun run
+db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
+reads it yet: the viewer and the export come with M4.
+
+A mutation declares its action beside its module's guards (the declaration is spread into `audits`
+in `src/console/modules/index.ts`) and records it once its change is stored; AGENTS.md "Admin
+events" has the rules:
+
+```ts
+// src/console/modules/tenants/index.ts
+export const tenantsAudits: Audits = {
+  "Mutation.renameTenant": "tenant.rename",
+};
+
+// in the resolver, after the write
+await ctx.audit("tenant.rename", { type: "tenant", id: tenantId, tenantId });
+```
+
+`ctx.audit` is awaited: when the event cannot be stored, the mutation fails (and may be retried)
+rather than leave a change with no record. `src/console/audit.spec.ts` fails for a mutation whose
+module declares no action.
+
 ## Branding
 
 A tenant wears its own theme on the hosted pages. The brand is one document per tenant (collection
@@ -177,7 +204,7 @@ light and dark, and stores the CSS only when all pass WCAG AA. A pair that fails
 (422, `extensions.failures`: foreground, background, mode, ratio, minimum). The generator moves a hard
 seed (a yellow) lighter or darker to reach AA on its own; the payload's `warnings` say what it moved.
 A bad value is `BAD_USER_INPUT` (400, `extensions.field`). `branding(tenantId)` needs `view` on the tenant,
-`updateBranding` needs `edit`.
+`updateBranding` needs `edit`. Each call that succeeds records the admin event `branding.update`.
 
 The display name is a label only: it is stored as text and never written into the stylesheet. The seed
 and the radius are parsed, and the CSS is built from the parsed values, so a value that is not a colour
