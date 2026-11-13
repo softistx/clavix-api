@@ -22,8 +22,8 @@ nxgt-janus release says which.
     sign-ins and new tokens (tokens already issued live to expiry, the console stays readable).
     A deleted tenant goes to a 30-day trash, can be restored, then is purged; its slug stays
     reserved.
-  - Tenant: clients, resources, scopes with consent texts, users, end-user roles and admin
-    roles ([#9](https://github.com/softistx/clavix-api/issues/9)).
+  - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users,
+    end-user roles and admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
   - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
     host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
   - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for
@@ -106,15 +106,16 @@ nxgt-janus release says which.
   ([#5](https://github.com/softistx/clavix-api/issues/5)).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once
-  ([#6](https://github.com/softistx/clavix-api/issues/6)). Grants other than code and
-  refresh wait on a per-client grant list in janus-oauth.
+  ([#6](https://github.com/softistx/clavix-api/issues/6)). A client's grant types are
+  recorded and shown, not enforced; grants other than code and refresh wait on janus-oauth.
 - **Tenants created by script** — `bun run tenants:create` creates a tenant (slug rules,
   reserved and deleted slugs refused, first signing key) idempotently and prints its issuer
   ([#74](https://github.com/softistx/clavix-api/issues/74)).
 - **Resources registered by script** — `bun run resources:create` stores a tenant's API
   (audience URI and scopes), idempotently; an app's own API gets access tokens with its `aud`,
-  isolated per tenant ([#75](https://github.com/softistx/clavix-api/issues/75)). Scopes are a
-  plain list until the console.
+  isolated per tenant ([#75](https://github.com/softistx/clavix-api/issues/75)). Scopes became
+  documents with per-language consent texts in the console API
+  ([#9](https://github.com/softistx/clavix-api/issues/9)).
 - **Migration guide** — how an application moves from embedded janus to Clavix as an OIDC
   relying party ([#7](https://github.com/softistx/clavix-api/issues/7)):
   [written](guide/migrating-from-embedded-janus.md).

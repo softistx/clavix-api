@@ -9,8 +9,9 @@ Today it serves:
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- on `POST /console/graphql`, the console API (only `me` for now), behind a bearer token;
-- scripts that create tenants, OAuth clients and API resources until the console can.
+- on `POST /console/graphql`, the console API (`me`, a tenant's clients, resources, scopes and
+  branding), behind a bearer token;
+- scripts that create tenants (no console field yet), OAuth clients and API resources.
 
 ## Documentation
 
@@ -140,17 +141,19 @@ Clavix adds no `jose`.
 `POST /console/graphql` is the console's own GraphQL API (SDL in `src/console`). It reads no
 cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
 tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
-No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. Today it
-exposes `me { user platformRole memberships { tenant { slug } role } }` and the branding fields
-(see "Branding"); the scripts above still create tenants, clients and resources.
+No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
+exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
+resources and scopes (below) and the branding fields (see "Branding"); tenants are still created
+by script.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
 
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and
-prints the client secret once: save it), then name the first operator, a user who already exists
-in the `clavix` tenant:
+prints the client secret once: save it; the `2026-11-13-scopes` migration turns each resource's
+scope strings into `Scope` documents), then name the first
+operator, a user who already exists in the `clavix` tenant:
 
 ```sh
 bun run operators:grant --email ada@example.com            # platform owner
@@ -162,6 +165,92 @@ curl -s https://api.clavix.example/console/graphql \
   -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
   -d '{"query":"{ me { platformRole } }"}'
 ```
+
+### Clients, resources and scopes
+
+Every field takes the `tenantId` it works on. Queries need `view` on that tenant (any role),
+mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another tenant, gets
+`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (also a suspended tenant), `CONFLICT`,
+`BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
+update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
+
+| Field                                                | What it does                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`    |
+| `client(tenantId, id)`                               | one client, or `null`                                                           |
+| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once     |
+| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                 |
+| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client |
+| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens                      |
+| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                       |
+| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                        |
+| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                             |
+| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                         |
+
+```graphql
+mutation {
+  createClient(
+    tenantId: "6731…"
+    input: {
+      name: "Back office"
+      type: CONFIDENTIAL
+      redirectUris: ["https://office.example.com/callback"]
+    }
+  ) {
+    client {
+      id
+      name
+      type
+      redirectUris
+    }
+    clientSecret # shown once: janus keeps only its hash
+  }
+}
+```
+
+```graphql
+mutation {
+  createScope(
+    tenantId: "6731…"
+    input: {
+      name: "invoices:read"
+      resourceId: "6732…"
+      description: { fr: "Lire vos factures", en: "Read your invoices" }
+    }
+  ) {
+    id
+    name
+    description {
+      fr
+      en
+    }
+    resourceId
+    claims
+  }
+}
+```
+
+- **A client id** is `input.clientId` (`a-z0-9-`) or the name in that form; one that exists is a
+  `CONFLICT`. Redirect URIs follow the rules of `clients:create` (below).
+- **A scope** belongs to a resource, where its name is unique: two resources may each have a
+  `read`. Without `resourceId` it is a standard OpenID Connect scope and its name must be `openid`,
+  `profile` or `email`: this is how a tenant writes the consent text of those. `claims` is stored
+  only; no claim is emitted from it yet.
+- **The consent page** shows a scope's `description` as its label, in the viewer's language
+  (`Accept-Language`: French, else English), then in the other language, then the scope's name.
+- **A change serves at once**: the scopes a resource offers are read on every OAuth request.
+- **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
+  redirect URIs, a search 100 characters; more is `BAD_USER_INPUT`.
+- **The console's own client and resource** (`console` in the `clavix` tenant) cannot be changed
+  or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
+- **Listing**: clients come in id order; a client made by `clients:create` is listed too. With
+  `q`, a page may hold fewer than `first` items (even none) and still give a `nextCursor`: follow
+  it until it is `null`.
+- **`grantTypes`** on a client is what was recorded when it was registered (both grant types by
+  default, or the script's `--grants`). It is shown for information: the token endpoint does not
+  enforce it.
+- **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
+  opened are revoked.
 
 ### Admin events
 
@@ -285,11 +374,11 @@ bun run tenants:create --slug acme --name "Acme" --sign-up   # open sign-up for 
 
 ## Resources
 
-An access token is bound to one resource (RFC 8707): the API it is for. Until the console exists
-(M2), a tenant registers its APIs by script. A resource is per tenant: `acme`'s is unknown to
+An access token is bound to one resource (RFC 8707): the API it is for. A tenant registers its
+APIs in the console ("Console API") or by script. A resource is per tenant: `acme`'s is unknown to
 `globex` (`invalid_target`). A client asking `resource=<uri>` gets a token whose `aud` is that URI,
 signed with the tenant's key; an unregistered URI is refused. Re-running with the same URI updates
-the name and replaces the scopes. It serves at once, with no restart.
+the name and replaces the scopes (a scope that stays keeps its consent texts). It serves at once, with no restart.
 
 ```sh
 bun run resources:create --tenant acme --uri https://api.acme.example \
@@ -309,7 +398,7 @@ none) and cannot be registered.
 
 ## OAuth clients
 
-Until the console exists (M2), a client is registered on a tenant by script. Clients are per tenant:
+A client is registered on a tenant in the console ("Console API") or by script. Clients are per tenant:
 they live in the tenant's partition of the janus collections, so a client of `acme` is unknown to
 `globex` (its `/authorize` answers `invalid_client`).
 
@@ -338,9 +427,9 @@ bun run clients:create --tenant acme --name "Web app" \
   becomes confidential and gets a secret.
 - The output also carries `issuer`, `tenant`, `redirectUris` and `type`. `--help` prints the
   usage; bad input prints the message and the usage and exits 1.
-- **Grants**: janus-oauth 0.8 has no per-client grant list; every client may use the authorization
-  code and refresh grants. `--grants` refuses any other (device code, token exchange, client
-  credentials) until janus offers them per client.
+- **Grants**: `--grants` is recorded on the client and shown by the console (`grantTypes`), but
+  the token endpoint does not enforce it: every client may use the authorization code and refresh
+  grants. Any other (device code, token exchange, client credentials) is refused.
 
 ## OpenID Connect
 

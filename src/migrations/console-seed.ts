@@ -12,6 +12,7 @@ import {
 } from "@/console/identity";
 import { registerResource } from "@/modules/resources/register-resource";
 import { resources } from "@/modules/resources/resources.model";
+import { scopes } from "@/modules/resources/scopes.model";
 import {
   issuerOf,
   type PublicOrigin,
@@ -38,6 +39,7 @@ export async function seedConsole(
   await registerResource(
     {
       collection: getCollection(db, resources),
+      scopes: getCollection(db, scopes),
       findTenant,
       issuerOf: (slug) => issuerOf(slug, origin),
     },
