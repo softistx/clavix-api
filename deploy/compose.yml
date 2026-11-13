@@ -42,6 +42,10 @@ services:
       PORT: "3001"
       API_URL: http://api:3000/graphql
       TRUSTED_PROXIES: "1"
+      # Required by the console: the compose file refuses to start the ui until
+      # both are set (docs/operations.md, "First boot": bring the ui up last).
+      CONSOLE_CLIENT_SECRET: ${CONSOLE_CLIENT_SECRET:?set CONSOLE_CLIENT_SECRET}
+      CONSOLE_SESSION_SECRET: ${CONSOLE_SESSION_SECRET:?set CONSOLE_SESSION_SECRET}
     expose: ["3001"]
     depends_on:
       api: { condition: service_healthy }

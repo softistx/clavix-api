@@ -46,7 +46,8 @@ by the `Host` header, which Caddy passes untouched.
 3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate
    the secrets: `openssl rand -base64 32` for `CLAVIX_KEYS_MASTER_KEY`,
    `openssl rand -hex 32` for `CLAVIX_TLS_ASK_SECRET`, `openssl rand -hex 24` for
-   `REDIS_PASSWORD`.
+   `REDIS_PASSWORD`, `openssl rand -base64 48` for `CONSOLE_SESSION_SECRET`.
+   `CONSOLE_CLIENT_SECRET` stays a placeholder until step 5.
 4. **Master key custody.** `CLAVIX_KEYS_MASTER_KEY` encrypts every tenant's
    signing keys and social secrets. Store it in a secret manager apart from the
    database and from the backups. Losing it makes the stored keys unreadable
@@ -58,8 +59,26 @@ by the `Host` header, which Caddy passes untouched.
    dc up -d mongo redis
    dc run --rm api bun run db:sync       # collections, indexes, validators
    dc run --rm api bun run db:migrate    # prints the console client secret once: save it
+   ```
+
+   Put that secret in `deploy/.env` as `CONSOLE_CLIENT_SECRET` (the example holds
+   the placeholder `pending-db-migrate`). Lost? Mint another:
+   `dc run --rm api bun run clients:create --tenant clavix --name Console --client-id console --confidential --redirect-uri https://console.<domain>/console/auth/callback --rotate-secret`
+   (the redirect URI is required, and a re-run replaces the stored ones).
+   Then start everything:
+
+   ```sh
    dc up -d
    ```
+
+   `compose.yml` requires both console variables on the `ui` (`:?`: an empty or
+   missing value is an error). Compose checks every service when it reads the
+   file, so a missing value fails **every** `dc` command, `dc up -d mongo redis`
+   included, not only the `ui`. That is why `.env.example` ships a non-empty
+   placeholder for the client secret and step 3 fills `CONSOLE_SESSION_SECRET`:
+   the data services start first, and the `ui` starts last with the real secret.
+   Starting the `ui` while the placeholder is still there starts it with a
+   wrong client secret.
 
 6. Name the first operator, a user who already exists in the `clavix` tenant
    (the console needs a platform role before anyone can use it):
@@ -84,13 +103,41 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `REDIS_PASSWORD`                            | redis, api     | the password in `REDIS_URL`                                                                                                                                    |
 | `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api            | required in production                                                                                                                                         |
 | `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                                                                                                              |
+| `CONSOLE_CLIENT_SECRET`                     | ui (and api)   | ui, required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                              |
+| `CONSOLE_SESSION_SECRET`                    | ui (and api)   | ui, required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                      |
 | `CONTACT_EMAIL`                             | ui             | the public contact address                                                                                                                                     |
 | `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
 
 Compose sets `MONGO_URI`, `REDIS_URL`, `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
-ignored by git. Compose hands the whole file to `api` only; the `ui` gets just
-`CLAVIX_DOMAIN` and `CONTACT_EMAIL`, so it never sees the master key or the ask secret.
+ignored by git. Compose hands the whole file to `api` only (so it also holds the two
+console variables, which it does not read); the `ui` gets just `CLAVIX_DOMAIN`,
+`CONTACT_EMAIL` and the two console variables, so it never sees the master key or the
+ask secret.
+
+### The console's issuer
+
+The console signs in against the `clavix` tenant's issuer,
+`https://clavix.<CLAVIX_DOMAIN>`, and the ui fetches that issuer's discovery
+document through the public host. From inside the `ui` container the name must
+therefore resolve and reach Caddy: public DNS works when the host can reach its
+own public address (hairpin NAT); some providers do not allow it.
+
+The API builds a tenant's `iss` from the tenant (`issuerOf`, or `issuerOfHost`
+for a custom primary host), `CLAVIX_DOMAIN` and the public scheme, never from
+its own address. So a request to `http://api:3000` carrying
+`Host: clavix.<domain>` would receive the same `iss`; whether the ui can fetch
+from one URL and validate against another is the ui's setting, not the API's.
+The surest fix without hairpin NAT is a network alias on `caddy`, so the
+public names resolve to Caddy on the compose network and keep the real
+certificate:
+
+```yaml
+caddy:
+  networks:
+    default:
+      aliases: ["clavix.${CLAVIX_DOMAIN}", "console.${CLAVIX_DOMAIN}"]
+```
 
 ## TLS
 
