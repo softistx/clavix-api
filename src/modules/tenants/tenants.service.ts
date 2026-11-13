@@ -27,6 +27,12 @@ export interface TenantsServiceOptions {
    */
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
   /**
+   * The tenant's custom (verified) hosts, dropped with its slug host on each
+   * write: a suspended or deleted tenant must stop resolving on them at once.
+   * Default: none. An error is logged and the slug host is still dropped.
+   */
+  hostsOf?: (tenantId: ObjectId) => string[] | Promise<string[]>;
+  /**
    * Called with the tenant's id (hex, the janus partition) once it is created,
    * to give it its first signing key before any token. Same contract as
    * `onHostsChanged`: an error is logged and swallowed, the tenant stands, and
@@ -41,6 +47,9 @@ export interface TenantsServiceOptions {
 export class TenantsService {
   private readonly domain: string;
   private readonly onHostsChanged: (hosts: string[]) => void | Promise<void>;
+  private readonly hostsOf: (
+    tenantId: ObjectId,
+  ) => string[] | Promise<string[]>;
   private readonly onCreated: (tenantId: string) => void | Promise<void>;
   private readonly log: (message: string) => void;
 
@@ -50,6 +59,7 @@ export class TenantsService {
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
+    this.hostsOf = options.hostsOf ?? (() => []);
     this.onCreated = options.onCreated ?? (() => {});
     this.log = options.log ?? ((message) => console.warn(message));
   }
@@ -217,6 +227,15 @@ export class TenantsService {
 
   private async changed(tenant: Tenant) {
     const hosts = [hostOf(tenant.slug, this.domain)];
+    try {
+      hosts.push(...(await this.hostsOf(tenant._id)));
+    } catch (error) {
+      this.log(
+        `tenants: hostsOf failed for ${hosts[0]}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     try {
       await this.onHostsChanged(hosts);
     } catch (error) {

@@ -44,6 +44,12 @@ export interface TenantAdminOptions {
   domain?: string;
   /** As `TenantsServiceOptions.onHostsChanged`: after the write, errors logged and swallowed. */
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
+  /**
+   * The tenant's custom (verified) hosts, dropped with its slug host on each
+   * write: a suspended or deleted tenant must stop resolving on them at once.
+   * Default: none. An error is logged and the slug host is still dropped.
+   */
+  hostsOf?: (tenantId: ObjectId) => string[] | Promise<string[]>;
   log?: (message: string) => void;
 }
 
@@ -66,6 +72,9 @@ const STATE_FILTER = {
 export class TenantAdminService {
   private readonly domain: string;
   private readonly onHostsChanged: (hosts: string[]) => void | Promise<void>;
+  private readonly hostsOf: (
+    tenantId: ObjectId,
+  ) => string[] | Promise<string[]>;
   private readonly log: (message: string) => void;
 
   constructor(
@@ -75,6 +84,7 @@ export class TenantAdminService {
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
+    this.hostsOf = options.hostsOf ?? (() => []);
     this.log = options.log ?? ((message) => console.warn(message));
   }
 
@@ -296,8 +306,17 @@ export class TenantAdminService {
     }
   }
 
-  private async changed(tenant: Pick<Tenant, "slug">) {
+  private async changed(tenant: Pick<Tenant, "slug" | "_id">) {
     const hosts = [hostOf(tenant.slug, this.domain)];
+    try {
+      hosts.push(...(await this.hostsOf(tenant._id)));
+    } catch (error) {
+      this.log(
+        `tenants: hostsOf failed for ${hosts[0]}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     try {
       await this.onHostsChanged(hosts);
     } catch (error) {

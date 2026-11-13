@@ -1,4 +1,5 @@
 import type { TypedCollection } from "@softistx/mongo";
+import type { ObjectId } from "mongodb";
 import { TenantAdminService, TenantsService } from "@/modules/tenants";
 import type { PublicOrigin } from "@/modules/tenants/identity";
 import { hostOf } from "@/modules/tenants/identity";
@@ -22,6 +23,8 @@ export interface TenancyOptions {
   config: PublicOrigin;
   /** The custom domains hosts resolve through (A4). Default: none, only slug hosts resolve. */
   domains?: DomainDirectory;
+  /** A tenant's verified custom hosts, dropped from the cache with its slug host on each tenant write. */
+  hostsOf?: (tenantId: ObjectId) => Promise<string[]>;
   /** Gives a new tenant its first signing key. Default: none. */
   onCreated?: (tenantId: string) => void | Promise<void>;
 }
@@ -35,6 +38,7 @@ export function createTenancy({
   cache,
   config,
   domains,
+  hostsOf,
   onCreated,
 }: TenancyOptions) {
   const tenantResolver = createTenantResolver({
@@ -51,10 +55,12 @@ export function createTenancy({
   });
   const tenantsService = new TenantsService(tenants, {
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+    ...(hostsOf === undefined ? {} : { hostsOf }),
     ...(onCreated === undefined ? {} : { onCreated }),
   });
   const tenantAdmin = new TenantAdminService(tenants, tenantsService, {
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+    ...(hostsOf === undefined ? {} : { hostsOf }),
   });
   return { tenantResolver, tenantsService, tenantAdmin };
 }
@@ -95,6 +101,7 @@ export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
     tenantOfHost: (host) => domainStore.tenantOfHost(host),
     primaryHostOf: (tenantId) => domainStore.primaryHostOf(tenantId),
   },
+  hostsOf: (tenantId) => domainStore.verifiedHostsOf(tenantId),
   config: origin,
 });
 

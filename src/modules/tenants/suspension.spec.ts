@@ -4,11 +4,12 @@ import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
-import { tenantsService } from "@/config/tenancy";
+import { createTenancy, tenantsService } from "@/config/tenancy";
 import { settled } from "@/modules/auth/outbox";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { withTenantState } from "@/oauth/tenant-state";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { memoryTenantCache } from "@/tenancy/tenant-cache";
 import { issuerOf } from "./identity";
 import { PLATFORM_TENANT_SLUG } from "./slug";
 
@@ -117,6 +118,36 @@ describe("a suspended or deleted tenant's hosted pages", () => {
     const { tenantAdmin } = await import("@/config/tenancy");
     await tenantAdmin.restore(id);
     expect((await gql("frozen", REQUEST)).errors).toBeUndefined();
+  });
+});
+
+describe("a suspension and the cached custom host", () => {
+  test("a suspended tenant is not live on its custom host at once, not after the cache TTL", async () => {
+    const created = await tenantsService.create({
+      slug: "cached-custom",
+      name: "Cached",
+    });
+    const custom = "login.cached.example";
+    // A custom host the resolver and the tenant writes both know.
+    const hosts = new Map([[custom, created._id]]);
+    const tenancy = createTenancy({
+      tenants: mongo.db.tenants,
+      cache: memoryTenantCache(),
+      config: origin,
+      domains: {
+        tenantOfHost: async (host) => hosts.get(host),
+        primaryHostOf: async () => undefined,
+      },
+      hostsOf: async () => [custom],
+    });
+    // Warm the cache, then suspend through the wired service.
+    expect((await tenancy.tenantResolver.resolveHost(custom))?.status).toBe(
+      "active",
+    );
+    await tenancy.tenantsService.suspend(created._id.toHexString());
+    expect((await tenancy.tenantResolver.resolveHost(custom))?.status).toBe(
+      "suspended",
+    );
   });
 });
 
