@@ -1,0 +1,18 @@
+"""
+The brand of the tenant the request's host names, for its hosted pages.
+Anonymous.
+"""
+type PublicBranding {
+  displayName: String!
+  "The `data-nxgt-theme` value the CSS is scoped to."
+  themeName: String!
+  "A stylesheet to inject; scoped to `[data-nxgt-theme=\"<themeName>\"]`."
+  css: String!
+  "Relative to the tenant's host; null without a logo."
+  logoUrl: String
+}
+
+extend type Query {
+  "The host tenant's brand, or null (no tenant, or none set): the page keeps Clavix's own theme."
+  tenantBranding: PublicBranding
+}

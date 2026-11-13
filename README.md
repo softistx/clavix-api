@@ -141,8 +141,8 @@ Clavix adds no `jose`.
 cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
 tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. Today it
-exposes only `me { user platformRole memberships { tenant { slug } role } }`, so the scripts above
-still create tenants, clients and resources.
+exposes `me { user platformRole memberships { tenant { slug } role } }` and the branding fields
+(see "Branding"); the scripts above still create tenants, clients and resources.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
@@ -162,6 +162,36 @@ curl -s https://api.clavix.example/console/graphql \
   -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
   -d '{"query":"{ me { platformRole } }"}'
 ```
+
+## Branding
+
+A tenant wears its own theme on the hosted pages. The brand is one document per tenant (collection
+`branding`, tenant-owned, run `bun run db:sync` to create it): display name, seed colour, radius,
+optional background preset and motif (ids of `@softistx/material-core/backgrounds`), an optional logo,
+and the generated stylesheet.
+
+`updateBranding` on `/console/graphql` replaces the whole brand (the logo is kept unless `logo` or
+`removeLogo` is sent), so repeating a call changes nothing (`changed: false`). It compiles the seed with
+`defineTheme` and `themeToCss({ scope: "attribute" })`, measures every pair with `checkThemeContrast` in
+light and dark, and stores the CSS only when all pass WCAG AA. A pair that fails is `BRANDING_CONTRAST`
+(422, `extensions.failures`: foreground, background, mode, ratio, minimum). The generator moves a hard
+seed (a yellow) lighter or darker to reach AA on its own; the payload's `warnings` say what it moved.
+A bad value is `BAD_USER_INPUT` (400, `extensions.field`). `branding(tenantId)` needs `view` on the tenant,
+`updateBranding` needs `edit`.
+
+```graphql
+mutation {
+  updateBranding(tenantId: "...", input: { displayName: "Acme", seed: "#0a7ea4", radius: "0.5rem" }) {
+    changed warnings branding { themeName css logoUrl }
+  }
+}
+```
+
+A logo is a PNG, JPEG or WebP of at most 256 KiB (`logo: { contentType, dataBase64 }`); SVG is refused
+because it can carry script. The hosted pages read `tenantBranding` on `/graphql` (anonymous, by the
+request host; `null` keeps Clavix's own theme) and inject `css` with `data-nxgt-theme="<themeName>"`.
+`GET /branding/logo` on the tenant's host serves the logo with an `ETag` (its sha256), `304` on
+`If-None-Match`, `nosniff` and a sandboxing CSP; `404` without a logo.
 
 ## Tenants
 

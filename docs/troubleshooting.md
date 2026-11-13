@@ -4,6 +4,7 @@ Find the message you see, then read when it appears, why, and the fix.
 - [`temporarily_unavailable`: the issuer has no signing key yet](#temporarily_unavailable-the-issuer-has-no-signing-key-yet)
 - [`CLAVIX_TRUSTED_PROXIES is required in production`](#clavix_trusted_proxies-is-required-in-production-set-the-number-of-reverse-proxies-in-front-of-the-app-0-if-none)
 - [Client registration refusals (`clients:create`)](#client-registration-refusals-clientscreate)
+- [`BRANDING_CONTRAST` on `updateBranding`](#branding_contrast-on-updatebranding)
 - [`FORBIDDEN` and `NOT_FOUND` on `/graphql`](#forbidden-and-not_found-on-graphql)
 
 ## `temporarily_unavailable`: the issuer has no signing key yet
@@ -236,3 +237,16 @@ role `bun run operators:grant --email <address> --role <role>`.
 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
 first. Pass `--email`, and a `--role` of owner, admin or viewer.
+
+## `BRANDING_CONTRAST` on `updateBranding`
+
+**When:** `updateBranding` answers `422` with `extensions.code: "BRANDING_CONTRAST"`.
+
+**Why:** the theme built from the brand has a text/background pair below WCAG AA (4.5, or 3 for large
+text and indicators) in light or dark. `extensions.failures` lists each pair (`foreground`, `background`,
+`mode`, `ratio`, `minimum`). Nothing was stored. The generator already moves a seed to reach AA, so this
+means a pair that could not be solved.
+
+**Fix:** pick a seed closer to mid lightness and less saturated, or drop the background preset, and
+send the call again. A colour the library cannot read, or an unsafe radius, is `BAD_USER_INPUT` with
+`extensions.field` instead.
