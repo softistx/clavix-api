@@ -6,6 +6,7 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
+import { deviceOptions } from "./device";
 import {
   confirmMagicLink,
   magicLinkDisabled,
@@ -64,7 +65,12 @@ export const auth: Resolvers = {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
       requireMethod(tenant, "emailCode");
-      const signedIn = await verifySignInCode(auth, challenge, code);
+      const signedIn = await verifySignInCode(
+        auth,
+        challenge,
+        code,
+        deviceOptions(ctx.request),
+      );
       await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");
       ctx.set.headers.append(
@@ -95,7 +101,11 @@ export const auth: Resolvers = {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
       if (!auth.magicLink.enabled) throw magicLinkDisabled();
-      const signedIn = await confirmMagicLink(auth, token);
+      const signedIn = await confirmMagicLink(
+        auth,
+        token,
+        deviceOptions(ctx.request),
+      );
       await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");
       ctx.set.headers.append(

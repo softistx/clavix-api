@@ -20,6 +20,7 @@ export const usersGuards: Guards = {
   "Query.user": onTenant("view", lowerTenantArg),
   "Query.userInvitations": onTenant("view", lowerTenantArg),
   "Query.userGrants": onTenant("view", lowerTenantArg),
+  "Query.userSessions": onTenant("view", lowerTenantArg),
   "Mutation.inviteUser": onTenant("edit", lowerTenantArg),
   "Mutation.revokeInvitation": onTenant("edit", lowerTenantArg),
   "Mutation.updateUser": onTenant("edit", lowerTenantArg),
@@ -27,6 +28,8 @@ export const usersGuards: Guards = {
   "Mutation.enableUser": onTenant("edit", lowerTenantArg),
   "Mutation.deleteUser": onTenant("edit", lowerTenantArg),
   "Mutation.revokeUserSessions": onTenant("edit", lowerTenantArg),
+  "Mutation.revokeUserSession": onTenant("edit", lowerTenantArg),
+  "Mutation.setUserEmailVerified": onTenant("edit", lowerTenantArg),
   "Mutation.revokeGrant": onTenant("edit", lowerTenantArg),
 };
 
@@ -41,6 +44,8 @@ export const usersAudits: Audits = {
   "Mutation.enableUser": "user.enable",
   "Mutation.deleteUser": "user.delete",
   "Mutation.revokeUserSessions": "user.revokeSessions",
+  "Mutation.revokeUserSession": "user.revokeSession",
+  "Mutation.setUserEmailVerified": "user.setEmailVerified",
   "Mutation.revokeGrant": "user.revokeGrant",
 };
 
@@ -60,6 +65,11 @@ const grantShape = (grant: UserGrantView) => ({
 
 const MAX_PAGE = 100;
 const MAX_NAME = 200;
+const MAX_PREFIX = 254;
+const badInput = (message: string) =>
+  new GraphQLError(message, {
+    extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+  });
 const target = (type: string, id: string, tenantId: string) => ({
   type,
   id,
@@ -68,27 +78,43 @@ const target = (type: string, id: string, tenantId: string) => ({
 
 export const users: Resolvers = {
   Query: {
-    users: async (_, { tenantId: given, after, first, email }, ctx) => {
+    users: async (
+      _,
+      { tenantId: given, after, first, email, emailPrefix },
+      ctx,
+    ) => {
       const tenantId = tenantIdOf(given);
+      const prefix = emailPrefix?.trim() ?? "";
+      if (email !== null && email !== undefined && prefix !== "") {
+        throw badInput("Give either email or emailPrefix, not both");
+      }
+      if ([...prefix].length > MAX_PREFIX) {
+        throw badInput("The prefix is too long");
+      }
       await activeTenant(ctx.directory, tenantId);
       if (email !== null && email !== undefined) {
         const found = await ctx.users.findByEmail(tenantId, email);
         return {
           items: found === null ? [] : [shape(found)],
           nextCursor: null,
+          totalCount: found === null ? 0 : 1,
         };
       }
+      const filter = prefix === "" ? {} : { emailPrefix: prefix };
       try {
         const page = await ctx.users.list(tenantId, {
           after: after ?? null,
           limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+          ...filter,
         });
-        return { items: page.items.map(shape), nextCursor: page.nextCursor };
+        return {
+          items: page.items.map(shape),
+          nextCursor: page.nextCursor,
+          totalCount: await ctx.users.count(tenantId, filter),
+        };
       } catch (error) {
         if (error instanceof JanusError && error.code === "INVALID_CURSOR") {
-          throw new GraphQLError("The cursor is not valid", {
-            extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
-          });
+          throw badInput("The cursor is not valid");
         }
         throw error;
       }
@@ -98,6 +124,15 @@ export const users: Resolvers = {
       await activeTenant(ctx.directory, tenantId);
       const found = await ctx.users.find(tenantId, id);
       return found === null ? null : shape(found);
+    },
+    userSessions: async (_, { tenantId: given, userId }, ctx) => {
+      const tenantId = tenantIdOf(given);
+      await activeTenant(ctx.directory, tenantId);
+      return (await ctx.users.sessions(tenantId, userId)).map((session) => ({
+        ...session,
+        device: session.device ?? null,
+        lastUsedAt: session.lastUsedAt ?? null,
+      }));
     },
     userInvitations: async (_, { tenantId: given }, ctx) => {
       const tenantId = tenantIdOf(given);
@@ -183,6 +218,40 @@ export const users: Resolvers = {
       const ended = await ctx.users.revokeSessions(tenantId, userId);
       await ctx.audit("user.revokeSessions", target("user", userId, tenantId));
       return ended;
+    },
+    revokeUserSession: async (
+      _,
+      { tenantId: given, userId, sessionId },
+      ctx,
+    ) => {
+      const tenantId = tenantIdOf(given);
+      idArg(userId, "userId");
+      idArg(sessionId, "sessionId");
+      await activeTenant(ctx.directory, tenantId);
+      const ended = await ctx.users.revokeSession(tenantId, userId, sessionId);
+      // Recorded on a repeat and on a session that is not this user's too:
+      // the id is only named, never read.
+      await ctx.audit(
+        "user.revokeSession",
+        target("session", sessionId, tenantId),
+      );
+      return ended;
+    },
+    setUserEmailVerified: async (
+      _,
+      { tenantId: given, userId, verified },
+      ctx,
+    ) => {
+      const tenantId = tenantIdOf(given);
+      idArg(userId, "userId");
+      await activeTenant(ctx.directory, tenantId);
+      const user = await ctx.users.setEmailVerified(tenantId, userId, verified);
+      if (user === null) throw denial("NOT_FOUND", "No such user");
+      await ctx.audit(
+        "user.setEmailVerified",
+        target("user", userId, tenantId),
+      );
+      return shape(user);
     },
     revokeGrant: async (_, { tenantId: given, userId, grantId }, ctx) => {
       const tenantId = tenantIdOf(given);

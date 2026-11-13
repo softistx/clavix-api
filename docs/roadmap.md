@@ -29,8 +29,7 @@ nxgt-janus release says which.
     [#120](https://github.com/softistx/clavix-api/issues/120)).
   - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users (list, invite,
     disable, delete, sessions and grants; done on the M2 branch,
-    [#101](https://github.com/softistx/clavix-api/issues/101); the e-mail search is exact until janus
-    offers a prefix filter), end-user roles per tenant, scoped to a resource or not, and assigned to users (done on the M2 branch, [#102](https://github.com/softistx/clavix-api/issues/102)); admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
+    [#101](https://github.com/softistx/clavix-api/issues/101); an e-mail prefix search with a total, a session list with a per-session revoke and an e-mail verified flag, done on the M2 branch, [#132](https://github.com/softistx/clavix-api/issues/132)), end-user roles per tenant, scoped to a resource or not, and assigned to users (done on the M2 branch, [#102](https://github.com/softistx/clavix-api/issues/102)); admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
   - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
     host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
   - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for
