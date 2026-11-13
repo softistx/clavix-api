@@ -1,0 +1,63 @@
+"Whether a client keeps a secret (a back end) or proves itself with PKCE only."
+enum ClientType {
+  PUBLIC
+  CONFIDENTIAL
+}
+
+"An OAuth client of a tenant."
+type Client {
+  "The client_id."
+  id: ID!
+  name: String!
+  type: ClientType!
+  "Exact-match redirect URIs."
+  redirectUris: [String!]!
+  createdAt: DateTime!
+}
+
+"A page of a tenant's clients; `nextCursor` is `null` on the last."
+type ClientPage {
+  items: [Client!]!
+  nextCursor: String
+}
+
+"A client just created. The secret of a confidential client is in `clientSecret`, here and nowhere else."
+type CreatedClient {
+  client: Client!
+  clientSecret: String
+}
+
+"A client whose secret was just rotated. The old secret no longer works; the new one is shown once."
+type RotatedClientSecret {
+  client: Client!
+  clientSecret: String!
+}
+
+input CreateClientInput {
+  name: String!
+  type: ClientType!
+  redirectUris: [String!]!
+  "The client_id (a-z, 0-9, `-`); default: the name. Creating an existing id is a CONFLICT."
+  clientId: String
+}
+
+"Fields left out stay as they are. The type and the secret never change here."
+input UpdateClientInput {
+  name: String
+  redirectUris: [String!]
+}
+
+type Query {
+  "The tenant's clients by name (`q` matches part of the name or id). Needs `view` on the tenant."
+  clients(tenantId: ID!, q: String, after: String, first: Int = 25): ClientPage!
+  client(tenantId: ID!, id: ID!): Client
+}
+
+type Mutation {
+  "Needs `edit` on the tenant."
+  createClient(tenantId: ID!, input: CreateClientInput!): CreatedClient!
+  updateClient(tenantId: ID!, id: ID!, input: UpdateClientInput!): Client!
+  rotateClientSecret(tenantId: ID!, id: ID!): RotatedClientSecret!
+  "`true` when the client was deleted, `false` when it was already gone."
+  deleteClient(tenantId: ID!, id: ID!): Boolean!
+}
