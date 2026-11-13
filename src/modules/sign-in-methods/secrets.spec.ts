@@ -72,3 +72,23 @@ test("another tenant, provider, key, version or a changed byte does not open", (
     expect(String((error as Error).message)).not.toContain("s3cret-value");
   }
 });
+
+test("a keyring: the first key seals, every key opens, a stranger does not", () => {
+  const old = randomBytes(32);
+  const next = randomBytes(32);
+  const sealedOld = createSecretBox(old).seal("old-secret", context);
+
+  const ring = createSecretBox([next, old]);
+  expect(ring.kid).toBe(createSecretBox(next).kid);
+  expect(ring.opens(sealedOld.kid)).toBe(true);
+  expect(ring.opens("AAAAAAAAAAA")).toBe(false);
+  expect(ring.open(sealedOld, context)).toBe("old-secret");
+
+  const sealedNew = ring.seal("new-secret", context);
+  expect(sealedNew.kid).toBe(ring.kid);
+  expect(createSecretBox(next).open(sealedNew, context)).toBe("new-secret");
+  expect(() => createSecretBox(next).open(sealedOld, context)).toThrow(
+    "Sealed under another key",
+  );
+  expect(() => createSecretBox([] as never)).toThrow(TypeError);
+});

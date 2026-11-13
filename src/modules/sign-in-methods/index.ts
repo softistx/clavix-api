@@ -71,7 +71,7 @@ export const signInMethods: Resolvers = {
         methods: methodsOf(signIn)
           .filter((method) => method.enabled)
           .map((method) => HOSTED[method.type]),
-        social: offeredSocial(signIn, secretBox.kid).map(({ provider }) => ({
+        social: offeredSocial(signIn, secretBox.opens).map(({ provider }) => ({
           id: provider,
           label: SOCIAL_LABELS[provider],
         })),
@@ -83,7 +83,7 @@ export const signInMethods: Resolvers = {
       // The tenant's policy first: a provider it does not offer does not
       // exist, before any throttle budget is spent.
       const tenant = await tenantOf(ctx);
-      const offered = offeredSocial(tenant.signIn, secretBox.kid);
+      const offered = offeredSocial(tenant.signIn, secretBox.opens);
       if (!offered.some((entry) => entry.provider === provider)) {
         // A fixed word: the caller's string is not echoed.
         throw methodDisabled("this provider");

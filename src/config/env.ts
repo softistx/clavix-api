@@ -1,5 +1,6 @@
 import { defineEnv } from "@alxia/env";
 import { z } from "zod";
+import { masterKeysProblem } from "./master-keys";
 
 const production = Bun.env.NODE_ENV === "production";
 
@@ -32,15 +33,13 @@ const domain = z
     "not a lowercase DNS name with at least two labels",
   );
 
-// 32 bytes in standard base64 (44 characters): the master key that encrypts the
-// signing keys at rest.
-const masterKey = z
-  .string()
-  .regex(/^[A-Za-z0-9+/]{43}=$/, "not 32 bytes in base64")
-  .refine(
-    (value) => Buffer.from(value, "base64").length === 32,
-    "not 32 bytes in base64",
-  );
+// The master key that encrypts the signing keys at rest: 32 bytes in standard
+// base64 (44 characters), or a comma-separated list of them while it rotates
+// (the first seals, any opens; see `master-keys.ts`).
+const masterKey = z.string().superRefine((value, ctx) => {
+  const problem = masterKeysProblem(value);
+  if (problem !== undefined) ctx.addIssue({ code: "custom", message: problem });
+});
 
 const smtpUrl = z
   .string()
@@ -67,7 +66,9 @@ export const env = defineEnv({
   // Encrypts every tenant's signing keys at rest (AES-256-GCM): 32 random
   // bytes in base64, e.g. `openssl rand -base64 32`. Required in production;
   // a public development default elsewhere. Losing it makes the stored keys
-  // unreadable: keep it in a secret manager, apart from the database.
+  // unreadable: keep it in a secret manager, apart from the database. To
+  // rotate it, a comma-separated list: the first key seals, any opens
+  // (docs/operations.md, "Rotating the master key").
   CLAVIX_KEYS_MASTER_KEY: inProduction(masterKey, DEV_KEYS_MASTER_KEY),
   // The SMTP server of the platform sender, `no-reply@<CLAVIX_DOMAIN>`
   // (`smtps://user:pass@smtp.example:465`). Required in production; unset

@@ -15,6 +15,8 @@
     "tenants:create": "bun src/scripts/tenants-create.ts",
     "clients:create": "bun src/scripts/clients-create.ts",
     "resources:create": "bun src/scripts/resources-create.ts",
+    "keys:reseal": "bun src/scripts/keys-reseal.ts",
+    "keys:rotate": "bun src/scripts/keys-rotate.ts",
     "operators:grant": "bun src/scripts/operators-grant.ts",
     "lint": "biome lint",
     "format": "biome format --write",

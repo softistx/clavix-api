@@ -148,6 +148,19 @@ test("the keys master key: a public default outside production, never in it", as
   ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
 });
 
+test("the keys master key takes a keyring: a comma-separated list, no repeat", async () => {
+  const next = Buffer.alloc(32, 9).toString("base64");
+  const ring = `${next},${masterKey}`;
+  const { env } = await load({ ...clean, CLAVIX_KEYS_MASTER_KEY: ring });
+  expect(env.CLAVIX_KEYS_MASTER_KEY).toBe(ring);
+  await expect(
+    load({ ...clean, CLAVIX_KEYS_MASTER_KEY: `${masterKey},${masterKey}` }),
+  ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
+  await expect(
+    load({ ...clean, CLAVIX_KEYS_MASTER_KEY: `${masterKey},c2hvcnQ=` }),
+  ).rejects.toThrow("CLAVIX_KEYS_MASTER_KEY");
+});
+
 test("the sign-in code limits and the proxy count have defaults and are read", async () => {
   const { env } = await load({
     ...clean,

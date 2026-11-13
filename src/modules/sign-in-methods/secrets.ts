@@ -19,6 +19,11 @@ const derive = (masterKey: Uint8Array, info: string, bytes: number) =>
  * master key (`CLAVIX_KEYS_MASTER_KEY`): HKDF-SHA256, no salt, info
  * `social-secrets`, 32 bytes, then AES-256-GCM with a random 12-byte IV.
  *
+ * With a keyring (a master-key rotation) the first key seals and every key
+ * opens, by the envelope's `kid`. Envelopes under an older key stay readable
+ * while it is in the list; re-wrapping them is clavix-api#49, so the old key
+ * leaves the list only after that.
+ *
  * The envelope is `{ v: 1, kid, iv, ct }`: `kid` names the master key (8 bytes
  * of a second derivation, info `social-secrets/kid`, base64url; it tells
  * nothing about the key), so a master-key rotation (clavix-api#49) finds the
@@ -26,17 +31,28 @@ const derive = (masterKey: Uint8Array, info: string, bytes: number) =>
  * `v`, `kid` and `context` (the tenant and the provider) are authenticated: a
  * sealed secret copied to another tenant's document does not open.
  */
-export function createSecretBox(masterKey: Uint8Array) {
-  const key = derive(masterKey, LABEL, 32);
-  const kid = derive(masterKey, `${LABEL}/kid`, 8).toString("base64url");
-  const aad = (context: string) => Buffer.from(`v${VERSION}:${kid}:${context}`);
+export function createSecretBox(
+  masterKeys: Uint8Array | readonly [Uint8Array, ...Uint8Array[]],
+) {
+  const ring = masterKeys instanceof Uint8Array ? [masterKeys] : masterKeys;
+  const keys = ring.map((masterKey) => {
+    const kid = derive(masterKey, `${LABEL}/kid`, 8).toString("base64url");
+    return { kid, key: derive(masterKey, LABEL, 32) };
+  });
+  const [current] = keys;
+  if (current === undefined) throw new TypeError("A secret box needs a key");
+  const aad = (kid: string, context: string) =>
+    Buffer.from(`v${VERSION}:${kid}:${context}`);
 
   return {
-    kid,
+    /** The key that seals. */
+    kid: current.kid,
+    /** Whether an envelope sealed under `kid` can be opened: its key is in the keyring. */
+    opens: (kid: string) => keys.some((entry) => entry.kid === kid),
     seal(plaintext: string, context: string): SealedSecret {
       const iv = randomBytes(12);
-      const cipher = createCipheriv("aes-256-gcm", key, iv);
-      cipher.setAAD(aad(context));
+      const cipher = createCipheriv("aes-256-gcm", current.key, iv);
+      cipher.setAAD(aad(current.kid, context));
       const ct = Buffer.concat([
         cipher.update(plaintext, "utf8"),
         cipher.final(),
@@ -44,24 +60,25 @@ export function createSecretBox(masterKey: Uint8Array) {
       ]);
       return {
         v: VERSION,
-        kid,
+        kid: current.kid,
         iv: iv.toString("base64url"),
         ct: ct.toString("base64url"),
       };
     },
-    /** Throws when the envelope is of another version or key, or the context or the bytes are wrong. The error never carries the secret. */
+    /** Throws when the envelope is of another version or of a key outside the keyring, or the context or the bytes are wrong. The error never carries the secret. */
     open(sealed: SealedSecret, context: string): string {
-      if (sealed.v !== VERSION || sealed.kid !== kid) {
+      const entry = keys.find((candidate) => candidate.kid === sealed.kid);
+      if (sealed.v !== VERSION || entry === undefined) {
         throw new TypeError("Sealed under another key or version");
       }
       const bytes = Buffer.from(sealed.ct, "base64url");
       if (bytes.length < TAG_BYTES) throw new TypeError("Not a sealed secret");
       const decipher = createDecipheriv(
         "aes-256-gcm",
-        key,
+        entry.key,
         Buffer.from(sealed.iv, "base64url"),
       );
-      decipher.setAAD(aad(context));
+      decipher.setAAD(aad(entry.kid, context));
       decipher.setAuthTag(bytes.subarray(bytes.length - TAG_BYTES));
       return Buffer.concat([
         decipher.update(bytes.subarray(0, bytes.length - TAG_BYTES)),
