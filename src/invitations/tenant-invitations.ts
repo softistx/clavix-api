@@ -26,7 +26,7 @@ export interface InvitationsAuth {
       email: string;
       name: string;
       role: string;
-      invitedBy: { id: string };
+      invitedBy: { id: string } | null;
     }): Promise<{ code: string; invitation: StoredInvitation }>;
     list(
       scope: string,
@@ -72,7 +72,8 @@ export interface InviteInput {
   organization: string;
   email: string;
   role: string;
-  invitedBy: { id: string; name?: string | undefined };
+  /** Who invites; `null` for the system (a CLI), which names no inviter in the e-mail. */
+  invitedBy: { id: string; name?: string | undefined } | null;
 }
 
 /** The invitations of one tenant's user pool: issue and mail, list, revoke. */
@@ -122,12 +123,12 @@ export function createTenantInvitations(
         email,
         name: email.split("@")[0] ?? email,
         role,
-        invitedBy: { id: invitedBy.id },
+        invitedBy: invitedBy === null ? null : { id: invitedBy.id },
       });
       await mail.invitation(
         { email },
         {
-          ...(invitedBy.name === undefined ? {} : { inviter: invitedBy.name }),
+          ...(invitedBy?.name === undefined ? {} : { inviter: invitedBy.name }),
           organization,
           role,
           link: link(issued.code),

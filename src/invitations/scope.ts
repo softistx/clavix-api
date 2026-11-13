@@ -16,3 +16,15 @@ export const adminTenantOf = (scope: string): string | null =>
  * tenant's console admins. Accepting it makes the account and grants nothing else.
  */
 export const userScope = () => "users";
+
+const OPERATOR = "operator";
+
+/**
+ * The scope of an invitation to become a platform operator, issued in the
+ * `clavix` tenant by `operators:grant --create`. Accepting it makes the account
+ * and grants the invitation's role on the platform.
+ */
+export const operatorScope = () => OPERATOR;
+
+/** Whether the scope is the operator invitation one. */
+export const isOperatorScope = (scope: string): boolean => scope === OPERATOR;

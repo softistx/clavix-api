@@ -1,7 +1,9 @@
 import { CliInputError } from "@/cli/errors";
 import { access } from "@/config/access";
+import { adminEventRecorder } from "@/config/admin-events";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { invitationsOf } from "@/config/invitations";
 import { redis } from "@/config/redis";
 import { tenantResolver } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
@@ -10,12 +12,14 @@ import {
   OPERATORS_USAGE,
   parseOperatorArgs,
 } from "@/console/operators";
+import { operatorScope } from "@/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 
 // Grants a platform role (default owner) to a user of the clavix tenant, until
 // the console can. Idempotent. See `bun run operators:grant --help`.
 //
 //   bun run operators:grant --email ada@example.com
+//   bun run operators:grant --email ada@example.com --create   # fresh database
 const args = Bun.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
   console.log(OPERATORS_USAGE);
@@ -33,7 +37,26 @@ try {
   console.log(
     JSON.stringify(
       await grantOperator(
-        { findByEmail: (e) => janus.findByEmail(e), access },
+        {
+          findByEmail: (e) => janus.findByEmail(e),
+          access,
+          invite: (email, role) =>
+            invitationsOf(async () => tenant).invite({
+              scope: operatorScope(),
+              organization: "Clavix",
+              email,
+              role,
+              invitedBy: null,
+            }),
+          record: (target) =>
+            adminEventRecorder.record({
+              actor: "cli:operators:grant",
+              action: "operator.grant",
+              tenantId: null,
+              target,
+              requestId: crypto.randomUUID(),
+            }),
+        },
         input,
       ),
       null,
