@@ -59,6 +59,30 @@ describe("tlsAsk", () => {
     expect((await get(ask(), q, { method: "POST" })).status).toBe(404);
   });
 
+  test("platform hosts go to allowedPlatformHost, never to the custom store", async () => {
+    let custom = 0;
+    const known = ["acme.clavix.test", "console.clavix.test"];
+    const handler = ask({
+      allowed: async () => {
+        custom++;
+        return true;
+      },
+      allowedPlatformHost: async (host) => known.includes(host),
+    });
+    for (const [domain, status] of [
+      ["Acme.clavix.test", 200],
+      ["console.clavix.test.", 200],
+      ["ghost.clavix.test", 404],
+      ["a.b.clavix.test", 404],
+      ["clavix.test.evil.com", 200],
+    ] as const) {
+      expect(
+        (await get(handler, `token=${SECRET}&domain=${domain}`)).status,
+      ).toBe(status);
+    }
+    expect(custom).toBe(1); // only clavix.test.evil.com is a custom host
+  });
+
   test("404 for platform domains, IPs and garbage, without asking the store", async () => {
     let asked = 0;
     const handler = ask({

@@ -1,0 +1,214 @@
+# Operations
+
+Run Clavix on one host with Docker Compose: the API, the UI, MongoDB (a one-node
+replica set), Redis and Caddy for TLS. Nothing here is deployed by CI. The files
+are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`
+and `scripts/mongo-backup.sh` / `scripts/mongo-restore.sh`.
+
+## What runs
+
+| Service | Image                                 | Reachable from             | Notes                                            |
+| ------- | ------------------------------------- | -------------------------- | ------------------------------------------------ |
+| `caddy` | `caddy:2`                             | the internet (80, 443)     | the only published ports; certificates on demand |
+| `api`   | `CLAVIX_API_IMAGE` (the `Dockerfile`) | `caddy`, `ui`              | non-root, healthcheck on `/healthz`, port 3000   |
+| `ui`    | `CLAVIX_UI_IMAGE` (clavix-ui)         | `caddy`                    | hosted pages, console, landing; port 3001        |
+| `mongo` | `mongo:8`                             | `api`, `backup`, `restore` | `--replSet rs0`, initiated by its healthcheck    |
+| `redis` | `redis:7-alpine`                      | `api`                      | password, append-only file                       |
+
+Caddy sends the authorization server, the GraphQL APIs, JWKS, userinfo, the logo
+and `/healthz` to the API, and everything else to the UI. The tenant is chosen
+by the `Host` header, which Caddy passes untouched.
+
+## Health
+
+- `GET /healthz` is liveness: 200 `{ status, version }`, no dependency is
+  touched. The image's `HEALTHCHECK` and an uptime monitor use it.
+- `GET /readyz` is readiness: Mongo `ping` and Redis `PING` within 2 s each.
+  200 `{ status: "ok", checks }`, or 503 `{ status: "unavailable", checks }`
+  naming the dependency that is `down`, without the error text (the logs have
+  it). Caddy answers 404 to `/readyz` from outside: probe it from the private
+  network (`docker compose exec api bun -e "..."`, or a load balancer in front of
+  `api`).
+
+## First boot
+
+1. A host with Docker, DNS `A`/`AAAA` records for `<domain>` and
+   `*.<domain>` (so `console.<domain>` and every `<slug>.<domain>` resolve), and
+   ports 80 and 443 open.
+2. Build and publish the images yourself. Both repositories build with their
+   `Dockerfile`; the API one needs the GitHub Packages token as a build secret:
+
+   ```sh
+   export GITHUB_TOKEN=$(gh auth token)
+   docker build --secret id=github_token,env=GITHUB_TOKEN -t registry.example.com/clavix-api:0.1.0 .
+   ```
+
+3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate
+   the secrets: `openssl rand -base64 32` for `CLAVIX_KEYS_MASTER_KEY`,
+   `openssl rand -hex 32` for `CLAVIX_TLS_ASK_SECRET`, `openssl rand -hex 24` for
+   `REDIS_PASSWORD`.
+4. **Master key custody.** `CLAVIX_KEYS_MASTER_KEY` encrypts every tenant's
+   signing keys and social secrets. Store it in a secret manager apart from the
+   database and from the backups. Losing it makes the stored keys unreadable
+   (see "Signing keys" below).
+5. Start the data services, then run the deployment steps once:
+
+   ```sh
+   alias dc='docker compose -f deploy/compose.yml --env-file deploy/.env'
+   dc up -d mongo redis
+   dc run --rm api bun run db:sync       # collections, indexes, validators
+   dc run --rm api bun run db:migrate    # prints the console client secret once: save it
+   dc up -d
+   ```
+
+6. Name the first operator, a user who already exists in the `clavix` tenant
+   (the console needs a platform role before anyone can use it):
+   `dc run --rm api bun run operators:grant --email you@example.com`
+   (see the README, "Console API").
+7. Check: `curl https://console.<domain>/healthz` answers 200 and
+   `dc exec api bun -e "console.log((await fetch('http://127.0.0.1:3000/readyz')).status)"`
+   prints 200.
+
+## Environment
+
+The variables of the API are in the README ("Environment") and `.env.example`.
+Beyond them, the deployment reads, in `deploy/.env`:
+
+| Variable                                    | Read by        | Meaning                                                             |
+| ------------------------------------------- | -------------- | ------------------------------------------------------------------- |
+| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`       | compose        | the images to run                                                   |
+| `CLAVIX_DOMAIN`                             | api, ui, caddy | the apex; tenants live at `<slug>.<domain>`                         |
+| `ACME_EMAIL`                                | caddy          | the ACME account address                                            |
+| `REDIS_PASSWORD`                            | redis, api     | the password in `REDIS_URL`                                         |
+| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api            | required in production                                              |
+| `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                   |
+| `CONTACT_EMAIL`                             | ui             | the public contact address                                          |
+| `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/`), archives kept (14) |
+
+Compose sets `MONGO_URI`, `REDIS_URL`, `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
+one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
+ignored by git.
+
+## TLS
+
+Caddy gets a certificate for a host the first time it is asked for, but only
+after it asks the API: `GET http://api:3000/internal/tls/ask?token=...&domain=<host>`.
+The answer is 200 for
+- a verified custom domain of a live tenant,
+- the apex, `console.<domain>`, and `<slug>.<domain>` of a live tenant,
+
+and a bare 404 for everything else (an unknown, pending, lapsed or suspended
+domain, a deleted tenant, a wrong token); 429 past `CLAVIX_TLS_ASK_LIMIT`
+asks a minute. So a stranger pointing a name at your IP gets no certificate.
+
+**The endpoint is not reachable from outside**, three ways at once:
+the API publishes no port, so only `caddy` and `ui` reach it on the compose
+network; the Caddyfile answers 404 to `/internal/*` before any proxying; and the
+endpoint itself refuses any request carrying `X-Forwarded-For`, `X-Forwarded-Host`
+or `Forwarded` (everything Caddy proxies has them) and any request without the
+secret token.
+
+Let's Encrypt limits new certificates to 50 a week per registered domain, and a
+slug host is one certificate each. Past a few dozen tenants, switch the slug
+hosts to one wildcard certificate (DNS-01, a Caddy built with your DNS
+provider's module): the commented block at the end of `deploy/Caddyfile` shows
+it. Custom domains stay on demand.
+
+## Upgrade
+
+1. Build and tag the new images; set the new tags in `deploy/.env`.
+2. Take a backup first (below).
+3. `dc pull` (or load the images), then
+   `dc run --rm api bun run db:sync && dc run --rm api bun run db:migrate`.
+   Migrations are forward-only and idempotent; read the release notes.
+4. `dc up -d api ui`. The API drains requests in flight on SIGTERM (20 s).
+5. Check `/healthz` and `/readyz`, then sign in to the console.
+
+Rollback: set the previous tags and `dc up -d api ui`. A migration that changed
+data needs the backup restored (below); `db:migrate` says when one did.
+
+## Backup
+
+```sh
+dc --profile tools run --rm backup          # archive in BACKUP_DIR (default backups/)
+```
+
+`scripts/mongo-backup.sh` runs `mongodump --gzip` against `MONGO_URI`, writes
+`clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and
+keeps the newest `BACKUP_KEEP` archives. Schedule it from the host's cron, e.g.
+nightly, and copy the archives off the host. The dump is of one database and not
+point-in-time: take it at a quiet hour.
+
+The archive holds the signing keys **encrypted**. It restores a working system
+only together with the same `CLAVIX_KEYS_MASTER_KEY`. Back up the master key
+separately, in the secret manager. Redis holds only caches, queues and counters:
+it is not backed up, and a lost Redis costs a cold cache and the month's active
+user counts.
+
+## Restore
+
+```sh
+dc stop api ui                                            # nobody writes while it runs
+CONFIRM=yes dc --profile tools run --rm restore /backups/clavix-20261112T031500Z.archive.gz
+dc up -d api ui
+```
+
+`scripts/mongo-restore.sh` verifies the checksum, then runs `mongorestore --drop`
+into the database named in `MONGO_URI`. Without `CONFIRM=yes` it prints what it
+would do and stops (exit 2). Afterwards run `db:sync`, check `/readyz`, sign in
+to the console, and confirm a tenant's JWKS (`https://<slug>.<domain>/jwks.json`)
+lists its keys. Key rotation resumes by itself.
+
+### Restore drill
+
+Rehearse the restore, never first meet it in an incident. Once a month, and
+after any change to the scripts:
+
+```sh
+# scratch database on the same server, production untouched
+CONFIRM=yes dc --profile tools run --rm restore /backups/<latest> clavix-drill
+```
+
+(`restore` accepts the target database name as its second argument), then compare
+collection counts with production and drop `clavix-drill`. The repository's spec
+`src/ops/restore-drill.spec.ts` does the same against the test MongoDB (dump,
+restore into a scratch database, compare collections, documents and indexes,
+refuse a damaged archive). It needs `mongodump` and `mongorestore` on the PATH
+(`brew install mongodb-database-tools`, or set `MONGODUMP` / `MONGORESTORE`) and
+is skipped without them.
+
+## Signing keys
+
+Each tenant's ES256 keys rotate by themselves: a key signs for 90 days, the next
+one is published 48 h before, a retired key stays published 24 h (hourly job,
+plus one pass at API start). Nothing to do in normal operation. To check, read
+`https://<slug>.<domain>/jwks.json`.
+
+Emergency rotation (a key leaked) and a lost or changed master key use the same
+procedure, from the README ("Signing keys"): delete the tenant's `oauthSigningKeys`
+documents, restart the API so the start pass creates new keys, and tell relying
+parties: tokens signed by the old keys stop verifying once the JWKS no longer
+lists them. There is no re-encryption in place and no "rotate now" script yet.
+
+## Troubleshooting
+
+| Symptom                        | Look at                                                                                                                                                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api` restarts at once         | `dc logs api`: a malformed variable stops the app at start and is named                                                                                                                                                                                                                                |
+| `/readyz` 503                  | the `checks` object names `mongo` or `redis`; `dc ps`, `dc logs mongo`                                                                                                                                                                                                                                 |
+| `mongo` never healthy          | `dc logs mongo`; the replica set host must be `mongo:27017` (changing the service name breaks `rs.initiate`)                                                                                                                                                                                           |
+| No certificate for a tenant    | `dc logs caddy`; ask by hand from the private network: `dc exec api bun -e "console.log((await fetch('http://127.0.0.1:3000/internal/tls/ask?token=' + process.env.CLAVIX_TLS_ASK_SECRET + '&domain=acme.<domain>')).status)"` (200 expected; 404: the tenant is not live, or the domain not verified) |
+| Rate-limited by Let's Encrypt  | see "TLS": move the slug hosts to a wildcard certificate                                                                                                                                                                                                                                               |
+| Everyone shares one rate limit | `CLAVIX_TRUSTED_PROXIES` must be 1 behind Caddy                                                                                                                                                                                                                                                        |
+| Sign-in mails do not leave     | `CLAVIX_SMTP_URL`; the mailer logs the relay's refusal                                                                                                                                                                                                                                                 |
+| Wrong tenant on a host         | Caddy must pass `Host` untouched (`header_up Host {host}`)                                                                                                                                                                                                                                             |
+| Console `401`                  | the `console` client secret from `db:migrate`; see the README, "Console API"                                                                                                                                                                                                                           |
+
+Application errors and their causes: [troubleshooting.md](troubleshooting.md).
+
+## Not covered yet
+
+- MongoDB authentication and TLS between containers: the database listens on the
+  private compose network only. Add auth with a key file before exposing it.
+- Image publishing and any deploy pipeline (workflows are off).
+- Point-in-time recovery (oplog) and off-host backup shipping.

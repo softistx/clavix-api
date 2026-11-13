@@ -1,0 +1,56 @@
+# Clavix edge. TLS is automatic and on demand: Caddy asks the API before it
+# requests a certificate for any host (docs/operations.md, "TLS").
+{
+	email {$ACME_EMAIL}
+	on_demand_tls {
+		# Answers 200 only for a verified custom domain of a live tenant, or a
+		# platform host (apex, console, the slug host of a live tenant); 404
+		# otherwise. Caddy appends `&domain=<host>`.
+		ask http://api:3000/internal/tls/ask?token={$CLAVIX_TLS_ASK_SECRET}
+	}
+}
+
+# Every host that reaches this server: <slug>.{$CLAVIX_DOMAIN}, console.,
+# the apex and the tenants' custom domains.
+https:// {
+	tls {
+		on_demand
+	}
+
+	encode zstd gzip
+
+	# Never public. The api is not published, Caddy reaches it on the private
+	# network, and the endpoint itself refuses any request carrying
+	# X-Forwarded-* (which this proxy adds to everything it forwards), so the
+	# paths below are closed three times over.
+	@private path /internal /internal/* /readyz
+	respond @private 404
+
+	# The authorization server, the GraphQL APIs and the logo: the api.
+	@api path /authorize /token /revoke /introspect /jwks.json /userinfo /graphql /console/graphql /branding/logo /healthz /.well-known/oauth-authorization-server /.well-known/openid-configuration /.well-known/webauthn
+	handle @api {
+		reverse_proxy api:3000 {
+			# The tenant is chosen by the Host header: pass it untouched.
+			header_up Host {host}
+		}
+	}
+
+	# Everything else (hosted pages, console, landing): the ui.
+	handle {
+		reverse_proxy ui:3001 {
+			header_up Host {host}
+		}
+	}
+}
+
+# Many tenants: Let's Encrypt allows 50 new certificates a week per registered
+# domain, and one slug host is one certificate. Past a few dozen tenants, serve
+# the slug hosts with one wildcard certificate (DNS-01 challenge, needs a Caddy
+# built with your DNS provider's module) and keep on-demand for custom domains:
+#
+# *.{$CLAVIX_DOMAIN}, {$CLAVIX_DOMAIN} {
+#	tls {
+#		dns <provider> {env.DNS_API_TOKEN}
+#	}
+#	... same handle blocks as above ...
+# }
