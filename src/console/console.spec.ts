@@ -530,6 +530,30 @@ describe("operators:grant", () => {
     expect(await access.platformRole("off-user")).toBeNull();
   });
 
+  test("the check and the grant run under the user's lock, on a fresh read", async () => {
+    const { grantOperator } = await import("./operators");
+    const locked: string[] = [];
+    let reads = 0;
+    const result = await grantOperator(
+      {
+        ...deps,
+        // Active at the first read, disabled once the lock is held.
+        findByEmail: async (email) => {
+          const found = await deps.findByEmail(email);
+          reads += 1;
+          return found === null ? null : { ...found, active: reads === 1 };
+        },
+        lock: async (id, work) => {
+          locked.push(id);
+          return work();
+        },
+      },
+      { email: "bob@console.test", role: "viewer", create: false },
+    ).catch((error: unknown) => error);
+    expect(locked).toEqual([bob]);
+    expect(String(result)).toContain("disabled");
+  });
+
   test("--create invites an unknown e-mail and records it; a known one is granted, not invited", async () => {
     const { grantOperator, parseOperatorArgs } = await import("./operators");
     expect(

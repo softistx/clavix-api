@@ -66,6 +66,11 @@ export async function grantOperator(
       email: string,
     ): Promise<{ id: string; email: string; active: boolean } | null>;
     access: Pick<Access, "grantPlatform">;
+    /**
+     * Runs the check and the grant alone per user (the accept hooks' lock),
+     * so a `deleteUser` or a disable cannot slip between them. Default: none.
+     */
+    lock?: <T>(userId: string, work: () => Promise<T>) => Promise<T>;
     /** Issues and mails the operator invitation; the id of the invitation. */
     invite(email: string, role: Role): Promise<{ id: string }>;
     record(target: { type: string; id: string }): Promise<void>;
@@ -88,14 +93,20 @@ export async function grantOperator(
       invited: true,
     };
   }
-  if (!user.active) {
-    throw new CliInputError(
-      `the account "${input.email}" is disabled: enable it before granting a platform role`,
-    );
-  }
-  await deps.access.grantPlatform(user.id, input.role);
-  await deps.record({ type: "user", id: user.id });
-  return { userId: user.id, email: user.email, role: input.role };
+  const lock = deps.lock ?? ((_id, work) => work());
+  const granted = await lock(user.id, async () => {
+    // Read again under the lock: the account may have changed since.
+    const current = (await deps.findByEmail(input.email)) ?? user;
+    if (!current.active) {
+      throw new CliInputError(
+        `the account "${input.email}" is disabled: enable it before granting a platform role`,
+      );
+    }
+    await deps.access.grantPlatform(current.id, input.role);
+    await deps.record({ type: "user", id: current.id });
+    return current;
+  });
+  return { userId: granted.id, email: granted.email, role: input.role };
 }
 
 type GrantDeps = Parameters<typeof grantOperator>[0];
@@ -108,12 +119,14 @@ type GrantDeps = Parameters<typeof grantOperator>[0];
 export function operatorGrantDeps(parts: {
   findByEmail: GrantDeps["findByEmail"];
   access: GrantDeps["access"];
+  lock?: GrantDeps["lock"];
   invitations: Pick<TenantInvitations, "invite">;
   recorder: Pick<AdminEventRecorder, "record">;
 }): GrantDeps {
   return {
     findByEmail: parts.findByEmail,
     access: parts.access,
+    ...(parts.lock === undefined ? {} : { lock: parts.lock }),
     invite: (email, role) =>
       parts.invitations.invite({
         scope: operatorScope(),

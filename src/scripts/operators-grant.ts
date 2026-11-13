@@ -3,10 +3,12 @@ import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { exclusive } from "@/config/exclusive";
 import { invitationsOf } from "@/config/invitations";
 import { redis } from "@/config/redis";
 import { tenantResolver } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
+import { userKey } from "@/console/modules/user-key";
 import {
   grantOperator,
   OPERATORS_USAGE,
@@ -31,7 +33,7 @@ try {
     `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
   );
   const janus = tenant === null ? null : await forTenant(tenant);
-  if (janus === null) {
+  if (tenant === null || janus === null) {
     throw new CliInputError("the clavix tenant is missing or suspended");
   }
   console.log(
@@ -40,6 +42,7 @@ try {
         operatorGrantDeps({
           findByEmail: (e) => janus.findByEmail(e),
           access,
+          lock: (id, work) => exclusive(userKey(tenant.tenantId, id), work),
           invitations: invitationsOf(async () => tenant),
           recorder: adminEventRecorder,
         }),
