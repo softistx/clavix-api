@@ -4,7 +4,7 @@ type TenantUser {
   email: EmailAddress!
   name: String
   emailVerified: Boolean!
-  "False once a console admin disabled the user: no sign-in, no new token."
+  "False once a console admin disabled the user: no sign-in."
   active: Boolean!
   createdAt: DateTime!
 }
@@ -73,8 +73,8 @@ extend type Mutation {
   "Revokes a pending invitation of the tenant (tenant admin). True also when there is none."
   revokeInvitation(tenantId: ID!, invitationId: ID!): Boolean!
   """
-  Disables a user (tenant admin): their sessions end at once and the
-  applications they allowed get no new token. Idempotent. Errors: NOT_FOUND for
+  Disables a user (tenant admin): their sessions end at once and they
+  cannot sign in again. Idempotent. Errors: NOT_FOUND for
   an unknown user.
   """
   disableUser(tenantId: ID!, userId: ID!): TenantUser!

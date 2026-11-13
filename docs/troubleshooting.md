@@ -388,7 +388,8 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 The address already has an account in that tenant's pool. Find the user with `users(tenantId, email:)` and
 manage them there; an invitation is only for an address with no account.
 
-### `SERVICE_UNAVAILABLE` (503) on a membership write or on accepting an admin invitation
+### `503 SERVICE_UNAVAILABLE: Try again later` on a membership write or on accepting an admin invitation
 
 The tenant's membership lock is held by another API process past its wait, or Redis is down. Nothing
 changed (an invitation being accepted is released): ask again, with the same link for an invitation.
+The token-store 503 with the same message has another cause (see above).
