@@ -150,7 +150,7 @@ export const users: Resolvers = {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
       const name = input.name.trim();
-      if (name === "" || name.length > MAX_NAME) {
+      if (name === "" || [...name].length > MAX_NAME) {
         throw new GraphQLError("The name must be 1 to 200 characters", {
           extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
         });
