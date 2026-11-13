@@ -371,7 +371,9 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 - **Nothing a tenant typed is copied into the CSS**: the display name is a label, the seed and radius
   are parsed by the library and our radius pattern, the preset and motif are ids from its lists. The
   hosted pages put `css` in a `<style>`, so a new brand field that reaches the stylesheet is parsed or
-  taken from a closed list, and gets a case in the "break out of the stylesheet" spec.
+  taken from a closed list, and gets a case in the "break out of the stylesheet" spec. `buildTheme` also refuses the compiled
+  CSS when it holds `<`, `@import`, `url(`, `image-set(`, `src(` or a backslash (`assertSafeCss`,
+  BAD_USER_INPUT field `css`).
 - **`updateBranding` is a whole replacement, idempotent** (`changed: false` when nothing differs) and
   serialised by the optimistic lock: `update` writes at the version it read and decides again after a
   concurrent write (three attempts, then `CONFLICT`, 409). A new field joins `same()` or a repeat stops being a no-op.

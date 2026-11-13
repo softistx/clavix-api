@@ -16,6 +16,7 @@ import { consoleSchema } from "@/console/schema";
 import { BrandingConflictError, BrandingService } from "./branding.service";
 import { LOGO_MAX_BYTES } from "./logo";
 import {
+  assertSafeCss,
   BrandingContrastError,
   buildTheme,
   type CompileTheme,
@@ -128,6 +129,49 @@ beforeAll(async () => {
 afterAll(async () => {
   await mongo.db.branding.raw.deleteMany({});
   await mongo.db.adminEvents.raw.deleteMany({});
+});
+
+describe("the unsafe-CSS guard", () => {
+  test("refuses <, @import, url(, image-set(, src( and a backslash, any case, after comments are stripped", () => {
+    for (const css of [
+      "a{b:c}</style>",
+      "@import 'x.css';",
+      "@IMPORT url(x)",
+      "a{background:url(x)}",
+      "a{background:URL(x)}",
+      "a{background:image-set(x 1x)}",
+      "a{background:SRC(x)}",
+      "a{content:'\\41'}",
+      "/* ok */ a{b:c} @import x",
+    ]) {
+      expect(() => assertSafeCss(css)).toThrow(
+        expect.objectContaining({ code: "BAD_USER_INPUT", field: "css" }),
+      );
+    }
+  });
+
+  test("refuses < and a backslash even inside a comment", () => {
+    for (const css of ["a{} /* </style><script> */", "a{} /* \\ */"]) {
+      expect(() => assertSafeCss(css)).toThrow(
+        expect.objectContaining({ code: "BAD_USER_INPUT", field: "css" }),
+      );
+    }
+  });
+
+  test("accepts the generated stylesheet and a comment that only holds the other tokens", () => {
+    expect(() => assertSafeCss(buildTheme(base).compiled.css)).not.toThrow();
+    expect(() => assertSafeCss("a{b:c} /* url( @import */")).not.toThrow();
+  });
+
+  test("a compiler that returns unsafe css is refused before anything is stored", () => {
+    const unsafe: CompileTheme = (input) => ({
+      ...compileTheme(input),
+      css: "a{background:url(x)}",
+    });
+    expect(() => buildTheme(base, unsafe)).toThrow(
+      expect.objectContaining({ code: "BAD_USER_INPUT", field: "css" }),
+    );
+  });
 });
 
 describe("the theme", () => {

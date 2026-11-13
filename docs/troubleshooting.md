@@ -5,6 +5,7 @@ Find the message you see, then read when it appears, why, and the fix.
 - [`CLAVIX_TRUSTED_PROXIES is required in production`](#clavix_trusted_proxies-is-required-in-production-set-the-number-of-reverse-proxies-in-front-of-the-app-0-if-none)
 - [Client registration refusals (`clients:create`)](#client-registration-refusals-clientscreate)
 - [`BRANDING_CONTRAST` on `updateBranding`](#branding_contrast-on-updatebranding)
+- [`BAD_USER_INPUT` field `css`: "the theme's CSS is not safe"](#bad_user_input-field-css-the-themes-css-is-not-safe)
 - [`FORBIDDEN` and `NOT_FOUND` on `/graphql`](#forbidden-and-not_found-on-graphql)
 
 ## `temporarily_unavailable`: the issuer has no signing key yet
@@ -461,10 +462,25 @@ text and indicators) in light or dark. `extensions.failures` lists each pair (`f
 means a pair that could not be solved.
 
 **Fix:** pick a seed closer to mid lightness and less saturated, or drop the background preset, and
-send the call again. A colour the library cannot read, an unsafe radius, an unknown preset or motif, or
+send the call again. A colour the library cannot read, an unsafe radius, an unknown preset or motif, unsafe generated CSS (see below), or
 a logo that is not a PNG, JPEG or WebP of at most 256 KiB (checked by its bytes) is `BAD_USER_INPUT`
 with `extensions.field` instead. `CONFLICT` (409) means other calls changed the brand at the same
 time: read it and send the call again.
+
+## `BAD_USER_INPUT` field `css`: "the theme's CSS is not safe"
+
+**When:** `updateBranding` answers `400` with `extensions.field: "css"`.
+
+**Why:** the stylesheet a tenant brand would store contains `<`, `@import`, `url(`, `image-set(`, `src(` or
+a backslash (case-insensitive; `<` and the backslash even inside a comment, the other tokens once CSS
+comments are stripped); `image(` and `cross-fade(` are refused too. The hosted pages put the CSS in a `<style>`,
+so none of these may be stored; the UI refuses them at read too. The generator never writes them for a
+valid brand, so this means a changed generator or an injected compiler. Every write path (the console
+mutation and any script) goes through `buildTheme`, so nothing was stored. A brand stored earlier is
+not migrated.
+
+**Fix:** send a plain seed, radius, preset and motif; the message names the token found. If a
+`@softistx/material-core` upgrade now emits one, file it upstream.
 
 ## `BAD_USER_INPUT: Unknown cursor` on `clients`
 
