@@ -444,7 +444,9 @@ Monthly active users never block: `usage` only reports `exceeded`.
 
 **`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on every console write of a tenant's own admins (clients, resources, roles, users, admins, domains, branding, sign-in methods, `updateTenant`: the console stays readable on a suspended tenant, platform operators can still write), and as `access_denied` JSON on
 `/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
-`restoreTenant` lifts it at once (the host cache is dropped). Tokens already issued still work until they expire.
+`restoreTenant` lifts it at once (the tenant's slug host and its verified custom hosts are dropped from the cache). Tokens already issued still work until they expire.
+
+It is also the answer of `acceptInvitation` (and `invitationPreview`'s sibling sign-in operations) on a suspended tenant's own host: an end-user invitation cannot be accepted, and so cannot sign the new user in, until `resumeTenant`; the invitation is not spent. An admin invitation is accepted on the `clavix` tenant, which cannot be suspended: for it a suspended managed tenant gives `INVITATION_INVALID` instead. Every console write of a tenant admin (see above, `createClient`, `updateRole`, ...) gives `TENANT_SUSPENDED` too, replays included.
 
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
 

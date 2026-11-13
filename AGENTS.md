@@ -318,7 +318,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   of the `clavix` tenant a platform role (default owner), until the console can. The user must exist,
   unless `--create`: an unknown address is then invited (operator scope, `operatorScope()`, issued by
   the system, mailed by the tenant's mail path) and accepting the invitation makes the account and
-  grants the role (`adminInvitationHooks`, under the user's `userKey` lock, inside the tenant's members lock, the order `keepOwners` keeps: platform owners, members by id, user). A disabled account is refused. Each run records the admin event `operator.grant`.
+  grants the role (`adminInvitationHooks`, under the user's `userKey` lock, inside the tenant's members lock, the order `keepOwners` keeps: platform owners, members by id, user). A disabled account is refused: the active check and `grantPlatform` run under the user's `userKey` lock (`grantOperator`'s `lock`, wired by the script with `exclusive`), on a fresh read, so a `deleteUser` or a disable cannot slip between them (#182). Each run records the admin event `operator.grant`.
 
 ### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
 
@@ -429,7 +429,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
   `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
-  `socialSignInStart`, `socialSignInComplete`, `acceptInvitation`,
+  `socialSignInStart`, `socialSignInComplete`, `acceptInvitation` (on the tenant's own host: an end-user invitation of a suspended tenant is refused before the code is read),
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
   already issued live to expiry, and the console stays readable.
@@ -437,7 +437,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
 - **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
   (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
-  of the access token, so refreshes count); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
+  of the access token, so refreshes count) and an `acceptInvitation` that signs the new account in (#176); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
   `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of

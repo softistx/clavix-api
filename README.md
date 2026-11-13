@@ -186,7 +186,7 @@ tenant's owner or a platform owner). An invitation is a janus invitation of the 
 `admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
 That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
 host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
-revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session. Inviting an address that is
+revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session and counts the user as active for the month. The grant runs under the same user lock as `deleteUser`, so an accept racing a delete either is swept by it or finds the account gone. Inviting an address that is
 already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it (new id, new inviter).
 `resendAdminInvitation(tenantId, invitationId)` instead renews the same invitation: a new code and
 lifetime, a new mail naming the caller, the old code stops working, a lapsed invitation is allowed.
@@ -229,7 +229,7 @@ the first one with `--create` (mailed link; the account and role are made when i
 
 ```sh
 bun run operators:grant --email ada@example.com --create   # first operator on a fresh database
-bun run operators:grant --email ada@example.com            # platform owner (account exists and enabled)
+bun run operators:grant --email ada@example.com            # platform owner (account exists and is active; the grant runs under the user lock, like an accept)
 bun run operators:grant --email bob@example.com --role viewer
 ```
 
