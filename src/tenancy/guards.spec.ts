@@ -63,15 +63,17 @@ const allowed = [
   "src/modules/tenants/",
   "src/modules/resources/",
   "src/config/resources.ts",
+  "src/modules/branding/",
+  "src/config/branding.ts",
 ];
-// Where the platform `tenants` collection may be reached: every writer
-// there goes through the service, which invalidates the resolver's cache.
 // Where a platform collection with a `tenantId` (owned.ts) may be reached:
 // `adminEvents` by its recorder and the recorder's wiring, nowhere else.
 const platformAllowed = [
   "src/console/admin-events/",
   "src/config/admin-events.ts",
 ];
+// Where the platform `tenants` collection may be reached: every writer
+// there goes through the service, which invalidates the resolver's cache.
 const tenantsAllowed = [
   "src/modules/tenants/",
   "src/config/tenancy.ts",

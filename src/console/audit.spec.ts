@@ -14,16 +14,19 @@ import {
 import { type Audits, auditProblems } from "./audit";
 import { onPlatform, onTenant } from "./guard";
 import { CONSOLE_PATH } from "./identity";
+import { audits as consoleAudits } from "./modules";
 import { createConsoleSchema } from "./schema";
 
-// The console has no mutation yet: these stand for a slice's. `rename` and
-// `removeOperator` record what they did; `renameTwice` records two events.
+// Test-only mutations, merged with the console's own (whose declarations
+// `specAudits` carries along). `rename` and `removeOperator` record what they
+// did; `renameTwice` records two events.
 const typeDefs = `type Mutation {
   rename(tenantId: ID!, id: ID!): Boolean!
   renameTwice(tenantId: ID!, id: ID!): Boolean!
   removeOperator(id: ID!): Boolean!
 }`;
 const specAudits: Audits = {
+  ...consoleAudits,
   "Mutation.rename": "thing.rename",
   "Mutation.renameTwice": "thing.rename",
   "Mutation.removeOperator": "operator.remove",
@@ -137,8 +140,7 @@ afterAll(async () => {
 describe("every mutation declares its audit action", () => {
   test("the real schema has no mutation without one, and no stray declaration", async () => {
     const { consoleSchema } = await import("./schema");
-    const { audits } = await import("./modules");
-    expect(auditProblems(consoleSchema, audits)).toEqual({
+    expect(auditProblems(consoleSchema, consoleAudits)).toEqual({
       undeclared: [],
       stray: [],
       malformed: [],
@@ -158,7 +160,7 @@ describe("every mutation declares its audit action", () => {
     expect(auditProblems(schema, missing).undeclared).toEqual([
       "Mutation.rename",
     ]);
-    expect(auditProblems(schema, {}).undeclared).toEqual([
+    expect(auditProblems(schema, consoleAudits).undeclared).toEqual([
       "Mutation.rename",
       "Mutation.renameTwice",
       "Mutation.removeOperator",

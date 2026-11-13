@@ -248,6 +248,30 @@ does two things, and nothing else touches the collection:
 - The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
   never used.
 
+## Branding (`src/modules/branding`, `src/console/modules/branding`)
+
+A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`), reached only through
+`BrandingService` (`config/branding.ts`), which scopes every read and write with `scopeToTenant`.
+- **The theme is compiled on write, served as stored** (`theme.ts`): `validateThemeInput`, then
+  `defineTheme` and `themeToCss({ scope: "attribute" })` of `@softistx/material-core`, measured by
+  `checkThemeContrast` in light and dark. A failing pair is `BRANDING_CONTRAST` and nothing is stored.
+  Never write a stylesheet by hand, and never store CSS that did not pass `buildTheme`.
+- **Nothing a tenant typed is copied into the CSS**: the display name is a label, the seed and radius
+  are parsed by the library and our radius pattern, the preset and motif are ids from its lists. The
+  hosted pages put `css` in a `<style>`, so a new brand field that reaches the stylesheet is parsed or
+  taken from a closed list, and gets a case in the "break out of the stylesheet" spec.
+- **`updateBranding` is a whole replacement, idempotent** (`changed: false` when nothing differs) and
+  serialised by the optimistic lock: `update` writes at the version it read and decides again after a
+  concurrent write (three attempts, then `CONFLICT`, 409). A new field joins `same()` or a repeat stops being a no-op.
+  It records the admin event `branding.update` (target `branding`, id the tenant's) after the store,
+  on a repeat too: the retry of a call whose record failed must still leave an event.
+- **The logo** (`logo.ts`, `logo-route.ts`) is a PNG, JPEG or WebP of at most 256 KiB, checked by its
+  magic bytes and stored inline; never SVG (it runs script on the tenant's own host). Its sha256 is the
+  `ETag`, and `immutable` is sent only when `?v=` names the current image (`logoUrl`).
+- **Two schemas**: the console's `branding` / `updateBranding` (guards `view` / `edit` on the tenant)
+  live in `src/console/modules/branding`; the anonymous `tenantBranding` by host is in
+  `src/modules/branding` and shows only what a hosted page draws (no seed, no tenant id).
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`
