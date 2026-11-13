@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { registerClient } from "@/clients/register-client";
-import { access } from "@/config/access";
+import { access, linkTenantToPlatform } from "@/config/access";
 import { clientIndex } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
@@ -356,6 +356,86 @@ describe("deleteClient", () => {
     });
     expect(second.errors).toBeUndefined();
     expect(second.data?.["deleteClient"]).toBe(false);
+  });
+});
+
+describe("limits and races", () => {
+  test("two creations of one id at once: one is created, the other is a CONFLICT", async () => {
+    const results = await Promise.all(
+      [1, 2, 3].map(() =>
+        create(admin, tenantA, { name: "Racer", type: "CONFIDENTIAL" }),
+      ),
+    );
+    expect(results.filter((r) => r.errors === undefined)).toHaveLength(1);
+    expect(results.filter((r) => r.errors !== undefined).map(codeOf)).toEqual([
+      "CONFLICT",
+      "CONFLICT",
+    ]);
+  });
+
+  test("a refused creation leaves nothing listed, and the id stays free", async () => {
+    const bad = await create(admin, tenantA, {
+      name: "Ghost",
+      redirectUris: ["not a uri"],
+    });
+    expect(codeOf(bad)).toBe("BAD_USER_INPUT");
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "ghost" }))).toEqual(
+      [],
+    );
+    expect(
+      (await create(admin, tenantA, { name: "Ghost" })).errors,
+    ).toBeUndefined();
+  });
+
+  test("the list and the detail give the same creation date", async () => {
+    const listed = await admin(LIST, { tenantId: tenantA, q: "ghost" });
+    const [item] = (
+      (listed.data?.["clients"] ?? { items: [] }) as {
+        items: Record<string, unknown>[];
+      }
+    ).items;
+    const got = await admin(GET, { tenantId: tenantA, id: "ghost" });
+    expect(item).toEqual(got.data?.["client"] as Record<string, unknown>);
+  });
+
+  test("an unknown cursor, a name or a list too long are BAD_USER_INPUT", async () => {
+    expect(
+      codeOf(await admin(LIST, { tenantId: tenantA, after: "not-a-cursor" })),
+    ).toBe("BAD_USER_INPUT");
+    expect(
+      codeOf(await create(admin, tenantA, { name: "n".repeat(101) })),
+    ).toBe("BAD_USER_INPUT");
+    const uris = Array.from({ length: 21 }, (_, i) => `${REDIRECT}/${i}`);
+    expect(
+      codeOf(
+        await create(admin, tenantA, { name: "Many", redirectUris: uris }),
+      ),
+    ).toBe("BAD_USER_INPUT");
+  });
+});
+
+describe("the console's own client", () => {
+  test("cannot be changed, rotated or deleted here, even by a platform owner", async () => {
+    const platform = await mongo.db.tenants.findFirst({
+      slug: PLATFORM_TENANT_SLUG,
+    });
+    const tenantId = platform?._id.toHexString() ?? "";
+    // The specs empty the relations: link the tenant again, as the migration does.
+    await linkTenantToPlatform(tenantId);
+    const id = "console";
+    expect(
+      codeOf(await operator(UPDATE, { tenantId, id, input: { name: "X" } })),
+    ).toBe("BAD_USER_INPUT");
+    expect(codeOf(await operator(ROTATE, { tenantId, id }))).toBe(
+      "BAD_USER_INPUT",
+    );
+    expect(codeOf(await operator(DELETE, { tenantId, id }))).toBe(
+      "BAD_USER_INPUT",
+    );
+    // Another tenant's client of that id is an ordinary client.
+    await create(admin, tenantA, { name: "Console", clientId: "console" });
+    const deleted = await admin(DELETE, { tenantId: tenantA, id });
+    expect(deleted.data?.["deleteClient"]).toBe(true);
   });
 });
 

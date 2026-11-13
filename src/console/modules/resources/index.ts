@@ -6,6 +6,7 @@ import type {
 } from "@/modules/resources/catalog";
 import { type Guards, onTenant } from "../../guard";
 import { activeTenant, refusing, tenantArg } from "../catalog-support";
+import { keepConsoleResource } from "../reserved";
 
 const view = onTenant("view", tenantArg);
 const edit = onTenant("edit", tenantArg);
@@ -97,8 +98,13 @@ export const resources: Resolvers = {
         await catalog.listScopes(_id, { resourceId: updated._id }),
       );
     },
-    deleteResource: async (_, { tenantId, id }, ctx) =>
-      catalog.deleteResource((await activeTenant(ctx, tenantId))._id, id),
+    deleteResource: async (_, { tenantId, id }, ctx) => {
+      const tenant = await activeTenant(ctx, tenantId);
+      return refusing(async () => {
+        keepConsoleResource(tenant, await catalog.findResource(tenant._id, id));
+        return catalog.deleteResource(tenant._id, id);
+      });
+    },
     createScope: async (_, { tenantId, input }, ctx) => {
       const { _id } = await activeTenant(ctx, tenantId);
       return scopeShape(
@@ -132,7 +138,21 @@ export const resources: Resolvers = {
         ),
       );
     },
-    deleteScope: async (_, { tenantId, id }, ctx) =>
-      catalog.deleteScope((await activeTenant(ctx, tenantId))._id, id),
+    deleteScope: async (_, { tenantId, id }, ctx) => {
+      const tenant = await activeTenant(ctx, tenantId);
+      return refusing(async () => {
+        const scope = await catalog.findScope(tenant._id, id);
+        if (scope !== undefined && scope.resourceId !== null) {
+          keepConsoleResource(
+            tenant,
+            await catalog.findResource(
+              tenant._id,
+              scope.resourceId.toHexString(),
+            ),
+          );
+        }
+        return catalog.deleteScope(tenant._id, id);
+      });
+    },
   },
 };

@@ -52,6 +52,28 @@ export function createClientIndex(
       }
     },
 
+    /**
+     * Takes the client id for a client about to be created: `false` when the
+     * tenant already lists it (the unique index decides between two callers).
+     */
+    async claim(
+      tenantId: ObjectId,
+      record: ClientIndexRecord,
+    ): Promise<boolean> {
+      try {
+        await of(tenantId).create({
+          clientId: record.clientId,
+          name: record.name,
+          type: record.type,
+          redirectUris: [...record.redirectUris],
+        });
+        return true;
+      } catch (error) {
+        if (error instanceof ConflictError) return false;
+        throw error;
+      }
+    },
+
     /** Removes the client from the index; `false` when it was not there. */
     async remove(tenantId: ObjectId, clientId: string): Promise<boolean> {
       return (await of(tenantId).hardDeleteMany({ clientId })) > 0;

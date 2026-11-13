@@ -4,7 +4,8 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (
 issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
-services behind them; tenants, clients and resources are created by script until the M2 console.
+services behind them; tenants are created by script until the M2 console; clients, resources and
+scopes are managed in the console API or by script.
 The UI is `softistx/clavix-ui`.
 
 The owner's rules for every repository (worktrees, Conventional Commits, integration
@@ -60,8 +61,10 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
   `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
   have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
   or `email` (`scope-name.ts`); it exists once a tenant describes it. `claims` is stored only.
-- **`Catalog`** is the one writer (console resolvers, `registerResource`); it throws `CatalogError`
-  (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`.
+- **`Catalog`** is the one writer of scopes and the console's writer of resources
+  (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
+  (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are
+  bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
 - **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
 - **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
@@ -224,6 +227,9 @@ every other failure a 401).
   (`src/modules/resources`), after `activeTenant` (`catalog-support.ts`: a suspended tenant is
   `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`. `test/console.ts`
   (`consoleAs(userId)`) runs the real console app with a stubbed token check.
+- **The console's own client and resource** (`console` in the `clavix` tenant, the migration's) are
+  refused by `modules/reserved.ts`: no update, rotation or deletion of the client, no deletion of
+  the resource or its scopes through the API (it would lock every operator out); scripts still can.
 - **`clientIndex`** (`src/modules/clients`) is a tenant-owned copy of each client's id, name, type
   and redirect URIs, written by `registerClient`, read by `clients(...)` for listing and search:
   janus-oauth 0.9 cannot list clients. It is marked `Temporary, until @softistx/janus-oauth#706`

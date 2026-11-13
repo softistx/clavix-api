@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { access } from "@/config/access";
+import { access, linkTenantToPlatform } from "@/config/access";
+import { consoleResource } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -464,5 +465,81 @@ describe("deleting", () => {
     const again = await admin(DELETE, { tenantId: tenantA, id: api });
     expect(again.errors).toBeUndefined();
     expect(again.data?.["deleteResource"]).toBe(false);
+  });
+});
+
+describe("limits", () => {
+  test("a description, a name or claims too long are BAD_USER_INPUT", async () => {
+    const created = one(
+      await admin(CREATE, {
+        tenantId: tenantA,
+        input: { uri: "https://limits.res-a.example/v1" },
+      }),
+      "createResource",
+    );
+    const scope = (input: Record<string, unknown>) =>
+      admin(CREATE_SCOPE, {
+        tenantId: tenantA,
+        input: { name: "limited", resourceId: created.id, ...input },
+      });
+    expect(codeOf(await scope({ description: { fr: "x".repeat(301) } }))).toBe(
+      "BAD_USER_INPUT",
+    );
+    expect(
+      codeOf(
+        await scope({ claims: Array.from({ length: 51 }, (_, i) => `c${i}`) }),
+      ),
+    ).toBe("BAD_USER_INPUT");
+    expect(
+      codeOf(
+        await admin(UPDATE, {
+          tenantId: tenantA,
+          id: created.id,
+          input: { name: "n".repeat(101) },
+        }),
+      ),
+    ).toBe("BAD_USER_INPUT");
+  });
+});
+
+describe("the console's own resource", () => {
+  test("and its scopes cannot be deleted here, even by a platform owner", async () => {
+    const operator = consoleAs("res-operator");
+    await access.grantPlatform("res-operator", "owner");
+    const platform = await mongo.db.tenants.findFirst({
+      slug: PLATFORM_TENANT_SLUG,
+    });
+    const tenantId = platform?._id.toHexString() ?? "";
+    // The specs empty the relations: link the tenant again, as the migration does.
+    await linkTenantToPlatform(tenantId);
+    const found = many(await operator(LIST, { tenantId }), "resources").find(
+      (resource) => resource["uri"] === consoleResource,
+    );
+    if (found === undefined) throw new Error("the console resource is seeded");
+    const [scope] = found["scopes"] as Row[];
+    expect(
+      codeOf(await operator(DELETE_SCOPE, { tenantId, id: scope?.id ?? "" })),
+    ).toBe("BAD_USER_INPUT");
+    expect(codeOf(await operator(DELETE, { tenantId, id: found.id }))).toBe(
+      "BAD_USER_INPUT",
+    );
+    expect(
+      one(await operator(GET, { tenantId, id: found.id }), "resource").id,
+    ).toBe(found.id);
+  });
+});
+
+describe("a suspended tenant", () => {
+  test("is NOT_FOUND for its admin", async () => {
+    await tenantsService.suspend(tenantB);
+    expect(codeOf(await adminB(LIST, { tenantId: tenantB }))).toBe("NOT_FOUND");
+    expect(
+      codeOf(
+        await adminB(CREATE, {
+          tenantId: tenantB,
+          input: { uri: "https://late.res-b.example" },
+        }),
+      ),
+    ).toBe("NOT_FOUND");
   });
 });

@@ -2,6 +2,7 @@ import { clientsService } from "@/config/clients";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { type Guards, onTenant } from "../../guard";
 import { activeTenant, refusing, tenantArg } from "../catalog-support";
+import { keepConsoleClient } from "../reserved";
 
 const view = onTenant("view", tenantArg);
 const edit = onTenant("edit", tenantArg);
@@ -45,9 +46,7 @@ export const clients: Resolvers = {
         }),
       );
       return {
-        items: page.items.map((entry) =>
-          shape({ ...entry, createdAt: entry.createdAt }),
-        ),
+        items: page.items.map(shape),
         nextCursor: page.nextCursor,
       };
     },
@@ -78,25 +77,32 @@ export const clients: Resolvers = {
     updateClient: async (_, { tenantId, id, input }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
       return shape(
-        await refusing(() =>
-          clientsService.update(tenant, id, {
+        await refusing(() => {
+          keepConsoleClient(tenant, id);
+          return clientsService.update(tenant, id, {
             name: input.name ?? undefined,
             redirectUris: input.redirectUris ?? undefined,
-          }),
-        ),
+          });
+        }),
       );
     },
     rotateClientSecret: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
-      const rotated = await refusing(() =>
-        clientsService.rotateSecret(tenant, id),
-      );
+      const rotated = await refusing(() => {
+        keepConsoleClient(tenant, id);
+        return clientsService.rotateSecret(tenant, id);
+      });
       return {
         client: shape(rotated.client),
         clientSecret: rotated.clientSecret,
       };
     },
-    deleteClient: async (_, { tenantId, id }, ctx) =>
-      clientsService.delete(await activeTenant(ctx, tenantId), id),
+    deleteClient: async (_, { tenantId, id }, ctx) => {
+      const tenant = await activeTenant(ctx, tenantId);
+      return refusing(async () => {
+        keepConsoleClient(tenant, id);
+        return clientsService.delete(tenant, id);
+      });
+    },
   },
 };

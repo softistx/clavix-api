@@ -13,7 +13,7 @@ import {
 import { userinfoOf } from "@/oauth/building";
 import type { ResourcesFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import { Catalog } from "./catalog";
+import { Catalog, scopeNamesByResource } from "./catalog";
 import { CatalogError } from "./catalog.errors";
 import { resourceUriProblem } from "./resource-uri";
 import type { resources } from "./resources.model";
@@ -144,11 +144,7 @@ export const storedResourcesFor =
   async (tenant: ResolvedTenant) => {
     const tenantId = new ObjectId(tenant.tenantId);
     const found = await scopeToTenant(collection, tenantId).findMany();
-    const byResource = await new Catalog({
-      resources: collection,
-      scopes: scopeDocs,
-      userinfoOf: () => "",
-    }).scopeNamesByResource(tenantId);
+    const byResource = await scopeNamesByResource(scopeDocs, tenantId);
     return Object.fromEntries(
       found.map((resource) => [
         resource.uri,

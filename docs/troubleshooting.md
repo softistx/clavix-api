@@ -232,6 +232,24 @@ The caller's role does not give the permission the field needs (a viewer cannot 
 admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
 role `bun run operators:grant --email <address> --role <role>`.
 
+### `NOT_FOUND: No such client`, `No such resource`, `No such scope`
+
+The id is unknown in that tenant: it never existed, it belongs to another tenant, or the tenant
+is suspended. A query answers `null` and a delete `false` instead of this error. Read the ids
+again with `clients(tenantId)`, `resources(tenantId)` or `scopes(tenantId)`.
+
+### `CONFLICT` on `createClient`, `createResource`, `createScope`
+
+The client id, the resource URI or the scope name (in that resource) already exists in the
+tenant. Pass another `clientId`, or update the one that exists.
+
+### `BAD_USER_INPUT` on a client, resource or scope mutation
+
+The message says which: a redirect URI or a resource URI janus refuses (HTTPS, no fragment), a
+scope name with a space or a quote, a scope without `resourceId` that is not `openid`, `profile`
+or `email`, an empty name, or `rotateClientSecret` on a public client (`A public client has no
+secret to rotate`).
+
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)

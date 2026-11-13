@@ -42,9 +42,54 @@ export interface CatalogOptions {
 
 const sameUri = (a: string, b: string) => new URL(a).href === new URL(b).href;
 
-const cleanClaims = (claims: readonly string[] | undefined) => [
-  ...new Set((claims ?? []).map((claim) => claim.trim())),
-];
+const MAX_NAME = 100;
+const MAX_DESCRIPTION = 300;
+const MAX_CLAIMS = 50;
+
+const refuse = (message: string): never => {
+  throw new CatalogError("BAD_USER_INPUT", message);
+};
+
+function cleanClaims(claims: readonly string[] | undefined) {
+  const clean = [...new Set((claims ?? []).map((claim) => claim.trim()))];
+  if (clean.length > MAX_CLAIMS || clean.some((c) => c.length > MAX_NAME)) {
+    refuse(
+      `a scope has at most ${MAX_CLAIMS} claims of ${MAX_NAME} characters`,
+    );
+  }
+  return clean;
+}
+
+function cleanText(text: string | undefined): string | undefined {
+  const clean = text?.trim();
+  if ((clean?.length ?? 0) > MAX_DESCRIPTION) {
+    refuse(`a description has at most ${MAX_DESCRIPTION} characters`);
+  }
+  return clean;
+}
+
+function cleanName(name: string): string {
+  const clean = name.trim();
+  if (clean === "") refuse("a resource needs a name");
+  if (clean.length > MAX_NAME) {
+    refuse(`a name has at most ${MAX_NAME} characters`);
+  }
+  return clean;
+}
+
+/** The scope names by resource id (hex) of a tenant: what the token server serves. */
+export async function scopeNamesByResource(
+  scopeDocs: TypedCollection<typeof scopes>,
+  tenantId: ObjectId,
+): Promise<Map<string, string[]>> {
+  const byResource = new Map<string, string[]>();
+  for (const scope of await scopeToTenant(scopeDocs, tenantId).findMany()) {
+    if (scope.resourceId === null) continue;
+    const key = scope.resourceId.toHexString();
+    byResource.set(key, [...(byResource.get(key) ?? []), scope.name]);
+  }
+  return byResource;
+}
 
 /**
  * A tenant's resources and scopes, for the console (ADR-0025): each call takes
@@ -115,10 +160,7 @@ export class Catalog {
         `"${uri}" is the tenant's userinfo endpoint, a built-in resource`,
       );
     }
-    const name = (input.name ?? new URL(uri).host).trim();
-    if (name === "") {
-      throw new CatalogError("BAD_USER_INPUT", "a resource needs a name");
-    }
+    const name = cleanName(input.name ?? new URL(uri).host);
     try {
       return await this.resourcesOf(tenantId).create({ uri, name });
     } catch (error) {
@@ -141,10 +183,7 @@ export class Catalog {
     if (existing === undefined) {
       throw new CatalogError("NOT_FOUND", "No such resource");
     }
-    const name = input.name.trim();
-    if (name === "") {
-      throw new CatalogError("BAD_USER_INPUT", "a resource needs a name");
-    }
+    const name = cleanName(input.name);
     return this.resourcesOf(tenantId).update(existing._id, { name });
   }
 
@@ -174,7 +213,11 @@ export class Catalog {
   ): Promise<StoredScopeDoc> {
     const name = input.name.trim();
     const problem =
-      name === "" ? "a scope needs a name" : scopeNameProblem(name);
+      name === ""
+        ? "a scope needs a name"
+        : name.length > MAX_NAME
+          ? `a name has at most ${MAX_NAME} characters`
+          : scopeNameProblem(name);
     if (problem !== null) throw new CatalogError("BAD_USER_INPUT", problem);
     let resourceId: ObjectId | null = null;
     if (input.resourceId !== undefined && input.resourceId !== null) {
@@ -192,15 +235,17 @@ export class Catalog {
         `scope "${name}" needs a resource: only ${OIDC_SCOPES.join(", ")} have none`,
       );
     }
+    const description = {
+      fr: cleanText(input.description?.fr) ?? "",
+      en: cleanText(input.description?.en) ?? "",
+    };
+    const claims = cleanClaims(input.claims);
     try {
       return await this.scopesOf(tenantId).create({
         name,
-        description: {
-          fr: input.description?.fr?.trim() ?? "",
-          en: input.description?.en?.trim() ?? "",
-        },
+        description,
         resourceId,
-        claims: cleanClaims(input.claims),
+        claims,
       });
     } catch (error) {
       if (error instanceof ConflictError) {
@@ -230,8 +275,8 @@ export class Catalog {
     }
     return this.scopesOf(tenantId).update(existing._id, {
       description: {
-        fr: input.description?.fr?.trim() ?? existing.description.fr,
-        en: input.description?.en?.trim() ?? existing.description.en,
+        fr: cleanText(input.description?.fr) ?? existing.description.fr,
+        en: cleanText(input.description?.en) ?? existing.description.en,
       },
       claims:
         input.claims === undefined
@@ -279,18 +324,5 @@ export class Catalog {
         if (!(error instanceof ConflictError)) throw error;
       }
     }
-  }
-
-  /** The scope names by resource id (hex) of a tenant: what the token server serves. */
-  async scopeNamesByResource(
-    tenantId: ObjectId,
-  ): Promise<Map<string, string[]>> {
-    const byResource = new Map<string, string[]>();
-    for (const scope of await this.scopesOf(tenantId).findMany()) {
-      if (scope.resourceId === null) continue;
-      const key = scope.resourceId.toHexString();
-      byResource.set(key, [...(byResource.get(key) ?? []), scope.name]);
-    }
-    return byResource;
   }
 }

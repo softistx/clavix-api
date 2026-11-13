@@ -93,8 +93,9 @@ nxgt-janus release says which.
   ([#74](https://github.com/softistx/clavix-api/issues/74)).
 - **Resources registered by script** — `bun run resources:create` stores a tenant's API
   (audience URI and scopes), idempotently; an app's own API gets access tokens with its `aud`,
-  isolated per tenant ([#75](https://github.com/softistx/clavix-api/issues/75)). Scopes are a
-  plain list until the console.
+  isolated per tenant ([#75](https://github.com/softistx/clavix-api/issues/75)). Scopes became
+  documents with per-language consent texts in the console API
+  ([#9](https://github.com/softistx/clavix-api/issues/9)).
 - **Migration guide** — how an application moves from embedded janus to Clavix as an OIDC
   relying party ([#7](https://github.com/softistx/clavix-api/issues/7)):
   [written](guide/migrating-from-embedded-janus.md).

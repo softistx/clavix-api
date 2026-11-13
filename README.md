@@ -9,8 +9,9 @@ Today it serves:
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- on `POST /console/graphql`, the console API (only `me` for now), behind a bearer token;
-- scripts that create tenants, OAuth clients and API resources until the console can.
+- on `POST /console/graphql`, the console API (`me`, and a tenant's clients, resources and
+  scopes), behind a bearer token;
+- scripts that create tenants (no console field yet), OAuth clients and API resources.
 
 ## Documentation
 
@@ -237,6 +238,10 @@ mutation {
 - **The consent page** shows a scope's `description` as its label, in the viewer's language
   (`Accept-Language`: French, else English), then in the other language, then the scope's name.
 - **A change serves at once**: the scopes a resource offers are read on every OAuth request.
+- **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
+  redirect URIs; more is `BAD_USER_INPUT`, like an unknown `after` cursor.
+- **The console's own client and resource** (`console` in the `clavix` tenant) cannot be changed
+  or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
 - A client made by `clients:create` is listed too. Deleting a client does not revoke the grants
   users gave it yet.
 

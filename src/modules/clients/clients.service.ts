@@ -1,4 +1,5 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import { InvalidCursorError } from "@softistx/mongo";
 import type { Db } from "mongodb";
 import { CliInputError, type CliTenant } from "@/cli/errors";
 import { clientIdOf, registerClient } from "@/clients/register-client";
@@ -22,6 +23,28 @@ export interface ClientsServiceOptions {
 }
 
 const slugOnly = (tenant: CliTenant) => tenant.slug;
+
+const MAX_NAME = 100;
+const MAX_REDIRECT_URIS = 20;
+const MAX_QUERY = 100;
+
+function checkSizes(input: {
+  name?: string | undefined;
+  redirectUris?: readonly string[] | undefined;
+}) {
+  if ((input.name?.length ?? 0) > MAX_NAME) {
+    throw new CatalogError(
+      "BAD_USER_INPUT",
+      `a client's name has at most ${MAX_NAME} characters`,
+    );
+  }
+  if ((input.redirectUris?.length ?? 0) > MAX_REDIRECT_URIS) {
+    throw new CatalogError(
+      "BAD_USER_INPUT",
+      `a client has at most ${MAX_REDIRECT_URIS} redirect URIs`,
+    );
+  }
+}
 
 /**
  * A tenant's OAuth clients for the console. The janus store is the truth (one
@@ -63,8 +86,29 @@ export class ClientsService {
     tenant: CliTenant,
     options: { after?: string | null; limit: number; q?: string | undefined },
   ) {
-    const page = await this.options.index.page(tenant._id, options);
-    return { items: page.items, nextCursor: page.nextCursor };
+    if ((options.q?.length ?? 0) > MAX_QUERY) {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        `a search has at most ${MAX_QUERY} characters`,
+      );
+    }
+    const page = await this.options.index
+      .page(tenant._id, options)
+      .catch((error) => {
+        if (error instanceof InvalidCursorError) {
+          throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
+        }
+        throw error;
+      });
+    // The index says which clients and in what order; each is read from the
+    // janus store, the truth (one the store lost is left out).
+    const found = await Promise.all(
+      page.items.map((entry) => this.find(tenant, entry.clientId)),
+    );
+    return {
+      items: found.filter((client) => client !== null),
+      nextCursor: page.nextCursor,
+    };
   }
 
   async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {
@@ -95,18 +139,35 @@ export class ClientsService {
       clientId?: string | undefined;
     },
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
+    checkSizes(input);
     const clientId = input.clientId ?? clientIdOf(input.name);
+    const taken = new CatalogError(
+      "CONFLICT",
+      `A client already has the id "${clientId}"`,
+    );
     if (clientId !== "" && (await this.find(tenant, clientId)) !== null) {
-      throw new CatalogError(
-        "CONFLICT",
-        `A client already has the id "${clientId}"`,
-      );
+      throw taken;
     }
+    // The id is claimed in the index first (its unique index decides between
+    // two creations of one id), then the client is written.
+    const claimed =
+      clientId !== "" &&
+      !(await this.options.index.claim(tenant._id, {
+        clientId,
+        name: input.name,
+        type: input.type,
+        redirectUris: input.redirectUris,
+      }));
+    if (claimed) throw taken;
     const registered = await this.register(tenant, {
       name: input.name,
       redirectUris: input.redirectUris,
       type: input.type,
       clientId,
+    }).catch(async (error) => {
+      if (clientId !== "")
+        await this.options.index.remove(tenant._id, clientId);
+      throw error;
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -123,6 +184,7 @@ export class ClientsService {
       redirectUris?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
+    checkSizes(input);
     const current = await this.require(tenant, clientId);
     await this.register(tenant, {
       name: input.name ?? current.name,
@@ -152,9 +214,12 @@ export class ClientsService {
       clientId,
       rotateSecret: true,
     });
+    if (registered.clientSecret === null) {
+      throw new Error("rotating a confidential client minted no secret");
+    }
     return {
       client: await this.require(tenant, clientId),
-      clientSecret: registered.clientSecret ?? "",
+      clientSecret: registered.clientSecret,
     };
   }
 
