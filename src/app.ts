@@ -9,6 +9,7 @@ import {
 import { readyz } from "./config/ready";
 import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
+import { useWithoutQuotedValues } from "./console/coercion";
 import { CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
@@ -79,6 +80,7 @@ export function createApp(
       ide: "apollo-sandbox",
       plugins: [
         useSameOriginJson(),
+        useWithoutQuotedValues(),
         janusPlugin(),
         ...(options.oauth?.serverFor === undefined
           ? []
@@ -100,7 +102,7 @@ export function createApp(
           schema: consoleOptions.schema ?? consoleSchema,
           path: CONSOLE_PATH,
           ide: false,
-          plugins: [useConsole(consoleOptions)],
+          plugins: [useWithoutQuotedValues(), useConsole(consoleOptions)],
           maskedErrors: janusMasking,
         }),
       );
