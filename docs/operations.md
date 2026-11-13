@@ -192,6 +192,11 @@ it. Custom domains stay on demand.
 3. `dc pull` (or load the images), then
    `dc run --rm api bun run db:sync && dc run --rm api bun run db:migrate`.
    Read the release notes: a migration may change data.
+   `db:sync` runs `syncMongoOAuthPartitioned`, which janus-oauth-mongo 0.12
+   needs before the new code serves requests (it replaces the validator that
+   rejects a grant with `bound`, and creates the `bound` and `clientId` indexes).
+   Skipped, approving a bound grant fails with `Document failed validation`
+   (code 121, `STORE_FAILED`).
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

@@ -105,6 +105,8 @@ const as = (
         clientId: CONSOLE_CLIENT_ID,
         grantId: "g",
         scopes: ["console"],
+        clientName: null,
+        bound: null,
       }),
     },
   })

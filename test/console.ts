@@ -25,6 +25,8 @@ export function consoleAs(userId: string) {
         clientId: "spec",
         grantId: "spec",
         scopes: ["console"],
+        clientName: null,
+        bound: null,
       }),
     },
   });
