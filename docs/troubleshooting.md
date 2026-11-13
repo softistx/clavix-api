@@ -392,7 +392,7 @@ safe to repeat: it changes nothing twice and records the event it missed.
 The code is unknown, already used, revoked or expired; the hosted API gives one answer for all four,
 so a code cannot be probed. An admin invitation is also invalid while its tenant is suspended or
 deleted, on any host but the `clavix` tenant's, and for an `owner` invitation whose inviter was
-deleted since. An account deleted or disabled between creation and grant gets no owner role (the
+deleted or disabled since. An account deleted or disabled between creation and grant gets no owner role (the
 invitation is released: send a new one). Have an owner of the tenant send a new invitation with `inviteAdmin`
 (inviting again replaces the pending one).
 

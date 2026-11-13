@@ -33,7 +33,7 @@ type Mutation {
   """
   Invites an e-mail address to administer a tenant (tenant owner). The invitee
   accepts on the hosted `/invitation` page of the `clavix` tenant; accepting
-  grants the role, once (an `owner` invitation is refused once its inviter is
+  grants the role, once (an `owner` invitation is refused once its inviter is disabled or
   deleted, and grants nothing to an account deleted or disabled meanwhile). A pending invitation of the same address is replaced
   (a new mail goes out). Errors: ALREADY_MEMBER (409) when the address already
   holds a role there, NOT_FOUND for an unknown tenant.

@@ -278,7 +278,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable and
   delete of a `clavix` user, tenant ownerships and the last live platform owner, under
   `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
-  ghost or a deleted inviter) all use it. A repeat `disableUser` is never `LAST_OWNER`.
+  ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` is never `LAST_OWNER`.
   Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
   (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
   mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it

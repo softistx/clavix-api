@@ -29,7 +29,7 @@ export interface AdminInvitationHooksOptions {
  *
  * `beforeAccept` refuses an admin invitation whose tenant is gone or
  * suspended, or whose role is unknown, and an `owner` invitation whose
- * inviter was deleted since (nothing is written; the hosted API answers
+ * inviter was deleted or disabled since (nothing is written; the hosted API answers
  * `INVITATION_INVALID`). `onAccepted` grants the role on the tenant;
  * janus claims an invitation once, so it runs once. An `owner` is never
  * granted to an account that was deleted or disabled meanwhile (no ghost
@@ -52,11 +52,11 @@ export function adminInvitationHooks({
       );
     }
   };
-  /** An owner invitation outlives its inviter: not accepted once they are gone. */
+  /** An owner invitation does not outlive its inviter: not accepted once they are gone or disabled. */
   const inviterGone = async ({ invitation }: Accepting) =>
     invitation.role === "owner" &&
     typeof invitation.invitedBy === "string" &&
-    (await findUser(invitation.invitedBy)) === null;
+    (await findUser(invitation.invitedBy))?.active !== true;
   return {
     async beforeAccept(accepting: Accepting): Promise<boolean> {
       const { invitation } = accepting;

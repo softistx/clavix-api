@@ -196,7 +196,7 @@ that invitation. Invitations expose `invitedBy { id name }`, the operator who fi
 a script did); a resend keeps it. The
 last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
 removed, nor disabled or deleted, on a tenant or on the platform: `LAST_OWNER` (409). An `owner`
-invitation is refused once its inviter is deleted. Role changes of one
+invitation is refused once its inviter is deleted or disabled. Role changes of one
 tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
 within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
 already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they

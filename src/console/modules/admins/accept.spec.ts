@@ -41,6 +41,13 @@ describe("an owner invitation accepted after a deletion", () => {
     ).toBe(false);
   });
 
+  test("refused too when its inviter is disabled", async () => {
+    const { hooks } = setup({ off: false });
+    expect(
+      await hooks.beforeAccept({ invitation: invitation("owner", "off") }),
+    ).toBe(false);
+  });
+
   test("a live inviter, or a system invitation, is accepted", async () => {
     const { hooks } = setup({ boss: true, new: true });
     expect(
