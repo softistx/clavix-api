@@ -236,7 +236,14 @@ describe("magic link turned on by the tenant", () => {
   });
 
   test("a link of tenant A is refused on tenant B", async () => {
-    await service.create({ slug: "globex", name: "Globex", signUp: true });
+    const globex = await service.create({
+      slug: "globex",
+      name: "Globex",
+      signUp: true,
+    });
+    await policy.updateMethods(globex._id.toHexString(), [
+      { type: "magicLink", enabled: true },
+    ]);
     const { token } = await ask("acme", "iso@example.test");
     const answer = await gql("globex", CONFIRM, { token });
     expect(codeOf(answer)).toBe("MAGIC_LINK_INVALID");
