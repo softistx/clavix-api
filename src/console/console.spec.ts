@@ -293,6 +293,52 @@ describe("the console's bearer token", () => {
     clock.advance(-24 * 60 * 60 * 1000);
   });
 
+  test("a client_credentials token is refused at the token endpoint", async () => {
+    // The console client has no user behind a client_credentials token: the
+    // token endpoint offers authorization_code and refresh_token only, whatever
+    // grant types a client records.
+    const issuer = issuerOf(PLATFORM_TENANT_SLUG, origin);
+    const response = await issuers.handle(
+      new Request(`${issuer}/token`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          authorization: `Basic ${btoa(`${CLIENT.id}:${CLIENT.secret}`)}`,
+        },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          scope: "console",
+          resource: AUDIENCE,
+        }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      error?: string;
+      access_token?: string;
+    };
+    expect(body.error).toBe("unsupported_grant_type");
+    expect(body.access_token).toBeUndefined();
+  });
+
+  test("a principal with no user is refused", async () => {
+    const userless = createConsoleAuthenticator({
+      audience: AUDIENCE,
+      serverOfClavix: async () =>
+        ({
+          authenticate: async () => ({
+            clientId: CONSOLE_CLIENT_ID,
+            grantId: "g",
+            scopes: ["console"],
+          }),
+        }) as never,
+    });
+    const request = new Request("http://localhost/", {
+      headers: { authorization: "Bearer x" },
+    });
+    expect(await userless(request)).toBeNull();
+  });
+
   test("a cookie alone authenticates nothing", async () => {
     const response = await app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
