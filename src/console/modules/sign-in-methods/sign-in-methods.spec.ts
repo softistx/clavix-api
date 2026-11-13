@@ -674,7 +674,7 @@ describe("concurrent changes", () => {
   test("a change that keeps losing the race is CONFLICT (409), nothing stored", async () => {
     const lost = new SignInPolicyService(
       {
-        activeByIds: tenantsService.activeByIds.bind(tenantsService),
+        liveByIds: tenantsService.liveByIds.bind(tenantsService),
         updateSignIn: async () => {
           throw Object.create(OptimisticLockError.prototype);
         },

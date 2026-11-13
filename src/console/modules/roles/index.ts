@@ -67,7 +67,7 @@ async function shapes(tenantId: ObjectId, found: RoleDoc[]) {
 const shapeOne = async (tenantId: ObjectId, role: RoleDoc) =>
   shape(role, await rolesService.memberCount(tenantId, role));
 
-/** The active tenant of the call: the id as an ObjectId. */
+/** The tenant of the call (suspended included; the guard refuses its writes): the id as an ObjectId. */
 async function tenantOf(ctx: ConsoleContext, given: string) {
   const hex = tenantIdOf(given);
   await liveTenant(ctx.directory, hex);

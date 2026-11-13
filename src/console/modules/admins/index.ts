@@ -121,7 +121,7 @@ export const admins: Resolvers = {
     removeMembership: async (_, { tenantId: given, userId }, ctx) => {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
-      // Like the other writes: a tenant that is gone or suspended is not edited.
+      // Like the other writes: a tenant that is gone (or trashed) is not edited; a suspended one is refused by the guard.
       await liveTenant(ctx.directory, tenantId);
       await removeMember(ctx, tenantId, userId);
       await ctx.audit("membership.remove", {

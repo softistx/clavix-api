@@ -362,8 +362,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   user. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
   `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
   `RolesError`.
-- **Shared helpers**: `console/modules/ids.ts` (`lowerTenantArg`, `tenantIdOf`, `idArg`) and
-  `console/modules/ids.ts` (`liveTenant`: a suspended tenant is returned, a trashed or unknown one is `NOT_FOUND`).
+- **Shared helpers**: `console/modules/ids.ts` (`tenantArg`, `tenantIdOf`, `idArg`, and `liveTenant`: a suspended tenant is returned, a trashed or unknown one is `NOT_FOUND`).
   A tenant trashed mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
 - **A suspended tenant's console is readable, not writable** (ADR-0039, #167): `ConsoleDirectory.tenantsByIds`,
   `TenantsService.liveByIds` and `SignInPolicyService.get` return active and suspended tenants (not the trash);

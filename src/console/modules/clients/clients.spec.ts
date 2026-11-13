@@ -564,14 +564,14 @@ describe("admin events", () => {
 });
 
 describe("a suspended tenant", () => {
-  test("is NOT_FOUND, even for its admin and a platform owner", async () => {
+  test("is readable, and its writes are TENANT_SUSPENDED for its admin", async () => {
     await tenantsService.suspend(tenantB);
-    expect(codeOf(await adminB(LIST, { tenantId: tenantB }))).toBe("NOT_FOUND");
-    expect(codeOf(await operator(LIST, { tenantId: tenantB }))).toBe(
-      "NOT_FOUND",
-    );
+    expect((await adminB(LIST, { tenantId: tenantB })).errors).toBeUndefined();
+    expect(
+      (await operator(LIST, { tenantId: tenantB })).errors,
+    ).toBeUndefined();
     expect(codeOf(await create(adminB, tenantB, { name: "Nope" }))).toBe(
-      "NOT_FOUND",
+      "TENANT_SUSPENDED",
     );
   });
 });
