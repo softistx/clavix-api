@@ -4,6 +4,7 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import {
   confirmMagicLink,
@@ -48,6 +49,7 @@ export const auth: Resolvers = {
     requestSignInCode: async (_, { email }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
+      requireMethod(tenant, "emailCode");
       ctx.set.headers.set("cache-control", "no-store");
       await ctx.signInThrottle?.check({
         tenantId: tenant.tenantId,
@@ -61,6 +63,7 @@ export const auth: Resolvers = {
     verifySignInCode: async (_, { challenge, code }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
+      requireMethod(tenant, "emailCode");
       const signedIn = await verifySignInCode(auth, challenge, code);
       await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");

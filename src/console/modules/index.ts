@@ -7,6 +7,11 @@ import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
 import { me, meGuards } from "./me";
 import { resources, resourcesAudits, resourcesGuards } from "./resources";
+import {
+  signInMethods,
+  signInMethodsAudits,
+  signInMethodsGuards,
+} from "./sign-in-methods";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 import { users, usersAudits, usersGuards } from "./users";
 
@@ -17,6 +22,7 @@ export const resolvers: Resolvers = mergeResolvers([
   me,
   admins,
   branding,
+  signInMethods,
   clients,
   resources,
   tenants,
@@ -29,6 +35,7 @@ export const guards: Guards = {
   ...clientsGuards,
   ...resourcesGuards,
   ...tenantsGuards,
+  ...signInMethodsGuards,
   ...usersGuards,
 };
 export const audits: Audits = {
@@ -37,5 +44,6 @@ export const audits: Audits = {
   ...clientsAudits,
   ...resourcesAudits,
   ...tenantsAudits,
+  ...signInMethodsAudits,
   ...usersAudits,
 };

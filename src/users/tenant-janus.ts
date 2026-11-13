@@ -1,10 +1,19 @@
-import { createJanusIssuers, janus } from "@softistx/janus";
+import {
+  createJanusIssuers,
+  janus,
+  type SocialConfig,
+  type SocialProfile,
+} from "@softistx/janus";
+import type { SocialAuth } from "@softistx/janus-graphql";
 import {
   createMongoInvitations,
   createMongoStores,
 } from "@softistx/janus-mongo";
 import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
 import type { Db } from "mongodb";
+import type { SecretBox } from "@/modules/sign-in-methods/secrets";
+import { isEnabled } from "@/modules/sign-in-methods/sign-in.schema";
+import { socialProvidersOf } from "@/modules/sign-in-methods/social";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { originOf, rpIdOf } from "./rp";
@@ -30,12 +39,11 @@ export const SIGN_IN_CODE_LIFESPAN = "10m";
 export const MAGIC_LINK_LIFESPAN = "15m";
 
 export interface TenantJanusOptions {
-  /** Host to tenant: unknown and suspended hosts resolve to `null`. */
   resolver: Pick<TenantResolver, "resolveRequest">;
   /** The database of the janus collections (`syncMongoStoresPartitioned`). */
   db: Db;
-  /** The global magic-link switch (`CLAVIX_MAGIC_LINK`); off when left out. */
-  magicLink?: boolean;
+  /** Opens the tenants' sealed social secrets; without it no tenant has a social provider. */
+  secrets?: SecretBox;
   /** What accepting an invitation of this tenant checks and does; nothing when left out. */
   invitationHooks?: InvitationHooksFor;
 }
@@ -61,10 +69,12 @@ export type InvitationHooksFor = (
 function buildJanus(
   db: Db,
   tenant: ResolvedTenant,
-  magicLink: boolean,
+  social?: SocialConfig,
   hooks?: InvitationHooks,
 ) {
   return janus({
+    // janus refuses a social config with no provider: such a tenant gets none.
+    ...(social === undefined ? {} : { social }),
     user: userSchema,
     email: "email",
     store: createMongoStores(db, { partition: tenant.partition }),
@@ -76,10 +86,10 @@ function buildJanus(
       signInCode: SIGN_IN_CODE_LIFESPAN,
       magicLink: MAGIC_LINK_LIFESPAN,
     },
-    // janus defaults magic-link sign-in to on; Clavix turns it off until the
-    // owner switches it on (CLAVIX_MAGIC_LINK, `requestMagicLink` and
-    // `confirmMagicLink`). Off, both answer 404 MAGIC_LINK_DISABLED.
-    magicLink: { enabled: magicLink },
+    // janus defaults magic-link sign-in to on; Clavix passes the tenant's own
+    // choice (its sign-in policy, off until it turns it on). Off,
+    // `requestMagicLink` and `confirmMagicLink` answer 404 MAGIC_LINK_DISABLED.
+    magicLink: { enabled: isEnabled(tenant.signIn, "magicLink") },
     // A passkey as the first factor: the relying party is the tenant's own
     // host (`rp.ts`), so a passkey is unknown to every other tenant. janus
     // accepts `http://<name>.localhost` origins, so a development tenant on
@@ -109,16 +119,55 @@ function buildJanus(
   });
 }
 
+/** The typed shape of a tenant's instance. It has no `social`: only a tenant with a provider does, reached through `socialOf`. */
 export type TenantJanus = ReturnType<typeof buildJanus>;
+
+/** The instance of a tenant with at least one social provider. */
+export type TenantSocialJanus = TenantJanus & SocialAuth;
+
+/** The provider's display name when the user schema takes it (1 to 200 characters), else none: it never refuses a sign-up. */
+function nameOf(name: string | undefined): { name?: string } {
+  const trimmed = name?.trim() ?? "";
+  return trimmed === "" || trimmed.length > 200 ? {} : { name: trimmed };
+}
+
+/** The tenant's own social apps (ADR-0035); a new user only where sign-up is open. */
+function socialConfigOf(
+  tenant: ResolvedTenant,
+  secrets: SecretBox | undefined,
+): SocialConfig | undefined {
+  if (secrets === undefined) return undefined;
+  const providers = socialProvidersOf(tenant, secrets, (provider, reason) =>
+    console.warn(
+      `social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`,
+    ),
+  );
+  if (Object.keys(providers).length === 0) return undefined;
+  return {
+    providers,
+    signUp: tenant.signUp
+      ? (profile: SocialProfile) => ({
+          email: profile.email ?? "",
+          ...nameOf(profile.name),
+        })
+      : false,
+  };
+}
 
 export function buildTenantJanus(
   db: Db,
   tenant: ResolvedTenant,
-  magicLink = false,
+  secrets?: SecretBox,
   hooks?: InvitationHooks,
 ): TenantJanus {
-  return buildJanus(db, tenant, magicLink, hooks);
+  return buildJanus(db, tenant, socialConfigOf(tenant, secrets), hooks);
 }
+
+/** The instance when the tenant has at least one social provider, else `null`. */
+export const socialOf = (auth: TenantJanus): TenantSocialJanus | null =>
+  "social" in auth && auth.social !== undefined
+    ? (auth as TenantSocialJanus)
+    : null;
 
 /**
  * One janus instance per tenant, chosen by host, rebuilt when the tenant's
@@ -127,7 +176,7 @@ export function buildTenantJanus(
 export function createTenantJanusIssuers({
   resolver,
   db,
-  magicLink = false,
+  secrets,
   invitationHooks,
 }: TenantJanusOptions) {
   return createJanusIssuers({
@@ -138,6 +187,6 @@ export function createTenantJanusIssuers({
         : { issuer: tenant.issuer, version: String(tenant.version), tenant };
     },
     build: ({ tenant }) =>
-      buildTenantJanus(db, tenant, magicLink, invitationHooks?.(tenant)),
+      buildTenantJanus(db, tenant, secrets, invitationHooks?.(tenant)),
   });
 }

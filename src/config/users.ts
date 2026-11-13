@@ -2,8 +2,8 @@ import { adminInvitationHooks } from "@/console/modules/admins/accept";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
-import { env } from "./env";
 import { exclusive } from "./exclusive";
+import { secretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { tenantResolver, tenantsService } from "./tenancy";
 
@@ -24,7 +24,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
   {
     resolver: tenantResolver,
     db: oauthDb,
-    magicLink: env.CLAVIX_MAGIC_LINK,
+    secrets: secretBox,
     invitationHooks: (tenant) =>
       tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks : undefined,
   },
