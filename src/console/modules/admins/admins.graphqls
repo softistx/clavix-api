@@ -33,7 +33,8 @@ type Mutation {
   """
   Invites an e-mail address to administer a tenant (tenant owner). The invitee
   accepts on the hosted `/invitation` page of the `clavix` tenant; accepting
-  grants the role, once. A pending invitation of the same address is replaced
+  grants the role, once (an `owner` invitation is refused once its inviter is disabled or
+  deleted, and grants nothing to an account deleted or disabled meanwhile). A pending invitation of the same address is replaced
   (a new mail goes out). Errors: ALREADY_MEMBER (409) when the address already
   holds a role there, NOT_FOUND for an unknown tenant.
   """
@@ -45,12 +46,12 @@ type Mutation {
   """
   Gives a member another role (tenant owner). Idempotent. Errors: NOT_FOUND for
   a user who is not a member, LAST_OWNER (409) when it would leave the tenant
-  with no owner.
+  with no owner who can sign in (a disabled or deleted owner does not count).
   """
   changeMembership(tenantId: ID!, userId: ID!, role: Role!): TenantMember!
   """
   Removes a member (tenant owner), whatever the role. True also when the user
-  was not a member. Errors: LAST_OWNER (409) for the last owner.
+  was not a member. Errors: LAST_OWNER (409) for the last owner who can sign in.
   """
   removeMembership(tenantId: ID!, userId: ID!): Boolean!
   """

@@ -194,7 +194,9 @@ It is `NOT_FOUND` (404) for an id that is not this tenant's, `INVITATION_NOT_PEN
 accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60 s of the last send of
 that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
 a script did); a resend keeps it. The
-last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409). Role changes of one
+last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
+removed, nor disabled or deleted, on a tenant or on the platform: `LAST_OWNER` (409). An `owner`
+invitation is refused once its inviter is deleted or disabled. Role changes of one
 tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
 within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
 already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they

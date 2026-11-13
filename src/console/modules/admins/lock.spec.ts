@@ -56,7 +56,17 @@ const code503 = (error: unknown) =>
 describe("the tenant's membership lock cannot be taken", () => {
   test("a membership write is a retryable 503 and changes nothing", async () => {
     held = true;
-    const deps = { access, exclusive };
+    const deps = {
+      access,
+      exclusive,
+      directory: {
+        findUser: async (id: string) => ({
+          id,
+          email: `${id}@t`,
+          active: true,
+        }),
+      },
+    };
     for (const write of [
       () => changeRole(deps, tenantId, member, "admin"),
       () => removeMember(deps, tenantId, member),
@@ -87,6 +97,7 @@ describe("the tenant's membership lock cannot be taken", () => {
         access,
         exclusive,
         tenantActive: async () => true,
+        findUser: async (id) => auth.findUser(id),
       }),
     );
     const { code } = await auth.invitations.issue({
@@ -138,6 +149,7 @@ describe("the operator invitation (operators:grant --create)", () => {
         access,
         exclusive,
         tenantActive: async () => true,
+        findUser: async (id) => auth.findUser(id),
       }),
     );
     const issue = (role: string) =>
@@ -159,5 +171,41 @@ describe("the operator invitation (operators:grant --create)", () => {
     const again = await issue("viewer");
     await auth.invitations.accept({ code: again.code });
     expect(await access.platformRole(user?.id ?? "")).toBe("owner");
+  });
+});
+
+describe("an owner invitation for an account that is gone", () => {
+  test("is INVITATION_INVALID and grants nothing", async () => {
+    const clavix = await tenantResolver.resolveHost(
+      `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
+    );
+    if (clavix === null) throw new Error("no clavix tenant");
+    held = false;
+    const auth = buildTenantJanus(
+      oauthDb,
+      clavix,
+      undefined,
+      adminInvitationHooks({
+        access,
+        exclusive,
+        tenantActive: async () => true,
+        findUser: async () => null,
+      }),
+    );
+    const { code } = await auth.invitations.issue({
+      scope: operatorScope(),
+      email: "ghost@owner.test",
+      name: "ghost",
+      role: "owner",
+      invitedBy: null,
+    });
+    const failed = await auth.invitations
+      .accept({ code })
+      .catch((e: unknown) => e);
+    expect((failed as { code?: string }).code).toBe("INVITATION_INVALID");
+    const user = await auth.findByEmail("ghost@owner.test");
+    expect(
+      user === null ? null : await access.platformRole(user.id),
+    ).toBeNull();
   });
 });

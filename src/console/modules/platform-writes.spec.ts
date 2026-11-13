@@ -316,6 +316,18 @@ describe("the last owner of a tenant", () => {
     );
   });
 
+  test("disabling a disabled sole owner again is idempotent", async () => {
+    const tenant = await fresh("pw-twice");
+    const sole = await operatorOf("twice@pw.test", tenant);
+    const other = await operatorOf("twice-b@pw.test", tenant);
+    const t = writes(clavix, sole);
+    expect((await platformOwner(t.disableUser)).errors).toBeUndefined();
+    // The other owner is gone (revoked behind the console's back): no live
+    // owner is left, but `sole` is already disabled.
+    await access.revokeTenant(tenant, other, "owner");
+    expect((await platformOwner(t.disableUser)).errors).toBeUndefined();
+  });
+
   test("a platform admin is still FORBIDDEN before the last-owner check", async () => {
     const sole = await operatorOf("sole2@pw.test", await fresh("pw-solo2"));
     const admin = await mkOperator("padmin3@pw.test");

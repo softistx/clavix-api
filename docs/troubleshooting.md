@@ -353,8 +353,10 @@ secret to rotate`).
 ### `LAST_OWNER` (409) on `changeMembership`, `removeMembership`, `disableUser` or `deleteUser`
 
 The change would leave the tenant with no owner. For `disableUser` and `deleteUser` on a `clavix`
-user, the user is the only owner of a tenant who can sign in (a disabled owner does not count). Name or invite another owner first, then demote or
-remove this one. Of two owners removed at the same moment, the second is refused. `CONFLICT` (409)
+user, the user is the only owner who can sign in of a tenant they own, or the only live platform
+owner. One rule everywhere: a disabled or deleted owner does not count, so with owners X (disabled)
+and Y, Y cannot step down or be removed. Disabling a user who is already disabled is never refused.
+Name, invite or enable another owner first, then demote or remove this one. Of two owners removed at the same moment, the second is refused. `CONFLICT` (409)
 on the same two mutations means the user's roles kept changing during the call: retry.
 
 ### `ALREADY_MEMBER` (409) on `inviteAdmin`
@@ -389,7 +391,9 @@ safe to repeat: it changes nothing twice and records the event it missed.
 
 The code is unknown, already used, revoked or expired; the hosted API gives one answer for all four,
 so a code cannot be probed. An admin invitation is also invalid while its tenant is suspended or
-deleted, and on any host but the `clavix` tenant's. Have an owner of the tenant send a new invitation with `inviteAdmin`
+deleted, on any host but the `clavix` tenant's, and for an `owner` invitation whose inviter was
+deleted or disabled since. An account deleted or disabled between creation and grant gets no owner role (the
+invitation is released: send a new one). Have an owner of the tenant send a new invitation with `inviteAdmin`
 (inviting again replaces the pending one).
 
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`

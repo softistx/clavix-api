@@ -114,7 +114,8 @@ extend type Mutation {
   cannot sign in again. Idempotent. Errors: NOT_FOUND for
   an unknown user; on the `clavix` tenant, FORBIDDEN for an owner or a platform
   role holder unless the caller can manage the platform, LAST_OWNER (409) when
-  the user is the only owner who can sign in of a tenant, CONFLICT (409) when
+  the user is the only owner who can sign in of a tenant or of the platform
+  (not on a repeat: a disabled user is not refused), CONFLICT (409) when
   the memberships keep changing (retry).
   """
   disableUser(tenantId: ID!, userId: ID!): TenantUser!

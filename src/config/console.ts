@@ -78,7 +78,12 @@ export function createConsoleDeps(
         const user = (await janus?.findUser(id)) ?? null;
         return user === null
           ? null
-          : { id: user.id, email: user.email, name: user.name };
+          : {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              active: user.active,
+            };
       },
       findUserByEmail: async (email) => {
         const tenant = await clavixTenant();

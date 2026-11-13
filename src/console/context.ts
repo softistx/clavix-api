@@ -8,9 +8,13 @@ import type { Permission, Role } from "./model";
 /** What the console needs to look a user or tenants up, injected (see `src/config/console.ts`). */
 export interface ConsoleDirectory {
   /** A user of the `clavix` tenant, or `null` (gone, deactivated). */
-  findUser(
-    id: string,
-  ): Promise<{ id: string; email: string; name?: string | undefined } | null>;
+  findUser(id: string): Promise<{
+    id: string;
+    email: string;
+    name?: string | undefined;
+    /** Whether the user can sign in (a disabled one cannot). */
+    active: boolean;
+  } | null>;
   /** A user of the `clavix` tenant by e-mail, or `null`. */
   findUserByEmail(email: string): Promise<{ id: string } | null>;
   /**
