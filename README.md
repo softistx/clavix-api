@@ -10,7 +10,7 @@ Today it serves:
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
 - on `POST /console/graphql`, the console API (only `me` for now), behind a bearer token;
-- scripts that create tenants, OAuth clients and API resources until the console can.
+- scripts that create tenants, OAuth clients and API resources until the console can. The console API already manages tenants (create, update, plan and quotas, suspend and resume, trash and restore, usage); emptying the trash after 30 days is not scheduled yet (clavix-api#112). Its refusals are in `docs/troubleshooting.md`.
 
 ## Documentation
 
@@ -69,7 +69,7 @@ one needs on top:
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PORT`                                                                 | 3000                                                                                                                                                                                                                    |
 | `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                  |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off                                                                                                                                                        |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off and monthly active users are not counted                                                                                                               |
 | `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                    |
 | `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                |
 | `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                             |
@@ -651,7 +651,8 @@ A request belongs to the tenant whose slug is the one label before `CLAVIX_DOMAI
 the `Host` header; `X-Forwarded-Host` is ignored. It is lowercased, its port and trailing dot
 removed. No tenant (`null`, a 404 for the OAuth endpoints) for an IP, the apex itself, more
 than one label before it, a reserved label (`www`, `console`, `api`, ...), an unknown slug, a
-suspended or deleted tenant. A slug is reserved for good: deleting a tenant does not free its slug, and creating a tenant with it fails like any duplicate. In a resolver, `await tenant()` of the context gives
+tenant whose purge started. A suspended or deleted (trash) tenant resolves with its `status`: sign-in,
+`/authorize` and `/token` refuse it with `TENANT_SUSPENDED` (403), while discovery and keys keep answering. A slug is reserved for good: deleting a tenant does not free its slug, and creating a tenant with it fails like any duplicate. In a resolver, `await tenant()` of the context gives
 `{ tenantId, slug, issuer, partition, version }`, resolved once per request.
 
 Resolved hosts are cached in Redis (`tenant-host`, 60 s; 30 s for "no tenant"); creating,

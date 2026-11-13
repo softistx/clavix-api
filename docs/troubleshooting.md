@@ -251,7 +251,7 @@ runs the console itself.
 (`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
 Monthly active users never block: `usage` only reports `exceeded`.
 
-**`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, and as `access_denied` JSON on
+**`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on `updateTenant` by a tenant admin (platform operators can still edit), and as `access_denied` JSON on
 `/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
 `restoreTenant` lifts it at once (the host cache is dropped). Tokens already issued still work until they expire.
 
