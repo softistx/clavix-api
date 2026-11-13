@@ -7,12 +7,13 @@ nxgt-janus release says which.
 
 ## Now
 
-- **Admin roles** — roles for the admins of a tenant, so an owner can give an admin less than
-  full access ([#9](https://github.com/softistx/clavix-api/issues/9)). Admin memberships and
-  invitations are in; the role definitions are what remains.
-- **Admin events viewer and export** — every change made from the console is already recorded (see
-  Shipped); the viewer and the export come with the audit log
-  ([#107](https://github.com/softistx/clavix-api/issues/107)).
+- **Console hardening** — follow-ups of the shipped console: a suspended tenant refuses social
+  sign-in and invitation acceptance ([#164](https://github.com/softistx/clavix-api/issues/164)),
+  its console stays readable ([#167](https://github.com/softistx/clavix-api/issues/167)),
+  client and domain writes are serialized ([#165](https://github.com/softistx/clavix-api/issues/165)),
+  console tokens are bound to their user ([#170](https://github.com/softistx/clavix-api/issues/170)),
+  and the follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127))
+  and going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 ## Next
 
@@ -38,7 +39,7 @@ nxgt-janus release says which.
 **Federation, step-up and events**
 - Enterprise OIDC connections and home-realm discovery.
 - MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
-- Admin events and OAuth events: viewer, export and retention per plan; webhooks per tenant;
+- Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
   telemetry.
 
 **Before v1**
@@ -51,6 +52,9 @@ nxgt-janus release says which.
 
 ## Shipped
 
+- **Tenant admins** — an owner invites admins to a tenant, changes their role (owner, admin,
+  viewer) and removes them; pending invitations can be resent or revoked
+  ([#111](https://github.com/softistx/clavix-api/issues/111)).
 - **Console API foundation** — the console's own GraphQL API at `/console/graphql`, behind a
   bearer token of the `clavix` tenant, with platform and tenant roles (owner, admin, viewer), a
   deny-by-default guard on every field, and `operators:grant` to name the first operators
