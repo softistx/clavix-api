@@ -4,8 +4,8 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (
 issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
-services behind them; tenants are created by script until the M2 console; clients, resources and
-scopes are managed in the console API or by script.
+services behind them; tenants, clients, resources and scopes are managed in the console API
+(the M2 console) or by script.
 The UI is `softistx/clavix-ui`.
 
 The owner's rules for every repository (worktrees, Conventional Commits, integration
@@ -206,8 +206,8 @@ outside the specs.
 
 ## Tenants by script
 
-`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant until the
-M2 console. It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
+`bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant by script (the console API's
+`createTenant` does too). It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
 (`register-tenant.ts`), which goes through `TenantsService.create` (the one place for slug rules,
 reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
 `created: false`, other values are refused, a deleted tenant's slug stays reserved.
@@ -219,7 +219,8 @@ The console's own GraphQL API, `POST /console/graphql`, apart from the hosted pa
 `src/generated/console`). No cookie and no Host-based tenant: the credential is a bearer JWT of the
 `clavix` tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, verified in process by
 `server.authenticate(request, { resource })` (`auth.ts`; no crypto of ours, a store outage is a 503,
-every other failure a 401).
+every other failure a 401). Only the console's own client (`CONSOLE_CLIENT_ID`, `identity.ts`) is
+accepted: a console-audience token minted for another client of `clavix` is a 401, whatever its scopes.
 - **Permissions** are a janus `defineModel` (`model.ts`) over the relation store in `oauthDb`
   (`config/access.ts`; `db:sync` creates its collection): platform and tenant `owner` / `admin` /
   `viewer`, permits `manage` / `edit` / `view`, a platform role inherited by every tenant through the
@@ -228,6 +229,13 @@ every other failure a 401).
 - **Deny by default** (`guard.ts`): every root field is wrapped, and one without an entry in its
   module's `guards` (`signedIn()`, `onTenant(perm, args => tenantId)`, `onPlatform(perm)`) is refused
   `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
+- **Writes on the `clavix` tenant are the platform's** (`guard.ts`, `allowed`): an `onTenant` guard
+  with `edit` or `manage` whose target is the `clavix` tenant itself asks `canPlatform` instead of
+  the tenant role (operators, the issuer's domains, sign-in policy, clients, branding and users
+  are all behind it); `view` stays tenant-level. It is central, so no module opts in. A tenant-level
+  role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
+  also removes their console relations (`access.removeUser`); disabling or deleting a `clavix` user
+  who holds a platform role or owns a tenant needs platform `manage` (`users/operators.ts`).
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
   there, never in `src/modules`.
@@ -405,7 +413,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   (`clavix:usage.mau`, 400 days), counted at sign-in, passkey sign-in and a successful `/token` (the `sub`
   of the access token, so refreshes count); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
-  `oauthPartitionedClients` by `partition`; domains count 0 until A4 (clavix-api#11). `assertWithinQuota`
+  `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
   clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
 - **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
@@ -473,7 +481,7 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
   when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
-  The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.sh`, `/readyz`) is in `docs/operations.md`.
+  The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). Janus accepting those origins is not wired yet.
 

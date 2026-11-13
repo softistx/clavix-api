@@ -6,7 +6,8 @@ import type { Resolvers } from "@/generated/console/resolvers";
 import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
-import { activeTenant, refusing, tenantArg } from "../catalog-support";
+import { catalogTenant, refusing } from "../catalog-support";
+import { tenantArg } from "../ids";
 import { keepConsoleClient } from "../reserved";
 import { refusal } from "../tenants/errors";
 
@@ -86,7 +87,7 @@ const CLIENT_ID = /^[a-z0-9-]{1,64}$/;
 export const clients: Resolvers = {
   Query: {
     clients: async (_, { tenantId, q, after, first }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const page = await refusing(() =>
         clientsService.list(tenant, {
           after: after ?? null,
@@ -101,7 +102,7 @@ export const clients: Resolvers = {
     },
     client: async (_, { tenantId, id }, ctx) => {
       const found = await clientsService.find(
-        await activeTenant(ctx, tenantId),
+        await catalogTenant(ctx, tenantId),
         id,
       );
       return found === null ? null : shape(found);
@@ -109,7 +110,7 @@ export const clients: Resolvers = {
   },
   Mutation: {
     createClient: async (_, { tenantId, input }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       // The existence check and the write of `create`, and the quota count,
       // are not atomic (the janus store has no insert-only write): one create
       // at a time per tenant, across processes when there is a shared lock.
@@ -131,7 +132,7 @@ export const clients: Resolvers = {
       };
     },
     updateClient: async (_, { tenantId, id, input }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       // Under the tenant's lock, as `create` and `delete`: the service reads
       // the client, then writes it back (the store upserts), so a delete in
       // between would bring it back. Serialized, the update of a client that
@@ -149,7 +150,7 @@ export const clients: Resolvers = {
       return shape(updated);
     },
     rotateClientSecret: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const rotated = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(() => {
           keepConsoleClient(tenant, id);
@@ -166,7 +167,7 @@ export const clients: Resolvers = {
       };
     },
     deleteClient: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const { removed, unmanaged } = await ctx.exclusive(
         clientsKey(tenant),
         () =>

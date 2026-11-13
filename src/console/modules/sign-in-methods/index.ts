@@ -12,15 +12,14 @@ import { hostOf, issuerOf } from "@/modules/tenants/identity";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
+import { tenantArg } from "../ids";
 import { signInPolicyService as service } from "./wiring";
 
-const tenantOf = (args: Record<string, unknown>) => String(args["tenantId"]);
-
 export const signInMethodsGuards: Guards = {
-  "Query.signInPolicy": onTenant("view", tenantOf),
-  "Mutation.updateSignInMethods": onTenant("edit", tenantOf),
-  "Mutation.setSocialProvider": onTenant("edit", tenantOf),
-  "Mutation.removeSocialProvider": onTenant("edit", tenantOf),
+  "Query.signInPolicy": onTenant("view", tenantArg),
+  "Mutation.updateSignInMethods": onTenant("edit", tenantArg),
+  "Mutation.setSocialProvider": onTenant("edit", tenantArg),
+  "Mutation.removeSocialProvider": onTenant("edit", tenantArg),
 };
 
 const METHOD = {
@@ -92,7 +91,7 @@ async function policyOf(tenant: Tenant) {
 export const signInMethods: Resolvers = {
   Query: {
     signInPolicy: async (_, { tenantId }) =>
-      await policyOf(await service.get(tenantId)),
+      await policyOf(await service.get(tenantId.toLowerCase())),
   },
   Mutation: {
     // Each records its admin event once the change is stored, and on a repeat
@@ -100,7 +99,7 @@ export const signInMethods: Resolvers = {
     // not leave the change with no event). Identifiers only, never a secret.
     updateSignInMethods: async (_, { tenantId, methods }, ctx) => {
       const tenant = await service.updateMethods(
-        tenantId,
+        tenantId.toLowerCase(),
         methods.map(({ type, enabled }) => ({
           type: storedOf(METHOD, type),
           enabled,
@@ -118,7 +117,7 @@ export const signInMethods: Resolvers = {
     },
     setSocialProvider: async (_, { tenantId, input }, ctx) => {
       const provider = storedOf(KIND, input.provider);
-      const tenant = await service.setSocial(tenantId, {
+      const tenant = await service.setSocial(tenantId.toLowerCase(), {
         provider,
         clientId: input.clientId ?? undefined,
         clientSecret: input.clientSecret ?? undefined,
@@ -133,7 +132,10 @@ export const signInMethods: Resolvers = {
     },
     removeSocialProvider: async (_, { tenantId, provider: kind }, ctx) => {
       const provider = storedOf(KIND, kind);
-      const tenant = await service.removeSocial(tenantId, provider);
+      const tenant = await service.removeSocial(
+        tenantId.toLowerCase(),
+        provider,
+      );
       await ctx.audit("socialProvider.remove", {
         type: "socialProvider",
         id: provider,

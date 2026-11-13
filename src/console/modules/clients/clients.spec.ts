@@ -794,3 +794,12 @@ describe("update and rotate of a client that is being deleted", () => {
     }
   });
 });
+
+describe("the tenant id's spelling", () => {
+  test("an upper-case tenant id is the same tenant, as on every module", async () => {
+    const lower = await admin(LIST, { tenantId: tenantA });
+    const upper = await admin(LIST, { tenantId: tenantA.toUpperCase() });
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data).toEqual(lower.data);
+  });
+});

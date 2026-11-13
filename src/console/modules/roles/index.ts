@@ -9,12 +9,11 @@ import type { Audits } from "../../audit";
 import type { ConsoleContext } from "../../context";
 import { type Guards, onTenant } from "../../guard";
 import { refusing } from "../catalog-support";
-import { activeTenant } from "../directory-tenant";
-import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
+import { activeTenant, idArg, tenantArg, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
 
-const view = onTenant("view", lowerTenantArg);
-const edit = onTenant("edit", lowerTenantArg);
+const view = onTenant("view", tenantArg);
+const edit = onTenant("edit", tenantArg);
 
 // Reading roles is `view`; changing them or their holders is `edit`.
 export const rolesGuards: Guards = {

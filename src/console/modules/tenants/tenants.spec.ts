@@ -12,6 +12,7 @@ import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
+import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { CONSOLE_PATH } from "../../identity";
 
@@ -35,7 +36,7 @@ const as = (userId: string, query: string) =>
       ...deps,
       authenticate: async () => ({
         userId,
-        clientId: "c",
+        clientId: CONSOLE_CLIENT_ID,
         grantId: "g",
         scopes: ["console"],
       }),
@@ -219,6 +220,20 @@ describe("suspend, resume, delete, restore", () => {
     }
   });
 
+  test("delete and restore take the id in upper case too", async () => {
+    const { id } = await create();
+    const del = await as(
+      OPERATOR,
+      `mutation { deleteTenant(id: "${id.toUpperCase()}") { status } }`,
+    );
+    expect(del.errors).toBeUndefined();
+    const res = await as(
+      OPERATOR,
+      `mutation { restoreTenant(id: "${id.toUpperCase()}") { status } }`,
+    );
+    expect(res.errors).toBeUndefined();
+  });
+
   test("delete puts the tenant in the trash with a purgeAt 30 days on; restore brings back its status", async () => {
     const { id } = await create();
     await as(OPERATOR, `mutation { suspendTenant(id: "${id}") { id } }`);
@@ -357,6 +372,13 @@ describe("queries", () => {
       clients: { used: 0, quota: 3 },
       domains: { used: 0, quota: 1 },
     });
+    // The id in upper case is the same tenant (the guard and the read agree).
+    const upper = await as(
+      ADMIN,
+      `{ usage(tenantId: "${id.toUpperCase()}", month: "2026-10") { month } }`,
+    );
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data?.["usage"]).toEqual({ month: "2026-10" });
     const bad = await as(
       ADMIN,
       `{ usage(tenantId: "${id}", month: "2026-13") { month } }`,

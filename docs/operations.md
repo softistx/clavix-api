@@ -3,7 +3,7 @@
 Run Clavix on one host with Docker Compose: the API, the UI, MongoDB (a one-node
 replica set), Redis and Caddy for TLS. Nothing here is deployed by CI. The files
 are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`
-and `scripts/mongo-backup.sh` / `scripts/mongo-restore.sh`.
+and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts`.
 
 ## What runs
 
@@ -111,8 +111,8 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `REDIS_PASSWORD`                            | redis, api     | the password in `REDIS_URL`                                                                                                                                    |
 | `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api            | required in production                                                                                                                                         |
 | `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                                                                                                              |
-| `CONSOLE_CLIENT_SECRET`                     | ui (and api)   | ui, required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                              |
-| `CONSOLE_SESSION_SECRET`                    | ui (and api)   | ui, required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                      |
+| `CONSOLE_CLIENT_SECRET`                     | ui             | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                  |
+| `CONSOLE_SESSION_SECRET`                    | ui             | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                          |
 | `CONSOLE_ISSUER`                            | ui             | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
 | `CONTACT_EMAIL`                             | ui             | the public contact address                                                                                                                                     |
 | `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
@@ -205,7 +205,9 @@ taken in step 2 (below).
 dc --profile tools run --rm backup          # archive in BACKUP_DIR (default backups/)
 ```
 
-`scripts/mongo-backup.sh` runs `mongodump --gzip` against `MONGO_URI`, writes
+The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun) that holds both. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
+
+`scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
 `clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and
 keeps the newest `BACKUP_KEEP` archives. Schedule it from the host's cron, e.g.
 nightly, and copy the archives off the host. The dump is of one database and not
@@ -225,7 +227,7 @@ CONFIRM=yes dc --profile tools run --rm restore /backups/clavix-20261112T031500Z
 dc up -d api ui
 ```
 
-`scripts/mongo-restore.sh` verifies the checksum (an archive without its `.sha256` is refused unless `SKIP_CHECKSUM=yes`), then runs `mongorestore --drop`
+`scripts/mongo-restore.ts` verifies the checksum (an archive without its `.sha256` is refused unless `SKIP_CHECKSUM=yes`), then runs `mongorestore --drop`
 into the database named in `MONGO_URI`. Without `CONFIRM=yes` it prints what it
 would do and stops (exit 2). Afterwards run `db:sync`, check `/readyz`, sign in
 to the console, and confirm a tenant's JWKS (`https://<slug>.<domain>/jwks.json`)
