@@ -103,7 +103,8 @@ mutation ($tenantId: ID!, $secret: String!) {
 
 | Code                         | HTTP | When                                                                                    |
 | ---------------------------- | ---- | --------------------------------------------------------------------------------------- |
-| `FORBIDDEN`                  |      | the caller lacks the permission on that tenant, or the tenant is unknown                |
+| `FORBIDDEN`                  |      | the caller lacks the permission on that tenant                                          |
+| `NOT_FOUND`                  | 404  | a platform operator names an unknown or inactive tenant                                 |
 | `NO_SIGN_IN_METHOD`          | 409  | the change would leave no enabled method and no enabled provider                        |
 | `SIGN_IN_METHOD_UNAVAILABLE` | 409  | enabling a method with `available: false` (`PASSWORD`)                                  |
 | `SOCIAL_SECRET_REQUIRED`     | 400  | a provider set for the first time without `clientSecret`                                |

@@ -514,9 +514,8 @@ come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, 
 
 Off by default, per tenant: a tenant's admin turns it on in its sign-in policy
 (`updateSignInMethods`, see "Sign-in methods and social providers"); there is no global switch.
-Off, both operations
-answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or mailed, so the surface
-looks absent; the hosted page hides its button. Same endpoint as the e-mail code
+Off, both operations answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or
+mailed, so the surface looks absent; the hosted page hides its button. Same endpoint as the e-mail code
 (`https://<slug>.<CLAVIX_DOMAIN>/graphql`):
 
 ```graphql
