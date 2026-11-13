@@ -15,7 +15,8 @@ nxgt-janus release says which.
   tenants, plans and quotas with usage counters
   ([#8](https://github.com/softistx/clavix-api/issues/8)); a tenant's clients, resources, scopes,
   users and admin roles ([#9](https://github.com/softistx/clavix-api/issues/9)); a theme per
-  tenant with an AA contrast check ([#10](https://github.com/softistx/clavix-api/issues/10));
+  tenant with an AA contrast check, a logo and a public brand query by host
+  ([#10](https://github.com/softistx/clavix-api/issues/10));
   custom domains with DNS TXT verification and automatic TLS
   ([#11](https://github.com/softistx/clavix-api/issues/11)); and sign-in methods and social
   providers per tenant ([#12](https://github.com/softistx/clavix-api/issues/12)).
