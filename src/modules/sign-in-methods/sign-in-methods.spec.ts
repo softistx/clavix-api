@@ -218,6 +218,17 @@ describe("social sign-in", () => {
     );
   });
 
+  test("two tenants interleaved each resolve their own provider on every call", async () => {
+    for (const [slug, clientId] of [
+      ["sih-other", "gh-client-other"],
+      ["sih-social", "gh-client-social"],
+      ["sih-other", "gh-client-other"],
+    ] as const) {
+      const start = await startOn(slug);
+      expect(new URL(start.url).searchParams.get("client_id")).toBe(clientId);
+    }
+  });
+
   test("complete exchanges the code with the tenant's secret, creates the user and opens the session", async () => {
     const start = await startOn("sih-social");
     const { calls, run } = github("ada@social.example");
