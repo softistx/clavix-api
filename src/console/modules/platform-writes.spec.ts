@@ -249,3 +249,64 @@ describe("deleting a clavix user", () => {
     expect(await access.platformRole(leaving)).toBeNull();
   });
 });
+
+describe("the last owner of a tenant", () => {
+  const operatorOf = async (email: string, tenant: string) => {
+    const id = await mkOperator(email);
+    await access.grantTenant(tenant, id, "owner");
+    return id;
+  };
+
+  const fresh = async (slug: string) =>
+    (await tenantsService.create({ slug, name: slug })).id;
+
+  test("a platform owner cannot disable or delete the only owner of a tenant", async () => {
+    const other = await fresh("pw-solo");
+    const sole = await operatorOf("sole@pw.test", other);
+    const t = writes(clavix, sole);
+    expect(codeOf(await platformOwner(t.disableUser))).toBe("LAST_OWNER");
+    expect(codeOf(await platformOwner(t.deleteUser))).toBe("LAST_OWNER");
+    // Nothing was changed.
+    expect(await access.memberships(sole)).toEqual([
+      { tenantId: other, role: "owner" },
+    ]);
+    const users = await platformOwner(
+      `{ user(tenantId: "${clavix}", id: "${sole}") { active } }`,
+    );
+    expect(users.data).toEqual({ user: { active: true } });
+  });
+
+  test("with a second owner, the first may go", async () => {
+    const other = await fresh("pw-duo");
+    const second = await operatorOf("second@pw.test", other);
+    const first = await operatorOf("first@pw.test", other);
+    const t = writes(clavix, first);
+    expect((await platformOwner(t.disableUser)).errors).toBeUndefined();
+    expect((await platformOwner(t.deleteUser)).data).toEqual({
+      deleteUser: true,
+    });
+    // The remaining owner is now the last one.
+    const last = writes(clavix, second);
+    expect(codeOf(await platformOwner(last.deleteUser))).toBe("LAST_OWNER");
+  });
+
+  test("the check runs under the members lock: two owners deleted together keep one", async () => {
+    const tenant = await fresh("pw-pair");
+    const a = await operatorOf("pair-a@pw.test", tenant);
+    const b = await operatorOf("pair-b@pw.test", tenant);
+    const results = await Promise.all(
+      [a, b].map((id) => platformOwner(writes(clavix, id).deleteUser)),
+    );
+    expect(results.map(codeOf).sort()).toEqual(["LAST_OWNER", undefined]);
+    expect(await access.owners(tenant)).toHaveLength(1);
+  });
+
+  test("a platform admin is still FORBIDDEN before the last-owner check", async () => {
+    const sole = await operatorOf("sole2@pw.test", await fresh("pw-solo2"));
+    const admin = await mkOperator("padmin3@pw.test");
+    await access.grantPlatform(admin, "admin");
+    expect(codeOf(await as(() => admin)(writes(clavix, sole).deleteUser))).toBe(
+      "FORBIDDEN",
+    );
+  });
+});
