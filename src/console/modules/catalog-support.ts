@@ -3,22 +3,25 @@ import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import type { CliTenant } from "@/cli/errors";
 import { CatalogError } from "@/modules/resources/catalog.errors";
+import { RolesError } from "@/modules/roles/roles.errors";
 import type { ConsoleContext } from "../context";
 
 const STATUS = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 } as const;
 
-/** A catalog refusal as a GraphQL error carrying its code. */
-export const catalogError = (error: CatalogError) =>
+/** A catalog or roles refusal as a GraphQL error carrying its code. */
+export const catalogError = (error: CatalogError | RolesError) =>
   new GraphQLError(error.message, {
     extensions: { code: error.code, http: { status: STATUS[error.code] } },
   });
 
-/** Runs a catalog call, turning its refusals into GraphQL errors. */
+/** Runs a catalog or roles call, turning its refusals into GraphQL errors. */
 export async function refusing<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    if (error instanceof CatalogError) throw catalogError(error);
+    if (error instanceof CatalogError || error instanceof RolesError) {
+      throw catalogError(error);
+    }
     throw error;
   }
 }

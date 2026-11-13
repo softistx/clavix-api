@@ -843,6 +843,27 @@ describe("disabling, sessions, grants and deletion", () => {
     );
   });
 
+  test("assignRole racing deleteUser leaves no assignment of the deleted user", async () => {
+    const a = await poolOf(slugA);
+    const tenant = new ObjectId(tenantA);
+    const role = await rolesService.create(tenant, { name: "racing" });
+    for (let i = 0; i < 5; i++) {
+      const user = (await a.auth.create({ email: `race${i}@end.test` })).id;
+      await Promise.all([
+        asConsole(
+          ownA,
+          `mutation { assignRole(tenantId: "${tenantA}", roleId: "${role._id.toHexString()}", userId: "${user}") }`,
+        ),
+        asConsole(
+          ownA,
+          `mutation { deleteUser(tenantId: "${tenantA}", userId: "${user}") }`,
+        ),
+      ]);
+      expect(await rolesService.rolesOfUser(tenant, user)).toEqual([]);
+      expect(await rolesService.memberCount(tenant, role)).toBe(0);
+    }
+  });
+
   test("deleteUser removes the user's role assignments too, on a repeat as well", async () => {
     const a = await poolOf(slugA);
     const holder = (await a.auth.create({ email: "holder@end.test" })).id;

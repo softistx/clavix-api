@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
+import { janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
@@ -227,6 +228,32 @@ describe("social sign-in", () => {
       const start = await startOn(slug);
       expect(new URL(start.url).searchParams.get("client_id")).toBe(clientId);
     }
+  });
+
+  test("one request resolves the tenant's instance once", async () => {
+    const spy = spyOn(janusIssuers, "forRequest");
+    try {
+      await startOn("sih-social");
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("a provider changed while the app runs is read afresh on the next call", async () => {
+    const mid = (await tenants.create({ slug: "sih-mid", name: "Mid" })).id;
+    for (const clientId of ["gh-mid-1", "gh-mid-2", "gh-mid-1"]) {
+      await policy.setSocial(mid, {
+        provider: "github",
+        clientId,
+        clientSecret: `${SECRET}-mid`,
+      });
+      const start = await startOn("sih-mid");
+      expect(new URL(start.url).searchParams.get("client_id")).toBe(clientId);
+    }
+    await policy.removeSocial(mid, "github");
+    const gone = await gql("sih-mid", START, { p: "github", r: null });
+    expect(codeOf(gone)).toBeDefined();
   });
 
   test("complete exchanges the code with the tenant's secret, creates the user and opens the session", async () => {

@@ -403,6 +403,31 @@ Monthly active users never block: `usage` only reports `exceeded`.
 `/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
 `restoreTenant` lifts it at once (the host cache is dropped). Tokens already issued still work until they expire.
 
+## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
+
+### `CONFLICT` (409) `A role named "<name>" already exists here`
+
+On `createRole` or `updateRole`: a role of the same name already exists in the same scope. Names are
+unique among the roles of the whole tenant, and among those of one resource, so `admin` may exist
+once tenant-wide and once on each resource. Pick another name, or update the existing role.
+
+### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
+
+`No such role`: the id names no role of this tenant (another tenant's id is not found either), or the
+role was deleted while `assignRole` ran. `No such resource`: `createRole` was given a `resourceId`
+that is not a resource of this tenant, or the resource was deleted at that moment. `No such user`:
+`assignRole` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
+was written. List the roles, resources or users again and send an id from there. `deleteRole` and
+`unassignRole` never answer `NOT_FOUND`: they are repeatable and answer `false` when there is nothing
+to remove.
+
+### `BAD_USER_INPUT` (400) on a role
+
+The message says which: a name that is not 1 to 64 characters of letters, digits, `.`, `_`, `:` and
+`-`; a description over 300 characters; a `userId` that is empty or over 200 characters; an `id`,
+`roleId` or `tenantId` that is not an id; or, on `roleMembers` or `me.switchableTenants`, `The cursor is not valid` (send
+`nextCursor` back as it came, with the same `q`). Nothing was written.
+
 ## `BRANDING_CONTRAST` on `updateBranding`
 
 **When:** `updateBranding` answers `422` with `extensions.code: "BRANDING_CONTRAST"`.

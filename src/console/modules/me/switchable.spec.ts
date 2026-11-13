@@ -204,6 +204,46 @@ describe("Me.switchableTenants", () => {
     expect(pageOf(two).nextCursor).toBeNull();
   });
 
+  test("a member's cursor is opaque, as an operator's is", async () => {
+    const one = await as(MULTI, LIST("(first: 1)"));
+    const cursor = pageOf(one).nextCursor as string;
+    expect(cursor).toBeString();
+    expect(cursor).not.toBe("sw-alpha");
+    expect(
+      slugs(await as(MULTI, LIST(`(first: 1, after: "${cursor}")`))),
+    ).toEqual(["sw-beta"]);
+  });
+
+  test("first is held between 1 and 100, for a member and an operator", async () => {
+    for (const who of [MULTI, OPERATOR]) {
+      expect(slugs(await as(who, LIST('(q: "sw-", first: 0)')))).toHaveLength(
+        1,
+      );
+      expect(slugs(await as(who, LIST('(q: "sw-", first: -5)')))).toHaveLength(
+        1,
+      );
+      expect(
+        slugs(await as(who, LIST('(q: "sw-", first: 100000)'))).length,
+      ).toBeGreaterThan(1);
+    }
+  });
+
+  test("a cursor that is not valid is BAD_USER_INPUT, for a member and an operator", async () => {
+    for (const who of [MEMBER, OPERATOR]) {
+      for (const after of ["sw-alpha", "!!not-a-cursor"]) {
+        const r = await as(who, LIST(`(after: "${after}")`));
+        expect(r.errors?.[0]?.extensions?.code).toBe("BAD_USER_INPUT");
+      }
+    }
+  });
+
+  test("a cursor of one search is refused on another", async () => {
+    const one = await as(MULTI, LIST("(first: 1)"));
+    const cursor = pageOf(one).nextCursor as string;
+    const r = await as(MULTI, LIST(`(q: "beta", after: "${cursor}")`));
+    expect(r.errors?.[0]?.extensions?.code).toBe("BAD_USER_INPUT");
+  });
+
   test("a request with no valid token is a 401", async () => {
     expect((await request(null, LIST())).status).toBe(401);
   });

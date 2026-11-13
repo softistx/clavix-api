@@ -349,6 +349,43 @@ describe("assignments", () => {
     expect(roles.map((r) => r.id)).not.toContain(id);
   });
 
+  test("a repeated delete sweeps assignments a late write left", async () => {
+    const id = await make(admin, tenantA, "late-asg");
+    await mongo.db.roleAssignments.raw.insertOne({
+      _id: new ObjectId(),
+      tenantId: new ObjectId(tenantA),
+      roleId: new ObjectId(id),
+      userId: userA1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never);
+    expect((await admin(DELETE, { t: tenantA, id })).data?.["deleteRole"]).toBe(
+      true,
+    );
+    expect(
+      await mongo.db.roleAssignments.raw.countDocuments({
+        roleId: new ObjectId(id),
+      }),
+    ).toBe(0);
+  });
+
+  test("memberCount counts each role's own tenant holders, in one list", async () => {
+    const one = await make(admin, tenantA, "cnt-same");
+    const two = await make(admin, tenantA, "cnt-empty");
+    const theirs = await make(adminB, tenantB, "cnt-same");
+    await admin(ASSIGN, { t: tenantA, r: one, u: userA1 });
+    await admin(ASSIGN, { t: tenantA, r: one, u: userA2 });
+    await adminB(ASSIGN, { t: tenantB, r: theirs, u: userB1 });
+    const list = (await admin(LIST, { t: tenantA })).data?.["roles"] as {
+      name: string;
+      memberCount: number;
+    }[];
+    const by = Object.fromEntries(list.map((r) => [r.name, r.memberCount]));
+    expect(by["cnt-same"]).toBe(2);
+    expect(by["cnt-empty"]).toBe(0);
+    expect(two).toBeString();
+  });
+
   test("deleting a resource deletes the roles scoped to it and their assignments", async () => {
     const uri = "https://api.rl-a.example/gone";
     await registerStoredResource({ tenant: "rl-a", uri, scopes: ["read"] });

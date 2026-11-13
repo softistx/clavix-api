@@ -6,7 +6,14 @@ import {
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import type { resources } from "../resources/resources.model";
-import { RolesError } from "./roles.errors";
+import { claimRoles, rolesOfUser } from "./role-claims";
+import {
+  cleanDescription,
+  cleanName,
+  conflict,
+  MAX_ID,
+  refuse,
+} from "./roles.input";
 import type { roleAssignments, roles } from "./roles.model";
 
 export type RoleDoc = ReadDocumentOf<typeof roles>;
@@ -18,39 +25,6 @@ export interface RolesOptions {
   /** Read only: to scope a role to a resource and to find the resource of a token's audience. */
   resources: TypedCollection<typeof resources>;
 }
-
-const NAME = /^[A-Za-z0-9._:-]{1,64}$/;
-const MAX_DESCRIPTION = 300;
-const MAX_ID = 200;
-
-const refuse = (code: RolesError["code"], message: string): never => {
-  throw new RolesError(code, message);
-};
-
-function cleanName(name: string) {
-  const clean = name.trim();
-  if (!NAME.test(clean)) {
-    refuse(
-      "BAD_USER_INPUT",
-      "a role name is 1 to 64 characters of letters, digits, '.', '_', ':' and '-'",
-    );
-  }
-  return clean;
-}
-
-function cleanDescription(text: string | undefined) {
-  const clean = (text ?? "").trim();
-  if (clean.length > MAX_DESCRIPTION) {
-    refuse(
-      "BAD_USER_INPUT",
-      `a description has at most ${MAX_DESCRIPTION} characters`,
-    );
-  }
-  return clean;
-}
-
-const conflict = (name: string) =>
-  new RolesError("CONFLICT", `A role named "${name}" already exists here`);
 
 /**
  * A tenant's end-user roles and their assignments (slice A2c). Every method
@@ -96,6 +70,24 @@ export class RolesService {
 
   async memberCount(tenantId: ObjectId, role: RoleDoc): Promise<number> {
     return this.assignmentsOf(tenantId).count({ roleId: role._id });
+  }
+
+  /** The holders of each role in one query, by role id (hex); a role nobody holds counts 0. */
+  async memberCounts(
+    tenantId: ObjectId,
+    found: readonly RoleDoc[],
+  ): Promise<Map<string, number>> {
+    const counts = new Map(found.map((role) => [role._id.toHexString(), 0]));
+    if (found.length === 0) return counts;
+    // Grouped on the server; the tenant is in the match, as a scope would put it.
+    const grouped = await this.options.assignments.raw
+      .aggregate<{ _id: ObjectId; n: number }>([
+        { $match: { tenantId, roleId: { $in: found.map((r) => r._id) } } },
+        { $group: { _id: "$roleId", n: { $sum: 1 } } },
+      ])
+      .toArray();
+    for (const { _id, n } of grouped) counts.set(_id.toHexString(), n);
+    return counts;
   }
 
   async create(
@@ -166,14 +158,19 @@ export class RolesService {
     }
   }
 
-  /** Deletes the role and its assignments; `false` when it was not there. */
+  /**
+   * Deletes the role and its assignments; `false` when it was not there. The
+   * role goes first, then the sweep, and the sweep runs on a repeat too: an
+   * `assign` that re-checks the role after its write then sees it gone, in
+   * every ordering, and a run that stopped between the two is finished.
+   */
   async delete(tenantId: ObjectId, roleId: string): Promise<boolean> {
-    const existing = await this.find(tenantId, roleId);
-    if (existing === undefined) return false;
-    // Assignments first: a role never goes while someone still holds it.
-    await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: existing._id });
-    await this.rolesOf(tenantId).hardDeleteMany({ _id: existing._id });
-    return true;
+    if (!ObjectId.isValid(roleId)) return false;
+    const id = new ObjectId(roleId);
+    const removed =
+      (await this.rolesOf(tenantId).hardDeleteMany({ _id: id })) > 0;
+    await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: id });
+    return removed;
   }
 
   /** The roles scoped to a resource that is being deleted, removed with their assignments; the roles removed. */
@@ -250,16 +247,8 @@ export class RolesService {
   }
 
   /** The roles a user holds, by name. */
-  async rolesOfUser(tenantId: ObjectId, userId: string): Promise<RoleDoc[]> {
-    const held = await this.assignmentsOf(tenantId).findMany({
-      filter: { userId },
-    });
-    if (held.length === 0) return [];
-    const ids = new Set(held.map((a) => a.roleId.toHexString()));
-    const all = await this.rolesOf(tenantId).findMany();
-    return all
-      .filter((role) => ids.has(role._id.toHexString()))
-      .sort((a, b) => a.name.localeCompare(b.name));
+  rolesOfUser(tenantId: ObjectId, userId: string): Promise<RoleDoc[]> {
+    return rolesOfUser(this.options, tenantId, userId);
   }
 
   /**
@@ -267,27 +256,11 @@ export class RolesService {
    * plus, for a token whose audience is the URI of a resource of the tenant,
    * those scoped to that resource. Sorted, one entry per name.
    */
-  async claimRoles(
+  claimRoles(
     tenantId: ObjectId,
     userId: string,
     audience: string | null,
   ): Promise<string[]> {
-    const held = await this.rolesOfUser(tenantId, userId);
-    if (held.length === 0) return [];
-    let resourceId: string | null = null;
-    if (audience !== null) {
-      const resource = await this.resourcesOf(tenantId).findFirst({
-        uri: audience,
-      });
-      resourceId = resource?._id.toHexString() ?? null;
-    }
-    const names = held
-      .filter(
-        (role) =>
-          role.resourceId === null ||
-          role.resourceId.toHexString() === resourceId,
-      )
-      .map((role) => role.name);
-    return [...new Set(names)].sort();
+    return claimRoles(this.options, tenantId, userId, audience);
   }
 }

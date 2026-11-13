@@ -33,6 +33,8 @@ export interface TenantListOptions {
   /** The start of a slug or a part of a name. */
   q?: string | undefined;
   state?: TenantListState | undefined;
+  /** Only these tenants (hex ids); an empty list matches none. */
+  ids?: readonly string[] | undefined;
   after?: string | undefined;
   first: number;
 }
@@ -103,13 +105,22 @@ export class TenantAdminService {
   }
 
   /** A page of tenants by slug, the trash included, purged ones left out. */
-  list({ q, state, after, first }: TenantListOptions) {
+  list({ q, state, ids, after, first }: TenantListOptions) {
     const text = q?.trim() ?? "";
     const pattern = escapeRegex(text);
     return this.collection.paginateByCursor({
       filter: {
         purgeStartedAt: { $exists: false },
         ...(state === undefined ? {} : STATE_FILTER[state]),
+        ...(ids === undefined
+          ? {}
+          : {
+              _id: {
+                $in: ids
+                  .filter((id) => ObjectId.isValid(id))
+                  .map((id) => new ObjectId(id)),
+              },
+            }),
         ...(text === ""
           ? {}
           : {
@@ -124,7 +135,7 @@ export class TenantAdminService {
       after,
       withDeleted: true,
       // A cursor of one search is refused on another.
-      scope: JSON.stringify([text, state ?? null]),
+      scope: JSON.stringify([text, state ?? null, ids !== undefined]),
     });
   }
 

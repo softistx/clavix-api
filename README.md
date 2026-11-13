@@ -149,7 +149,8 @@ No token, or a forged, expired or other-audience one, is a 401; the store down i
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
 resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
 tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, their plans and their
-trash are managed here too (below); `tenants:create` remains for the first tenants.
+trash are managed here too (below); `tenants:create` remains for the first tenants. The console shell's
+tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
@@ -160,7 +161,7 @@ tenant; every field is refused unless its guard allows it.
 is the console shell's tenant switcher. For a tenant admin it lists the tenants of their roles; for a
 platform operator, every tenant not in the trash. Each item carries the role they act with there (the
 stronger of their direct role and their platform role). Items are ordered by slug and paged by cursor
-(`first` 1 to 100, default 25; pass `nextCursor` as `after`); `q` matches the start of the slug or part
+(`first` is clamped to 1 to 100, default 25; pass `nextCursor` as `after`: any other cursor is `BAD_USER_INPUT` (400), `The cursor is not valid`); `q` matches the start of the slug or part
 of the name, case-insensitively. A suspended tenant stays listed (`tenant.status` is `SUSPENDED`; the
 console stays readable on it); a tenant in the trash is left out, and a caller with no role gets an
 empty page. Any signed-in caller may ask; it never lists a tenant the caller holds no role on.
