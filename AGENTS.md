@@ -258,7 +258,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
-  has no insert-only write, so `createClient` runs under `ctx.exclusive(clientsKey(tenant), ...)`
+  has no insert-only write, so `createClient`, `updateClient`, `rotateClientSecret` and `deleteClient` run under `ctx.exclusive(clientsKey(tenant), ...)` (a racing delete never brings a client back; an update or rotation of a missing client is `NOT_FOUND`, from `ClientsService.require` inside the lock)
   (`console:clients:<hex>`, the same queue and Redis lock as the admins): the id check and the
   upsert of two creations of one id are never interleaved (one wins, the other is `CONFLICT`), and
   the `clients` quota (`assertClientQuota`: `usageService.count` against `quotasOf`, `QUOTA_EXCEEDED`)
@@ -404,13 +404,14 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
   `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  `socialSignInStart`, `socialSignInComplete`, `acceptInvitation`,
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
   already issued live to expiry, and the console stays readable.
 - **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
   `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
 - **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
-  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey sign-in and a successful `/token` (the `sub`
+  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
   of the access token, so refreshes count); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
   `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
@@ -457,7 +458,9 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   punycode); IPs, localhost, wildcards, reserved suffixes and the platform domain are refused.
 - The quota (`effectiveQuotas(...).domains`) counts pending claims too and is checked on
   `addDomain` (`assertWithinQuota`), which runs under the tenant's `ctx.exclusive` lock
-  (`console:domains:<tenantId>`); the post-insert recount stays as a second guard.
+  (`console:domains:<tenantId>`, shared by `removeDomain` and `setPrimaryDomain`, so two
+  concurrent `setPrimaryDomain` leave one primary); the post-insert recount stays as a second guard.
+  `removeDomain` records `domain.remove` on a repeat too (an id the trail cannot hold is not recorded).
   `usage.domains` is `domainStore.count`. These slice decisions stand (issue #127): pending
   claims count toward the quota; a lapsed primary keeps resolving but the TLS ask refuses it;
   recheck every 6 h with a 7-day grace.

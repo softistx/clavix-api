@@ -461,7 +461,7 @@ Each tenant chooses how its users sign in
   `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) on the tenant's host.
 - **Social providers**: Google, GitHub and Microsoft through `@softistx/janus-social`, each tenant
   with its own client id and secret. The redirect URI to register at the provider is the
-  `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback`.
+  `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback` (the host is the tenant's issuer: its primary custom domain when set, else the slug host).
 - **At least one way in**: a change that would leave no enabled method and no enabled provider is
   refused, 409 `NO_SIGN_IN_METHOD`.
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from

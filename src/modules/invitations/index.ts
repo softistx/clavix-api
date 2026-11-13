@@ -7,6 +7,7 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { adminTenantOf } from "@/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { requireLive } from "@/tenancy/live";
 
 const invalid = () =>
   new GraphQLError("The invitation is invalid or has expired", {
@@ -72,6 +73,7 @@ export const invitations: Resolvers = {
   Mutation: {
     acceptInvitation: async (_, { code }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
       ctx.set.headers.set("cache-control", "no-store");
       const accepted = await guarded(() => auth.invitations.accept({ code }));
       const organization = await organizationOf(

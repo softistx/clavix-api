@@ -9,7 +9,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
-import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { domainStore, tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
@@ -573,6 +573,30 @@ describe("the social providers", () => {
       ),
     ).toBe("NO_SIGN_IN_METHOD");
     expect((await stored(a)).version).toBe(version);
+  });
+
+  test("the redirect URI follows the primary custom domain, as the runtime callback does", async () => {
+    await as(ADMIN_C, SET, {
+      t: c,
+      i: { provider: "GOOGLE", clientId: "google-id", clientSecret: SECRET },
+    });
+    const id = new ObjectId(c);
+    const claim = await domainStore.add(id, "auth.sim-c.com", 5);
+    await mongo.db.domains.raw.updateOne(
+      { _id: claim._id },
+      { $set: { status: "verified", verifiedAt: new Date() } },
+    );
+    await domainStore.setPrimary(id, claim._id.toHexString());
+    const policy = await policyOf(ADMIN_C, c);
+    const resolved = await tenantResolver.resolveHost(
+      new URL(issuerOf("sim-c", origin)).host,
+    );
+    expect(policy.social[0]?.callbackUrl).toBe(
+      `${resolved?.issuer}/sign-in/social/google/callback`,
+    );
+    expect(policy.social[0]?.callbackUrl).toContain("auth.sim-c.com");
+    await mongo.db.domains.raw.deleteMany({ tenantId: id });
+    await tenantResolver.invalidate([new URL(issuerOf("sim-c", origin)).host]);
   });
 
   test("removing a provider drops its secret; removing it again writes nothing", async () => {
