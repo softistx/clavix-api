@@ -2,10 +2,16 @@ import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
+import { admins, adminsAudits, adminsGuards } from "./admins";
 import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
 import { me, meGuards } from "./me";
 import { resources, resourcesAudits, resourcesGuards } from "./resources";
+import {
+  signInMethods,
+  signInMethodsAudits,
+  signInMethodsGuards,
+} from "./sign-in-methods";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 
 // One entry per module: its resolvers, the guard of each root field it adds
@@ -13,21 +19,27 @@ import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 // denied (guard.ts); a mutation with no audit action fails audit.spec.ts.
 export const resolvers: Resolvers = mergeResolvers([
   me,
+  admins,
   branding,
+  signInMethods,
   clients,
   resources,
   tenants,
 ]);
 export const guards: Guards = {
   ...meGuards,
+  ...adminsGuards,
   ...brandingGuards,
   ...clientsGuards,
   ...resourcesGuards,
   ...tenantsGuards,
+  ...signInMethodsGuards,
 };
 export const audits: Audits = {
+  ...adminsAudits,
   ...brandingAudits,
   ...clientsAudits,
   ...resourcesAudits,
   ...tenantsAudits,
+  ...signInMethodsAudits,
 };

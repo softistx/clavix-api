@@ -104,13 +104,6 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
-  // The global switch of magic-link sign-in (janus `magicLink.enabled`), off by
-  // default (owner decision, clavix-api#24). Only "true" / "1" turn it on. Off,
-  // requestMagicLink and confirmMagicLink answer 404 MAGIC_LINK_DISABLED.
-  CLAVIX_MAGIC_LINK: z
-    .enum(["true", "false", "1", "0"])
-    .default("false")
-    .transform((value) => value === "true" || value === "1"),
   // How many reverse proxies stand in front of the app. 0 (default): the
   // client address is the connection's. N: it is the entry N places from the
   // right of X-Forwarded-For, which the proxies append to. Required in

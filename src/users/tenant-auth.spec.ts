@@ -304,8 +304,8 @@ describe("OAuth with the real authFor", () => {
   });
 });
 
-describe("magic link switch", () => {
-  test("with the flag unset, the magic-link request is refused with MAGIC_LINK_DISABLED (404)", async () => {
+describe("magic link policy", () => {
+  test("a tenant that did not turn it on has it off: MAGIC_LINK_DISABLED (404)", async () => {
     const auth = await janusOf("acme");
     expect(auth.magicLink.enabled).toBe(false);
     const refusal = await auth.magicLink
@@ -316,11 +316,16 @@ describe("magic link switch", () => {
     expect(statusOf((refusal as JanusError).code)).toBe(404);
   });
 
-  test("magicLink: true reaches janus", async () => {
+  test("the tenant's choice reaches janus", async () => {
     const tenant = await tenantOf("acme");
-    expect(buildTenantJanus(oauthDb, tenant, true).magicLink.enabled).toBe(
-      true,
-    );
+    const chosen = {
+      ...tenant,
+      signIn: {
+        ...tenant.signIn,
+        methods: [{ type: "magicLink" as const, enabled: true }],
+      },
+    };
+    expect(buildTenantJanus(oauthDb, chosen).magicLink.enabled).toBe(true);
     expect(buildTenantJanus(oauthDb, tenant).magicLink.enabled).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ Today it serves:
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
 - on `POST /console/graphql`, the console API (`me`, tenants with plans, quotas, usage, suspension and
-  trash, a tenant's clients, resources, scopes and branding), behind a bearer token;
+  trash, the admins of a tenant, a tenant's clients, resources, scopes and branding), behind a bearer token;
 - scripts that create tenants, OAuth clients and API resources. The trash is emptied after 30 days by a
   daily scheduled purge (see "Tenants, plans and usage"); the console's refusals are in `docs/troubleshooting.md`.
 
@@ -21,6 +21,7 @@ Today it serves:
 | This README                                                                                | run, environment, and each feature below            |
 | [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix |
 | [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls   |
+| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers     |
 | [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes      |
 | [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                 |
 | [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                   |
@@ -67,22 +68,21 @@ one needs on top:
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                                                                                                                                          |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                                                 | 3000                                                                                                                                                                                                                    |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                  |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off and monthly active users are not counted                                                                                                               |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                    |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                             |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                            |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                                                                                                                       |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                       |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                        |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                             |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                              |
-| `CLAVIX_MAGIC_LINK`                                                    | global switch of magic-link sign-in (janus `magicLink.enabled`); `true`/`1` or `false`/`0`, default `false`; off, `requestMagicLink` and `confirmMagicLink` answer 404 `MAGIC_LINK_DISABLED` (see "Magic-link sign-in") |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                |
+| Variable                                                               | Default / rule                                                                                                           |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`                                                                 | 3000                                                                                                                     |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                   |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off and monthly active users are not counted                |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                     |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                 |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                              |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory             |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                        |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                        |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                         |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                              |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                               |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits") |
 
 ## Sign-in code limits
 
@@ -144,11 +144,36 @@ cookie and resolves no tenant from the host: the credential is an access token o
 tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
-resources and scopes (below) and the branding fields (see "Branding"). Tenants, their plans and
-their trash are managed here too (below); `tenants:create` remains for the first tenants.
+resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
+tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, their plans and their
+trash are managed here too (below); `tenants:create` remains for the first tenants.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
+
+### Admins of a tenant
+
+A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `viewer` on it.
+`memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
+email, role)`, `changeMembership`, `removeMembership` and `revokeAdminInvitation` need `manage` (the
+tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
+`admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
+That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
+host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
+revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session. Inviting an address that is
+already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it. The
+last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409). Role changes of one
+tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
+within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
+already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they
+sign in as usual. An invitation to a suspended or deleted tenant is `INVITATION_INVALID` until it is back.
+
+Each of the four mutations that succeeds records an admin event (see "Admin events"), repeats included:
+`membership.invite` and `membership.revokeInvitation` (target: the invitation's id, never the
+address), `membership.change` and `membership.remove` (target: the user's id). Accepting an
+invitation is the invitee's act on the hosted API and records none. A `userId` or `invitationId`
+longer than 200 characters is `BAD_USER_INPUT` (400); a `tenantId` is 24 hexadecimal characters, in
+any case.
 
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and
@@ -329,6 +354,43 @@ await ctx.audit("tenant.rename", { type: "tenant", id: tenantId, tenantId });
 `ctx.audit` is awaited: when the event cannot be stored, the mutation fails (and may be retried)
 rather than leave a change with no record. `src/console/audit.spec.ts` fails for a mutation whose
 module declares no action.
+
+## Sign-in methods and social providers
+
+Each tenant chooses how its users sign in
+([docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md) has every operation and error).
+- **Methods**: `PASSKEY` and `EMAIL_CODE` are on for a new tenant, `MAGIC_LINK` is off, and
+  `PASSWORD` is listed but not available yet. A method that is off answers 404
+  `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) on the tenant's host.
+- **Social providers**: Google, GitHub and Microsoft through `@softistx/janus-social`, each tenant
+  with its own client id and secret. The redirect URI to register at the provider is the
+  `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback`.
+- **At least one way in**: a change that would leave no enabled method and no enabled provider is
+  refused, 409 `NO_SIGN_IN_METHOD`.
+- **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
+  `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
+  `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
+  and it is never logged. Losing or changing the master key makes it unreadable: the provider is
+  left out with a warning that names the tenant and provider, and the admin enters the secret again.
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation ($t: ID!) { updateSignInMethods(tenantId: $t, methods: [{ type: MAGIC_LINK, enabled: true }]) { version methods { type enabled available } } }","variables":{"t":"<tenant id>"}}'
+```
+
+```graphql
+# On the tenant's host, POST /graphql: what the hosted sign-in page offers.
+{
+  hostedSignInMethods {
+    methods
+    social {
+      id
+      label
+    }
+  }
+}
+```
 
 ## Branding
 
@@ -641,9 +703,10 @@ come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, 
 
 ## Magic-link sign-in
 
-Off by default: `CLAVIX_MAGIC_LINK=true` (or `1`) turns it on for every tenant. Off, both operations
-answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or mailed, so the surface
-looks absent; the hosted page hides its button. Same endpoint as the e-mail code
+Off by default, per tenant: a tenant's admin turns it on in its sign-in policy
+(`updateSignInMethods`, see "Sign-in methods and social providers"); there is no global switch.
+Off, both operations answer HTTP 404 `MAGIC_LINK_DISABLED` before anything is counted, written or
+mailed, so the surface looks absent; the hosted page hides its button. Same endpoint as the e-mail code
 (`https://<slug>.<CLAVIX_DOMAIN>/graphql`):
 
 ```graphql
