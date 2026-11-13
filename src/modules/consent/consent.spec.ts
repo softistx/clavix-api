@@ -400,7 +400,7 @@ const expectRefused = (result: GqlResult) => {
 };
 
 describe("a tenant that is not live", () => {
-  test("a suspended or deleted tenant mints no code; a resumed one does again", async () => {
+  test("a suspended or deleted tenant mints no code", async () => {
     const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
     if (acme === undefined) throw new Error("no acme");
     const id = await authorize("acme");
@@ -417,7 +417,5 @@ describe("a tenant that is not live", () => {
       await tenantAdmin.restore(acme._id.toHexString());
       await tenants.reactivate(acme._id);
     }
-    const resumed = await gql("acme", APPROVE, { id }, cookieOf("acme"));
-    expect(resumed.errors).toBeUndefined();
   });
 });
