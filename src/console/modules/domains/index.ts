@@ -105,7 +105,7 @@ export const domains: Resolvers = {
   Mutation: {
     addDomain: async (_, { tenantId, host }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const stored = await tenantAdmin.find(tenantId);
+      const stored = await tenantAdmin.find(tenant._id.toHexString());
       const quota = stored === undefined ? 0 : effectiveQuotas(stored).domains;
       // The quota count and the insert are not atomic: one claim at a time
       // per tenant, across processes when there is a shared lock.

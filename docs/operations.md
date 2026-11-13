@@ -205,6 +205,8 @@ taken in step 2 (below).
 dc --profile tools run --rm backup          # archive in BACKUP_DIR (default backups/)
 ```
 
+The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun) that holds both. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
+
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
 `clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and
 keeps the newest `BACKUP_KEEP` archives. Schedule it from the host's cron, e.g.

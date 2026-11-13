@@ -56,6 +56,16 @@ afterAll(async () => {
   await oauthDb.collection("relations").deleteMany({});
 });
 
+describe("the tenant id's spelling on a write", () => {
+  test("addDomain with an upper-case tenant id adds the domain and keeps the quota", async () => {
+    const result = await admin(ADD, {
+      tenantId: tenantA.toUpperCase(),
+      host: "upper.acme.com",
+    });
+    expect(result.errors).toBeUndefined();
+  });
+});
+
 describe("addDomain", () => {
   test("claims a normalised host and shows the TXT record to publish", async () => {
     const result = await admin(ADD, {

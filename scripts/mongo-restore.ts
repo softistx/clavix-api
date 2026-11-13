@@ -10,7 +10,6 @@
 // the live database (docs/operations.md, "Restore").
 // MONGORESTORE  the mongorestore binary (default: mongorestore).
 import { existsSync } from "node:fs";
-import { basename } from "node:path";
 import { $ } from "bun";
 
 const fail = (message: string, code = 1): never => {
@@ -27,11 +26,11 @@ if (!existsSync(archive)) fail(`no such archive: ${archive}`);
 const sidecar = Bun.file(`${archive}.sha256`);
 if (await sidecar.exists()) {
   const expected = (await sidecar.text()).trim().split(/\s+/)[0];
-  const actual = new Bun.CryptoHasher("sha256")
-    .update(await Bun.file(archive).arrayBuffer())
-    .digest("hex");
+  const hasher = new Bun.CryptoHasher("sha256");
+  for await (const chunk of Bun.file(archive).stream()) hasher.update(chunk);
+  const actual = hasher.digest("hex");
   if (expected?.toLowerCase() !== actual) {
-    fail(`checksum mismatch: ${basename(archive)} is damaged`);
+    fail(`checksum mismatch: ${archive} is damaged`);
   }
 } else if (Bun.env["SKIP_CHECKSUM"] !== "yes") {
   fail(

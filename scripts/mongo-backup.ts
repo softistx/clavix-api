@@ -37,6 +37,7 @@ try {
     .quiet();
   if (dumped.exitCode !== 0) {
     process.stderr.write(dumped.stderr);
+    rmSync(tmp, { force: true });
     fail(`${dump} failed (exit ${dumped.exitCode})`, dumped.exitCode);
   }
   renameSync(tmp, file);
@@ -45,9 +46,9 @@ try {
 }
 
 // The sidecar in `sha256sum` format, so `sha256sum --check` reads it too.
-const hash = new Bun.CryptoHasher("sha256")
-  .update(await Bun.file(file).arrayBuffer())
-  .digest("hex");
+const hasher = new Bun.CryptoHasher("sha256");
+for await (const chunk of Bun.file(file).stream()) hasher.update(chunk);
+const hash = hasher.digest("hex");
 await Bun.write(`${file}.sha256`, `${hash}  ${name}\n`);
 
 // Retention: the newest `keep` archives stay.

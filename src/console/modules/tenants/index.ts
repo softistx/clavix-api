@@ -275,7 +275,8 @@ export const tenants: Resolvers = {
       });
       return parentOf(updated);
     },
-    deleteTenant: async (_, { id }, ctx) => {
+    deleteTenant: async (_, { id: given }, ctx) => {
+      const id = given.toLowerCase();
       const current = await tenantAdmin.find(id);
       if (current === undefined) throw notFound();
       const deleted = await tenantAdmin.trash(id).catch((error: unknown) => {
@@ -290,9 +291,11 @@ export const tenants: Resolvers = {
       return parentOf(deleted);
     },
     restoreTenant: async (_, { id }, ctx) => {
-      const restored = await tenantAdmin.restore(id).catch((error: unknown) => {
-        throw asNotFound(error);
-      });
+      const restored = await tenantAdmin
+        .restore(id.toLowerCase())
+        .catch((error: unknown) => {
+          throw asNotFound(error);
+        });
       const tenantId = restored._id.toHexString();
       await ctx.audit("tenant.restore", {
         type: "tenant",
