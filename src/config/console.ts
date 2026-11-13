@@ -26,9 +26,9 @@ export const consoleResource = consoleAudience(origin);
 const clavixTenant = () =>
   tenantResolver.resolveHost(`${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`);
 
-/** The live tenant with this id, resolved through its own host; `null` when gone or suspended. */
+/** The tenant with this id (suspended included: the console reads it), resolved through its own host; `null` when gone or trashed. */
 async function resolveById(id: string) {
-  const [tenant] = await tenantsService.activeByIds([id]);
+  const [tenant] = await tenantsService.liveByIds([id]);
   return tenant === undefined
     ? null
     : tenantResolver.resolveHost(`${tenant.slug}.${env.CLAVIX_DOMAIN}`);
@@ -87,10 +87,11 @@ export function createConsoleDeps(
         return janus.findByEmail(email);
       },
       tenantsByIds: async (ids) =>
-        (await tenantsService.activeByIds(ids)).map((tenant) => ({
+        (await tenantsService.liveByIds(ids)).map((tenant) => ({
           id: tenant._id.toHexString(),
           slug: tenant.slug,
           name: tenant.name,
+          status: tenant.status,
         })),
     },
   };

@@ -241,7 +241,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   there, never in `src/modules`.
 - **`clients` and `resources`** (issue #9) are thin: resolvers call `ClientsService`
   (`src/modules/clients`, wired in `src/config/clients.ts`) and `Catalog`
-  (`src/modules/resources`), after `activeTenant` (`catalog-support.ts`: a suspended tenant is
+  (`src/modules/resources`), after `liveTenant` (`catalog-support.ts`: a suspended tenant is
   `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
   its admin event (`client.create`, `client.rotateSecret`, `resource.delete`, `scope.update`, ...:
   the target is the client id or the document id, never a secret; a delete records on a repeat
@@ -363,7 +363,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
   `RolesError`.
 - **Shared helpers**: `console/modules/ids.ts` (`lowerTenantArg`, `tenantIdOf`, `idArg`) and
-  `console/modules/directory-tenant.ts` (`activeTenant`, a suspended tenant is `NOT_FOUND`).
+  `console/modules/directory-tenant.ts` (`liveTenant`, a suspended tenant is `NOT_FOUND`).
   A tenant suspended mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
 - `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
   read a token's content).

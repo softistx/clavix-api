@@ -24,9 +24,10 @@ export const brandingAudits: Audits = {
 };
 
 // The guard decided who may touch the tenant; this decides it exists (a
-// platform role is allowed on any id) and is active.
+// platform role is allowed on any id) and is not in the trash (a suspended
+// tenant is readable; the guard refuses its writes).
 async function requireTenant(tenantId: string) {
-  if ((await tenantsService.activeByIds([tenantId])).length === 0) {
+  if ((await tenantsService.liveByIds([tenantId])).length === 0) {
     throw denial("NOT_FOUND", "No such tenant");
   }
 }
