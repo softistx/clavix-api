@@ -55,6 +55,13 @@ const JANUS = [
   ...janusPartitionedCollections,
   partitionedInvitations,
 ].map((definition) => definition.name);
+// Only what this spec seeded (the other specs share the collections).
+const clearSeeded = async () => {
+  for (const name of JANUS)
+    await oauthDb
+      .collection(name)
+      .deleteMany({ _id: { $regex: `^[0-9a-f]+:${name}:` } as never });
+};
 const seedJanus = async (partition: string) => {
   for (const name of JANUS) {
     await oauthDb.collection(name).insertMany(
@@ -112,7 +119,7 @@ const can = (tenant: { _id: ObjectId }, user: string) =>
 beforeEach(async () => {
   logged.length = 0;
   failFor = undefined;
-  for (const name of JANUS) await oauthDb.collection(name).deleteMany({});
+  await clearSeeded();
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
@@ -127,7 +134,7 @@ afterAll(async () => {
   await mongo.db.branding.raw.deleteMany({});
   await mongo.db.usageCounters.raw.deleteMany({});
   await oauthDb.collection("relations").deleteMany({});
-  for (const name of JANUS) await oauthDb.collection(name).deleteMany({});
+  await clearSeeded();
 });
 
 describe("the tenant purge", () => {
