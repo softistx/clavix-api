@@ -14,10 +14,10 @@
         "@nxgt/graphql-scalars": "^0.7.1",
         "@nxgt/graphql-validation": "^0.8.1",
         "@softistx/janus": "^0.58.1",
-        "@softistx/janus-graphql": "^0.25.3",
+        "@softistx/janus-graphql": "^0.26.0",
         "@softistx/janus-mail": "^0.25.11",
         "@softistx/janus-mongo": "^0.25.0",
-        "@softistx/janus-oauth": "^0.10.0",
+        "@softistx/janus-oauth": "^0.10.1",
         "@softistx/janus-oauth-mongo": "^0.10.0",
         "@softistx/janus-oidc": "^0.3.9",
         "@softistx/janus-passkeys": "^0.3.4",
@@ -316,13 +316,13 @@
 
     "@softistx/janus": ["@softistx/janus@0.58.1", "https://npm.pkg.github.com/download/@softistx/janus/0.58.1/b38fffbc919fecb90eaa37d59f8775bc58bcc96a", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-gQuN68QoFKO7HjQNsHqPj4P184Pc1qXJ9rJ6+azgwPTqN2gh6Apeawg0EheozAxnFtCHzNwMnuXRvue6uShyxw=="],
 
-    "@softistx/janus-graphql": ["@softistx/janus-graphql@0.25.3", "https://npm.pkg.github.com/download/@softistx/janus-graphql/0.25.3/0222992db29a0b082e4dd6b9a900c49038ac72bc", { "peerDependencies": { "@envelop/core": "^5.0.0 || ^6.0.0", "@graphql-tools/utils": ">=10.0.0 <14", "@softistx/janus": "^0.58.0", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-45GXFAf7Bf23KYpONYIpxREFmBJWV8MBKMLzjH1Y9rE1d+TlkOD89J6v6r0Au/dWICTT7+aMg3hytOsFj4n3Sg=="],
+    "@softistx/janus-graphql": ["@softistx/janus-graphql@0.26.0", "https://npm.pkg.github.com/download/@softistx/janus-graphql/0.26.0/df90e6743ec29f86a4ff05e53f0eeb4b5c0ea37f", { "peerDependencies": { "@envelop/core": "^5.0.0 || ^6.0.0", "@graphql-tools/utils": ">=10.0.0 <14", "@softistx/janus": "^0.58.1", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-WGRq7200N19GJHpA2lB8wpJERQvjfvFapF4TKv5HIh+6uU0ytagihZUVe51WOVPh1kLqYTcz8uZ3Pq8BSznQAg=="],
 
     "@softistx/janus-mail": ["@softistx/janus-mail@0.25.11", "https://npm.pkg.github.com/download/@softistx/janus-mail/0.25.11/342b62418332a7760e61b42671d46fbb3873ce2c", { "peerDependencies": { "@softistx/janus": "^0.58.0", "@softistx/mail": ">=1.5.0 <2", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-LdyfbmTF4Gi3ViGc8RNjET3DBm6snzOMaXRTFSueQC7G5rDIMOATUtJRLZHoBM5ZqIra+/Yp8ofXZoTpsBf2fQ=="],
 
     "@softistx/janus-mongo": ["@softistx/janus-mongo@0.25.0", "https://npm.pkg.github.com/download/@softistx/janus-mongo/0.25.0/2d05f9137bdfa6413163666f90d2ca77c0788e50", { "peerDependencies": { "@softistx/janus": "^0.58.1", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-z0adAF0roBYFsVccNRp5CQbjJviKpWLOkEUCRBU/mghwGsFGNiKLHC+qS2wtxPRhE3MyWBq8kCTP41P3EoMA5A=="],
 
-    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.10.0", "https://npm.pkg.github.com/download/@softistx/janus-oauth/0.10.0/69aa8d32b211b30b66e3efb05a0c06d54818f90e", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.58.1", "@softistx/janus-graphql": "^0.25.3", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-d92gaF30vAg8IHNopaTml3xOjDwndpm8YbJdGvYv07O6Kbxzh7pDcJ2dkGe9c5vjaHQQcR3JUJfL4LG0n+z5Lw=="],
+    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.10.1", "https://npm.pkg.github.com/download/@softistx/janus-oauth/0.10.1/850186b71d403a7b11d5b2cf05affe96d9e27a8f", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.58.1", "@softistx/janus-graphql": "^0.26.0", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-NPx7UKAdmjrydWS3HvDp0koI5mn2TjwueFcJW9t77bMAQitQlDZWy2HSEfSqUrgwgJ0ygDF8hz5QX1dS1Zd6TA=="],
 
     "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.10.0", "https://npm.pkg.github.com/download/@softistx/janus-oauth-mongo/0.10.0/7d00319b87a88caa2c9a67274dd9224757427f1e", { "peerDependencies": { "@softistx/janus": "^0.58.1", "@softistx/janus-oauth": "^0.10.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-Moxc71SG/FstoS40TAFeFPQCwPAO5jrZgaQ5cakNYSx2IdXSK4Si9Tl+0vA7XyZ+ZvPDm5PVZoWLK0qley6/4A=="],
 
