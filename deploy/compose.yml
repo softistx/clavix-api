@@ -34,8 +34,10 @@ services:
   ui:
     <<: *restart
     image: ${CLAVIX_UI_IMAGE:?set CLAVIX_UI_IMAGE in deploy/.env}
-    env_file: .env
+    # No env_file: the ui never sees the api's secrets (master key, ask secret...).
     environment:
+      CLAVIX_DOMAIN: ${CLAVIX_DOMAIN:?set CLAVIX_DOMAIN}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
       NODE_ENV: production
       PORT: "3001"
       API_URL: http://api:3000/graphql

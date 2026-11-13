@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { normalizeHost } from "@/tenancy/host";
+import { normalizeHost, slugOfHost } from "@/tenancy/host";
 import { normalizeDomainHost } from "./domain-host";
 
 /** The path Caddy's `on_demand_tls { ask }` calls. */
@@ -20,6 +20,23 @@ export interface TlsAskDeps {
   /** Spends one ask; `false` past the limit. Redis down: `true` (logged by the implementation). */
   limit?: (() => Promise<boolean>) | undefined;
   log?: (message: string) => void;
+}
+
+/**
+ * The decision for a host under the platform domain: the apex and
+ * `console.<domain>` always, `<slug>.<domain>` only when `isLiveTenantHost`
+ * says a live tenant has it (never a suspended, deleted or unknown one).
+ */
+export function platformHostPolicy(options: {
+  domain: string;
+  isLiveTenantHost(host: string): Promise<boolean>;
+}) {
+  const domain = options.domain.toLowerCase();
+  return async (host: string): Promise<boolean> => {
+    if (host === domain || host === `console.${domain}`) return true;
+    if (slugOfHost(host, domain) === null) return false;
+    return options.isLiveTenantHost(host);
+  };
 }
 
 const digest = (value: string) => createHash("sha256").update(value).digest();

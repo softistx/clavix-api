@@ -23,13 +23,16 @@ fi
 if [[ -f "$archive.sha256" ]]; then
   (cd "$(dirname "$archive")" && sha256sum --check --quiet "$(basename "$archive").sha256") \
     || { echo "checksum mismatch: $archive is damaged" >&2; exit 1; }
+elif [[ "${SKIP_CHECKSUM:-}" != "yes" ]]; then
+  echo "no $archive.sha256 next to the archive (SKIP_CHECKSUM=yes to restore it unchecked)" >&2
+  exit 1
 fi
 
 # The database the archive was taken from, and the one it goes to.
 path="${MONGO_URI#*://}"; path="${path#*/}"; source_db="${path%%\?*}"
 target_db="${2:-$source_db}"
-if [[ -z "$source_db" ]]; then
-  echo "MONGO_URI must name the database in its path" >&2
+if [[ ! "$source_db" =~ ^[A-Za-z0-9_-]+$ || ! "$target_db" =~ ^[A-Za-z0-9_-]+$ ]]; then
+  echo "MONGO_URI must name the database in its path, and the names be letters, digits, - or _" >&2
   exit 1
 fi
 # The URI without its database: mongorestore takes the namespaces from the flags.

@@ -38,7 +38,7 @@ nxgt-janus release says which.
     ([#11](https://github.com/softistx/clavix-api/issues/11)). The API is in the M2
     integration branch (add, verify, remove, make primary, a 6-hourly recheck with a 7-day
     grace, the TLS ask endpoint, the Related Origins document); the reverse-proxy
-    configuration waits for the going-live slice.
+    configuration is in the going-live slice below.
   - Going live ([#108](https://github.com/softistx/clavix-api/issues/108)): a `Dockerfile`, a
     compose file with Caddy (on-demand TLS asking the API, a wildcard option), `/healthz` and
     `/readyz`, a MongoDB backup and restore script with a restore drill, and the runbook

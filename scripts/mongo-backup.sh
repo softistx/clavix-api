@@ -15,6 +15,7 @@ out="${1:-./backups}"
 : "${MONGO_URI:?MONGO_URI is required}"
 keep="${KEEP:-14}"
 dump="${MONGODUMP:-mongodump}"
+[[ "$keep" =~ ^[1-9][0-9]*$ ]] || { echo "KEEP must be a positive integer" >&2; exit 1; }
 
 mkdir -p "$out"
 umask 077

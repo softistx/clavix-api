@@ -1,10 +1,14 @@
 import { ObjectId } from "mongodb";
-import { TLS_ASK_PATH, tlsAsk } from "@/modules/domains/tls-ask";
+import {
+  platformHostPolicy,
+  TLS_ASK_PATH,
+  tlsAsk,
+} from "@/modules/domains/tls-ask";
 import {
   relatedOrigins,
   WEBAUTHN_WELL_KNOWN,
 } from "@/modules/domains/well-known";
-import { hostOfRequest, slugOfHost } from "@/tenancy/host";
+import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
 import { redis } from "./redis";
@@ -28,14 +32,13 @@ export const serveTlsAsk = tlsAsk({
   },
   // The platform's own hosts: the apex, the console, and the slug host of a
   // live tenant (never a deleted, suspended or unknown one).
-  allowedPlatformHost: async (host) => {
-    if (host === env.CLAVIX_DOMAIN || host === `console.${env.CLAVIX_DOMAIN}`) {
-      return true;
-    }
-    if (slugOfHost(host, env.CLAVIX_DOMAIN) === null) return false;
-    const tenant = await tenantResolver.resolveHost(host);
-    return tenant !== null && isLive(tenant);
-  },
+  allowedPlatformHost: platformHostPolicy({
+    domain: env.CLAVIX_DOMAIN,
+    isLiveTenantHost: async (host) => {
+      const tenant = await tenantResolver.resolveHost(host);
+      return tenant !== null && isLive(tenant);
+    },
+  }),
   limit:
     askLimits === undefined
       ? undefined

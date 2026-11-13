@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { tlsAsk } from "./tls-ask";
+import { platformHostPolicy, tlsAsk } from "./tls-ask";
 import { relatedOrigins } from "./well-known";
 
 const SECRET = "s".repeat(40);
@@ -123,6 +123,25 @@ describe("tlsAsk", () => {
     expect(
       (await get(handler, `token=${SECRET}&domain=auth.acme.com`)).status,
     ).toBe(404);
+  });
+});
+
+describe("platformHostPolicy", () => {
+  const live = new Set(["acme.clavix.test"]);
+  const policy = platformHostPolicy({
+    domain: "Clavix.test",
+    isLiveTenantHost: async (host) => live.has(host),
+  });
+
+  test("the apex and the console always, a slug host only when live", async () => {
+    expect(await policy("clavix.test")).toBe(true);
+    expect(await policy("console.clavix.test")).toBe(true);
+    expect(await policy("acme.clavix.test")).toBe(true);
+    // suspended, deleted or unknown: the tenant is not live
+    expect(await policy("gone.clavix.test")).toBe(false);
+    // not a slug shape: the tenant lookup is never reached
+    expect(await policy("a.b.clavix.test")).toBe(false);
+    expect(await policy("evilclavix.test")).toBe(false);
   });
 });
 

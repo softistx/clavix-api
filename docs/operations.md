@@ -64,7 +64,9 @@ by the `Host` header, which Caddy passes untouched.
 6. Name the first operator, a user who already exists in the `clavix` tenant
    (the console needs a platform role before anyone can use it):
    `dc run --rm api bun run operators:grant --email you@example.com`
-   (see the README, "Console API").
+   (see the README, "Console API"). A fresh `clavix` tenant has no users: create
+   the first one by signing in once on the `clavix` tenant's host
+   (`https://clavix.<domain>`) with your e-mail code, then run the command.
 7. Check: `curl https://console.<domain>/healthz` answers 200 and
    `dc exec api bun -e "console.log((await fetch('http://127.0.0.1:3000/readyz')).status)"`
    prints 200.
@@ -74,20 +76,21 @@ by the `Host` header, which Caddy passes untouched.
 The variables of the API are in the README ("Environment") and `.env.example`.
 Beyond them, the deployment reads, in `deploy/.env`:
 
-| Variable                                    | Read by        | Meaning                                                             |
-| ------------------------------------------- | -------------- | ------------------------------------------------------------------- |
-| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`       | compose        | the images to run                                                   |
-| `CLAVIX_DOMAIN`                             | api, ui, caddy | the apex; tenants live at `<slug>.<domain>`                         |
-| `ACME_EMAIL`                                | caddy          | the ACME account address                                            |
-| `REDIS_PASSWORD`                            | redis, api     | the password in `REDIS_URL`                                         |
-| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api            | required in production                                              |
-| `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                   |
-| `CONTACT_EMAIL`                             | ui             | the public contact address                                          |
-| `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/`), archives kept (14) |
+| Variable                                    | Read by        | Meaning                                                                                                                                                        |
+| ------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`       | compose        | the images to run                                                                                                                                              |
+| `CLAVIX_DOMAIN`                             | api, ui, caddy | the apex; tenants live at `<slug>.<domain>`                                                                                                                    |
+| `ACME_EMAIL`                                | caddy          | the ACME account address                                                                                                                                       |
+| `REDIS_PASSWORD`                            | redis, api     | the password in `REDIS_URL`                                                                                                                                    |
+| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api            | required in production                                                                                                                                         |
+| `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                                                                                                              |
+| `CONTACT_EMAIL`                             | ui             | the public contact address                                                                                                                                     |
+| `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
 
 Compose sets `MONGO_URI`, `REDIS_URL`, `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
-ignored by git.
+ignored by git. Compose hands the whole file to `api` only; the `ui` gets just
+`CLAVIX_DOMAIN` and `CONTACT_EMAIL`, so it never sees the master key or the ask secret.
 
 ## TLS
 
@@ -99,7 +102,8 @@ The answer is 200 for
 
 and a bare 404 for everything else (an unknown, pending, lapsed or suspended
 domain, a deleted tenant, a wrong token); 429 past `CLAVIX_TLS_ASK_LIMIT`
-asks a minute. So a stranger pointing a name at your IP gets no certificate.
+asks a minute (a flood of random names sent to your IP can use that budget up
+and make legitimate asks answer 429 for a minute; raise the limit if it happens). So a stranger pointing a name at your IP gets no certificate.
 
 **The endpoint is not reachable from outside**, three ways at once:
 the API publishes no port, so only `caddy` and `ui` reach it on the compose
@@ -120,12 +124,13 @@ it. Custom domains stay on demand.
 2. Take a backup first (below).
 3. `dc pull` (or load the images), then
    `dc run --rm api bun run db:sync && dc run --rm api bun run db:migrate`.
-   Migrations are forward-only and idempotent; read the release notes.
-4. `dc up -d api ui`. The API drains requests in flight on SIGTERM (20 s).
+   Read the release notes: a migration may change data.
+4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 
-Rollback: set the previous tags and `dc up -d api ui`. A migration that changed
-data needs the backup restored (below); `db:migrate` says when one did.
+Rollback: set the previous tags and `dc up -d api ui`. This rolls back the
+images, not the schema or data: if a migration changed data, restore the backup
+taken in step 2 (below).
 
 ## Backup
 
@@ -153,7 +158,7 @@ CONFIRM=yes dc --profile tools run --rm restore /backups/clavix-20261112T031500Z
 dc up -d api ui
 ```
 
-`scripts/mongo-restore.sh` verifies the checksum, then runs `mongorestore --drop`
+`scripts/mongo-restore.sh` verifies the checksum (an archive without its `.sha256` is refused unless `SKIP_CHECKSUM=yes`), then runs `mongorestore --drop`
 into the database named in `MONGO_URI`. Without `CONFIRM=yes` it prints what it
 would do and stops (exit 2). Afterwards run `db:sync`, check `/readyz`, sign in
 to the console, and confirm a tenant's JWKS (`https://<slug>.<domain>/jwks.json`)
@@ -208,7 +213,7 @@ Application errors and their causes: [troubleshooting.md](troubleshooting.md).
 
 ## Not covered yet
 
-- MongoDB authentication and TLS between containers: the database listens on the
-  private compose network only. Add auth with a key file before exposing it.
+- MongoDB authentication and TLS between containers (an accepted risk for now): the database listens on the
+  private compose network only, shared by api, ui, caddy and the tools. Add auth with a key file before exposing it.
 - Image publishing and any deploy pipeline (workflows are off).
 - Point-in-time recovery (oplog) and off-host backup shipping.
