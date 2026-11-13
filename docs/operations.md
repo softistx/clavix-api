@@ -105,6 +105,7 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                                                                                                              |
 | `CONSOLE_CLIENT_SECRET`                     | ui (and api)   | ui, required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                              |
 | `CONSOLE_SESSION_SECRET`                    | ui (and api)   | ui, required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                      |
+| `CONSOLE_ISSUER`                            | ui             | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
 | `CONTACT_EMAIL`                             | ui             | the public contact address                                                                                                                                     |
 | `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
 
@@ -126,9 +127,20 @@ own public address (hairpin NAT); some providers do not allow it.
 The API builds a tenant's `iss` from the tenant (`issuerOf`, or `issuerOfHost`
 for a custom primary host), `CLAVIX_DOMAIN` and the public scheme, never from
 its own address. So a request to `http://api:3000` carrying
-`Host: clavix.<domain>` would receive the same `iss`; whether the ui can fetch
-from one URL and validate against another is the ui's setting, not the API's.
-The surest fix without hairpin NAT is a network alias on `caddy`, so the
+`Host: clavix.<domain>` would receive the same `iss`; the ui cannot
+fetch from one URL and validate against another.
+
+`CONSOLE_ISSUER` (ui, optional) replaces the default
+`https://clavix.<CLAVIX_DOMAIN>`. The ui uses that one string twice: as the base
+of `/.well-known/openid-configuration` and as the `issuer` the discovery document
+and the ID token must name (a mismatch fails with `issuer-mismatch`, and the
+endpoints must be `https`, `http` only on loopback). So it must be byte-for-byte the API's `iss` (the
+public scheme, the tenant host and `CLAVIX_DOMAIN`). An internal URL such as
+`http://api:3000` does **not** work: discovery would be fetched there but would
+name the public `iss`, and the ui would refuse it. Set it only when the public
+issuer differs from the default (a custom primary host for the `clavix` tenant).
+To reach the issuer from inside the compose network, keep the public name and
+make it resolve (hairpin NAT or the alias below). The surest fix without hairpin NAT is a network alias on `caddy`, so the
 public names resolve to Caddy on the compose network and keep the real
 certificate:
 

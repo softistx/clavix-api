@@ -15,8 +15,9 @@ const origin = () =>
 // confidential client `console` in the `clavix` tenant, and every tenant linked
 // to the platform. Needs the `clavix-tenant` migration, `db:sync` (the OAuth
 // and relation collections). The client's secret is printed once, when it is
-// created; rotate it later with `clients:create --client-id console
-// --confidential --rotate-secret`. Down removes the client and the resource.
+// created; rotate it later with `clients:create --tenant clavix --name
+// "Clavix console" --client-id console --confidential --redirect-uri
+// https://console.<domain>/console/auth/callback --rotate-secret`. Down removes the client and the resource.
 export const consoleSeed = defineMigration({
   id,
   async up({ db }) {
