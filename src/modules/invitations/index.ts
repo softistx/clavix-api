@@ -77,7 +77,11 @@ export const invitations: Resolvers = {
       const organization = await organizationOf(
         accepted.invitation.scope,
         tenant,
-      ).catch(() => ""); // accepted already: a tenant gone since is no refusal
+      ).catch((error: unknown) => {
+        // Accepted already: a tenant gone since is no refusal.
+        if (error instanceof GraphQLError) return "";
+        throw error;
+      });
       if (accepted.status === "signedIn") {
         ctx.set.headers.append(
           "set-cookie",

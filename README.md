@@ -157,7 +157,7 @@ tenant's owner or a platform owner). An invitation is a janus invitation of the 
 `admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
 That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
 host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
-revoked or lapsed code is `INVITATION_INVALID`, 400) and opens the session. Inviting an address that is
+revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session. Inviting an address that is
 already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it. The
 last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409). Role changes of one
 tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
