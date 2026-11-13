@@ -758,7 +758,7 @@ describe("the tokens of a deleted client", () => {
 
 describe("update and rotate of a client that is being deleted", () => {
   test("a missing client is NOT_FOUND, never created by the write", async () => {
-    const id = "ghost";
+    const id = "never-registered";
     expect(
       codeOf(
         await admin(UPDATE, { tenantId: tenantA, id, input: { name: "X" } }),

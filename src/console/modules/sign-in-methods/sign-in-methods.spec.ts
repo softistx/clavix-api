@@ -574,7 +574,7 @@ describe("the social providers", () => {
       i: { provider: "GOOGLE", clientId: "google-id", clientSecret: SECRET },
     });
     const id = new ObjectId(c);
-    const claim = await domainStore.add(id, "auth.sim-c.example", 5);
+    const claim = await domainStore.add(id, "auth.sim-c.com", 5);
     await mongo.db.domains.raw.updateOne(
       { _id: claim._id },
       { $set: { status: "verified", verifiedAt: new Date() } },
@@ -587,7 +587,7 @@ describe("the social providers", () => {
     expect(policy.social[0]?.callbackUrl).toBe(
       `${resolved?.issuer}/sign-in/social/google/callback`,
     );
-    expect(policy.social[0]?.callbackUrl).toContain("auth.sim-c.example");
+    expect(policy.social[0]?.callbackUrl).toContain("auth.sim-c.com");
     await mongo.db.domains.raw.deleteMany({ tenantId: id });
     await tenantResolver.invalidate([new URL(issuerOf("sim-c", origin)).host]);
   });
