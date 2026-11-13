@@ -116,7 +116,7 @@ export interface UserInvitationView {
 
 /**
  * The end users of the tenants (their janus partition), their invitations and
- * grants. Every call names an active tenant by id (the caller checked it);
+ * grants. Every call names a tenant that is not in the trash (active or suspended) by id (the caller checked it);
  * a user or id of another tenant is unknown. Injected (see `src/config/console.ts`).
  */
 export interface ConsoleUsers {
