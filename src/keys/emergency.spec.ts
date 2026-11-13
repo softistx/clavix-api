@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
 import { rotateNow } from "./emergency";
-import { retireAfterMs } from "./policy";
+import { retireAfterMs, rotationPolicy } from "./policy";
 import { ensureSigningKey } from "./rotation";
 import { createTenantKeys } from "./signing-keys";
 
@@ -106,4 +106,9 @@ describe("emergency rotation", () => {
     expect(rotated[0]).toMatchObject({ tenantId: B, retired: null });
     expect(rotated[0]?.current).toBe((await signing(B, t0)) as string);
   });
+});
+
+test("retireAfterMs is the policy's retireAfter", () => {
+  expect(rotationPolicy.retireAfter).toBe("24h");
+  expect(retireAfterMs).toBe(24 * 3_600_000);
 });

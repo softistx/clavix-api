@@ -94,7 +94,7 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
 - **Console users** (`src/console/modules/users/`): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port (`janus-users.ts`), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `src/modules/auth/device.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.
-- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.kid)`, so a provider sealed under another master key is not shown.
+- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; re-wrapping is clavix-api#49).
 
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
@@ -200,7 +200,7 @@ so a code mail in flight is not lost; `stopTimeout` is set above it.
 
 `src/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
 `src/config/keys.ts`; a tenant's partition is its hex id), the rotation policy and the hourly
-`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them (README, "Signing keys"). Sign and
+`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). Sign and
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 

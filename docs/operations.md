@@ -312,6 +312,8 @@ a tenant failed.
   `keys:rotate --all --drop-old`: a new master key alone does not change the
   signing keys.
 
+`--all` covers the active tenants only; a suspended tenant is rotated by naming its slug once reactivated. A non-zero exit means a tenant may be left with no current key until the hourly job runs: run `keys:rotate` for that tenant again.
+
 Check afterwards with `https://<slug>.<domain>/jwks.json`.
 
 A **lost** master key cannot be recovered by rotation: the stored keys are
