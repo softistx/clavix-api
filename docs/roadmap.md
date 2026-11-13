@@ -32,7 +32,10 @@ nxgt-janus release says which.
     host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
   - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for
     verified domains of active tenants
-    ([#11](https://github.com/softistx/clavix-api/issues/11)).
+    ([#11](https://github.com/softistx/clavix-api/issues/11)). The API is in the M2
+    integration branch (add, verify, remove, make primary, a 6-hourly recheck with a 7-day
+    grace, the TLS ask endpoint, the Related Origins document); the reverse-proxy
+    configuration waits for the going-live slice.
   - Going live: container images, a compose file with a reverse proxy (wildcard and on-demand
     TLS), health and readiness endpoints, a MongoDB backup and restore script with a restore
     drill, and a runbook.

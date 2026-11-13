@@ -31,7 +31,7 @@ describe("tenant-owned collections", () => {
   });
 
   test("the platform collections with a tenantId are the listed ones only", () => {
-    expect(platformCollections).toEqual(["adminEvents"]);
+    expect(platformCollections).toEqual(["adminEvents", "domains"]);
     expect(owned.map((c) => c.name)).not.toContain("adminEvents");
     expect(isTenantOwned(appCollections.adminEvents)).toBe(true);
     expect(isOwned(appCollections.adminEvents)).toBe(false);
@@ -76,6 +76,8 @@ const allowed = [
 const platformAllowed = [
   "src/console/admin-events/",
   "src/config/admin-events.ts",
+  "src/modules/domains/",
+  "src/config/domains.ts",
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.
@@ -202,6 +204,7 @@ describe("source scan", () => {
   // place and written by its recorder alone, and never exported.
   test("the platform collections are reached only by their recorder and its wiring", async () => {
     expect(platformNames).toContain("adminEvents");
+    expect(platformNames).toContain("domains");
     expect(
       await offendersOf(direct(platformNames), platformAllowed, true),
     ).toEqual([]);
