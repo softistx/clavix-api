@@ -404,13 +404,14 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
   `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  `socialSignInStart`, `socialSignInComplete`, `acceptInvitation`,
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
   already issued live to expiry, and the console stays readable.
 - **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
   `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
 - **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
-  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey sign-in and a successful `/token` (the `sub`
+  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
   of the access token, so refreshes count); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
   `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`

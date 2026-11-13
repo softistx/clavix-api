@@ -1,8 +1,10 @@
 import { denial, socialResolvers } from "@softistx/janus-graphql";
 import { secretBox } from "@/config/keys";
+import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireLive } from "@/tenancy/live";
 import { socialOf } from "@/users/tenant-janus";
 import { methodDisabled } from "./gate";
 import {
@@ -83,6 +85,7 @@ export const signInMethods: Resolvers = {
       // The tenant's policy first: a provider it does not offer does not
       // exist, before any throttle budget is spent.
       const tenant = await tenantOf(ctx);
+      requireLive(tenant);
       const offered = offeredSocial(tenant.signIn, secretBox.opens);
       if (!offered.some((entry) => entry.provider === provider)) {
         // A fixed word: the caller's string is not echoed.
@@ -105,7 +108,8 @@ export const signInMethods: Resolvers = {
     // is refused with no provider call (sign-in-methods.spec.ts), so this
     // mutation cannot be used to spend the provider's quota.
     socialSignInComplete: async (_, { callbackUrl, flow }, ctx) => {
-      await tenantOf(ctx);
+      const tenant = await tenantOf(ctx);
+      requireLive(tenant);
       const { auth, resolvers } = await socialOfTenant(ctx);
       const done = await resolvers.Mutation.socialSignInComplete(
         _,
@@ -122,6 +126,7 @@ export const signInMethods: Resolvers = {
       if (user === null) {
         throw denial("FORBIDDEN", "Sign-in could not be completed");
       }
+      await usageService.recordActive(tenant.tenantId, user.id);
       return {
         user: {
           id: user.id,
