@@ -33,17 +33,24 @@ const target = (tenant: { _id: { toHexString(): string } }, id: string) => ({
 
 const TYPE = { public: "PUBLIC", confidential: "CONFIDENTIAL" } as const;
 
+const GRANT = {
+  authorization_code: "AUTHORIZATION_CODE",
+  refresh_token: "REFRESH_TOKEN",
+} as const;
+
 const shape = (client: {
   clientId: string;
   name: string;
   type: "public" | "confidential";
   redirectUris: readonly string[];
+  grantTypes: readonly ("authorization_code" | "refresh_token")[];
   createdAt: Date;
 }) => ({
   id: client.clientId,
   name: client.name,
   type: TYPE[client.type],
   redirectUris: [...client.redirectUris],
+  grantTypes: client.grantTypes.map((grant) => GRANT[grant]),
   createdAt: client.createdAt,
 });
 

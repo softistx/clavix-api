@@ -15,8 +15,9 @@ import {
 import { partitionOf } from "@/modules/tenants/identity";
 
 /**
- * The grants janus-oauth 0.8 offers to every client: it has no per-client
- * grant list, so the script only accepts these (and stores nothing for them).
+ * The grant types janus-oauth knows. A client records the ones it was
+ * registered with (`grantTypes`, for display); the token endpoint does not
+ * enforce the list, so every client may use both.
  */
 export const OFFERED_GRANTS = ["authorization_code", "refresh_token"] as const;
 export type OfferedGrant = (typeof OFFERED_GRANTS)[number];
@@ -33,7 +34,10 @@ export interface RegisterClientInput {
    * name, lowercased, as `a-z0-9-`. Re-running with the same id updates the client.
    */
   clientId?: string;
-  /** Default: both offered grants. Anything else is refused. */
+  /**
+   * Recorded on the client for display, not enforced. Default: what the
+   * client already records, else both. Anything else is refused.
+   */
   grants?: readonly string[];
   /** Mint a new secret for an existing confidential client. */
   rotateSecret?: boolean;
@@ -56,21 +60,6 @@ export interface RegisterClientOptions {
   db: Db;
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
   now?: () => Date;
-  /**
-   * The console's list of clients (Temporary, until @softistx/janus-oauth#706):
-   * told of every client registered, so a client made by script is listed too.
-   */
-  index?: {
-    upsert(
-      tenantId: CliTenant["_id"],
-      record: {
-        clientId: string;
-        name: string;
-        type: "public" | "confidential";
-        redirectUris: readonly string[];
-      },
-    ): Promise<void>;
-  };
 }
 
 const ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
@@ -89,6 +78,7 @@ function validate(input: RegisterClientInput): {
   name: string;
   clientId: string;
   redirectUris: string[];
+  grantTypes: OfferedGrant[] | undefined;
 } {
   const name = input.name.trim();
   if (name === "") throw new CliInputError("a client needs a name");
@@ -108,14 +98,18 @@ function validate(input: RegisterClientInput): {
       throw new CliInputError(`redirect URI "${uri}": ${problem}`);
     }
   }
-  for (const grant of input.grants ?? OFFERED_GRANTS) {
+  for (const grant of input.grants ?? []) {
     if (!(OFFERED_GRANTS as readonly string[]).includes(grant)) {
       throw new CliInputError(
-        `grant "${grant}" is not offered: janus-oauth ${OFFERED_GRANTS.join(" and ")} only, for every client`,
+        `grant "${grant}" is not offered: janus-oauth knows ${OFFERED_GRANTS.join(" and ")} only`,
       );
     }
   }
-  return { name, clientId, redirectUris };
+  const grantTypes =
+    input.grants === undefined
+      ? undefined
+      : OFFERED_GRANTS.filter((grant) => input.grants?.includes(grant));
+  return { name, clientId, redirectUris, grantTypes };
 }
 
 /**
@@ -130,7 +124,7 @@ export async function registerClient(
   options: RegisterClientOptions,
   input: RegisterClientInput,
 ): Promise<RegisteredClient> {
-  const { name, clientId, redirectUris } = validate(input);
+  const { name, clientId, redirectUris, grantTypes } = validate(input);
   const type = input.type ?? "public";
   const tenant = await options.findTenant(input.tenant);
   if (tenant === undefined) throw new UnknownTenantError(input.tenant);
@@ -176,6 +170,7 @@ export async function registerClient(
     source: "registered",
     createdAt: existing?.createdAt ?? (options.now ?? (() => new Date()))(),
     expiresAt: null,
+    grantTypes: grantTypes ?? existing?.grantTypes ?? [...OFFERED_GRANTS],
     ...(confidential && secretHash !== undefined
       ? {
           tokenEndpointAuthMethod: "client_secret_basic" as const,
@@ -184,12 +179,6 @@ export async function registerClient(
       : {}),
   };
   await store.upsertClient(record);
-  await options.index?.upsert(tenant._id, {
-    clientId,
-    name,
-    type,
-    redirectUris,
-  });
   return {
     created: existing === null,
     tenant: tenant.slug,

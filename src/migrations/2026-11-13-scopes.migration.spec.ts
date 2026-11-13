@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import { migrate, rollback } from "@softistx/mongo/migrations";
 import type { Db, ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
-import { clientIndex, scopes, tenants } from "@/modules/collections";
-import { partitionOf } from "@/modules/tenants/identity";
+import { scopes, tenants } from "@/modules/collections";
 import { freshMigrationDb } from "~/migrations";
 import { clavixTenant } from "./2026-11-10-clavix-tenant.migration";
 import { id, scopesMigration } from "./2026-11-13-scopes.migration";
@@ -93,53 +90,7 @@ describe(id, () => {
     expect(found[0]?.["description"]).toEqual({ fr: "", en: "Read" });
   });
 
-  test("up lists the clients the janus store holds, each in its tenant, once", async () => {
-    const findTenant = (slug: string) =>
-      getCollection(db, tenants).findFirst({ slug });
-    const made = await registerClient(
-      { db, findTenant },
-      {
-        tenant: "clavix",
-        name: "Back end",
-        redirectUris: ["https://app.example/cb"],
-        type: "confidential",
-      },
-    );
-    await registerClient(
-      { db, findTenant },
-      {
-        tenant: "mig-b",
-        name: "Mobile",
-        redirectUris: ["https://b.example/cb"],
-      },
-    );
-    await migrate(db, [clavixTenant, scopesMigration]);
-    await again();
-    const listed = await db
-      .collection("clientIndex")
-      .find()
-      .sort({ clientId: 1 })
-      .toArray();
-    expect(
-      listed.map((entry) => [
-        entry["clientId"],
-        String(entry["tenantId"]),
-        entry["type"],
-      ]),
-    ).toEqual([
-      ["back-end", String(tenantId), "confidential"],
-      ["mobile", String(other), "public"],
-    ]);
-    // The list holds no secret, plain or hashed.
-    expect(JSON.stringify(listed)).not.toContain(made.clientSecret as string);
-    const stored = await createMongoOAuth(db, {
-      partition: partitionOf(tenantId),
-    }).findClient("back-end");
-    expect(JSON.stringify(listed)).not.toContain(stored?.secretHash as string);
-    expect(await getCollection(db, clientIndex).raw.countDocuments()).toBe(2);
-  });
-
-  test("down puts the strings back and empties the scopes and the list", async () => {
+  test("down puts the strings back and empties the scopes", async () => {
     await legacy(tenantId, API, ["read", "write"]);
     await migrate(db, [clavixTenant, scopesMigration]);
     await rollback(db, [clavixTenant, scopesMigration]);
@@ -149,6 +100,5 @@ describe(id, () => {
       "write",
     ]);
     expect(await getCollection(db, scopes).raw.countDocuments()).toBe(0);
-    expect(await db.collection("clientIndex").countDocuments()).toBe(0);
   });
 });

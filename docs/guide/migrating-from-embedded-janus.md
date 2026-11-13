@@ -57,7 +57,8 @@ janus keeps only its SHA-256. Re-running is idempotent on the client id and prin
   allowed). List every environment's callback with a repeated `--redirect-uri`.
 - A browser-only app registers a public client (omit `--confidential`): PKCE `S256` only, no
   secret.
-- **Grants**: authorization code and refresh only. `--grants` refuses anything else.
+- **Grants**: authorization code and refresh only. `--grants` refuses anything else; what it
+  records is shown by the console and not enforced.
 - A client belongs to its tenant: another tenant's `/authorize` answers `invalid_client`.
 
 Full flag table: "OAuth clients" in the [README](../../README.md#oauth-clients).
@@ -235,8 +236,8 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
    which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
-5. **Per-client grants and `client_credentials`** are not available (janus-oauth has no
-   per-client grant list), so a back end calling the API as itself cannot yet use a Clavix
+5. **Per-client grants and `client_credentials`** are not available (janus-oauth records a client's
+   grant types but does not enforce them, and has no `client_credentials`), so a back end calling the API as itself cannot yet use a Clavix
    token.
 6. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
    a token with `read:packages`, as in the README's Run section.

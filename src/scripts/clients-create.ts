@@ -1,7 +1,6 @@
 import { CliInputError } from "@/cli/errors";
 import { parseClientArgs, USAGE } from "@/clients/cli";
 import { registerClient } from "@/clients/register-client";
-import { clientIndex } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -23,7 +22,7 @@ if (args.includes("--help") || args.includes("-h")) {
 }
 try {
   const result = await registerClient(
-    { db: oauthDb, findTenant: tenantBySlug, index: clientIndex },
+    { db: oauthDb, findTenant: tenantBySlug },
     parseClientArgs(args),
   );
   console.log(

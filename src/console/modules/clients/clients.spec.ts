@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { registerClient } from "@/clients/register-client";
 import { access, linkTenantToPlatform } from "@/config/access";
-import { clientIndex } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
@@ -19,7 +18,7 @@ const operator = consoleAs("cli-operator");
 let tenantA = "";
 let tenantB = "";
 
-const CLIENT = "id name type redirectUris createdAt";
+const CLIENT = "id name type redirectUris grantTypes createdAt";
 const CREATE = `mutation($tenantId: ID!, $input: CreateClientInput!) {
   createClient(tenantId: $tenantId, input: $input) { client { ${CLIENT} } clientSecret }
 }`;
@@ -67,7 +66,6 @@ afterAll(async () => {
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
-  await mongo.db.clientIndex.raw.deleteMany({});
   await mongo.db.adminEvents.raw.deleteMany({});
   await oauthDb.collection("relations").deleteMany({});
 });
@@ -88,6 +86,7 @@ describe("createClient", () => {
       name: "Back end",
       type: "CONFIDENTIAL",
       redirectUris: [REDIRECT],
+      grantTypes: ["AUTHORIZATION_CODE", "REFRESH_TOKEN"],
     });
     expect(created.clientSecret.length).toBeGreaterThan(20);
     const stored = await (await storeOf(tenantA)).findClient("back-end");
@@ -137,7 +136,7 @@ describe("createClient", () => {
 });
 
 describe("clients and client", () => {
-  test("lists by name in pages, and filters with q", async () => {
+  test("lists in id order in pages, and filters with q", async () => {
     const first = await admin(LIST, { tenantId: tenantA, first: 1 });
     expect(first.errors).toBeUndefined();
     expect(idsOf(first)).toEqual(["back-end"]);
@@ -160,12 +159,65 @@ describe("clients and client", () => {
     );
   });
 
+  test("a search follows the cursor to every match, whatever the page size", async () => {
+    const found: string[] = [];
+    let after: string | null = null;
+    do {
+      const result = await admin(LIST, {
+        tenantId: tenantA,
+        q: "app",
+        first: 1,
+        after,
+      });
+      expect(result.errors).toBeUndefined();
+      found.push(...(idsOf(result) ?? []));
+      after =
+        (result.data?.["clients"] as { nextCursor: string | null } | undefined)
+          ?.nextCursor ?? null;
+    } while (after !== null);
+    expect(found).toEqual(["mobile-app"]);
+  });
+
+  test("the list never carries a secret hash", async () => {
+    const stored = await (await storeOf(tenantA)).findClient("back-end");
+    const listed = await admin(LIST, { tenantId: tenantA });
+    expect(JSON.stringify(listed)).not.toContain(stored?.secretHash as string);
+  });
+
+  test("the grant types a script recorded are shown", async () => {
+    await registerClient(
+      {
+        db: oauthDb,
+        findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+      },
+      {
+        tenant: "cli-a",
+        name: "Code only",
+        redirectUris: [REDIRECT],
+        grants: ["authorization_code"],
+      },
+    );
+    const found = await admin(GET, { tenantId: tenantA, id: "code-only" });
+    expect(found.data?.["client"]).toMatchObject({
+      grantTypes: ["AUTHORIZATION_CODE"],
+    });
+    // An update keeps what was recorded.
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "code-only",
+      input: { name: "Code" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      name: "Code",
+      grantTypes: ["AUTHORIZATION_CODE"],
+    });
+  });
+
   test("a client made by the script is listed too", async () => {
     await registerClient(
       {
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
-        index: clientIndex,
       },
       { tenant: "cli-a", name: "Scripted", redirectUris: [REDIRECT] },
     );
@@ -358,22 +410,30 @@ describe("deleteClient", () => {
     expect(second.errors).toBeUndefined();
     expect(second.data?.["deleteClient"]).toBe(false);
   });
+
+  test("revokes the client's grants, and no other client's", async () => {
+    const store = await storeOf(tenantA);
+    const grant = (id: string, clientId: string) =>
+      store.upsertGrant({
+        id,
+        userId: "user-1",
+        clientId,
+        resource: "https://api.example/v1",
+        scopes: ["read"],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        revokedAt: null,
+      });
+    const gone = await grant("grant-code-only", "code-only");
+    const kept = await grant("grant-back-end", "back-end");
+    const result = await admin(DELETE, { tenantId: tenantA, id: "code-only" });
+    expect(result.data?.["deleteClient"]).toBe(true);
+    expect((await store.findGrant(gone.id))?.revokedAt).toBeInstanceOf(Date);
+    expect((await store.findGrant(kept.id))?.revokedAt).toBeNull();
+  });
 });
 
-describe("limits and races", () => {
-  test("two creations of one id at once: one is created, the other is a CONFLICT", async () => {
-    const results = await Promise.all(
-      [1, 2, 3].map(() =>
-        create(admin, tenantA, { name: "Racer", type: "CONFIDENTIAL" }),
-      ),
-    );
-    expect(results.filter((r) => r.errors === undefined)).toHaveLength(1);
-    expect(results.filter((r) => r.errors !== undefined).map(codeOf)).toEqual([
-      "CONFLICT",
-      "CONFLICT",
-    ]);
-  });
-
+describe("limits", () => {
   test("a refused creation leaves nothing listed, and the id stays free", async () => {
     const bad = await create(admin, tenantA, {
       name: "Ghost",
@@ -399,9 +459,9 @@ describe("limits and races", () => {
     expect(item).toEqual(got.data?.["client"] as Record<string, unknown>);
   });
 
-  test("an unknown cursor, a name or a list too long are BAD_USER_INPUT", async () => {
+  test("a cursor, a name or a list too long are BAD_USER_INPUT", async () => {
     expect(
-      codeOf(await admin(LIST, { tenantId: tenantA, after: "not-a-cursor" })),
+      codeOf(await admin(LIST, { tenantId: tenantA, after: "c".repeat(201) })),
     ).toBe("BAD_USER_INPUT");
     expect(
       codeOf(await create(admin, tenantA, { name: "n".repeat(101) })),

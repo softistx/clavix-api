@@ -2,7 +2,7 @@ import { syncMongoRelations } from "@softistx/janus-mongo";
 import { syncMongoOAuthPartitioned } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import { mongo } from "@/config/db";
-import { clientIndex, resources, scopes, tenants } from "@/modules/collections";
+import { resources, scopes, tenants } from "@/modules/collections";
 
 // A database of its own on the test replica set, for the specs that run
 // migrations from scratch (the shared one is migrated once, by test/setup.ts).
@@ -18,7 +18,6 @@ export async function freshMigrationDb() {
   await getCollection(db, tenants).sync();
   await getCollection(db, resources).sync();
   await getCollection(db, scopes).sync();
-  await getCollection(db, clientIndex).sync();
   await syncMongoOAuthPartitioned(db);
   await syncMongoRelations(db);
   return db;

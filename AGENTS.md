@@ -68,7 +68,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
 - **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
 - **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
-  texts) and backfills `clientIndex`; `resources.scopes` stays optional in the model for its `down`.
+  texts); `resources.scopes` stays optional in the model for its `down`.
 
 ## OpenID Connect
 
@@ -234,11 +234,15 @@ every other failure a 401).
 - **The console's own client and resource** (`console` in the `clavix` tenant, the migration's) are
   refused by `modules/reserved.ts`: no update, rotation or deletion of the client, no deletion of
   the resource or its scopes through the API (it would lock every operator out); scripts still can.
-- **`clientIndex`** (`src/modules/clients`) is a tenant-owned copy of each client's id, name, type
-  and redirect URIs, written by `registerClient`, read by `clients(...)` for listing and search:
-  janus-oauth 0.9 cannot list clients. It is marked `Temporary, until @softistx/janus-oauth#706`
-  (`listClients`); the janus store stays the source of truth, and a secret or its hash never goes
-  in the index or in a GraphQL type.
+- **Clients are listed from the janus store** (`ClientsService`, `src/modules/clients`): the
+  tenant's partition store answers `listClients` in id order, and each record is mapped to a
+  `ClientView` there, so a `secretHash` never reaches a resolver or a GraphQL type. The store has
+  no search: `q` is applied in the service, which reads what the page still lacks until it is full
+  (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
+  `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
+  repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. Two
+  `createClient` of one id at the very same time are not told apart (the store has no
+  insert-only write): the last one wins.
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
@@ -311,8 +315,9 @@ in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through t
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
-`tenantBySlug` (`src/config/tenancy.ts`). Grants are not stored: janus-oauth 0.8 has no
-per-client list (the script refuses all but code and refresh). A client keeps its type: re-running a
+`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is recorded on the client (`grantTypes`,
+shown by the console) but not enforced by janus's token endpoint; the script refuses all but code
+and refresh. A client keeps its type: re-running a
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 

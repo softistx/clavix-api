@@ -62,9 +62,7 @@ const allowed = [
   "src/migrations/",
   "src/modules/tenants/",
   "src/modules/resources/",
-  "src/modules/clients/",
   "src/config/resources.ts",
-  "src/config/clients.ts",
   "src/modules/branding/",
   "src/config/branding.ts",
 ];

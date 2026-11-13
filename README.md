@@ -176,12 +176,12 @@ update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`
 
 | Field                                                | What it does                                                                    |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                 | a page of clients by name (`q` matches the name or the id), `nextCursor`        |
+| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`    |
 | `client(tenantId, id)`                               | one client, or `null`                                                           |
 | `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once     |
 | `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                 |
 | `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client |
-| `deleteClient(tenantId, id)`                         | removes the client                                                              |
+| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens                      |
 | `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                       |
 | `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                        |
 | `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                             |
@@ -240,11 +240,17 @@ mutation {
   (`Accept-Language`: French, else English), then in the other language, then the scope's name.
 - **A change serves at once**: the scopes a resource offers are read on every OAuth request.
 - **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
-  redirect URIs; more is `BAD_USER_INPUT`, like an unknown `after` cursor.
+  redirect URIs, a search 100 characters; more is `BAD_USER_INPUT`.
 - **The console's own client and resource** (`console` in the `clavix` tenant) cannot be changed
   or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
-- A client made by `clients:create` is listed too. Deleting a client does not revoke the grants
-  users gave it yet.
+- **Listing**: clients come in id order; a client made by `clients:create` is listed too. With
+  `q`, a page may hold fewer than `first` items (even none) and still give a `nextCursor`: follow
+  it until it is `null`.
+- **`grantTypes`** on a client is what was recorded when it was registered (both grant types by
+  default, or the script's `--grants`). It is shown for information: the token endpoint does not
+  enforce it.
+- **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
+  opened are revoked.
 
 ### Admin events
 
@@ -421,9 +427,9 @@ bun run clients:create --tenant acme --name "Web app" \
   becomes confidential and gets a secret.
 - The output also carries `issuer`, `tenant`, `redirectUris` and `type`. `--help` prints the
   usage; bad input prints the message and the usage and exits 1.
-- **Grants**: janus-oauth 0.8 has no per-client grant list; every client may use the authorization
-  code and refresh grants. `--grants` refuses any other (device code, token exchange, client
-  credentials) until janus offers them per client.
+- **Grants**: `--grants` is recorded on the client and shown by the console (`grantTypes`), but
+  the token endpoint does not enforce it: every client may use the authorization code and refresh
+  grants. Any other (device code, token exchange, client credentials) is refused.
 
 ## OpenID Connect
 

@@ -1,24 +1,31 @@
+import type {
+  OAuthClientGrantType,
+  OAuthClientRecord,
+} from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import { InvalidCursorError } from "@softistx/mongo";
 import type { Db } from "mongodb";
 import { CliInputError, type CliTenant } from "@/cli/errors";
-import { clientIdOf, registerClient } from "@/clients/register-client";
+import {
+  clientIdOf,
+  OFFERED_GRANTS,
+  registerClient,
+} from "@/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
-import type { ClientIndex } from "./client-index";
 
 export interface ClientView {
   clientId: string;
   name: string;
   type: "public" | "confidential";
   redirectUris: readonly string[];
+  /** As recorded on the client (both when nothing is); the token endpoint does not enforce it. */
+  grantTypes: readonly OAuthClientGrantType[];
   createdAt: Date;
 }
 
 export interface ClientsServiceOptions {
   /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
   db: Db;
-  index: ClientIndex;
   now?: () => Date;
 }
 
@@ -27,6 +34,27 @@ const slugOnly = (tenant: CliTenant) => tenant.slug;
 const MAX_NAME = 100;
 const MAX_REDIRECT_URIS = 20;
 const MAX_QUERY = 100;
+const MAX_CURSOR = 200;
+// A search reads the store page by page and keeps what matches; it stops
+// after this many reads and answers a short page with its cursor.
+const MAX_READS = 20;
+
+/** A capability the janus port leaves optional; the Mongo store has them all. */
+function capability<T>(method: T | undefined, name: string): T {
+  if (method === undefined) {
+    throw new Error(`the OAuth store has no ${name}()`);
+  }
+  return method;
+}
+
+const viewOf = (record: OAuthClientRecord): ClientView => ({
+  clientId: record.id,
+  name: record.name,
+  type: record.secretHash === undefined ? "public" : "confidential",
+  redirectUris: record.redirectUris,
+  grantTypes: record.grantTypes ?? OFFERED_GRANTS,
+  createdAt: record.createdAt,
+});
 
 function checkSizes(input: {
   name?: string | undefined;
@@ -48,10 +76,11 @@ function checkSizes(input: {
 
 /**
  * A tenant's OAuth clients for the console. The janus store is the truth (one
- * partition per tenant, so another tenant's client is "not found"); the
- * `clientIndex` shadow, kept by `registerClient`, is what lists them.
- * Creating reuses `registerClient`, so a console client follows the same rules
- * as one made by script. Deleting is idempotent.
+ * partition per tenant, so another tenant's client is "not found") and lists
+ * them (`listClients`); a record is mapped to a `ClientView`, so its
+ * `secretHash` never leaves this class. Creating reuses `registerClient`, so a console client follows the same rules
+ * as one made by script. Deleting revokes the client's grants and tokens and
+ * is idempotent.
  */
 export class ClientsService {
   constructor(private readonly options: ClientsServiceOptions) {}
@@ -70,7 +99,6 @@ export class ClientsService {
       {
         db: this.options.db,
         findTenant: async (slug) => (slug === tenant.slug ? tenant : undefined),
-        index: this.options.index,
         ...(this.options.now === undefined ? {} : { now: this.options.now }),
       },
       { ...input, tenant: slugOnly(tenant) },
@@ -92,35 +120,41 @@ export class ClientsService {
         `a search has at most ${MAX_QUERY} characters`,
       );
     }
-    const page = await this.options.index
-      .page(tenant._id, options)
-      .catch((error) => {
-        if (error instanceof InvalidCursorError) {
-          throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
-        }
-        throw error;
-      });
-    // The index says which clients and in what order; each is read from the
-    // janus store, the truth (one the store lost is left out).
-    const found = await Promise.all(
-      page.items.map((entry) => this.find(tenant, entry.clientId)),
+    if ((options.after?.length ?? 0) > MAX_CURSOR) {
+      throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
+    }
+    const listClients = capability(
+      this.storeOf(tenant).listClients,
+      "listClients",
     );
-    return {
-      items: found.filter((client) => client !== null),
-      nextCursor: page.nextCursor,
-    };
+    const needle = options.q?.trim().toLowerCase() ?? "";
+    const keep = (record: OAuthClientRecord) =>
+      record.source === "registered" &&
+      (needle === "" ||
+        record.name.toLowerCase().includes(needle) ||
+        record.id.includes(needle));
+    // The store lists in id order and has no search: each read asks for what
+    // the page still lacks, so a page never ends inside a read and the
+    // store's own cursor stays the page's.
+    const items: ClientView[] = [];
+    let cursor = options.after ?? undefined;
+    for (let reads = 0; reads < MAX_READS; reads += 1) {
+      const page = await listClients({
+        cursor,
+        limit: options.limit - items.length,
+      });
+      items.push(...page.items.filter(keep).map(viewOf));
+      if (page.nextCursor === null) return { items, nextCursor: null };
+      cursor = page.nextCursor;
+      if (items.length >= options.limit) break;
+    }
+    return { items, nextCursor: cursor ?? null };
   }
 
   async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {
     const record = await this.storeOf(tenant).findClient(clientId);
     if (record === null || record.source !== "registered") return null;
-    return {
-      clientId: record.id,
-      name: record.name,
-      type: record.secretHash === undefined ? "public" : "confidential",
-      redirectUris: record.redirectUris,
-      createdAt: record.createdAt,
-    };
+    return viewOf(record);
   }
 
   private async require(tenant: CliTenant, clientId: string) {
@@ -148,26 +182,11 @@ export class ClientsService {
     if (clientId !== "" && (await this.find(tenant, clientId)) !== null) {
       throw taken;
     }
-    // The id is claimed in the index first (its unique index decides between
-    // two creations of one id), then the client is written.
-    const claimed =
-      clientId !== "" &&
-      !(await this.options.index.claim(tenant._id, {
-        clientId,
-        name: input.name,
-        type: input.type,
-        redirectUris: input.redirectUris,
-      }));
-    if (claimed) throw taken;
     const registered = await this.register(tenant, {
       name: input.name,
       redirectUris: input.redirectUris,
       type: input.type,
       clientId,
-    }).catch(async (error) => {
-      if (clientId !== "")
-        await this.options.index.remove(tenant._id, clientId);
-      throw error;
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -223,15 +242,20 @@ export class ClientsService {
     };
   }
 
-  /** `false` when it was not there. Grants it held lapse with their tokens. */
+  /**
+   * `false` when it was not there. The client goes first (nothing new can be
+   * granted to it), then its standing grants and their tokens are revoked: on
+   * a repeat too, so a run that stopped between the two is finished.
+   */
   async delete(tenant: CliTenant, clientId: string): Promise<boolean> {
     const store = this.storeOf(tenant);
     const record = await store.findClient(clientId);
-    const removed =
-      record !== null && record.source === "registered"
-        ? await store.deleteClient(clientId)
-        : false;
-    await this.options.index.remove(tenant._id, clientId);
+    if (record !== null && record.source !== "registered") return false;
+    const removed = record !== null && (await store.deleteClient(clientId));
+    await capability(store.revokeClientGrants, "revokeClientGrants")(
+      clientId,
+      (this.options.now ?? (() => new Date()))(),
+    );
     return removed;
   }
 }
