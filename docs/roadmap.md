@@ -21,10 +21,9 @@ nxgt-janus release says which.
     ([#8](https://github.com/softistx/clavix-api/issues/8)). A suspended tenant refuses
     sign-ins and new tokens (tokens already issued live to expiry, the console stays readable).
     A deleted tenant goes to a 30-day trash, can be restored, then is purged; its slug stays
-    reserved. The API is in the M2 integration branch (tenants, plans, usage, suspension, trash);
-    the scheduled purge waits for janus
-    ([nxgt-janus#710](https://github.com/softistx/nxgt-janus/issues/710),
-    [#112](https://github.com/softistx/clavix-api/issues/112)).
+    reserved. The API and the scheduled daily purge of the trash are in the M2 integration branch
+    (tenants, plans, usage, suspension, trash; the purge uses janus's partition purges,
+    softistx/nxgt-janus#710, [#112](https://github.com/softistx/clavix-api/issues/112)).
   - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users,
     end-user roles and admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
   - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
@@ -35,8 +34,6 @@ nxgt-janus release says which.
     integration branch (add, verify, remove, make primary, a 6-hourly recheck with a 7-day
     grace, the TLS ask endpoint, the Related Origins document); the reverse-proxy
     configuration waits for the going-live slice.
-  - Sign-in methods and social providers per tenant
-    ([#12](https://github.com/softistx/clavix-api/issues/12)).
   - Going live: container images, a compose file with a reverse proxy (wildcard and on-demand
     TLS), health and readiness endpoints, a MongoDB backup and restore script with a restore
     drill, and a runbook.
@@ -78,6 +75,11 @@ nxgt-janus release says which.
 
 ## Shipped
 
+- **Sign-in methods and social providers per tenant** — a tenant turns passkey, e-mail code and
+  magic link on or off, and brings its own Google, GitHub or Microsoft app (secret sealed at rest,
+  never returned); the platform tenant always keeps passkey or e-mail code
+  ([#12](https://github.com/softistx/clavix-api/issues/12)):
+  [guide](guide/sign-in-methods.md).
 - **Dogfooding on Clavix** — our applications sign in through Clavix: the OIDC authorization
   server per issuer, users and sessions per tenant, passkeys and e-mailed codes, clients,
   resources and tenants registered by script, and a migration guide. Each piece is listed below.

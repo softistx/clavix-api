@@ -31,6 +31,7 @@ async function tenantOf(ctx: Context) {
 // policy changes), so they are made once per instance. Upstream need, to be
 // filed on nxgt-janus: `socialResolvers` taking a per-request auth source, as
 // `passkeyResolvers` does; this map goes then.
+// Temporary, until @softistx/janus-graphql#713
 const made = new WeakMap<TenantJanus, ReturnType<typeof socialResolvers>>();
 
 /** janus-graphql's social resolvers on the tenant's instance; `SIGN_IN_METHOD_DISABLED` for a tenant with no social provider. */
@@ -83,6 +84,11 @@ export const signInMethods: Resolvers = {
         ctx,
       );
     },
+    // No throttle of its own, on purpose: the budget is spent at
+    // `socialSignInStart`, and a flow is an unguessable single-use token that
+    // janus redeems before it calls the provider. A replayed or made-up flow
+    // is refused with no provider call (sign-in-methods.spec.ts), so this
+    // mutation cannot be used to spend the provider's quota.
     socialSignInComplete: async (_, { callbackUrl, flow }, ctx) => {
       await tenantOf(ctx);
       const { auth, resolvers } = await socialOfTenant(ctx);

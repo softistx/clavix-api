@@ -1,5 +1,6 @@
 import { OptimisticLockError } from "@softistx/mongo";
 import { GraphQLError } from "graphql";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
 import { type SecretBox, secretContext } from "./secrets";
@@ -7,6 +8,7 @@ import {
   hasSignInMethod,
   isAvailable,
   type MethodEntry,
+  type MethodType,
   methodsOf,
   type SignInPolicy,
   type SocialEntry,
@@ -27,6 +29,9 @@ export interface SocialInput {
 }
 
 const MAX = 512;
+
+/** The methods that need no outside provider. */
+const FIRST_PARTY: readonly MethodType[] = ["passkey", "emailCode"];
 
 function checked(name: string, value: string): string {
   const trimmed = value.trim();
@@ -78,14 +83,16 @@ export class SignInPolicyService {
       }
     }
     await this.get(tenantId);
-    return this.write(tenantId, ({ signIn }) => {
+    return this.write(tenantId, ({ signIn, slug }) => {
       const current = methodsOf(signIn);
       const methods = current.map(({ type, enabled }) => ({
         type,
         enabled: change.get(type) ?? enabled,
       }));
       if (same(methods, current)) return null;
-      return this.usable({ ...signIn, methods });
+      const next = { ...signIn, methods };
+      if (slug === PLATFORM_TENANT_SLUG) this.firstParty(next);
+      return this.usable(next);
     });
   }
 
@@ -183,6 +190,22 @@ export class SignInPolicyService {
       );
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * The platform tenant signs the console's operators in, so it always keeps
+   * a first-party method (passkey or e-mail code), whatever social providers
+   * it has: those depend on an outside provider.
+   */
+  private firstParty(policy: SignInPolicy): void {
+    const methods = methodsOf(policy);
+    if (!methods.some((m) => m.enabled && FIRST_PARTY.includes(m.type))) {
+      throw refusal(
+        "PLATFORM_FIRST_PARTY_METHOD",
+        "The platform tenant must keep passkey or e-mail code sign-in enabled",
+        409,
+      );
     }
   }
 

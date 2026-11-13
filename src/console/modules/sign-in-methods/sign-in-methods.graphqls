@@ -75,10 +75,13 @@ type Mutation {
   Turns methods on or off; a type left out keeps its value. Needs edit on the
   tenant. Idempotent: a call that changes nothing writes nothing.
   NO_SIGN_IN_METHOD (409) when it would leave the tenant no way to sign in (no
-  method and no social provider enabled); SIGN_IN_METHOD_UNAVAILABLE (409) when
-  it turns on a method that is not available; BAD_USER_INPUT (400) when a type
-  is given twice; CONFLICT (409) when other changes kept winning the race
-  (nothing stored: read the policy and send the change again).
+  method and no social provider enabled); PLATFORM_FIRST_PARTY_METHOD (409)
+  when it would leave the platform tenant with neither passkey nor e-mail code
+  enabled (a social provider does not count there);
+  SIGN_IN_METHOD_UNAVAILABLE (409) when it turns on a method that is not
+  available; BAD_USER_INPUT (400) when a type is given twice; CONFLICT (409)
+  when other changes kept winning the race (nothing stored: read the policy and
+  send the change again).
   """
   updateSignInMethods(
     tenantId: ID!

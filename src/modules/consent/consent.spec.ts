@@ -12,7 +12,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog } from "@/config/resources";
-import { tenantResolver } from "@/config/tenancy";
+import { tenantAdmin, tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -385,5 +385,37 @@ describe("a foreign page cannot decide", () => {
     );
     const body = (await response.json()) as GqlResult;
     expect(body.errors).toBeUndefined();
+  });
+});
+
+// Refused, no code minted. Which refusal depends on the order of the specs run
+// before this one (TENANT_SUSPENDED alone, UNAUTHENTICATED after the auth
+// specs); both are a refusal with no redirect.
+const expectRefused = (result: GqlResult) => {
+  expect(result.data?.["approveOAuthRequest"] ?? null).toBeNull();
+  expect(result.data?.["denyOAuthRequest"] ?? null).toBeNull();
+  expect(["TENANT_SUSPENDED", "UNAUTHENTICATED"]).toContain(
+    codeOf(result) ?? "",
+  );
+};
+
+describe("a tenant that is not live", () => {
+  test("a suspended or deleted tenant mints no code", async () => {
+    const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
+    if (acme === undefined) throw new Error("no acme");
+    const id = await authorize("acme");
+    try {
+      await tenants.suspend(acme._id);
+      for (const query of [APPROVE, DENY]) {
+        const result = await gql("acme", query, { id }, cookieOf("acme"));
+        expectRefused(result);
+      }
+      await tenants.delete(acme._id);
+      const deleted = await gql("acme", APPROVE, { id }, cookieOf("acme"));
+      expectRefused(deleted);
+    } finally {
+      await tenantAdmin.restore(acme._id.toHexString());
+      await tenants.reactivate(acme._id);
+    }
   });
 });

@@ -301,6 +301,32 @@ describe("social sign-in", () => {
     expect(replay.cookies).toEqual([]);
   });
 
+  test("a replayed or garbage flow costs no provider call (why socialSignInComplete needs no throttle of its own)", async () => {
+    const start = await startOn("sih-social");
+    const { calls, run } = github("hopper@social.example");
+    const vars = {
+      u: callbackOf("sih-social", start.state),
+      f: start.flow,
+    };
+    expect(
+      (await run(() => gql("sih-social", COMPLETE, vars))).errors,
+    ).toBeUndefined();
+    const spent = calls.length;
+    expect(spent).toBeGreaterThan(0);
+    const attempts = [
+      vars,
+      { ...vars, f: "not-a-flow" },
+      { u: "not a url", f: start.flow },
+      { u: callbackOf("sih-social", "forged-state"), f: "x".repeat(200) },
+    ];
+    for (const attempt of attempts) {
+      const answer = await run(() => gql("sih-social", COMPLETE, attempt));
+      expect(answer.errors).toBeDefined();
+      expect(answer.cookies).toEqual([]);
+    }
+    expect(calls.length).toBe(spent);
+  });
+
   test("a tenant with sign-up closed does not make a user from a stranger's account", async () => {
     const start = await startOn("sih-other");
     const { run } = github("stranger@social.example");
