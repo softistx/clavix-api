@@ -11,6 +11,14 @@ type AdminInvitation {
   role: Role!
   invitedAt: DateTime!
   expiresAt: DateTime!
+  "The operator who invited (the first sender; a resend keeps it). Null when a script did."
+  invitedBy: Inviter
+}
+
+"The operator who sent an invitation. `name` is null when the account is gone or has no name or e-mail."
+type Inviter {
+  id: ID!
+  name: String
 }
 
 extend type Query {
@@ -45,6 +53,16 @@ type Mutation {
   was not a member. Errors: LAST_OWNER (409) for the last owner.
   """
   removeMembership(tenantId: ID!, userId: ID!): Boolean!
+  """
+  Sends a pending invitation again (tenant owner): a new code and lifetime
+  (the old code stops working) and a new mail, naming the caller. Allowed on a
+  lapsed invitation too. Errors: NOT_FOUND (404) for an unknown tenant or an
+  invitation that is not this tenant's, INVITATION_NOT_PENDING (409) when it
+  was accepted or revoked, RESEND_TOO_SOON (429: it was sent, or sent again,
+  less than 60 s ago; `extensions.retryAfter` is the seconds to wait, nothing
+  was sent). `invitedBy` is unchanged.
+  """
+  resendAdminInvitation(tenantId: ID!, invitationId: ID!): AdminInvitation!
   "Revokes a pending invitation of the tenant (tenant owner). True also when there is none."
   revokeAdminInvitation(tenantId: ID!, invitationId: ID!): Boolean!
 }

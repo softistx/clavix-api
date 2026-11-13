@@ -8,6 +8,8 @@ export interface PendingInvitation {
   role: string;
   invitedAt: Date;
   expiresAt: Date;
+  /** The id of the user who invited, or `null` when the system did (a CLI). */
+  invitedBy: string | null;
 }
 
 interface StoredInvitation {
@@ -15,7 +17,10 @@ interface StoredInvitation {
   email: string;
   role: string;
   createdAt: Date;
+  /** Moves on a resend; an invitation is otherwise not written while pending. */
+  updatedAt: Date;
   expiresAt: Date;
+  invitedBy: string | null;
 }
 
 /** The slice of a tenant's janus instance the invitations use. */
@@ -40,6 +45,17 @@ export interface InvitationsAuth {
       items: readonly StoredInvitation[];
       nextCursor: string | null;
     }>;
+    get(input: {
+      id: string;
+      scope: string;
+    }): Promise<
+      (StoredInvitation & { status: "pending" | "accepted" | "revoked" }) | null
+    >;
+    resend(input: {
+      id: string;
+      scope: string;
+      by?: string;
+    }): Promise<{ code: string; invitation: StoredInvitation }>;
     revoke(input: { id: string; scope: string }): Promise<unknown>;
   };
 }
@@ -76,10 +92,54 @@ export interface InviteInput {
   invitedBy: { id: string; name?: string | undefined } | null;
 }
 
-/** The invitations of one tenant's user pool: issue and mail, list, revoke. */
+export interface ResendInput {
+  scope: string;
+  invitationId: string;
+  organization: string;
+  /** Who resends; named in the e-mail and kept by janus as `resentBy`. */
+  by: { id: string; name?: string | undefined };
+}
+
+/** Why an invitation was not sent again. */
+export type ResendRefusal =
+  | "NOT_FOUND"
+  | "INVITATION_NOT_PENDING"
+  | "RESEND_TOO_SOON";
+
+/** `resend` refused: nothing was renewed and no mail went out. */
+export class ResendRefusedError extends Error {
+  constructor(
+    readonly code: ResendRefusal,
+    /** `RESEND_TOO_SOON` only: whole seconds until it may be sent again. */
+    readonly retryAfter?: number,
+  ) {
+    super(code);
+    this.name = "ResendRefusedError";
+  }
+}
+
+/** The least time between two sends of one invitation. */
+export const RESEND_COOLDOWN_MS = 60_000;
+
+export interface InvitationsOptions {
+  /** The clock; tests move it. */
+  now?: () => number;
+  cooldownMs?: number;
+}
+
+/** The invitations of one tenant's user pool: issue and mail, resend, list, revoke. */
 export interface TenantInvitations {
   /** Issues the invitation (a pending one of the same scope and address is replaced) and mails its link. */
   invite(input: InviteInput): Promise<PendingInvitation>;
+  /**
+   * Sends a pending invitation again — lapsed or not — with a new code and a
+   * new lifetime (the old code stops working), and mails the new link. Throws
+   * `ResendRefusedError`: `NOT_FOUND` (not this scope's), `INVITATION_NOT_PENDING`
+   * (accepted or revoked), `RESEND_TOO_SOON` (sent, or sent again, less than
+   * the cooldown ago). The check and the write are not atomic: serialise the
+   * calls for one invitation.
+   */
+  resend(input: ResendInput): Promise<PendingInvitation>;
   /** The pending, unlapsed invitations of the scope, all of them. */
   pending(scope: string): Promise<PendingInvitation[]>;
   /** Revokes a pending invitation of the scope; `false` when it is not one. */
@@ -92,6 +152,7 @@ const toPending = (invitation: StoredInvitation): PendingInvitation => ({
   role: invitation.role,
   invitedAt: invitation.createdAt,
   expiresAt: invitation.expiresAt,
+  invitedBy: invitation.invitedBy,
 });
 
 /** The tenant is missing or suspended: the call did nothing. */
@@ -109,6 +170,7 @@ export class TenantUnavailableError extends Error {
  */
 export function createTenantInvitations(
   source: () => Promise<InvitationSource | null>,
+  { now = Date.now, cooldownMs = RESEND_COOLDOWN_MS }: InvitationsOptions = {},
 ): TenantInvitations {
   const need = async () => {
     const found = await source();
@@ -136,6 +198,49 @@ export function createTenantInvitations(
         },
       );
       return toPending(issued.invitation);
+    },
+    async resend({ scope, invitationId, organization, by }) {
+      const { auth, mail, link } = await need();
+      const found = await auth.invitations.get({ id: invitationId, scope });
+      if (found === null) throw new ResendRefusedError("NOT_FOUND");
+      if (found.status !== "pending") {
+        throw new ResendRefusedError("INVITATION_NOT_PENDING");
+      }
+      const wait = found.updatedAt.getTime() + cooldownMs - now();
+      if (wait > 0) {
+        throw new ResendRefusedError("RESEND_TOO_SOON", Math.ceil(wait / 1000));
+      }
+      let sent: Awaited<ReturnType<typeof auth.invitations.resend>>;
+      try {
+        sent = await auth.invitations.resend({
+          id: invitationId,
+          scope,
+          by: by.id,
+        });
+      } catch (error) {
+        // Accepted or revoked between the read and the write.
+        if (error instanceof JanusError && error.code === "NOT_FOUND") {
+          throw new ResendRefusedError("NOT_FOUND");
+        }
+        if (
+          error instanceof JanusError &&
+          error.code === "INVITATION_NOT_PENDING"
+        ) {
+          throw new ResendRefusedError("INVITATION_NOT_PENDING");
+        }
+        throw error;
+      }
+      await mail.invitation(
+        { email: sent.invitation.email },
+        {
+          ...(by.name === undefined ? {} : { inviter: by.name }),
+          organization,
+          role: sent.invitation.role,
+          link: link(sent.code),
+          expiresAt: sent.invitation.expiresAt,
+        },
+      );
+      return toPending(sent.invitation);
     },
     async pending(scope) {
       const { auth } = await need();

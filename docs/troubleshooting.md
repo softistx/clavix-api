@@ -352,6 +352,22 @@ remove this one. Of two owners removed at the same moment, the second is refused
 
 The address already holds a role on the tenant. Change it with `changeMembership`.
 
+### `RESEND_TOO_SOON` (429) on `resendAdminInvitation`
+
+The invitation was sent, or sent again, less than 60 seconds ago. Nothing was renewed and no mail
+went out. `extensions.retryAfter` (and the `Retry-After` header) is the seconds to wait. The delay
+is per invitation: a second invitation of the tenant can be resent at once. The mail may be slow
+rather than lost; check the spam folder before sending again. If the mail itself failed (a 5xx
+after the renewal), the old code is already dead: wait the 60 s and resend.
+
+### `INVITATION_NOT_PENDING` (409) or `NOT_FOUND` (404) on `resendAdminInvitation`
+
+`INVITATION_NOT_PENDING`: the invitation was accepted or revoked, so there is nothing to renew. If
+it was revoked, invite the address again with `inviteAdmin`; if it was accepted, the address already
+holds the role. `NOT_FOUND`: the tenant does not exist (or is suspended), or the id is not one of
+this tenant's invitations (an id of another tenant is as unknown). A lapsed pending invitation is
+not an error: resending it renews it.
+
 ### `BAD_USER_INPUT` (400) `userId is not an id` / `invitationId is not an id`, and `NOT_FOUND` `No such tenant`, on the membership mutations
 
 The id is empty or longer than 200 characters, or `tenantId` is not 24 hexadecimal characters.
