@@ -45,7 +45,7 @@ export interface TenantAdminOptions {
   /** As `TenantsServiceOptions.onHostsChanged`: after the write, errors logged and swallowed. */
   onHostsChanged?: (hosts: string[]) => void | Promise<void>;
   /**
-   * The tenant's custom (verified) hosts, dropped with its slug host on each
+   * Every custom host that resolves to the tenant (verified, or a lapsed primary), dropped with its slug host on each
    * write: a suspended or deleted tenant must stop resolving on them at once.
    * Default: none. An error is logged and the slug host is still dropped.
    */
