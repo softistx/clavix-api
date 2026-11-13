@@ -242,6 +242,16 @@ id and the secret together; later calls may leave the secret out to keep the sto
 A method type is given twice in `updateSignInMethods`, a new provider has no `clientId`, or a
 `clientId` or `clientSecret` is empty or longer than allowed.
 
+### `CONFLICT` (409)
+
+Other changes to the same tenant were stored between the read and the write, three times in a row.
+Nothing was stored. Read the policy and send the change again.
+
+### `EMAIL_UNVERIFIED` (403) on `socialSignInComplete` with Microsoft
+
+The ID token has no `xms_edov` claim, so the account's e-mail does not count as verified. Add
+`xms_edov` as an optional claim of the app registration (Token configuration) in Microsoft Entra.
+
 ### `SIGN_UP_DISABLED` (403) on `socialSignInComplete`
 
 The provider account's e-mail belongs to no user of the tenant, and the tenant's sign-up is closed.

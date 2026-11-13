@@ -150,6 +150,21 @@ describe("a method the tenant turned off", () => {
     expect((await gql("sih-open", PASSKEY_OPTIONS)).errors).toBeUndefined();
   });
 
+  test("the second step of each method is closed too", async () => {
+    const passkey = await gql(
+      "sih-social",
+      `mutation { signInWithPasskey(challenge: "c", response: "{}") { expiresAt } }`,
+    );
+    expect(codeOf(passkey)).toBe("SIGN_IN_METHOD_DISABLED");
+    await policy.updateMethods(social, [{ type: "emailCode", enabled: false }]);
+    const code = await gql(
+      "sih-social",
+      `mutation { verifySignInCode(challenge: "c", code: "000000") { expiresAt } }`,
+    );
+    expect(codeOf(code)).toBe("SIGN_IN_METHOD_DISABLED");
+    await policy.updateMethods(social, [{ type: "emailCode", enabled: true }]);
+  });
+
   test("the e-mail code answers SIGN_IN_METHOD_DISABLED once it is off", async () => {
     await policy.updateMethods(social, [{ type: "emailCode", enabled: false }]);
     const answer = await gql("sih-social", REQUEST_CODE);
@@ -271,6 +286,39 @@ describe("social sign-in", () => {
     expect(codeOf(answer)).toBe("SIGN_UP_DISABLED");
     expect(answer.cookies).toEqual([]);
     expect(answer.text).not.toContain(SECRET);
+  });
+
+  test("a flow begun before the provider was removed cannot be completed", async () => {
+    const start = await startOn("sih-other");
+    await policy.removeSocial(other, "github");
+    const { calls, run } = github("late@social.example");
+    const answer = await run(() =>
+      gql("sih-other", COMPLETE, {
+        u: callbackOf("sih-other", start.state),
+        f: start.flow,
+      }),
+    );
+    expect(codeOf(answer)).toBe("SIGN_IN_METHOD_DISABLED");
+    expect(answer.cookies).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  test("a provider whose secret was sealed under another master key is not offered", async () => {
+    await mongo.db.tenants.raw.updateOne(
+      { slug: "sih-social" },
+      {
+        $set: { "signIn.social.0.secret.kid": "another-key" },
+        $inc: { version: 1 },
+      },
+    );
+    await tenantResolver.invalidate([
+      new URL(issuerOf("sih-social", origin)).host,
+    ]);
+    const hosted = await gql("sih-social", HOSTED);
+    expect(hosted.data?.["hostedSignInMethods"]).toMatchObject({ social: [] });
+    const answer = await gql("sih-social", START, { p: "github" });
+    expect(codeOf(answer)).toBe("SIGN_IN_METHOD_DISABLED");
+    expect(answer.text).not.toContain("github");
   });
 });
 

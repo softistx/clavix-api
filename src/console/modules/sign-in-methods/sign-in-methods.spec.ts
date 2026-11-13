@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { OptimisticLockError } from "@softistx/mongo";
+import type { GraphQLError } from "graphql";
+import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
+import { adminEventRecorder } from "@/config/admin-events";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -8,6 +12,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { secretContext } from "@/modules/sign-in-methods/secrets";
+import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { socialProvidersOf } from "@/modules/sign-in-methods/social";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -54,6 +59,7 @@ const as = async (
         scopes: ["console"],
       }),
       access,
+      adminEvents: adminEventRecorder,
       directory: { findUser: async () => null, tenantsByIds: async () => [] },
     },
   }).request(`http://localhost${CONSOLE_PATH}`, {
@@ -117,7 +123,20 @@ afterAll(async () => {
     slug: { $nin: [PLATFORM_TENANT_SLUG] },
   });
   await oauthDb.collection("relations").deleteMany({});
+  await mongo.db.adminEvents.raw.deleteMany({});
 });
+
+const eventsOf = async (tenantId: string) =>
+  (
+    await mongo.db.adminEvents.raw
+      .find({ tenantId: new ObjectId(tenantId) })
+      .sort({ _id: 1 })
+      .toArray()
+  ).map((event) => ({
+    actor: event["actor"],
+    action: event["action"],
+    target: event["target"],
+  }));
 
 describe("the contract", () => {
   test("no type of the console schema can return a secret", () => {
@@ -465,5 +484,73 @@ describe("the social providers", () => {
       new Request(issuerOf("sim-a", origin)),
     );
     expect(janus === null ? "none" : socialOf(janus)).toBeNull();
+  });
+});
+
+describe("admin events", () => {
+  test("each mutation recorded who did what to which target, and no secret; refusals recorded nothing", async () => {
+    const events = await eventsOf(a);
+    expect(events).toContainEqual({
+      actor: ADMIN_A,
+      action: "signInPolicy.update",
+      target: { type: "signInPolicy", id: a },
+    });
+    expect(events).toContainEqual({
+      actor: ADMIN_A,
+      action: "socialProvider.set",
+      target: { type: "socialProvider", id: "google" },
+    });
+    expect(events).toContainEqual({
+      actor: OWNER_A,
+      action: "socialProvider.remove",
+      target: { type: "socialProvider", id: "google" },
+    });
+    expect(events.some((event) => event.actor === VIEWER_A)).toBe(false);
+    const all = await mongo.db.adminEvents.raw.find({}).toArray();
+    expect(JSON.stringify(all)).not.toContain(SECRET);
+    expect(JSON.stringify(all)).not.toContain("google-id");
+    // Tenant B's refused changes (NO_SIGN_IN_METHOD, unavailable, duplicate) left no event.
+    expect(
+      (await eventsOf(b)).filter((event) => event.actor !== ADMIN_B),
+    ).toEqual([]);
+  });
+});
+
+describe("concurrent changes", () => {
+  test("two admins each turning off a different last method: one is refused, a method stays", async () => {
+    const id = (await tenantsService.create({ slug: "sim-race", name: "R" }))
+      .id;
+    await access.grantTenant(id, ADMIN_A, "admin");
+    const [first, second] = await Promise.all([
+      as(ADMIN_A, METHODS, { t: id, m: [{ type: "PASSKEY", enabled: false }] }),
+      as(ADMIN_A, METHODS, {
+        t: id,
+        m: [{ type: "EMAIL_CODE", enabled: false }],
+      }),
+    ]);
+    expect([codeOf(first), codeOf(second)].sort()).toEqual([
+      "NO_SIGN_IN_METHOD",
+      undefined,
+    ] as unknown as string[]);
+    expect(enabledOf(await policyOf(ADMIN_A, id))).toHaveLength(1);
+  });
+
+  test("a change that keeps losing the race is CONFLICT (409), nothing stored", async () => {
+    const lost = new SignInPolicyService(
+      {
+        activeByIds: tenantsService.activeByIds.bind(tenantsService),
+        updateSignIn: async () => {
+          throw Object.create(OptimisticLockError.prototype);
+        },
+      } as unknown as typeof tenantsService,
+      secretBox,
+    );
+    const refusal = await lost
+      .updateMethods(b, [{ type: "magicLink", enabled: true }])
+      .catch((error: unknown) => error);
+    expect((refusal as GraphQLError).extensions).toMatchObject({
+      code: "CONFLICT",
+      http: { status: 409 },
+    });
   });
 });

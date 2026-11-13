@@ -96,6 +96,11 @@ mutation ($tenantId: ID!, $secret: String!) {
 - Later calls change only what they send: `{ provider: GITHUB, enabled: false }` turns it off and
   keeps the app; `{ provider: GITHUB, clientSecret: $new }` rotates the secret.
 - `removeSocialProvider(tenantId, provider)` deletes the app and its secret.
+- **Microsoft**: an account's e-mail counts as verified only when the ID token carries the
+  `xms_edov` claim. Add it as an optional claim of the app registration (Token configuration);
+  without it every sign-up is refused `EMAIL_UNVERIFIED`.
+- Each mutation records an admin event (`signInPolicy.update`, `socialProvider.set`,
+  `socialProvider.remove`): the actor, the tenant and the provider, never the client id or secret.
 - A new user is created from a provider account only when the tenant's sign-up is open; otherwise
   the account's verified e-mail must already belong to a user of the tenant.
 
@@ -105,6 +110,7 @@ mutation ($tenantId: ID!, $secret: String!) {
 | ---------------------------- | ---- | --------------------------------------------------------------------------------------- |
 | `FORBIDDEN`                  |      | the caller lacks the permission on that tenant                                          |
 | `NOT_FOUND`                  | 404  | a platform operator names an unknown or inactive tenant                                 |
+| `CONFLICT`                   | 409  | other changes to the tenant kept winning; nothing stored, read and retry                |
 | `NO_SIGN_IN_METHOD`          | 409  | the change would leave no enabled method and no enabled provider                        |
 | `SIGN_IN_METHOD_UNAVAILABLE` | 409  | enabling a method with `available: false` (`PASSWORD`)                                  |
 | `SOCIAL_SECRET_REQUIRED`     | 400  | a provider set for the first time without `clientSecret`                                |
@@ -129,7 +135,8 @@ Every mutation is idempotent: the same call again changes nothing, and `version`
 ```
 
 Public, by host; an unknown host is `NOT_FOUND`. It lists only what is enabled, and never a client
-id or a secret. Show a button per entry and nothing else: an operation of a method that is off
+id or a secret. A provider whose secret was sealed under another master key is left out until its
+secret is entered again. Show a button per entry and nothing else: an operation of a method that is off
 answers 404 `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) before anything is
 counted or mailed.
 

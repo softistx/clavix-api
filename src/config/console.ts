@@ -4,6 +4,7 @@ import type { ConsoleDeps } from "@/console/plugin";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
+import { adminEventRecorder } from "./admin-events";
 import { env } from "./env";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
@@ -40,6 +41,7 @@ export function createConsoleDeps(
       },
     }),
     access,
+    adminEvents: adminEventRecorder,
     directory: {
       findUser: async (id) => {
         const tenant = await clavixTenant();

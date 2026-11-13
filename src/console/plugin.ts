@@ -1,5 +1,6 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
+import type { AdminEventRecorder } from "./admin-events/recorder";
 import type { ConsoleDirectory, ConsoleExtras } from "./context";
 
 /** Verifies the request's bearer token: its principal, or `null`. A store outage rejects. */
@@ -11,6 +12,8 @@ export interface ConsoleDeps {
   authenticate: ConsoleAuthenticate;
   access: Access;
   directory: ConsoleDirectory;
+  /** Where `ctx.audit` appends its events. */
+  adminEvents: AdminEventRecorder;
 }
 
 const refusal = (
@@ -34,12 +37,27 @@ const refusal = (
 /**
  * The console's Yoga plugin: the bearer token is verified before anything is
  * parsed (no token, a forged, expired or other-audience one: 401; the store
- * down: 503), then `principal`, `can` and `canPlatform` ride on the context.
+ * down: 503), then `principal`, `can`, `canPlatform` and `audit` ride on the context.
  * No cookie is read and no tenant is resolved from the host: the token is the
  * whole credential.
  */
-export function useConsole({ authenticate, access, directory }: ConsoleDeps) {
+export function useConsole({
+  authenticate,
+  access,
+  directory,
+  adminEvents,
+}: ConsoleDeps) {
   const principals = new WeakMap<Request, OAuthPrincipal>();
+  // Ours, one per HTTP request: a client's `x-request-id` is never believed.
+  const requestIds = new WeakMap<Request, string>();
+  const requestIdOf = (request: Request) => {
+    let requestId = requestIds.get(request);
+    if (requestId === undefined) {
+      requestId = crypto.randomUUID();
+      requestIds.set(request, requestId);
+    }
+    return requestId;
+  };
   return {
     async onRequest({
       request,
@@ -92,6 +110,15 @@ export function useConsole({ authenticate, access, directory }: ConsoleDeps) {
           access.can(principal.userId, permission, tenantId),
         canPlatform: (permission) =>
           access.canPlatform(principal.userId, permission),
+        // The actor is the token's user, never an argument.
+        audit: (action, target) =>
+          adminEvents.record({
+            actor: principal.userId,
+            action,
+            tenantId: target.tenantId,
+            target: { type: target.type, id: target.id },
+            requestId: requestIdOf(context.request),
+          }),
       });
     },
   };

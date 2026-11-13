@@ -9,6 +9,7 @@ import {
 import { callbackUrlOf } from "@/modules/sign-in-methods/social";
 import { issuerOf } from "@/modules/tenants/identity";
 import type { Tenant } from "@/modules/tenants/tenants.model";
+import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { signInPolicyService as service } from "./wiring";
 
@@ -71,26 +72,56 @@ export const signInMethods: Resolvers = {
       policyOf(await service.get(tenantId)),
   },
   Mutation: {
-    updateSignInMethods: async (_, { tenantId, methods }) =>
-      policyOf(
-        await service.updateMethods(
-          tenantId,
-          methods.map(({ type, enabled }) => ({
-            type: storedOf(METHOD, type),
-            enabled,
-          })),
-        ),
-      ),
-    setSocialProvider: async (_, { tenantId, input }) =>
-      policyOf(
-        await service.setSocial(tenantId, {
-          provider: storedOf(KIND, input.provider),
-          clientId: input.clientId ?? undefined,
-          clientSecret: input.clientSecret ?? undefined,
-          enabled: input.enabled ?? undefined,
-        }),
-      ),
-    removeSocialProvider: async (_, { tenantId, provider }) =>
-      policyOf(await service.removeSocial(tenantId, storedOf(KIND, provider))),
+    // Each records its admin event once the change is stored, and on a repeat
+    // that changed nothing too (the retry of a call whose record failed must
+    // not leave the change with no event). Identifiers only, never a secret.
+    updateSignInMethods: async (_, { tenantId, methods }, ctx) => {
+      const tenant = await service.updateMethods(
+        tenantId,
+        methods.map(({ type, enabled }) => ({
+          type: storedOf(METHOD, type),
+          enabled,
+        })),
+      );
+      // A tenant has one policy, so the tenant's id names it.
+      await ctx.audit("signInPolicy.update", {
+        type: "signInPolicy",
+        id: tenantId,
+        tenantId,
+      });
+      return policyOf(tenant);
+    },
+    setSocialProvider: async (_, { tenantId, input }, ctx) => {
+      const provider = storedOf(KIND, input.provider);
+      const tenant = await service.setSocial(tenantId, {
+        provider,
+        clientId: input.clientId ?? undefined,
+        clientSecret: input.clientSecret ?? undefined,
+        enabled: input.enabled ?? undefined,
+      });
+      await ctx.audit("socialProvider.set", {
+        type: "socialProvider",
+        id: provider,
+        tenantId,
+      });
+      return policyOf(tenant);
+    },
+    removeSocialProvider: async (_, { tenantId, provider: kind }, ctx) => {
+      const provider = storedOf(KIND, kind);
+      const tenant = await service.removeSocial(tenantId, provider);
+      await ctx.audit("socialProvider.remove", {
+        type: "socialProvider",
+        id: provider,
+        tenantId,
+      });
+      return policyOf(tenant);
+    },
   },
+};
+
+/** The audit action of each mutation (audit.spec.ts). */
+export const signInMethodsAudits: Audits = {
+  "Mutation.updateSignInMethods": "signInPolicy.update",
+  "Mutation.setSocialProvider": "socialProvider.set",
+  "Mutation.removeSocialProvider": "socialProvider.remove",
 };

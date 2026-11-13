@@ -77,7 +77,8 @@ type Mutation {
   NO_SIGN_IN_METHOD (409) when it would leave the tenant no way to sign in (no
   method and no social provider enabled); SIGN_IN_METHOD_UNAVAILABLE (409) when
   it turns on a method that is not available; BAD_USER_INPUT (400) when a type
-  is given twice.
+  is given twice; CONFLICT (409) when other changes kept winning the race
+  (nothing stored: read the policy and send the change again).
   """
   updateSignInMethods(
     tenantId: ID!
@@ -87,12 +88,14 @@ type Mutation {
   Sets the tenant's own app for a social provider. Needs edit on the tenant.
   Idempotent. BAD_USER_INPUT (400) for a new provider without `clientId`,
   SOCIAL_SECRET_REQUIRED (400) for one without `clientSecret`,
-  NO_SIGN_IN_METHOD (409) when disabling it would leave no way to sign in.
+  NO_SIGN_IN_METHOD (409) when disabling it would leave no way to sign in,
+  CONFLICT (409) as above.
   """
   setSocialProvider(tenantId: ID!, input: SocialProviderInput!): SignInPolicy!
   """
   Removes the tenant's app for a provider, and its secret. Needs edit on the
-  tenant. Idempotent. NO_SIGN_IN_METHOD (409) when it was the last way to sign in.
+  tenant. Idempotent. NO_SIGN_IN_METHOD (409) when it was the last way to sign
+  in, CONFLICT (409) as above.
   """
   removeSocialProvider(
     tenantId: ID!
