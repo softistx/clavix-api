@@ -462,7 +462,7 @@ text and indicators) in light or dark. `extensions.failures` lists each pair (`f
 means a pair that could not be solved.
 
 **Fix:** pick a seed closer to mid lightness and less saturated, or drop the background preset, and
-send the call again. A colour the library cannot read, an unsafe radius, an unknown preset or motif, or
+send the call again. A colour the library cannot read, an unsafe radius, an unknown preset or motif, unsafe generated CSS (see below), or
 a logo that is not a PNG, JPEG or WebP of at most 256 KiB (checked by its bytes) is `BAD_USER_INPUT`
 with `extensions.field` instead. `CONFLICT` (409) means other calls changed the brand at the same
 time: read it and send the call again.
@@ -472,7 +472,8 @@ time: read it and send the call again.
 **When:** `updateBranding` answers `400` with `extensions.field: "css"`.
 
 **Why:** the stylesheet a tenant brand would store contains `<`, `@import`, `url(`, `image-set(`, `src(` or
-a backslash (case-insensitive, CSS comments stripped first). The hosted pages put the CSS in a `<style>`,
+a backslash (case-insensitive; `<` and the backslash even inside a comment, the other tokens once CSS
+comments are stripped); `image(` and `cross-fade(` are refused too. The hosted pages put the CSS in a `<style>`,
 so none of these may be stored; the UI refuses them at read too. The generator never writes them for a
 valid brand, so this means a changed generator or an injected compiler. Every write path (the console
 mutation and any script) goes through `buildTheme`, so nothing was stored. A brand stored earlier is

@@ -150,9 +150,17 @@ describe("the unsafe-CSS guard", () => {
     }
   });
 
-  test("accepts the generated stylesheet and a word that only contains the tokens inside a comment", () => {
+  test("refuses < and a backslash even inside a comment", () => {
+    for (const css of ["a{} /* </style><script> */", "a{} /* \\ */"]) {
+      expect(() => assertSafeCss(css)).toThrow(
+        expect.objectContaining({ code: "BAD_USER_INPUT", field: "css" }),
+      );
+    }
+  });
+
+  test("accepts the generated stylesheet and a comment that only holds the other tokens", () => {
     expect(() => assertSafeCss(buildTheme(base).compiled.css)).not.toThrow();
-    expect(() => assertSafeCss("a{b:c} /* url( @import < \\ */")).not.toThrow();
+    expect(() => assertSafeCss("a{b:c} /* url( @import */")).not.toThrow();
   });
 
   test("a compiler that returns unsafe css is refused before anything is stored", () => {
