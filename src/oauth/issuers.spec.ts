@@ -302,13 +302,13 @@ describe("unknown and suspended hosts", () => {
     }
   });
 
-  test("a suspended tenant is 404 until reactivated", async () => {
+  test("a suspended tenant keeps its discovery (tokens already issued live to expiry)", async () => {
     await tenants.create({ slug: "paused", name: "Paused" });
     const path = "/.well-known/oauth-authorization-server";
     expect((await get("paused", path)).status).toBe(200);
     const tenant = await resolver.resolveHost(`paused.${DOMAIN}`);
     await tenants.suspend(tenant?.tenantId ?? "");
-    expect((await get("paused", path)).status).toBe(404);
+    expect((await get("paused", path)).status).toBe(200);
     await tenants.reactivate(tenant?.tenantId ?? "");
     expect((await get("paused", path)).status).toBe(200);
   });
