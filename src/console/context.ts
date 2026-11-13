@@ -26,6 +26,8 @@ export interface AdminInvitation {
   role: Role;
   invitedAt: Date;
   expiresAt: Date;
+  /** The id of the operator who invited; `null` when the system did (a script). */
+  invitedBy: string | null;
 }
 
 /**
@@ -43,6 +45,17 @@ export interface ConsoleAdmins {
   }): Promise<AdminInvitation>;
   /** The pending, unlapsed invitations of the tenant. */
   invitations(tenantId: string): Promise<AdminInvitation[]>;
+  /**
+   * Sends one of the tenant's pending invitations again: a new code and
+   * lifetime, a new mail. Throws `ResendRefusedError` (not found, not pending,
+   * sent less than a minute ago).
+   */
+  resend(input: {
+    tenantId: string;
+    tenantName: string;
+    invitationId: string;
+    by: { id: string; name?: string | undefined };
+  }): Promise<AdminInvitation>;
   /** Revokes one of the tenant's invitations; `false` when it is not a pending one of this tenant. */
   revoke(tenantId: string, invitationId: string): Promise<boolean>;
 }

@@ -177,21 +177,27 @@ curl -s https://api.clavix.example/console/graphql \
 
 A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `viewer` on it.
 `memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
-email, role)`, `changeMembership`, `removeMembership` and `revokeAdminInvitation` need `manage` (the
+email, role)`, `changeMembership`, `removeMembership`, `resendAdminInvitation` and `revokeAdminInvitation` need `manage` (the
 tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
 `admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
 That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
 host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
 revoked or lapsed code is `INVITATION_INVALID`, 400) and, for a new account, opens the session. Inviting an address that is
-already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it. The
+already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it (new id, new inviter).
+`resendAdminInvitation(tenantId, invitationId)` instead renews the same invitation: a new code and
+lifetime, a new mail naming the caller, the old code stops working, a lapsed invitation is allowed.
+It is `NOT_FOUND` (404) for an id that is not this tenant's, `INVITATION_NOT_PENDING` (409) once
+accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60 s of the last send of
+that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
+a script did); a resend keeps it. The
 last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409). Role changes of one
 tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
 within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
 already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they
 sign in as usual. An invitation to a suspended or deleted tenant is `INVITATION_INVALID` until it is back.
 
-Each of the four mutations that succeeds records an admin event (see "Admin events"), repeats included:
-`membership.invite` and `membership.revokeInvitation` (target: the invitation's id, never the
+Each of the five mutations that succeeds records an admin event (see "Admin events"), repeats included:
+`membership.invite`, `membership.resendInvitation` and `membership.revokeInvitation` (target: the invitation's id, never the
 address), `membership.change` and `membership.remove` (target: the user's id). Accepting an
 invitation is the invitee's act on the hosted API and records none. A `userId` or `invitationId`
 longer than 200 characters is `BAD_USER_INPUT` (400); a `tenantId` is 24 hexadecimal characters, in

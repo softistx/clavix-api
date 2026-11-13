@@ -765,3 +765,172 @@ describe("admin events", () => {
     expect((await eventsOf()).length).toBe(before + 2);
   });
 });
+
+describe("resending an invitation", () => {
+  let tenant = "";
+  let renewedId = "";
+  const resend = (bearer: string, id: string, on = tenant) =>
+    asConsole(
+      bearer,
+      `mutation { resendAdminInvitation(tenantId: "${on}", invitationId: "${id}") { id email expiresAt invitedBy { id name } } }`,
+    );
+  // The cooldown reads janus's `updatedAt`: age the invitation instead of waiting.
+  const age = (email: string, set: Record<string, Date> = {}) =>
+    oauthDb.collection("partitionedInvitations").updateMany(
+      { email },
+      {
+        $set: { updatedAt: new Date(Date.now() - 120_000), ...set },
+      },
+    );
+  const events = async () =>
+    (
+      await mongo.db.adminEvents.raw
+        .find({
+          tenantId: new ObjectId(tenant),
+          action: "membership.resendInvitation",
+        })
+        .toArray()
+    ).map(({ actor, target }) => ({ actor, target }));
+
+  beforeAll(async () => {
+    tenant = (await tenantsService.create({ slug: "adm-rs", name: "Resend" }))
+      .id;
+    await access.grantTenant(tenant, ownA, "owner");
+    await access.grantTenant(tenant, ownA2, "owner");
+    await access.grantTenant(tenant, admA, "admin");
+  });
+
+  test("an invitation says who invited, by id and display name", async () => {
+    const invited = await asConsole(
+      ownA,
+      `mutation { inviteAdmin(tenantId: "${tenant}", email: "by@adm.test", role: VIEWER) { invitedBy { id name } } }`,
+    );
+    expect(invited.data?.["inviteAdmin"].invitedBy).toEqual({
+      id: ownA,
+      name: "own-a@adm.test",
+    });
+    const listed = await asConsole(
+      ownA,
+      `{ adminInvitations(tenantId: "${tenant}") { email invitedBy { id name } } }`,
+    );
+    expect(
+      listed.data?.["adminInvitations"].find(
+        (i: { email: string }) => i.email === "by@adm.test",
+      ).invitedBy,
+    ).toEqual({ id: ownA, name: "own-a@adm.test" });
+  });
+
+  test("a resend renews the invitation: new code and mail, the old code stops, invitedBy stays", async () => {
+    const email = "renew@adm.test";
+    const id = (await invite(ownA, tenant, email, "VIEWER")).data?.[
+      "inviteAdmin"
+    ].id as string;
+    renewedId = id;
+    const first = codeMailedTo(email);
+    await age(email, { expiresAt: new Date(Date.now() + 1000) });
+    const sent = await resend(ownA2, id);
+    expect(sent.errors).toBeUndefined();
+    expect(sent.data?.["resendAdminInvitation"].id).toBe(id);
+    expect(sent.data?.["resendAdminInvitation"].invitedBy.id).toBe(ownA);
+    expect(
+      new Date(sent.data?.["resendAdminInvitation"].expiresAt).getTime(),
+    ).toBeGreaterThan(Date.now() + 24 * 3_600_000);
+    const second = codeMailedTo(email);
+    expect(second).toBeDefined();
+    expect(second).not.toBe(first);
+    expect(
+      code(
+        await post(
+          hosted,
+          `mutation { acceptInvitation(code: "${first}") { signedIn } }`,
+        ),
+      ),
+    ).toBe("INVITATION_INVALID");
+    const accepted = await post(
+      hosted,
+      `mutation { acceptInvitation(code: "${second}") { signedIn } }`,
+    );
+    expect(accepted.errors).toBeUndefined();
+  });
+
+  test("a lapsed invitation can be sent again", async () => {
+    const email = "lapsed@adm.test";
+    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
+      .id as string;
+    await age(email, { expiresAt: new Date(Date.now() - 1000) });
+    expect((await resend(ownA, id)).errors).toBeUndefined();
+  });
+
+  test("a second resend within a minute is RESEND_TOO_SOON (429): nothing sent, no event", async () => {
+    const email = "soon@adm.test";
+    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
+      .id as string;
+    // Just invited: the invitation's own send counts.
+    const before = memory.sent.length;
+    const early = await resend(ownA, id);
+    expect(code(early)).toBe("RESEND_TOO_SOON");
+    expect(early.errors?.[0]?.extensions).toMatchObject({
+      retryAfter: expect.any(Number),
+    });
+    expect(memory.sent.length).toBe(before);
+    await age(email);
+    expect((await resend(ownA, id)).errors).toBeUndefined();
+    expect(code(await resend(ownA, id))).toBe("RESEND_TOO_SOON");
+    expect((await events()).filter((e) => e.target.id === id).length).toBe(1);
+  });
+
+  test("two concurrent resends send one mail", async () => {
+    const email = "race@adm.test";
+    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
+      .id as string;
+    await age(email);
+    const before = memory.sent.length;
+    const answers = await Promise.all([resend(ownA, id), resend(ownA2, id)]);
+    expect(answers.filter((a) => a.errors === undefined)).toHaveLength(1);
+    expect(answers.map(code).filter(Boolean)).toEqual(["RESEND_TOO_SOON"]);
+    expect(memory.sent.length).toBe(before + 1);
+  });
+
+  test("an accepted or revoked invitation is INVITATION_NOT_PENDING (409)", async () => {
+    const email = "revoked@adm.test";
+    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
+      .id as string;
+    await asConsole(
+      ownA,
+      `mutation { revokeAdminInvitation(tenantId: "${tenant}", invitationId: "${id}") }`,
+    );
+    await age(email);
+    expect(code(await resend(ownA, id))).toBe("INVITATION_NOT_PENDING");
+    // The invitation of the renewal test was accepted.
+    expect(code(await resend(ownA, renewedId))).toBe("INVITATION_NOT_PENDING");
+  });
+
+  test("an unknown invitation, another tenant's, a malformed id: NOT_FOUND / BAD_USER_INPUT", async () => {
+    const email = "other@adm.test";
+    const id = (await invite(ownB, tenantB, email)).data?.["inviteAdmin"]
+      .id as string;
+    await age(email);
+    expect(code(await resend(ownA, id))).toBe("NOT_FOUND");
+    expect(code(await resend(ownA, "nope"))).toBe("NOT_FOUND");
+    expect(code(await resend(ownA, ""))).toBe("BAD_USER_INPUT");
+    // The owner of B can: it is theirs.
+    expect((await resend(ownB, id, tenantB)).errors).toBeUndefined();
+  });
+
+  test("only an owner of the tenant resends", async () => {
+    const id = (await invite(ownA, tenant, "perm@adm.test")).data?.[
+      "inviteAdmin"
+    ].id as string;
+    await age("perm@adm.test");
+    expect(code(await resend(admA, id))).toBe("FORBIDDEN");
+    expect(code(await resend(vwA, id))).toBe("FORBIDDEN");
+    expect(code(await resend(ownB, id))).toBe("FORBIDDEN");
+  });
+
+  test("a resend stores its event: the actor, the invitation by id", async () => {
+    const found = await events();
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every((e) => e.target.type === "invitation")).toBe(true);
+    expect(found.map((e) => e.actor)).toContain(ownA2);
+  });
+});

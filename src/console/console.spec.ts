@@ -487,6 +487,7 @@ describe("operators:grant", () => {
             role: input.role,
             invitedAt: new Date(),
             expiresAt: new Date(),
+            invitedBy: null,
           };
         },
       },

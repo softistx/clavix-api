@@ -32,6 +32,15 @@ export function createJanusAdmins(
       ),
     invitations: async (tenantId) =>
       (await invitations.pending(adminScope(tenantId))).map(toAdminInvitation),
+    resend: async ({ tenantId, tenantName, invitationId, by }) =>
+      toAdminInvitation(
+        await invitations.resend({
+          scope: adminScope(tenantId),
+          invitationId,
+          organization: tenantName,
+          by,
+        }),
+      ),
     revoke: (tenantId, invitationId) =>
       invitations.revoke(adminScope(tenantId), invitationId),
   };

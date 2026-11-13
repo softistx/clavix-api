@@ -276,7 +276,13 @@ every other failure a 401).
   refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
   `onAccepted`, given per tenant by `invitationHooks` (`src/config/users.ts`; on `clavix`:
   `adminInvitationHooks`, which refuses a suspended or deleted tenant and grants the relation).
-  Its events are `membership.invite` / `.revokeInvitation` (target `invitation`) and `membership.change`
+  `resend` (`resendAdminInvitation`) sends a pending invitation again through janus's `resend`: a new
+  code and lifetime, `resentBy` set, the original `invitedBy` kept (the console reads it from the stored
+  invitation and resolves the name from the directory). The cooldown (`RESEND_COOLDOWN_MS`, 60 s) is read
+  from janus's `updatedAt`, so it holds across processes with no Redis; the check and the write run under
+  `ctx.exclusive` per invitation. Refusals are `ResendRefusedError` (`NOT_FOUND`, `INVITATION_NOT_PENDING`,
+  `RESEND_TOO_SOON` with `retryAfter`). A users-pool invitation has no resend yet.
+  Its events are `membership.invite` / `.resendInvitation` / `.revokeInvitation` (target `invitation`) and `membership.change`
   / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
   canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse
   after a write. Accepting (hosted, no console caller) records none.
