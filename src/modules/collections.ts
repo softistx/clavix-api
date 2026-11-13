@@ -3,5 +3,6 @@
 // adds its models here.
 
 export { oauthSigningKeys } from "@softistx/janus-oauth-mongo";
+export { adminEvents } from "../console/admin-events/admin-events.model";
 export { resources } from "./resources/resources.model";
 export { tenants } from "./tenants/tenants.model";

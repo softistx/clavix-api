@@ -163,6 +163,31 @@ curl -s https://api.clavix.example/console/graphql \
   -d '{"query":"{ me { platformRole } }"}'
 ```
 
+### Admin events
+
+Every console mutation records what it did in the `adminEvents` collection (ADR-0037): the actor
+(the token's user), the action (`tenant.create`), the tenant it was about (`null` for the platform),
+the target's type and id, the time and the id of the request. Events are only ever added, and they
+hold identifiers alone: never a secret, a token or the old and new values of a field. `bun run
+db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
+reads it yet: the viewer and the export come with M4.
+
+A mutation declares its action and records it once its change is stored:
+
+```ts
+// src/console/modules/tenants/index.ts
+export const tenantsAudits: Audits = {
+  "Mutation.renameTenant": "tenant.rename",
+};
+
+// in the resolver, after the write
+await ctx.audit("tenant.rename", { type: "tenant", id: tenantId, tenantId });
+```
+
+`ctx.audit` is awaited: when the event cannot be stored, the mutation fails (and may be retried)
+rather than leave a change with no record. `src/console/audit.spec.ts` fails for a mutation whose
+module declares no action.
+
 ## Tenants
 
 Until the console exists (M2), a tenant is created by script, through the same `TenantsService` the
