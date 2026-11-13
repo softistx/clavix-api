@@ -396,3 +396,14 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 **Why:** they belong to the console itself; changing them would lock operators out.
 
 **Fix:** leave them alone. Manage them with the `2026-11-12-console` migration, not through the API.
+
+### `USER_EXISTS` (409) on `inviteUser`
+
+The address already has an account in that tenant's pool. Find the user with `users(tenantId, email:)` and
+manage them there; an invitation is only for an address with no account.
+
+### `503 SERVICE_UNAVAILABLE: Try again later` on a membership write or on accepting an admin invitation
+
+The tenant's membership lock is held by another API process past its wait, or Redis is down. Nothing
+changed (an invitation being accepted is released): ask again, with the same link for an invitation.
+The token-store 503 with the same message has another cause (see above).

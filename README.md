@@ -68,21 +68,21 @@ one needs on top:
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                                           |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `PORT`                                                                 | 3000                                                                                                                     |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                   |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off and monthly active users are not counted                |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                     |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                 |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                              |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory             |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                        |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                        |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                         |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                              |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                               |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits") |
+| Variable                                                               | Default / rule                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                                 | 3000                                                                                                                                                                                                                                           |
+| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                                         |
+| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off, monthly active users are not counted and the console's membership lock is per process (with it, shared by every API process; a lock that cannot be taken is a retryable 503) |
+| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                                           |
+| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                                       |
+| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                                                    |
+| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                                                   |
+| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64); a public development default elsewhere                                                                                                                                                              |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                                              |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                                               |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                                                    |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                                                     |
+| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
 
 ## Sign-in code limits
 
@@ -175,6 +175,17 @@ invitation is the invitee's act on the hosted API and records none. A `userId` o
 longer than 200 characters is `BAD_USER_INPUT` (400); a `tenantId` is 24 hexadecimal characters, in
 any case.
 
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation { inviteAdmin(tenantId: \"65f1c0de00000000000000a1\", email: \"ada@example.com\", role: ADMIN) { id email role expiresAt } }"}'
+```
+
+A membership write whose lock cannot be taken (held by another process past 5 s, or Redis down) is a
+503 `SERVICE_UNAVAILABLE` and changes nothing: ask again. Accepting an invitation in that state fails the
+same way and releases the invitation, so the invitee retries the same link. `removeMembership`, like
+the other writes, is `NOT_FOUND` for a tenant that is gone or suspended.
+
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and
 prints the client secret once: save it; the `2026-11-13-scopes` migration turns each resource's
@@ -190,6 +201,33 @@ bun run operators:grant --email bob@example.com --role viewer
 curl -s https://api.clavix.example/console/graphql \
   -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
   -d '{"query":"{ me { platformRole } }"}'
+```
+
+### Users of a tenant
+
+The end users of a tenant are the users of its own pool (ADR-0008), not its admins. Reads need
+`view` on the tenant, every mutation `edit` (a tenant admin or a platform admin); a user, session,
+grant or invitation id of another tenant is unknown, never touched.
+
+| Operation                                                                 | Does                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `users(tenantId, after, first, email)`                                    | A page (25, at most 100), oldest first, `nextCursor` null on the last. `email` finds that exact address (any case); a prefix search waits on janus. A cursor janus refuses is `BAD_USER_INPUT` (400).                                                                                                                    |
+| `user(tenantId, id)`                                                      | One user, or `null`.                                                                                                                                                                                                                                                                                                     |
+| `inviteUser(tenantId, email)`                                             | A janus invitation into the tenant's pool (scope `users`), mailed in the tenant's name; accepting on the tenant's hosted `/invitation` page makes the account (e-mail proved) even when sign-up is closed. A pending one of the same address is replaced; an address that already has an account is `USER_EXISTS` (409). |
+| `userInvitations(tenantId)` / `revokeInvitation(tenantId, invitationId)`  | The pending, unlapsed ones; revoking is true also when there is none.                                                                                                                                                                                                                                                    |
+| `disableUser` / `enableUser`                                              | Idempotent. Disabling ends the user's sessions (a repeat ends any new one); an unknown user is `NOT_FOUND`.                                                                                                                                                                                                              |
+| `revokeUserSessions(tenantId, userId)`                                    | Ends every session; answers how many (0 on a repeat or an unknown user).                                                                                                                                                                                                                                                 |
+| `userGrants(tenantId, userId)` / `revokeGrant(tenantId, userId, grantId)` | The OAuth grants the user gave (standing only, with the client's name), and taking one back with the tokens it opened. `revokeGrant` is true also when already revoked, false for a grant that is not this user's.                                                                                                       |
+| `deleteUser(tenantId, userId)`                                            | Revokes the user's grants (and tokens), ends their sessions, deletes the user. True also when already gone.                                                                                                                                                                                                              |
+
+Each mutation records an admin event, repeats included (`user.invite`, `user.revokeInvitation`,
+`user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeGrant`; target: the
+user, invitation or grant id, never an address).
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation { inviteUser(tenantId: \"65f1c0de00000000000000a1\", email: \"bob@example.com\") { id expiresAt } }"}'
 ```
 
 ### Clients, resources and scopes
