@@ -4,6 +4,7 @@ import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { Audits } from "../../audit";
 import type {
   ConsoleContext,
@@ -14,6 +15,7 @@ import { type Guards, onTenant } from "../../guard";
 import { activeTenant } from "../directory-tenant";
 import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
+import { keepOwners } from "./operators";
 
 // Reading the users is `view`; changing them is `edit` (a tenant admin).
 export const usersGuards: Guards = {
@@ -192,7 +194,8 @@ export const users: Resolvers = {
     deleteUser: async (_, { tenantId: given, userId }, ctx) => {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
-      await activeTenant(ctx.directory, tenantId);
+      const tenant = await activeTenant(ctx.directory, tenantId);
+      await keepOwners(ctx, tenant, userId);
       // Alone with an `assignRole` of the same user: no assignment can be
       // written between the delete and the sweep.
       await ctx.exclusive(userKey(tenantId, userId), async () => {
@@ -200,6 +203,11 @@ export const users: Resolvers = {
         // Their role assignments go with them; on a repeat too, so a retry
         // finishes what a failed first run left.
         await rolesService.removeUser(new ObjectId(tenantId), userId);
+        // An operator (a user of `clavix`) also holds console roles: they go
+        // too, or a deleted account would keep its platform and tenant roles.
+        if (tenant.slug === PLATFORM_TENANT_SLUG) {
+          await ctx.access.removeUser(userId);
+        }
       });
       await ctx.audit("user.delete", target("user", userId, tenantId));
       return true;
@@ -250,7 +258,8 @@ async function setActive(
 ) {
   const tenantId = tenantIdOf(given);
   idArg(userId, "userId");
-  await activeTenant(ctx.directory, tenantId);
+  const tenant = await activeTenant(ctx.directory, tenantId);
+  if (!active) await keepOwners(ctx, tenant, userId);
   const user = await ctx.users.setActive(tenantId, userId, active);
   if (user === null) throw denial("NOT_FOUND", "No such user");
   await ctx.audit(

@@ -1,4 +1,5 @@
 import type { OAuthServer } from "@softistx/janus-oauth";
+import { CONSOLE_CLIENT_ID } from "./identity";
 import type { ConsoleAuthenticate } from "./plugin";
 
 /**
@@ -30,7 +31,10 @@ export function createConsoleAuthenticator({
     const principal = await server.authenticate(request, {
       resource: audience,
     });
+    // The console client alone: another client of the `clavix` tenant can be
+    // granted the console audience, and its token is not an operator's.
+    if (principal?.clientId !== CONSOLE_CLIENT_ID) return null;
     // The `console` scope is the gate: an `openid`-only token is not a console one.
-    return principal?.scopes.includes("console") === true ? principal : null;
+    return principal.scopes.includes("console") === true ? principal : null;
   };
 }

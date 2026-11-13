@@ -5,9 +5,9 @@
     "": {
       "name": "clavix-api",
       "dependencies": {
-        "@alxia/core": "^0.22.0",
+        "@alxia/core": "^0.23.0",
         "@alxia/env": "^0.5.0",
-        "@alxia/graphql": "^0.16.1",
+        "@alxia/graphql": "^0.16.2",
         "@graphql-tools/load-files": "^8.0.6",
         "@graphql-tools/merge": "^10.0.6",
         "@graphql-tools/utils": "^13.1.3",
@@ -26,7 +26,7 @@
         "@softistx/mail-smtp": "^1.1.0",
         "@softistx/material-core": "^0.84.0",
         "@softistx/mongo": "^0.29.0",
-        "@softistx/redis": "~0.19.0",
+        "@softistx/redis": "~0.20.0",
         "graphql": "^17.0.2",
         "graphql-yoga": "^5.24.2",
         "mongodb": "^7",
@@ -50,11 +50,11 @@
     },
   },
   "packages": {
-    "@alxia/core": ["@alxia/core@0.22.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-nDAqWA/CJbQ3PVB9e9F9Kdipp3Vv25PfxZmAx27EuiImY0ylkEwPRVMz8bzsbHGsQDA+V85NirJvqttpUTzL/g=="],
+    "@alxia/core": ["@alxia/core@0.23.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-8wThXJXra9ewv0wywfxHWfnN7+IYZoiXJ5AcXZ4+EnIoxbSrBu7bJY84qx236DEHZO7tlS//OkJvTvbQBfFZmQ=="],
 
     "@alxia/env": ["@alxia/env@0.5.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" }, "bin": { "alxia-env": "dist/cli/index.js" } }, "sha512-DhZMLwIFJUA3LZ/BzYKQQm+7O9nMH2DXfvKfkt01WcKccDySAsiHg735irOT0ymehxuRa22EzJzalX3n/fjN+w=="],
 
-    "@alxia/graphql": ["@alxia/graphql@0.16.1", "", { "peerDependencies": { "@alxia/core": "^0.22.0", "graphql": "^16.11.0 || ^17.0.0", "graphql-ws": "^6.1.0", "graphql-yoga": "^5.16.0 || ^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-6AWlZHeCF2LFMJUmfqNc+LCHdYD8ZGM+qZ3DFoZ+ZLXnIwjyFc8HHmdi4AdBV6cfkMxbwycTDoSo12y0mmGoSA=="],
+    "@alxia/graphql": ["@alxia/graphql@0.16.2", "", { "peerDependencies": { "@alxia/core": "^0.23.0", "graphql": "^16.11.0 || ^17.0.0", "graphql-ws": "^6.1.0", "graphql-yoga": "^5.16.0 || ^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-l+72cxlxYL82e99JBzjeq4h+DHGnSDX6BT06mKQRjit5xTpCvm4nyVV7Nh/NgeP5Ta1nDBm2/nqWs3h4TSVPZw=="],
 
     "@ardatan/relay-compiler": ["@ardatan/relay-compiler@13.0.2", "", { "dependencies": { "@babel/runtime": "^8.0.0", "immutable": "^5.1.9", "invariant": "^2.2.4" }, "peerDependencies": { "graphql": "*" } }, "sha512-VFpv9UP820SiwDUPYtq7PmD3jifzZlevkQ26bhbSzFeruSTys0eHzQCZyKg+IhgmZzwPI9AFjPe26ABNjGeIKg=="],
 
@@ -340,7 +340,7 @@
 
     "@softistx/mongo": ["@softistx/mongo@0.29.0", "https://npm.pkg.github.com/download/@softistx/mongo/0.29.0/4a08cb8c07c351064784f5f97242145a6fb574e0", { "peerDependencies": { "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-f9Y4ci1BOW94sj1nGmvxI4TrmyrcYwYSEgT4utL6RuemuO7xqBonTivGC4beXSYcfwhjCFIgsYHvSDqdQ/YmDA=="],
 
-    "@softistx/redis": ["@softistx/redis@0.19.0", "https://npm.pkg.github.com/download/@softistx/redis/0.19.0/73888b4ca6e7ee441ec2e6954c4556119e522bab", { "peerDependencies": { "redis-memory-server": ">=0.17.1 <0.18", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-U6Hc07DRfCKqok5dRut6JLzguuH7kBDVMHG7iBu2bTdGYlG3QPtAohxU1f7mkUEynXcLeCRm5L8lxd0DNKAPtA=="],
+    "@softistx/redis": ["@softistx/redis@0.20.0", "https://npm.pkg.github.com/download/@softistx/redis/0.20.0/d813fae458b84d0815a118ebf3bfb04e5f6bf341", { "peerDependencies": { "redis-memory-server": ">=0.17.1 <0.18", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-RMDE2iaVuEavbLz7BN2EPyY3H3/OVRyHgXowEYsEfvKjC1UexZ4/odtShgeWTbpRiuk+P3yg8z4NVorN0I7ppg=="],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 

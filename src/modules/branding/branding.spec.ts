@@ -65,7 +65,11 @@ const ctxFor = (userId: string): ConsoleContext =>
   ({
     principal: { userId },
     access,
-    directory: {},
+    // Every id is an ordinary tenant (not `clavix`): the tenant-level guard decides.
+    directory: {
+      tenantsByIds: async (ids: readonly string[]) =>
+        ids.map((id) => ({ id, slug: `t-${id}`, name: id })),
+    },
     can: (permission: Permission, tenantId: string) =>
       access.can(userId, permission, tenantId),
     canPlatform: (permission: Permission) =>
