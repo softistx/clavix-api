@@ -7,15 +7,16 @@ nxgt-janus release says which.
 
 ## Now
 
-- **Console hardening** — follow-ups of the shipped console: a suspended tenant refuses social
-  sign-in and invitation acceptance ([#164](https://github.com/softistx/clavix-api/issues/164)),
-  its console stays readable ([#167](https://github.com/softistx/clavix-api/issues/167)),
-  client and domain writes are serialized ([#165](https://github.com/softistx/clavix-api/issues/165)),
-  console tokens are bound to their user ([#170](https://github.com/softistx/clavix-api/issues/170)),
-  and the follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127))
-  and going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
+Nothing is in progress.
 
 ## Next
+
+- **Self-service e-mail verification** — a signed-in user asks for a verification mail and
+  confirms it with the link's token, with stable error codes for invalid, expired, throttled and
+  already-done answers; the OIDC `email_verified` claim follows the flag, and the sensitive
+  actions that need a verified e-mail are decided in the plan (passkey and second-factor setup,
+  e-mail change, console access)
+  ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
 - **Access rules** — an application publishes its OpenAPI and SDL from CI
   ([#34](https://github.com/softistx/clavix-api/issues/34)); a tenant drafts, publishes,
@@ -29,6 +30,10 @@ nxgt-janus release says which.
   Waits on `@softistx/security` `remotePolicy`.
 
 ## Later
+
+**Follow-ups**
+- Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
+  going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 **Advanced protocols**
 - PAR required per tenant and per client (on for new tenants); DPoP-bound tokens.
@@ -51,6 +56,17 @@ nxgt-janus release says which.
   the access rules refer to.
 
 ## Shipped
+
+- **Console hardening** — a suspended tenant refuses social sign-in and invitation acceptance
+  ([#164](https://github.com/softistx/clavix-api/issues/164)); its console stays readable, while a
+  tenant-admin write on it is refused with `TENANT_SUSPENDED`
+  ([#167](https://github.com/softistx/clavix-api/issues/167)); client and domain writes are
+  serialized ([#165](https://github.com/softistx/clavix-api/issues/165)); and console tokens are
+  bound to their user, the last owner being kept
+  ([#170](https://github.com/softistx/clavix-api/issues/170)).
+- **M2 console** — the console API for operators and tenant admins is complete: tenants, admins,
+  clients, resources and scopes, users, end-user roles, branding, domains, sign-in methods and
+  admin events recording, each listed below.
 
 - **Tenant admins** — an owner invites admins to a tenant, changes their role (owner, admin,
   viewer) and removes them; pending invitations can be resent or revoked
