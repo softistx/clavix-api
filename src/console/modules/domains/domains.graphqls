@@ -73,7 +73,7 @@ type Mutation {
   owns it. Errors: BAD_USER_INPUT (400, `extensions.field` `host`: not a
   domain name, an IP, localhost, a wildcard, or one of the platform's own
   domains), DOMAIN_TAKEN (409: another tenant has verified this host),
-  QUOTA_EXCEEDED (409, `extensions.field` `domains`). A suspended or unknown tenant is NOT_FOUND (404).
+  QUOTA_EXCEEDED (409, `extensions.field` `domains`). An unknown tenant is NOT_FOUND (404), a suspended one TENANT_SUSPENDED (403).
   """
   addDomain(tenantId: ID!, host: String!): Domain!
   """

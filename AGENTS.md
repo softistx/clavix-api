@@ -241,8 +241,8 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   there, never in `src/modules`.
 - **`clients` and `resources`** (issue #9) are thin: resolvers call `ClientsService`
   (`src/modules/clients`, wired in `src/config/clients.ts`) and `Catalog`
-  (`src/modules/resources`), after `activeTenant` (`catalog-support.ts`: a suspended tenant is
-  `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
+  (`src/modules/resources`), after `liveTenant` (`catalog-support.ts`: a suspended tenant is
+  readable, its writes are refused by the guard; a trashed one is `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
   its admin event (`client.create`, `client.rotateSecret`, `resource.delete`, `scope.update`, ...:
   the target is the client id or the document id, never a secret; a delete records on a repeat
   too, and `deleteResource` one `scope.delete` per scope it removed). The `operators:grant` script records
@@ -367,9 +367,18 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   user. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
   `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
   `RolesError`.
-- **Shared helpers**: `console/modules/ids.ts` (`lowerTenantArg`, `tenantIdOf`, `idArg`) and
-  `console/modules/directory-tenant.ts` (`activeTenant`, a suspended tenant is `NOT_FOUND`).
-  A tenant suspended mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
+- **Shared helpers**: `console/modules/ids.ts` (`tenantArg`, `tenantIdOf`, `idArg`, and `liveTenant`: a suspended tenant is returned, a trashed or unknown one is `NOT_FOUND`).
+  A tenant trashed mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
+- **A suspended tenant's console is readable, not writable** (ADR-0039, #167): `ConsoleDirectory.tenantsByIds`,
+  `TenantsService.liveByIds` and `SignInPolicyService.get` return active and suspended tenants (not the trash);
+  every read of every module works for the tenant's admins, and `Me.memberships` lists it with its `status`.
+  The write refusal is central, in `console/guard.ts`: a `tenant` guard with `edit` or `manage` on a
+  suspended tenant throws `TENANT_SUSPENDED` (403) after the role check (a caller with no right still gets
+  `FORBIDDEN`), unless the caller holds the same permission on the platform (support; `updateTenant` by an
+  operator keeps working). The platform's `suspendTenant`, `resumeTenant`, `deleteTenant`, `restoreTenant` and
+  `setTenantPlan` are `onPlatform` guards and never reach it. A new write on a tenant needs nothing
+  more than its `onTenant("edit" | "manage")` guard. `activeByIds` (status active only) stays for the
+  sign-up and invitation paths.
 - `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
   read a token's content).
 
@@ -438,7 +447,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
 - **Console API**: `tenants`, `tenant`, `plans`, `usage` and the seven mutations are in
   `src/console/modules/tenants`, with their audit actions (`tenant.create`, `.update`, `.setPlan`,
-  `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin; the rest
+  `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin (refused with `TENANT_SUSPENDED` while the tenant is suspended); the rest
   is platform-only. The `Tenant` parent is `TenantParent` (codegen mapper), so `Me.memberships` keeps
   working with the extended type.
 - **Still public for a suspended or deleted tenant**: the anonymous `tenantBranding` and the logo by host

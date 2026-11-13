@@ -19,10 +19,6 @@ const fail = (message: string, code: string, status: number, field?: string) =>
 export const badInput = (message: string, field: string) =>
   fail(message, "BAD_USER_INPUT", 400, field);
 
-/** The tenant-admin write refused while the tenant is suspended. */
-export const suspendedForAdmins = () =>
-  fail("The tenant is suspended", "TENANT_SUSPENDED", 403);
-
 /** The service's refusals as the contract's GraphQL errors; anything else passes through. */
 export function refusal(error: unknown): unknown {
   if (error instanceof SlugTakenError) {

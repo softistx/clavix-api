@@ -119,6 +119,22 @@ export class TenantsService {
   }
 
   /**
+   * The tenants with these ids (hex) that are active or suspended (ADR-0039:
+   * the console stays readable on a suspended one); an unknown or trashed one
+   * is left out.
+   */
+  async liveByIds(ids: readonly string[]): Promise<Tenant[]> {
+    const valid = ids.filter((id) => ObjectId.isValid(id));
+    if (valid.length === 0) return [];
+    return this.collection.findMany({
+      filter: {
+        _id: { $in: valid.map((id) => new ObjectId(id)) },
+        status: { $in: ["active", "suspended"] },
+      },
+    });
+  }
+
+  /**
    * Changes the tenant's sign-in policy (slice A5). `change` gets the stored
    * tenant and answers the new policy, or `null` for no change (no write, no
    * version bump, so no janus rebuild). The version read is the version

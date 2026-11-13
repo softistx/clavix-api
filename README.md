@@ -169,7 +169,7 @@ stronger of their direct role and their platform role). Items are ordered by slu
 of the name, case-insensitively. A suspended tenant stays listed (`tenant.status` is `SUSPENDED`; the
 console stays readable on it); a tenant in the trash is left out, and a caller with no role gets an
 empty page. Any signed-in caller may ask; it never lists a tenant the caller holds no role on.
-`me.memberships` is unchanged (direct roles only, suspended tenants left out).
+`me.memberships` lists direct roles only; a suspended tenant is listed with its `status`, a trashed one is left out.
 
 ```sh
 curl -s https://api.clavix.example/console/graphql \
@@ -216,7 +216,7 @@ curl -s https://api.clavix.example/console/graphql \
 A membership write whose lock cannot be taken (held by another process past 5 s, or Redis down) is a
 503 `SERVICE_UNAVAILABLE` and changes nothing: ask again. Accepting an invitation in that state fails the
 same way and releases the invitation, so the invitee retries the same link. `removeMembership`, like
-the other writes, is `NOT_FOUND` for a tenant that is gone or suspended.
+the other writes, is `NOT_FOUND` for a tenant that is gone or in the trash, and `TENANT_SUSPENDED` while it is suspended.
 
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and
@@ -292,7 +292,7 @@ the assignments and the resource-scoped roles that depended on them.
 
 Every field takes the `tenantId` it works on. Queries need `view` on that tenant (any role),
 mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another tenant, gets
-`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (also a suspended tenant), `CONFLICT`, `QUOTA_EXCEEDED`,
+`FORBIDDEN`. Errors carry `extensions.code`: `NOT_FOUND` (an unknown or trashed tenant), `TENANT_SUSPENDED` (403: a suspended tenant's console stays readable, every write of its admins is refused; platform operators still write), `CONFLICT`, `QUOTA_EXCEEDED`,
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 

@@ -2,7 +2,7 @@ import { denial } from "@softistx/janus-graphql";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { ConsoleContext } from "../../context";
 import type { Role } from "../../model";
-import { activeTenant, idArg, tenantIdOf } from "../ids";
+import { idArg, liveTenant, tenantIdOf } from "../ids";
 import { refusing } from "./errors";
 
 export { adminsAudits, adminsGuards } from "./guards";
@@ -65,17 +65,23 @@ const one = async (
 export const admins: Resolvers = {
   Query: {
     // The guard lower-cased the id it checked; read with the same spelling.
-    memberships: async (_, { tenantId }, ctx) =>
-      (await members(ctx.access, ctx.directory, tenantIdOf(tenantId))).map(
+    memberships: async (_, { tenantId: given }, ctx) => {
+      const tenantId = tenantIdOf(given);
+      await liveTenant(ctx.directory, tenantId);
+      return (await members(ctx.access, ctx.directory, tenantId)).map(
         ({ user, role }) => memberOf(user, role),
-      ),
-    adminInvitations: async (_, { tenantId }, ctx) =>
-      invitationsOf(ctx, await ctx.admins.invitations(tenantIdOf(tenantId))),
+      );
+    },
+    adminInvitations: async (_, { tenantId: given }, ctx) => {
+      const tenantId = tenantIdOf(given);
+      await liveTenant(ctx.directory, tenantId);
+      return invitationsOf(ctx, await ctx.admins.invitations(tenantId));
+    },
   },
   Mutation: {
     inviteAdmin: async (_, { tenantId: given, email, role }, ctx) => {
       const tenantId = tenantIdOf(given);
-      const tenant = await activeTenant(ctx.directory, tenantId);
+      const tenant = await liveTenant(ctx.directory, tenantId);
       const known = await ctx.directory.findUserByEmail(email);
       if (known !== null) await assertNotMember(ctx.access, tenantId, known.id);
       const inviter = await ctx.directory.findUser(ctx.principal.userId);
@@ -100,7 +106,7 @@ export const admins: Resolvers = {
     changeMembership: async (_, { tenantId: given, userId, role }, ctx) => {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
-      await activeTenant(ctx.directory, tenantId);
+      await liveTenant(ctx.directory, tenantId);
       // Before any write: a refusal leaves no change and no event.
       const user = await ctx.directory.findUser(userId);
       if (user === null) throw denial("NOT_FOUND", "No such user");
@@ -115,8 +121,8 @@ export const admins: Resolvers = {
     removeMembership: async (_, { tenantId: given, userId }, ctx) => {
       const tenantId = tenantIdOf(given);
       idArg(userId, "userId");
-      // Like the other writes: a tenant that is gone or suspended is not edited.
-      await activeTenant(ctx.directory, tenantId);
+      // Like the other writes: a tenant that is gone (or trashed) is not edited; a suspended one is refused by the guard.
+      await liveTenant(ctx.directory, tenantId);
       await removeMember(ctx, tenantId, userId);
       await ctx.audit("membership.remove", {
         type: "user",
@@ -132,7 +138,7 @@ export const admins: Resolvers = {
     ) => {
       const tenantId = tenantIdOf(given);
       idArg(invitationId, "invitationId");
-      const tenant = await activeTenant(ctx.directory, tenantId);
+      const tenant = await liveTenant(ctx.directory, tenantId);
       const sender = await ctx.directory.findUser(ctx.principal.userId);
       const resent = await ctx.exclusive(
         resendKey(tenantId, invitationId),

@@ -14,8 +14,12 @@ export function tenantIdOf(given: string) {
   return given.toLowerCase();
 }
 
-/** The tenant when it exists and is active, else a 404. `id` is the form `tenantIdOf` returns. */
-export async function activeTenant(directory: ConsoleDirectory, id: string) {
+/**
+ * The tenant when it exists and is not in the trash, else a 404. A suspended
+ * tenant is returned (ADR-0039: its console stays readable; the guard refuses
+ * its writes). `id` is the form `tenantIdOf` returns.
+ */
+export async function liveTenant(directory: ConsoleDirectory, id: string) {
   const [tenant] = await directory.tenantsByIds([id]);
   if (tenant === undefined) throw denial("NOT_FOUND", "No such tenant");
   return tenant;

@@ -419,14 +419,14 @@ describe("assignments", () => {
 });
 
 describe("a suspended tenant", () => {
-  test("its roles are NOT_FOUND, even for its admin", async () => {
+  test("its roles are readable, its writes TENANT_SUSPENDED, for its admin", async () => {
     const id = (await tenantsService.create({ slug: "rl-s", name: "S" })).id;
     await access.grantTenant(id, "rl-admin-a", "admin");
     await tenantsService.suspend(id);
-    expect(codeOf(await admin(LIST, { t: id }))).toBe("NOT_FOUND");
+    expect((await admin(LIST, { t: id })).errors).toBeUndefined();
     expect(
       codeOf(await admin(CREATE, { t: id, input: { name: "nope" } })),
-    ).toBe("NOT_FOUND");
+    ).toBe("TENANT_SUSPENDED");
   });
 });
 

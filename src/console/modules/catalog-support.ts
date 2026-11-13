@@ -4,7 +4,7 @@ import type { CliTenant } from "@/cli/errors";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { RolesError } from "@/modules/roles/roles.errors";
 import type { ConsoleContext } from "../context";
-import { activeTenant, tenantIdOf } from "./ids";
+import { liveTenant, tenantIdOf } from "./ids";
 
 const STATUS = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 } as const;
 
@@ -27,14 +27,16 @@ export async function refusing<T>(call: () => Promise<T>): Promise<T> {
 }
 
 /**
- * The active tenant the call names, as the catalog services take it. A guard
- * has already checked the caller's role on this id; an id that names no live
- * tenant (unknown, suspended) is "not found" even for a platform operator.
+ * The tenant the call names, as the catalog services take it (marked active:
+ * only the reads and the guard-checked writes reach it, and the guard refuses
+ * a suspended tenant's writes). A guard has already checked the caller's role
+ * on this id; an id that names no live tenant (unknown, trashed) is "not
+ * found" even for a platform operator.
  */
 export async function catalogTenant(
   ctx: ConsoleContext,
   tenantId: string,
 ): Promise<CliTenant> {
-  const found = await activeTenant(ctx.directory, tenantIdOf(tenantId));
+  const found = await liveTenant(ctx.directory, tenantIdOf(tenantId));
   return { _id: new ObjectId(found.id), slug: found.slug, status: "active" };
 }

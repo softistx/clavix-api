@@ -55,7 +55,7 @@ export const me: Resolvers = {
         roles.map(({ tenantId }) => tenantId),
       );
       const byId = new Map(tenants.map((tenant) => [tenant.id, tenant]));
-      // A role on a tenant that is gone or suspended is not shown.
+      // A role on a tenant that is gone (or trashed) is not shown; a suspended one is, with its status.
       return roles.flatMap(({ tenantId, role }) => {
         const tenant = byId.get(tenantId);
         return tenant === undefined

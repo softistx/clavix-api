@@ -21,7 +21,7 @@ import { isMonth } from "@/modules/usage/mau";
 import type { Audits } from "../../audit";
 import { type Guards, onPlatform, onTenant } from "../../guard";
 import { tenantArg } from "../ids";
-import { badInput, refusal, suspendedForAdmins } from "./errors";
+import { badInput, refusal } from "./errors";
 import { parentOf, type TenantParent } from "./parent";
 
 export type { TenantParent } from "./parent";
@@ -207,10 +207,7 @@ export const tenants: Resolvers = {
     },
     updateTenant: async (_, { id, input }, ctx) => {
       const current = await writable(id);
-      // A suspended tenant's own admins cannot change it; an operator can.
-      if (current.status === "suspended" && !(await ctx.canPlatform("edit"))) {
-        throw suspendedForAdmins();
-      }
+      // A suspended tenant's own admins never get here: the guard refuses them.
       const updated = await tenantAdmin
         .update(current._id, {
           name: input.name ?? undefined,

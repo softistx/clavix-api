@@ -17,10 +17,19 @@ export interface ConsoleDirectory {
   } | null>;
   /** A user of the `clavix` tenant by e-mail, or `null`. */
   findUserByEmail(email: string): Promise<{ id: string } | null>;
-  /** The active tenants with these ids (hex), in any order; unknown ids are left out. */
-  tenantsByIds(
-    ids: readonly string[],
-  ): Promise<{ id: string; slug: string; name: string }[]>;
+  /**
+   * The active and suspended tenants with these ids (hex), in any order; an
+   * unknown or trashed id is left out. A suspended tenant stays readable by
+   * its admins (ADR-0039), its writes being refused by the guard.
+   */
+  tenantsByIds(ids: readonly string[]): Promise<
+    {
+      id: string;
+      slug: string;
+      name: string;
+      status: "active" | "suspended";
+    }[]
+  >;
 }
 
 /** A pending admin invitation of a tenant, as the console shows it. */

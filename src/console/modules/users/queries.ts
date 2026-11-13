@@ -1,6 +1,6 @@
 import { JanusError } from "@softistx/janus";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { activeTenant, tenantIdOf } from "../ids";
+import { liveTenant, tenantIdOf } from "../ids";
 import { badInput, grantShape, shape } from "./shapes";
 
 const MAX_PAGE = 100;
@@ -20,7 +20,7 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
     if ([...prefix].length > MAX_PREFIX) {
       throw badInput("The prefix is too long");
     }
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     if (email !== null && email !== undefined) {
       const found = await ctx.users.findByEmail(tenantId, email);
       return {
@@ -50,18 +50,18 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
   },
   user: async (_, { tenantId: given, id }, ctx) => {
     const tenantId = tenantIdOf(given);
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     const found = await ctx.users.find(tenantId, id);
     return found === null ? null : shape(found);
   },
   userInvitations: async (_, { tenantId: given }, ctx) => {
     const tenantId = tenantIdOf(given);
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     return ctx.users.invitations(tenantId);
   },
   userGrants: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     return (await ctx.users.grants(tenantId, userId)).map(grantShape);
   },
 };

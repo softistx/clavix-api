@@ -9,7 +9,7 @@ import type { Audits } from "../../audit";
 import type { ConsoleContext } from "../../context";
 import { type Guards, onTenant } from "../../guard";
 import { refusing } from "../catalog-support";
-import { activeTenant, idArg, tenantArg, tenantIdOf } from "../ids";
+import { idArg, liveTenant, tenantArg, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
 
 const view = onTenant("view", tenantArg);
@@ -67,10 +67,10 @@ async function shapes(tenantId: ObjectId, found: RoleDoc[]) {
 const shapeOne = async (tenantId: ObjectId, role: RoleDoc) =>
   shape(role, await rolesService.memberCount(tenantId, role));
 
-/** The active tenant of the call: the id as an ObjectId. */
+/** The tenant of the call (suspended included; the guard refuses its writes): the id as an ObjectId. */
 async function tenantOf(ctx: ConsoleContext, given: string) {
   const hex = tenantIdOf(given);
-  await activeTenant(ctx.directory, hex);
+  await liveTenant(ctx.directory, hex);
   return { hex, id: new ObjectId(hex) };
 }
 
