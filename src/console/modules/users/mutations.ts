@@ -143,7 +143,12 @@ async function setActive(
         ctx,
         tenant,
         userId,
-        () => ctx.users.setActive(tenantId, userId, false),
+        // Under the user lock like the accept hooks: an owner role is not
+        // granted to an account disabled meanwhile.
+        () =>
+          ctx.exclusive(userKey(tenantId, userId), () =>
+            ctx.users.setActive(tenantId, userId, false),
+          ),
         "disable",
       ));
   if (user === null) throw denial("NOT_FOUND", "No such user");

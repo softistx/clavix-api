@@ -318,7 +318,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   of the `clavix` tenant a platform role (default owner), until the console can. The user must exist,
   unless `--create`: an unknown address is then invited (operator scope, `operatorScope()`, issued by
   the system, mailed by the tenant's mail path) and accepting the invitation makes the account and
-  grants the role (`adminInvitationHooks`). Each run records the admin event `operator.grant`.
+  grants the role (`adminInvitationHooks`, under the user's `userKey` lock, inside the tenant's members lock, the order `keepOwners` keeps: platform owners, members by id, user). A disabled account is refused. Each run records the admin event `operator.grant`.
 
 ### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
 
@@ -375,7 +375,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   `deleteRole` removes the assignments first, `deleteUser` and `deleteResource` remove theirs (a retry
   finishes a half run). `assignRole` (check the user, write) and `deleteUser` (delete, sweep) run under
   `ctx.exclusive(userKey(tenant, user))` (`console/modules/user-key.ts`), so no assignment outlives its
-  user. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
+  user; `disableUser` (platform users) and the `clavix` invitation accept hooks (`userLock`) take it too. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
   `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
   `RolesError`.
 - **Shared helpers**: `console/modules/ids.ts` (`tenantArg`, `tenantIdOf`, `idArg`, and `liveTenant`: a suspended tenant is returned, a trashed or unknown one is `NOT_FOUND`).

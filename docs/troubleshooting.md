@@ -392,9 +392,14 @@ safe to repeat: it changes nothing twice and records the event it missed.
 The code is unknown, already used, revoked or expired; the hosted API gives one answer for all four,
 so a code cannot be probed. An admin invitation is also invalid while its tenant is suspended or
 deleted, on any host but the `clavix` tenant's, and for an `owner` invitation whose inviter was
-deleted or disabled since. An account deleted or disabled between creation and grant gets no owner role (the
-invitation is released: send a new one). Have an owner of the tenant send a new invitation with `inviteAdmin`
+deleted or disabled since. An account deleted (any role) or disabled (owner role) between creation and grant gets no role (the
+invitation is released: send a new one). The grant runs under the same user lock as `deleteUser`, so an accept racing a delete either
+is swept by it or finds the account gone. Have an owner of the tenant send a new invitation with `inviteAdmin`
 (inviting again replaces the pending one).
+
+### `operators:grant`: `the account "<address>" is disabled`
+
+The platform role is never granted to a disabled account. Enable the user (`enableUser`) and run the command again.
 
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
 
