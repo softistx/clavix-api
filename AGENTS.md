@@ -292,7 +292,7 @@ every other failure a 401).
 
 ### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
 
-Every console mutation writes an append-only admin event (ADR-0037). A slice that adds a mutation
+Every console mutation writes an append-only admin event (ADR-0037). The platform's own changes with no console user write one too, under a `system:<module>:<job>` actor (`domain.lapse`, `domain.evict`: see Custom domains). A slice that adds a mutation
 does two things, and nothing else touches the collection:
 - **Declare** the action beside the module's guards, `export const <name>Audits: Audits = {
   "Mutation.renameTenant": "tenant.rename" }`, and spread it into `audits` in `modules/index.ts`
