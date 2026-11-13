@@ -105,7 +105,11 @@ export class TenantAdminService {
   }
 
   /** The filter of `list` and `count`: the trash included, purged ones left out. */
-  private filterOf({ q, state, ids }: TenantListOptions) {
+  private filterOf({
+    q,
+    state,
+    ids,
+  }: Pick<TenantListOptions, "q" | "state" | "ids">) {
     const text = q?.trim() ?? "";
     return {
       purgeStartedAt: { $exists: false },
@@ -150,7 +154,7 @@ export class TenantAdminService {
 
   /** How many tenants `list` finds with these filters in all; `after` and `first` play no part. */
   count(options: Omit<TenantListOptions, "after" | "first">) {
-    return this.collection.count(this.filterOf({ ...options, first: 0 }), {
+    return this.collection.count(this.filterOf(options), {
       withDeleted: true,
     });
   }
