@@ -1,6 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
 import { NotFoundError } from "@softistx/mongo";
-import { tenantAdmin, tenantsService } from "@/config/tenancy";
+import { tenantAdmin, tenantBySlug, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
@@ -14,6 +14,7 @@ import {
   type QuotaOverrides,
 } from "@/modules/tenants/plan.schema";
 import { stateOf, type TenantState } from "@/modules/tenants/tenants.admin";
+import { SlugTakenError } from "@/modules/tenants/tenants.errors";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import { purgeAtOf } from "@/modules/tenants/trash.schema";
 import { isMonth } from "@/modules/usage/mau";
@@ -168,17 +169,31 @@ export const tenants: Resolvers = {
         input.plan === null || input.plan === undefined
           ? "free"
           : planOrFail(input.plan);
+      const wanted = {
+        slug: input.slug,
+        name: input.name,
+        ...(input.signUp === null || input.signUp === undefined
+          ? {}
+          : { signUp: input.signUp }),
+        plan,
+      };
       const created = await tenantsService
-        .create({
-          slug: input.slug,
-          name: input.name,
-          ...(input.signUp === null || input.signUp === undefined
-            ? {}
-            : { signUp: input.signUp }),
-          plan,
-        })
-        .catch((error: unknown) => {
+        .create(wanted)
+        .catch(async (error: unknown) => {
           if (error instanceof TypeError) throw badInput(error.message, "name");
+          // A repeat of a call whose record failed: the same tenant is
+          // returned, and its event recorded below.
+          if (error instanceof SlugTakenError) {
+            const existing = await tenantBySlug(input.slug);
+            if (
+              existing !== undefined &&
+              existing.name === input.name.trim() &&
+              existing.plan === plan &&
+              existing.signUp === (wanted.signUp ?? false)
+            ) {
+              return existing;
+            }
+          }
           throw refusal(error);
         });
       const tenantId = created._id.toHexString();

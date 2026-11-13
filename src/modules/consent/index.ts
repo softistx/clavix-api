@@ -2,6 +2,8 @@ import type { IResolvers } from "@graphql-tools/utils";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
 import type { OAuthHandle } from "@/oauth/routes";
+import { requireLive } from "@/tenancy/live";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -42,6 +44,12 @@ export const consentResolvers: IResolvers = {
       const request = requestOf(ctx);
       const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
       if (server === null || server === undefined) throw denial("NOT_FOUND");
+      // A code is not minted for a suspended or deleted tenant.
+      requireLive(
+        await (
+          ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
+        ).tenant(),
+      );
       return server;
     },
   }),

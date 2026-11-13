@@ -101,6 +101,14 @@ describe("createTenant", () => {
     expect(await events()).toEqual(["tenant.create"]);
   });
 
+  test("a repeat after a failed record returns the tenant and records the event once", async () => {
+    const first = await create();
+    await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
+    const again = await create();
+    expect(again.id).toBe(first.id);
+    expect(await events()).toEqual(["tenant.create"]);
+  });
+
   test("a taken slug is SLUG_TAKEN, a bad one and an unknown plan BAD_USER_INPUT", async () => {
     await create();
     const taken = await as(

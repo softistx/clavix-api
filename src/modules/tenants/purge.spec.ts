@@ -84,6 +84,12 @@ describe("the tenant purge", () => {
     expect(names).not.toContain("adminEvents");
   });
 
+  test("every purger reaches a real collection", async () => {
+    for (const purger of ownedPurgers()) {
+      expect(await purger.deleteOwnedBy(new ObjectId())).toBe(0);
+    }
+  });
+
   test("refuses a tenant before its purgeAt and a tenant not in the trash", async () => {
     const a = await seed("alpha");
     await seed("bravo"); // not deleted

@@ -298,7 +298,8 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   (`purge.ts`) claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
   partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
   record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
-  tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. A failing tenant stays
+  tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. The Redis MAU counters (hashed, no user ids) are not deleted: they expire on their own after 400 days.
+  A failing tenant stays
   claimed and the next run resumes it. **Not scheduled, and `PartitionPurger` has no implementation**:
   Temporary, until @softistx/janus-oauth-mongo#710; wiring is clavix-api#112. A new tenant-owned
   collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
@@ -307,6 +308,10 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin; the rest
   is platform-only. The `Tenant` parent is `TenantParent` (codegen mapper), so `Me.memberships` keeps
   working with the extended type.
+- **Still public for a suspended or deleted tenant**: the anonymous `tenantBranding` and the logo by host
+  (a hosted page can show its suspended screen); `createTenant` repeated with the same slug, name, plan
+  and sign-up returns the tenant and records the event again (a retry after a failed record).
+  Dynamic client registration is off; if it is ever turned on, `tenant-state.ts` must refuse `/register`.
 
 ## OAuth clients
 
