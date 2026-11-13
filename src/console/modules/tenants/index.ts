@@ -20,19 +20,20 @@ import { purgeAtOf } from "@/modules/tenants/trash.schema";
 import { isMonth } from "@/modules/usage/mau";
 import type { Audits } from "../../audit";
 import { type Guards, onPlatform, onTenant } from "../../guard";
+import { tenantArg } from "../ids";
 import { badInput, refusal, suspendedForAdmins } from "./errors";
 import { parentOf, type TenantParent } from "./parent";
 
 export type { TenantParent } from "./parent";
 
-const idOf = (args: Record<string, unknown>) => String(args["id"]);
-const tenantIdOf = (args: Record<string, unknown>) => String(args["tenantId"]);
+const idOf = (args: Record<string, unknown>) =>
+  String(args["id"]).toLowerCase();
 
 export const tenantsGuards: Guards = {
   "Query.tenants": onPlatform("view"),
   "Query.tenant": onTenant("view", idOf),
   "Query.plans": { kind: "signedIn" },
-  "Query.usage": onTenant("view", tenantIdOf),
+  "Query.usage": onTenant("view", tenantArg),
   "Mutation.createTenant": onPlatform("edit"),
   "Mutation.updateTenant": onTenant("edit", idOf),
   "Mutation.setTenantPlan": onPlatform("edit"),
@@ -76,7 +77,7 @@ async function docOf(parent: TenantParent): Promise<Tenant> {
 
 // A tenant the caller may write to: it exists and is not in the trash.
 async function writable(id: string): Promise<Tenant> {
-  const tenant = await tenantAdmin.find(id);
+  const tenant = await tenantAdmin.find(id.toLowerCase());
   if (tenant === undefined || tenant.deletedAt !== null) throw notFound();
   return tenant;
 }
@@ -139,7 +140,7 @@ export const tenants: Resolvers = {
       return { items: page.items.map(parentOf), nextCursor: page.nextCursor };
     },
     tenant: async (_, { id }, ctx) => {
-      const tenant = await tenantAdmin.find(id);
+      const tenant = await tenantAdmin.find(id.toLowerCase());
       if (tenant === undefined) return null;
       // The trash is for platform operators.
       if (tenant.deletedAt !== null && !(await ctx.canPlatform("view"))) {
@@ -153,7 +154,7 @@ export const tenants: Resolvers = {
       if (month !== null && month !== undefined && !isMonth(month)) {
         throw badInput("month must be YYYY-MM", "month");
       }
-      const tenant = await tenantAdmin.find(tenantId);
+      const tenant = await tenantAdmin.find(tenantId.toLowerCase());
       if (
         tenant === undefined ||
         (tenant.deletedAt !== null && !(await ctx.canPlatform("view")))

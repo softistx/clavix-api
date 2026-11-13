@@ -8,7 +8,8 @@ import type {
 } from "@/modules/resources/catalog";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
-import { activeTenant, refusing, tenantArg } from "../catalog-support";
+import { catalogTenant, refusing } from "../catalog-support";
+import { tenantArg } from "../ids";
 import { keepConsoleResource } from "../reserved";
 
 const view = onTenant("view", tenantArg);
@@ -70,7 +71,7 @@ const resourceShape = (
 export const resources: Resolvers = {
   Query: {
     resources: async (_, { tenantId }, ctx) => {
-      const { _id } = await activeTenant(ctx, tenantId);
+      const { _id } = await catalogTenant(ctx, tenantId);
       const [found, scopes] = await Promise.all([
         catalog.listResources(_id),
         catalog.listScopes(_id),
@@ -78,7 +79,7 @@ export const resources: Resolvers = {
       return found.map((resource) => resourceShape(resource, scopes));
     },
     resource: async (_, { tenantId, id }, ctx) => {
-      const { _id } = await activeTenant(ctx, tenantId);
+      const { _id } = await catalogTenant(ctx, tenantId);
       const found = await catalog.findResource(_id, id);
       return found === undefined
         ? null
@@ -88,7 +89,7 @@ export const resources: Resolvers = {
           );
     },
     scopes: async (_, { tenantId, resourceId }, ctx) => {
-      const { _id } = await activeTenant(ctx, tenantId);
+      const { _id } = await catalogTenant(ctx, tenantId);
       if (resourceId === undefined || resourceId === null) {
         return (await catalog.listScopes(_id)).map(scopeShape);
       }
@@ -102,7 +103,7 @@ export const resources: Resolvers = {
   },
   Mutation: {
     createResource: async (_, { tenantId, input }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const created = await refusing(() =>
         catalog.createResource(tenant._id, tenant.slug, {
           uri: input.uri,
@@ -116,7 +117,7 @@ export const resources: Resolvers = {
       return resourceShape(created, []);
     },
     updateResource: async (_, { tenantId, id, input }, ctx) => {
-      const { _id } = await activeTenant(ctx, tenantId);
+      const { _id } = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
         catalog.updateResource(_id, id, { name: input.name }),
       );
@@ -127,7 +128,7 @@ export const resources: Resolvers = {
       );
     },
     deleteResource: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       let scopes: StoredScopeDoc[] = [];
       const removed = await refusing(async () => {
         const found = await catalog.findResource(tenant._id, id);
@@ -168,7 +169,7 @@ export const resources: Resolvers = {
       return removed;
     },
     createScope: async (_, { tenantId, input }, ctx) => {
-      const { _id } = await activeTenant(ctx, tenantId);
+      const { _id } = await catalogTenant(ctx, tenantId);
       const created = await refusing(() =>
         catalog.createScope(_id, {
           name: input.name,
@@ -184,7 +185,7 @@ export const resources: Resolvers = {
       return scopeShape(created);
     },
     updateScope: async (_, { tenantId, id, input }, ctx) => {
-      const { _id } = await activeTenant(ctx, tenantId);
+      const { _id } = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
         catalog.updateScope(_id, id, {
           description:
@@ -201,7 +202,7 @@ export const resources: Resolvers = {
       return scopeShape(updated);
     },
     deleteScope: async (_, { tenantId, id }, ctx) => {
-      const tenant = await activeTenant(ctx, tenantId);
+      const tenant = await catalogTenant(ctx, tenantId);
       const removed = await refusing(async () => {
         const scope = await catalog.findScope(tenant._id, id);
         if (scope !== undefined && scope.resourceId !== null) {

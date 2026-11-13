@@ -1,8 +1,7 @@
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
-import { activeTenant } from "../directory-tenant";
-import { idArg, lowerTenantArg, tenantIdOf } from "../ids";
+import { activeTenant, idArg, tenantArg, tenantIdOf } from "../ids";
 
 // A user's sessions: read is `view`, ending one is `edit`.
 const target = (type: string, id: string, tenantId: string) => ({
@@ -12,8 +11,8 @@ const target = (type: string, id: string, tenantId: string) => ({
 });
 
 export const sessionsGuards: Guards = {
-  "Query.userSessions": onTenant("view", lowerTenantArg),
-  "Mutation.revokeUserSession": onTenant("edit", lowerTenantArg),
+  "Query.userSessions": onTenant("view", tenantArg),
+  "Mutation.revokeUserSession": onTenant("edit", tenantArg),
 };
 
 export const sessionsAudits: Audits = {

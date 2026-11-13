@@ -1,6 +1,5 @@
 import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
-import { ObjectId } from "mongodb";
 import { brandingService } from "@/config/branding";
 import { tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
@@ -13,12 +12,11 @@ import {
 } from "@/modules/branding/theme";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
-
-const tenantIdOf = (args: Record<string, unknown>) => String(args["tenantId"]);
+import { tenantArg, tenantIdOf } from "../ids";
 
 export const brandingGuards: Guards = {
-  "Query.branding": onTenant("view", tenantIdOf),
-  "Mutation.updateBranding": onTenant("edit", tenantIdOf),
+  "Query.branding": onTenant("view", tenantArg),
+  "Mutation.updateBranding": onTenant("edit", tenantArg),
 };
 
 export const brandingAudits: Audits = {
@@ -28,13 +26,9 @@ export const brandingAudits: Audits = {
 // The guard decided who may touch the tenant; this decides it exists (a
 // platform role is allowed on any id) and is active.
 async function requireTenant(tenantId: string) {
-  if (
-    ObjectId.isValid(tenantId) &&
-    (await tenantsService.activeByIds([tenantId])).length === 1
-  ) {
-    return;
+  if ((await tenantsService.activeByIds([tenantId])).length === 0) {
+    throw denial("NOT_FOUND", "No such tenant");
   }
-  throw denial("NOT_FOUND", "No such tenant");
 }
 
 const shape = (
@@ -83,7 +77,8 @@ function refusal(error: unknown): unknown {
 
 export const branding: Resolvers = {
   Query: {
-    branding: async (_, { tenantId }) => {
+    branding: async (_, { tenantId: given }) => {
+      const tenantId = tenantIdOf(given);
       await requireTenant(tenantId);
       const found = await brandingService.get(tenantId);
       return found === undefined ? null : shape(tenantId, found);
@@ -91,9 +86,9 @@ export const branding: Resolvers = {
   },
   Mutation: {
     updateBranding: async (_, { tenantId: given, input }, ctx) => {
-      await requireTenant(given);
       // One spelling of the id in the trail, whatever case the caller sent.
-      const tenantId = new ObjectId(given).toHexString();
+      const tenantId = tenantIdOf(given);
+      await requireTenant(tenantId);
       const result = await brandingService
         .update(tenantId, {
           displayName: input.displayName,

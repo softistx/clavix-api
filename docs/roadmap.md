@@ -7,41 +7,12 @@ nxgt-janus release says which.
 
 ## Now
 
-- **Console API foundation** — the console's own GraphQL API at `/console/graphql`, behind a
-  bearer token of the `clavix` tenant, with platform and tenant roles (owner, admin, viewer), a
-  deny-by-default guard on every field, and `operators:grant` to name the first operators
-  ([#99](https://github.com/softistx/clavix-api/issues/99)).
-- **Admin events** — every change made from the console is recorded: who did it, what, on which
-  tenant and target, and when, with no secret value ever stored. The viewer and the export come
-  with the audit log ([#107](https://github.com/softistx/clavix-api/issues/107)).
-- **Console** (in progress; the foundation, branding and admin events above are in the M2
-  integration branch, nothing of M2 is in `develop` yet) — operators and tenant admins manage
-  Clavix from the console instead of scripts:
-  - Platform: tenants with plans, quotas and usage counters
-    ([#8](https://github.com/softistx/clavix-api/issues/8)). A suspended tenant refuses
-    sign-ins and new tokens (tokens already issued live to expiry, the console stays readable).
-    A deleted tenant goes to a 30-day trash, can be restored, then is purged; its slug stays
-    reserved. The API and the scheduled daily purge of the trash are in the M2 integration branch
-    (tenants, plans, usage, suspension, trash; the purge uses janus's partition purges,
-    softistx/nxgt-janus#710, [#112](https://github.com/softistx/clavix-api/issues/112)).
-  - Switchable tenants: `me.switchableTenants`, the shell's tenant switcher (a member's tenants, an
-    operator's every live tenant, paged and searchable; done on the M2 branch,
-    [#120](https://github.com/softistx/clavix-api/issues/120)).
-  - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users (list, invite,
-    disable, delete, sessions and grants; done on the M2 branch,
-    [#101](https://github.com/softistx/clavix-api/issues/101); an e-mail prefix search with a total, a session list with a per-session revoke and an e-mail verified flag, done on the M2 branch, [#132](https://github.com/softistx/clavix-api/issues/132)), end-user roles per tenant, scoped to a resource or not, and assigned to users (done on the M2 branch, [#102](https://github.com/softistx/clavix-api/issues/102)); admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
-  - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
-    host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
-  - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for
-    verified domains of active tenants
-    ([#11](https://github.com/softistx/clavix-api/issues/11)). The API is in the M2
-    integration branch (add, verify, remove, make primary, a 6-hourly recheck with a 7-day
-    grace, the TLS ask endpoint, the Related Origins document); the reverse-proxy
-    configuration is in the going-live slice below.
-  - Going live ([#108](https://github.com/softistx/clavix-api/issues/108)): a `Dockerfile`, a
-    compose file with Caddy (on-demand TLS asking the API, a wildcard option), `/healthz` and
-    `/readyz`, a MongoDB backup and restore script with a restore drill, and the runbook
-    [operations.md](operations.md) (done on the M2 branch; no deploy pipeline, images are built by hand).
+- **Admin roles** — roles for the admins of a tenant, so an owner can give an admin less than
+  full access ([#9](https://github.com/softistx/clavix-api/issues/9)). Admin memberships and
+  invitations are in; the role definitions are what remains.
+- **Admin events viewer and export** — every change made from the console is already recorded (see
+  Shipped); the viewer and the export come with the audit log
+  ([#107](https://github.com/softistx/clavix-api/issues/107)).
 
 ## Next
 
@@ -79,6 +50,39 @@ nxgt-janus release says which.
   the access rules refer to.
 
 ## Shipped
+
+- **Console API foundation** — the console's own GraphQL API at `/console/graphql`, behind a
+  bearer token of the `clavix` tenant, with platform and tenant roles (owner, admin, viewer), a
+  deny-by-default guard on every field, and `operators:grant` to name the first operators
+  ([#99](https://github.com/softistx/clavix-api/issues/99)).
+- **Tenants, plans, usage, suspension and trash** — operators manage tenants with plans, quotas and
+  usage counters ([#8](https://github.com/softistx/clavix-api/issues/8)). A suspended tenant refuses
+  sign-ins and new tokens (tokens already issued live to expiry, the console stays readable). A
+  deleted tenant goes to a 30-day trash, can be restored, then is purged daily; its slug stays
+  reserved ([#112](https://github.com/softistx/clavix-api/issues/112)).
+- **Switchable tenants** — `me.switchableTenants` feeds the shell's tenant switcher: a member's
+  tenants, or an operator's every live tenant, paged and searchable
+  ([#120](https://github.com/softistx/clavix-api/issues/120)).
+- **Clients, resources and scopes in the console** — a tenant manages its clients, resources and
+  scopes with per-language consent texts.
+- **Users in the console** — list, invite, disable and delete users, with their sessions (revoked
+  one by one), grants and an e-mail verified flag, and an e-mail prefix search with a total
+  ([#101](https://github.com/softistx/clavix-api/issues/101),
+  [#132](https://github.com/softistx/clavix-api/issues/132)).
+- **End-user roles** — roles per tenant, scoped to a resource or not, assigned to users and released
+  in the `roles` claim ([#102](https://github.com/softistx/clavix-api/issues/102)).
+- **Branding** — a theme per tenant with an AA contrast check, a logo, and a public brand query by
+  host; unsafe CSS is refused on save ([#10](https://github.com/softistx/clavix-api/issues/10)).
+- **Custom domains** — add, verify by DNS TXT, remove and make primary; a 6-hourly recheck with a
+  7-day grace, automatic TLS only for verified domains of active tenants, and the Related Origins
+  document ([#11](https://github.com/softistx/clavix-api/issues/11)).
+- **Going live** — a `Dockerfile`, a compose file with Caddy (on-demand TLS asking the API, a
+  wildcard option), `/healthz` and `/readyz`, a MongoDB backup and restore script with a restore
+  drill, and the runbook [operations.md](operations.md); no deploy pipeline, images are built by
+  hand ([#108](https://github.com/softistx/clavix-api/issues/108)).
+- **Admin events recording** — every change made from the console is recorded: who did it, what, on
+  which tenant and target, and when, with no secret value ever stored
+  ([#107](https://github.com/softistx/clavix-api/issues/107) for the viewer and export).
 
 - **Key rotation without downtime** — the master key is a keyring (`CLAVIX_KEYS_MASTER_KEY`, first seals, any opens) re-sealed by `bun run keys:reseal`, and `bun run keys:rotate` rotates a tenant's signing keys now in an emergency
   ([#156](https://github.com/softistx/clavix-api/issues/156)); runbook in `docs/operations.md`.

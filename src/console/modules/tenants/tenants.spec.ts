@@ -358,6 +358,13 @@ describe("queries", () => {
       clients: { used: 0, quota: 3 },
       domains: { used: 0, quota: 1 },
     });
+    // The id in upper case is the same tenant (the guard and the read agree).
+    const upper = await as(
+      ADMIN,
+      `{ usage(tenantId: "${id.toUpperCase()}", month: "2026-10") { month } }`,
+    );
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data?.["usage"]).toEqual({ month: "2026-10" });
     const bad = await as(
       ADMIN,
       `{ usage(tenantId: "${id}", month: "2026-13") { month } }`,
