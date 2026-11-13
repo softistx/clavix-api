@@ -46,3 +46,13 @@ export type ClaimsFor = (
   subject: OidcSubject,
   scopes: readonly string[],
 ) => OidcClaims | Promise<OidcClaims>;
+
+/**
+ * The `roles` claim of a tenant's users (slice A2c): the role names the user
+ * holds, tenant-wide ones plus, when `audience` is the URI of one of the
+ * tenant's resources, the ones scoped to it. `audience` is `null` for an
+ * id_token and userinfo (no resource: tenant-wide roles only).
+ */
+export type RolesFor = (
+  tenant: ResolvedTenant,
+) => (userId: string, audience: string | null) => Promise<string[]>;

@@ -16,7 +16,7 @@ import { changeRole, removeMember } from "./service";
 // A Redis whose lock cannot be taken (held by another past `wait`) until `free`.
 let held = true;
 const redis = {
-  lock: async (_key: string, work: () => Promise<unknown>) => {
+  lock: async <T>(_key: string, work: () => Promise<T>) => {
     if (held) throw new RedisError("LOCK_HELD", "k", "held");
     return work();
   },

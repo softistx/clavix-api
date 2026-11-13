@@ -5,7 +5,7 @@ import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
 import { lifetimes } from "./lifetimes";
-import type { AuthFor, SigningKeysFor } from "./ports";
+import type { AuthFor, RolesFor, SigningKeysFor } from "./ports";
 import type { Keyed } from "./resolution";
 
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
@@ -17,6 +17,7 @@ export interface BuildDeps {
   authFor: AuthFor;
   oidc: ReturnType<typeof createOidcProvider>;
   clock?: Clock | undefined;
+  rolesFor?: RolesFor | undefined;
 }
 
 /**
@@ -25,7 +26,7 @@ export interface BuildDeps {
  * the tenant's partition (ADR-0006).
  */
 export const buildIssuer =
-  ({ db, signingKeysFor, authFor, oidc, clock }: BuildDeps) =>
+  ({ db, signingKeysFor, authFor, oidc, clock, rolesFor }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
     const keys: SigningKeyStore = signingKeysFor(tenant.tenantId);
     const userinfo = userinfoOf(tenant.issuer);
@@ -36,7 +37,28 @@ export const buildIssuer =
       resources: { ...resources, [userinfo]: { scopes: [...OIDC_SCOPES] } },
       defaultResource: userinfo,
       lifetimes,
-      accessTokens: { format: "jwt" as const, keys },
+      accessTokens: {
+        format: "jwt" as const,
+        keys,
+        // Runs on every code exchange and refresh: a refreshed token carries
+        // the user's current roles. The audience is the token's resource.
+        ...(rolesFor === undefined
+          ? {}
+          : {
+              claims: async ({
+                subject,
+                audience,
+              }: {
+                subject: string;
+                audience: string;
+              }) => ({
+                roles: await rolesFor(tenant)(
+                  subject,
+                  audience === userinfo ? null : audience,
+                ),
+              }),
+            }),
+      },
       tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
       ...(clock === undefined ? {} : { clock }),
     };

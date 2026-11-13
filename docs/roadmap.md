@@ -27,7 +27,7 @@ nxgt-janus release says which.
   - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users (list, invite,
     disable, delete, sessions and grants; done on the M2 branch,
     [#101](https://github.com/softistx/clavix-api/issues/101); the e-mail search is exact until janus
-    offers a prefix filter), end-user roles and admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
+    offers a prefix filter), end-user roles per tenant, scoped to a resource or not, and assigned to users (done on the M2 branch, [#102](https://github.com/softistx/clavix-api/issues/102)); admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).
   - Branding: a theme per tenant with an AA contrast check, a logo and a public brand query by
     host ([#10](https://github.com/softistx/clavix-api/issues/10)) (in progress).
   - Custom domains: DNS TXT verification and automatic TLS; certificates are issued only for
@@ -102,7 +102,7 @@ nxgt-janus release says which.
 - **OpenID Connect** — id_token, userinfo, `openid-configuration`, JWT access tokens
   (RFC 9068) and introspection ([#4](https://github.com/softistx/clavix-api/issues/4)): each
   tenant host serves its own discovery, JWKS, userinfo and introspection, with user claims
-  from the tenant's own user pool. The `roles` claim waits for the console.
+  from the tenant's own user pool. The `roles` claim (id_token, userinfo and access tokens) is released from the console's end-user roles.
 - **Users and sessions per tenant** — one partitioned user pool per tenant, a host-only
   `__Host-` session cookie (14 days sliding, 30-day absolute cap), e-mail code sign-in
   (`requestSignInCode`, `verifySignInCode`, `signOut`, `currentUser`), per-tenant `signUp`

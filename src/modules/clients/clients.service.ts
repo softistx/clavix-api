@@ -191,6 +191,16 @@ export class ClientsService {
   }
 
   /**
+   * Whether the id names a client this service does not manage (a record that
+   * was not registered through the console or the script): `delete` leaves it
+   * alone and the caller has nothing to record.
+   */
+  async isUnmanaged(tenant: CliTenant, clientId: string): Promise<boolean> {
+    const record = await this.storeOf(tenant).findClient(clientId);
+    return record !== null && record.source !== "registered";
+  }
+
+  /**
    * `false` when it was not there. The client goes first (nothing new can be
    * granted to it), then its standing grants and their tokens are revoked: on
    * a repeat too, so a run that stopped between the two is finished.

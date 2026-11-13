@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { catalog } from "@/config/resources";
+import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type {
   StoredResourceDoc,
@@ -128,6 +129,7 @@ export const resources: Resolvers = {
     deleteResource: async (_, { tenantId, id }, ctx) => {
       const tenant = await activeTenant(ctx, tenantId);
       let scopes: StoredScopeDoc[] = [];
+      let roles: { _id: ObjectId }[] = [];
       const removed = await refusing(async () => {
         const found = await catalog.findResource(tenant._id, id);
         keepConsoleResource(tenant, found);
@@ -135,6 +137,9 @@ export const resources: Resolvers = {
           scopes = await catalog.listScopes(tenant._id, {
             resourceId: found._id,
           });
+          // The roles scoped to it go first: were the resource gone before them
+          // a retry would find nothing to clean up.
+          roles = await rolesService.deleteForResource(tenant._id, found._id);
         }
         return catalog.deleteResource(tenant._id, id);
       });
@@ -142,6 +147,13 @@ export const resources: Resolvers = {
       // recorded on a repeat too (it may be the event the first run missed).
       for (const scope of scopes) {
         await ctx.audit("scope.delete", target("scope", tenant._id, scope._id));
+      }
+      for (const role of roles) {
+        await ctx.audit("role.delete", {
+          type: "role",
+          id: role._id.toHexString(),
+          tenantId: tenant._id.toHexString(),
+        });
       }
       if (ObjectId.isValid(id)) {
         await ctx.audit(

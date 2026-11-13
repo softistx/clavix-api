@@ -1,9 +1,10 @@
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import type { AuthFor, ClaimsFor, ResourcesFor } from "@/oauth/ports";
+import type { AuthFor, ClaimsFor, ResourcesFor, RolesFor } from "@/oauth/ports";
 import { withTenantState } from "@/oauth/tenant-state";
 import { signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
+import { rolesFor as storedRolesFor } from "./roles";
 import { tenantResolver } from "./tenancy";
 import { usageService } from "./usage";
 
@@ -17,6 +18,7 @@ export const createIssuers = (
   authFor: AuthFor,
   claimsFor: ClaimsFor,
   resourcesFor: ResourcesFor = storedResourcesFor,
+  rolesFor: RolesFor = storedRolesFor,
 ) =>
   withTenantState(
     createClavixOAuthIssuers({
@@ -26,6 +28,7 @@ export const createIssuers = (
       authFor,
       claimsFor,
       resourcesFor,
+      rolesFor,
     }),
     {
       resolver: tenantResolver,

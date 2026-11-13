@@ -7,7 +7,7 @@ issued for that resource (its URI is the token's audience).
 """
 type TenantRole {
   id: ID!
-  "The claim value: 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`. Unique per tenant and resource; fixed once created is not required, see `updateRole`."
+  "The claim value: 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`. Unique per tenant and resource; `updateRole` may rename it."
   name: String!
   description: String
   "The resource (API) the role is scoped to, or `null` for the whole tenant. Fixed at creation."

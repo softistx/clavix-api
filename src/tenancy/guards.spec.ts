@@ -64,6 +64,8 @@ const allowed = [
   "src/modules/resources/",
   "src/config/resources.ts",
   "src/modules/branding/",
+  "src/modules/roles/",
+  "src/config/roles.ts",
   "src/config/branding.ts",
   "src/modules/usage/",
   "src/config/usage.ts",

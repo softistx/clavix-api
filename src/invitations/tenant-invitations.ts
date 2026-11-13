@@ -93,6 +93,14 @@ const toPending = (invitation: StoredInvitation): PendingInvitation => ({
   expiresAt: invitation.expiresAt,
 });
 
+/** The tenant is missing or suspended: the call did nothing. */
+export class TenantUnavailableError extends Error {
+  constructor() {
+    super("the tenant is not available");
+    this.name = "TenantUnavailableError";
+  }
+}
+
 /**
  * `TenantInvitations` over a tenant's janus invitations. `source` is read on
  * every call (a tenant's instance is rebuilt when the tenant changes); `null`
@@ -103,7 +111,7 @@ export function createTenantInvitations(
 ): TenantInvitations {
   const need = async () => {
     const found = await source();
-    if (found === null) throw new Error("the tenant is not available");
+    if (found === null) throw new TenantUnavailableError();
     return found;
   };
   return {
