@@ -410,6 +410,10 @@ is swept by it or finds the account gone. Have an owner of the tenant send a new
 
 The platform role is never granted to a disabled account. Enable the user (`enableUser`) and run the command again.
 
+### `operators:grant`: `the account "<address>" changed while granting: run the command again`
+
+The account was deleted, or deleted and created again, between the lookup and the grant (the command re-reads it under the user's lock). Nothing was granted. Run the command again.
+
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
@@ -444,7 +448,7 @@ Monthly active users never block: `usage` only reports `exceeded`.
 
 **`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on every console write of a tenant's own admins (clients, resources, roles, users, admins, domains, branding, sign-in methods, `updateTenant`: the console stays readable on a suspended tenant, platform operators can still write), and as `access_denied` JSON on
 `/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
-`restoreTenant` lifts it at once (the tenant's slug host and its verified custom hosts are dropped from the cache). Tokens already issued still work until they expire.
+`restoreTenant` lifts it at once (the tenant's slug host, its verified custom hosts and a lapsed primary host are dropped from the cache). Tokens already issued still work until they expire.
 
 It is also the answer of `acceptInvitation` on a suspended tenant's own host: an end-user invitation cannot be accepted, and so cannot sign the new user in, until `resumeTenant`; the invitation is not spent (`invitationPreview` is not refused). An admin invitation is accepted on the `clavix` tenant, which cannot be suspended: for it a suspended managed tenant gives `INVITATION_INVALID` instead. Every console write of a tenant admin (see above, `createClient`, `updateRole`, ...) gives `TENANT_SUSPENDED` too, replays included.
 
