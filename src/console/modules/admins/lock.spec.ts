@@ -82,7 +82,7 @@ describe("the tenant's membership lock cannot be taken", () => {
     const auth = buildTenantJanus(
       oauthDb,
       clavix,
-      false,
+      undefined,
       adminInvitationHooks({
         access,
         exclusive,
