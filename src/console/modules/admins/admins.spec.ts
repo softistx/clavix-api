@@ -632,14 +632,20 @@ describe("changing and removing, the last owner protected", () => {
   });
 
   test("two concurrent demotions of two owners leave one", async () => {
-    await access.grantTenant(tenantB, ownA2, "owner");
-    const demote = (user: string) =>
+    // Its own tenant and owners: which of the two survives is a race, so the
+    // loser must not be a user the other tests rely on (ownB owns tenantB).
+    const tenant = (
+      await tenantsService.create({ slug: "adm-race", name: "Race" })
+    ).id;
+    await access.grantTenant(tenant, ownA2, "owner");
+    await access.grantTenant(tenant, vwA, "owner");
+    const demote = (by: string, user: string) =>
       asConsole(
-        ownB,
-        `mutation { removeMembership(tenantId: "${tenantB}", userId: "${user}") }`,
+        by,
+        `mutation { removeMembership(tenantId: "${tenant}", userId: "${user}") }`,
       );
-    await Promise.all([demote(ownB), demote(ownA2)]);
-    const owners = await access.holders(tenantB, "owner");
+    await Promise.all([demote(ownA2, vwA), demote(vwA, ownA2)]);
+    const owners = await access.holders(tenant, "owner");
     expect(owners.length).toBeGreaterThanOrEqual(1);
   });
 });
