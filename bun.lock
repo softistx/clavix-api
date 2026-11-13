@@ -5,9 +5,9 @@
     "": {
       "name": "clavix-api",
       "dependencies": {
-        "@alxia/core": "^0.19.0",
+        "@alxia/core": "^0.22.0",
         "@alxia/env": "^0.5.0",
-        "@alxia/graphql": "^0.16.0",
+        "@alxia/graphql": "^0.16.1",
         "@graphql-tools/load-files": "^8.0.6",
         "@graphql-tools/merge": "^10.0.6",
         "@graphql-tools/utils": "^13.1.3",
@@ -50,11 +50,11 @@
     },
   },
   "packages": {
-    "@alxia/core": ["@alxia/core@0.19.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-I/tKBQ3xWfqMqUWzWwPNBbr1murfKGgcxcy1DiSQT30fIgHJ7IPmgx32O/3Mf2JOYMrwbz3BWnP7VO9GnL+Avg=="],
+    "@alxia/core": ["@alxia/core@0.22.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-nDAqWA/CJbQ3PVB9e9F9Kdipp3Vv25PfxZmAx27EuiImY0ylkEwPRVMz8bzsbHGsQDA+V85NirJvqttpUTzL/g=="],
 
     "@alxia/env": ["@alxia/env@0.5.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" }, "bin": { "alxia-env": "dist/cli/index.js" } }, "sha512-DhZMLwIFJUA3LZ/BzYKQQm+7O9nMH2DXfvKfkt01WcKccDySAsiHg735irOT0ymehxuRa22EzJzalX3n/fjN+w=="],
 
-    "@alxia/graphql": ["@alxia/graphql@0.16.0", "", { "peerDependencies": { "@alxia/core": "^0.21.1", "graphql": "^16.11.0 || ^17.0.0", "graphql-ws": "^6.1.0", "graphql-yoga": "^5.16.0 || ^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-KAZ1AP6GF5IoD+vcbKY0a1xC1pDOjrEoElGyBdZqT8moaOG437rE4VtZVDTi0TAZksI4/TsyTX9u84PSfwlKxQ=="],
+    "@alxia/graphql": ["@alxia/graphql@0.16.1", "", { "peerDependencies": { "@alxia/core": "^0.22.0", "graphql": "^16.11.0 || ^17.0.0", "graphql-ws": "^6.1.0", "graphql-yoga": "^5.16.0 || ^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-6AWlZHeCF2LFMJUmfqNc+LCHdYD8ZGM+qZ3DFoZ+ZLXnIwjyFc8HHmdi4AdBV6cfkMxbwycTDoSo12y0mmGoSA=="],
 
     "@ardatan/relay-compiler": ["@ardatan/relay-compiler@13.0.2", "", { "dependencies": { "@babel/runtime": "^8.0.0", "immutable": "^5.1.9", "invariant": "^2.2.4" }, "peerDependencies": { "graphql": "*" } }, "sha512-VFpv9UP820SiwDUPYtq7PmD3jifzZlevkQ26bhbSzFeruSTys0eHzQCZyKg+IhgmZzwPI9AFjPe26ABNjGeIKg=="],
 
