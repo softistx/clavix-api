@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { tlsAsk } from "./tls-ask";
+import { platformHostPolicy, tlsAsk } from "./tls-ask";
 import { relatedOrigins } from "./well-known";
 
 const SECRET = "s".repeat(40);
@@ -59,6 +59,30 @@ describe("tlsAsk", () => {
     expect((await get(ask(), q, { method: "POST" })).status).toBe(404);
   });
 
+  test("platform hosts go to allowedPlatformHost, never to the custom store", async () => {
+    let custom = 0;
+    const known = ["acme.clavix.test", "console.clavix.test"];
+    const handler = ask({
+      allowed: async () => {
+        custom++;
+        return true;
+      },
+      allowedPlatformHost: async (host) => known.includes(host),
+    });
+    for (const [domain, status] of [
+      ["Acme.clavix.test", 200],
+      ["console.clavix.test.", 200],
+      ["ghost.clavix.test", 404],
+      ["a.b.clavix.test", 404],
+      ["clavix.test.evil.com", 200],
+    ] as const) {
+      expect(
+        (await get(handler, `token=${SECRET}&domain=${domain}`)).status,
+      ).toBe(status);
+    }
+    expect(custom).toBe(1); // only clavix.test.evil.com is a custom host
+  });
+
   test("404 for platform domains, IPs and garbage, without asking the store", async () => {
     let asked = 0;
     const handler = ask({
@@ -99,6 +123,25 @@ describe("tlsAsk", () => {
     expect(
       (await get(handler, `token=${SECRET}&domain=auth.acme.com`)).status,
     ).toBe(404);
+  });
+});
+
+describe("platformHostPolicy", () => {
+  const live = new Set(["acme.clavix.test"]);
+  const policy = platformHostPolicy({
+    domain: "Clavix.test",
+    isLiveTenantHost: async (host) => live.has(host),
+  });
+
+  test("the apex and the console always, a slug host only when live", async () => {
+    expect(await policy("clavix.test")).toBe(true);
+    expect(await policy("console.clavix.test")).toBe(true);
+    expect(await policy("acme.clavix.test")).toBe(true);
+    // suspended, deleted or unknown: the tenant is not live
+    expect(await policy("gone.clavix.test")).toBe(false);
+    // not a slug shape: the tenant lookup is never reached
+    expect(await policy("a.b.clavix.test")).toBe(false);
+    expect(await policy("evilclavix.test")).toBe(false);
   });
 });
 

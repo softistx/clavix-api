@@ -1,0 +1,144 @@
+# Clavix on one host: api, ui, mongo (one-node replica set: transactions),
+# redis and caddy (the only published ports: 80 and 443).
+#
+#   cp deploy/.env.example deploy/.env   # then fill it; it is never committed
+#   docker compose -f deploy/compose.yml --env-file deploy/.env up -d
+#
+# See docs/operations.md. Images are never built by CI here: build and tag them
+# yourself (`docker build -t "$CLAVIX_API_IMAGE" .`).
+
+name: clavix
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *restart
+    image: ${CLAVIX_API_IMAGE:?set CLAVIX_API_IMAGE in deploy/.env}
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
+      # Caddy is the one proxy in front.
+      CLAVIX_TRUSTED_PROXIES: "1"
+    # No `ports`: the api is reachable by caddy and the ui on the private network only.
+    expose: ["3000"]
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    stop_grace_period: 20s
+
+  ui:
+    <<: *restart
+    image: ${CLAVIX_UI_IMAGE:?set CLAVIX_UI_IMAGE in deploy/.env}
+    # No env_file: the ui never sees the api's secrets (master key, ask secret...).
+    environment:
+      CLAVIX_DOMAIN: ${CLAVIX_DOMAIN:?set CLAVIX_DOMAIN}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+      NODE_ENV: production
+      PORT: "3001"
+      API_URL: http://api:3000/graphql
+      TRUSTED_PROXIES: "1"
+    expose: ["3001"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  mongo:
+    <<: *restart
+    image: mongo:8
+    command:
+      ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "1"]
+    expose: ["27017"]
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on the first start, then reports it healthy.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    expose: ["6379"]
+    volumes:
+      - redis-data:/data
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  caddy:
+    <<: *restart
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CLAVIX_DOMAIN: ${CLAVIX_DOMAIN:?set CLAVIX_DOMAIN}
+      CLAVIX_TLS_ASK_SECRET: ${CLAVIX_TLS_ASK_SECRET:?set CLAVIX_TLS_ASK_SECRET}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - ui
+
+  # `docker compose --profile tools run --rm backup` / `restore <file>`:
+  # mongodump and mongorestore against the mongo service (docs/operations.md).
+  backup:
+    profiles: ["tools"]
+    image: mongo:8
+    entrypoint: ["bash"]
+    command: ["/scripts/mongo-backup.sh", "/backups"]
+    environment:
+      MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
+      KEEP: ${BACKUP_KEEP:-14}
+    volumes:
+      - ../scripts:/scripts:ro
+      - ${BACKUP_DIR:-../backups}:/backups
+    depends_on:
+      mongo: { condition: service_healthy }
+
+  restore:
+    profiles: ["tools"]
+    image: mongo:8
+    entrypoint: ["bash", "/scripts/mongo-restore.sh"]
+    environment:
+      MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
+      CONFIRM: ${CONFIRM:-}
+    volumes:
+      - ../scripts:/scripts:ro
+      - ${BACKUP_DIR:-../backups}:/backups:ro
+    depends_on:
+      mongo: { condition: service_healthy }
+
+volumes:
+  mongo-data:
+  redis-data:
+  caddy-data:
+  caddy-config:

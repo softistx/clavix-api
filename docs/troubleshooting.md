@@ -413,11 +413,13 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 - **A domain turned `UNVERIFIED`**: its TXT record was missing for 7 days. It stopped serving and
   no certificate is issued or renewed; the owners were e-mailed. Publish the record and verify
   again. A lapsed primary keeps its flag, so the issuer does not change by itself.
+- **`/readyz` answers 503**: the body's `checks` names `mongo` or `redis` as `down`; see
+  [operations.md](operations.md), "Troubleshooting". `/healthz` stays 200 meanwhile.
 - **The TLS ask always answers 404**: `CLAVIX_TLS_ASK_SECRET` is unset or Caddy's `token` differs;
   the request went through a proxy (`X-Forwarded-*` is refused: Caddy must call the app directly);
   the domain is pending, unverified, unknown, or its tenant is suspended or in the trash. **429**:
   past `CLAVIX_TLS_ASK_LIMIT` asks per minute.
-- Caddy: `on_demand_tls { ask http://clavix-api:3000/internal/tls/ask?token=<secret> }` (Caddy
+- Caddy: `on_demand_tls { ask http://api:3000/internal/tls/ask?token=<secret> }` (Caddy
   appends `&domain=<host>`). Never route `/internal/` from the public listener.
 - **`NOT_FOUND` on a domain mutation**: the tenant is unknown or suspended, or the id belongs to
   another tenant. Pending claims count toward the `domains` quota: remove an abandoned one to free it.

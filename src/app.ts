@@ -6,6 +6,7 @@ import {
   TLS_ASK_PATH,
   WEBAUTHN_WELL_KNOWN,
 } from "./config/domains-routes";
+import { readyz } from "./config/ready";
 import { scopeTextsFor } from "./config/resources";
 import { passkeyThrottle, signInThrottle } from "./config/throttle";
 import { CONSOLE_PATH } from "./console/identity";
@@ -20,12 +21,13 @@ import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
 import type { ScopeTextsFor } from "./modules/consent/scope-labels";
 import { version } from "./modules/health";
+import type { ReadyReport } from "./modules/health/ready";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
 // The largest body /graphql reads.
 export const BODY_LIMIT = 100 * 1024;
 
-// `GET /healthz`, the liveness probe (no dependency is checked), the OAuth
+// `GET /healthz`, the liveness probe (no dependency is checked), `GET /readyz`, the OAuth
 // endpoints when `oauth` is given (the issuers of src/oauth, which
 // src/server.ts passes), then POST and GET /graphql behind the base's
 // middlewares. The body limit is declared before the OAuth routes, since it
@@ -44,6 +46,8 @@ export function createApp(
     console?: ConsoleDeps & { schema?: typeof consoleSchema };
     // Where the consent page reads the tenants' scope texts; the stored ones by default.
     scopeTexts?: ScopeTextsFor;
+    // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
+    ready?: () => Promise<ReadyReport>;
   } = {},
 ) {
   const base = createBase(undefined, {
@@ -53,6 +57,15 @@ export function createApp(
       "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
+    // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
+    .all("/readyz", async ({ request }) => {
+      if (request.method !== "GET") return new Response(null, { status: 404 });
+      const report = await (options.ready ?? readyz)();
+      return Response.json(report, {
+        status: report.status === "ok" ? 200 : 503,
+        headers: { "cache-control": "no-store" },
+      });
+    })
     .all(LOGO_PATH, ({ request }) => serveLogo(request))
     // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/tls-ask.ts).
     .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))

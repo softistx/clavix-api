@@ -443,10 +443,10 @@ only way into the `domains` collection.
   flag and keeps resolving: the issuer never moves silently. A DNS failure changes nothing.
 - A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
 - **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
-  domain of a live tenant, 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`, fails open
+  domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`, fails open
   when Redis is down), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, garbage, unknown, pending, lapsed, suspended).
-  The app has one listener: keep `/internal/` off the public proxy. No ACME client lives here.
+  The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.sh`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). Janus accepting those origins is not wired yet.
 
