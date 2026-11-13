@@ -73,6 +73,12 @@ export function createAccess(store: RelationStore) {
 
     linkTenant,
 
+    /** The ids of the users holding `owner` directly on the tenant. */
+    async owners(tenantId: string): Promise<string[]> {
+      const found = await store.findEntities(tenantOf(tenantId), "owner");
+      return found.filter((e) => e.type === "user").map((e) => e.id);
+    },
+
     grantPlatform: (userId: string, role: Role) =>
       access.grant(PLATFORM, role, userOf(userId)),
 

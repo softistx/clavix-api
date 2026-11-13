@@ -1,8 +1,9 @@
 """
 Where a custom domain stands. A new claim is PENDING until its TXT record is
 seen; VERIFIED serves the tenant (and gets a TLS certificate); UNVERIFIED is a
-verified domain whose record failed its recheck for 7 days (it serves nothing
-until `verifyDomain` succeeds again).
+verified domain whose record failed its recheck for 7 days (no certificate is
+issued or renewed for it until `verifyDomain` succeeds again; when it is the
+primary domain it keeps serving the issuer, which never changes silently).
 """
 enum DomainStatus {
   PENDING
@@ -28,7 +29,8 @@ type Domain {
   txtRecord: DomainTxtRecord!
   """
   The domain the tenant's issuer follows (ADR-0032). At most one per tenant,
-  always a VERIFIED one. The slug host keeps serving either way.
+  VERIFIED when set (a recheck lapse keeps the flag: the issuer never moves
+  silently). The slug host keeps serving either way.
   """
   primary: Boolean!
   "When the record was last seen, or `null`."

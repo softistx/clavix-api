@@ -16,7 +16,12 @@ export const resolvedTenant = z.object({
   // what opens or extends a session refuses it (`isLive`). An entry cached
   // before the field existed was an active tenant.
   status: z.enum(["active", "suspended", "deleted"]).default("active"),
+  // Where tokens say they come from: the slug host's issuer, or the primary
+  // custom domain's once the tenant made one primary (ADR-0032).
   issuer: z.string(),
+  // The slug host's issuer, whatever `issuer` is: the passkey rpId stays on it
+  // (ADR-0036). An entry cached before custom domains had none: `issuer` was it.
+  slugIssuer: z.string().optional(),
   partition: z.string(),
   version: z.number(),
 });

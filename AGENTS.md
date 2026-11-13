@@ -349,6 +349,39 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   and sign-up returns the tenant and records the event again (a retry after a failed record).
   Dynamic client registration is off; if it is ever turned on, `tenant-state.ts` must refuse `/register`.
 
+## Custom domains (`src/modules/domains`, `src/console/modules/domains`)
+
+A tenant adds a host (`addDomain`), publishes `_clavix.<host> TXT clavix-verify=<token>`, then
+`verifyDomain` reads it through the `TxtResolver` port (`dns.ts`; specs inject a fake, only
+`src/config/domains.ts` wires the real resolver). `DomainStore` (`domains.service.ts`) is the
+only way into the `domains` collection.
+- `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
+  tenants (partial unique index on `{ host }` where `status: "verified"`), which the
+  tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still
+  carries `tenantId` except `tenantOfHost`/`verifiedHost`, the resolver's and the TLS ask's lookups.
+- The token is 32 random bytes, bound to its own claim (tenant and host). Several tenants may
+  hold a pending claim on a host; the first to verify wins and evicts the others. A host
+  verified elsewhere is `DOMAIN_TAKEN`. Hosts are normalised (case, trailing dot, IDN to
+  punycode); IPs, localhost, wildcards, reserved suffixes and the platform domain are refused.
+- The quota (`effectiveQuotas(...).domains`) counts pending claims too and is checked on
+  `addDomain` (`assertWithinQuota`, a post-insert recount closes the race; serialising it
+  waits for `exclusive.ts`, A2d). `usage.domains` is `domainStore.count`.
+- The primary is explicit (`setPrimaryDomain`, ADR-0032); the issuer follows it (resolver
+  `toResolved`), the passkey rpId stays the slug host (`slugIssuer`, `src/users/rp.ts`,
+  ADR-0036). The primary cannot be removed. The slug host keeps serving.
+- `recheckAll` runs every 6 hours (`recheck.queue.ts`, started in `src/server.ts`). A record
+  missing for 7 days makes the domain `unverified` (it stops serving and no certificate is
+  issued) and the tenant's owners are e-mailed once (`notice.ts`). A lapsed primary keeps its
+  flag and keeps resolving: the issuer never moves silently. A DNS failure changes nothing.
+- A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
+- **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
+  domain of a live tenant, 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`, fails open
+  when Redis is down), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
+  proxied requests carrying `X-Forwarded-*`, garbage, unknown, pending, lapsed, suspended).
+  The app has one listener: keep `/internal/` off the public proxy. No ACME client lives here.
+- `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
+  (Related Origins). Janus accepting those origins is not wired yet.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`

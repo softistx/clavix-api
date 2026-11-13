@@ -305,3 +305,26 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 **Why:** they belong to the console itself; changing them would lock operators out.
 
 **Fix:** leave them alone. Manage them with the `2026-11-12-console` migration, not through the API.
+
+## Custom domains: `BAD_USER_INPUT` on `host`, `DOMAIN_TAKEN`, `DOMAIN_PRIMARY`, `DOMAIN_NOT_VERIFIED`
+
+- **`BAD_USER_INPUT` (field `host`)**: the host is not a public domain name. IPs, `localhost`,
+  wildcards, a scheme, port or path, reserved suffixes (`.local`, `.internal`, `.test`, ...) and
+  the platform domain with its subdomains are refused. Send `auth.acme.com`; case, a trailing dot
+  and IDN names (converted to punycode) are fine.
+- **`DOMAIN_TAKEN`**: another tenant already verified that host. Only a verified claim blocks,
+  so a pending claim never does: whoever publishes the TXT record first wins.
+- **`verifyDomain` returns `failure`**: `NO_RECORD` (no `_clavix.<host>` TXT yet; DNS may take
+  minutes to propagate), `MISMATCH` (the record does not hold this domain's token; each tenant has
+  its own), `LOOKUP_FAILED` (the resolver did not answer; retry).
+- **`DOMAIN_PRIMARY`**: make another verified domain primary first, then remove this one.
+- **`DOMAIN_NOT_VERIFIED`**: only a verified domain can be made primary.
+- **A domain turned `UNVERIFIED`**: its TXT record was missing for 7 days. It stopped serving and
+  no certificate is issued or renewed; the owners were e-mailed. Publish the record and verify
+  again. A lapsed primary keeps its flag, so the issuer does not change by itself.
+- **The TLS ask always answers 404**: `CLAVIX_TLS_ASK_SECRET` is unset or Caddy's `token` differs;
+  the request went through a proxy (`X-Forwarded-*` is refused: Caddy must call the app directly);
+  the domain is pending, unverified, unknown, or its tenant is suspended or in the trash. **429**:
+  past `CLAVIX_TLS_ASK_LIMIT` asks per minute.
+- Caddy: `on_demand_tls { ask http://clavix-api:3000/internal/tls/ask?token=<secret> }` (Caddy
+  appends `&domain=<host>`). Never route `/internal/` from the public listener.

@@ -8,7 +8,7 @@ import {
 import { isOwned } from "@/tenancy/owned";
 import { access } from "./access";
 import { mongo } from "./db";
-import { tenantAdmin } from "./tenancy";
+import { domainStore, tenantAdmin } from "./tenancy";
 
 /**
  * The tenant-owned collections of the app (`isOwned`: `adminEvents`, the
@@ -36,7 +36,11 @@ export const ownedPurgers = (): OwnedCollectionPurger[] =>
 export const createTenantPurge = (partitions: PartitionPurger) => () =>
   purgeTenants({
     registry: tenantAdmin,
-    owned: ownedPurgers(),
+    // The custom domains are a platform collection (`domains`), emptied too.
+    owned: [
+      ...ownedPurgers(),
+      { name: "domains", deleteOwnedBy: (id) => domainStore.deleteOwnedBy(id) },
+    ],
     memberships: access,
     partitions,
   });

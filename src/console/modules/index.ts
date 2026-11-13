@@ -4,6 +4,7 @@ import type { Audits } from "../audit";
 import type { Guards } from "../guard";
 import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
+import { domains, domainsAudits, domainsGuards } from "./domains";
 import { me, meGuards } from "./me";
 import { resources, resourcesAudits, resourcesGuards } from "./resources";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
@@ -15,6 +16,7 @@ export const resolvers: Resolvers = mergeResolvers([
   me,
   branding,
   clients,
+  domains,
   resources,
   tenants,
 ]);
@@ -22,12 +24,14 @@ export const guards: Guards = {
   ...meGuards,
   ...brandingGuards,
   ...clientsGuards,
+  ...domainsGuards,
   ...resourcesGuards,
   ...tenantsGuards,
 };
 export const audits: Audits = {
   ...brandingAudits,
   ...clientsAudits,
+  ...domainsAudits,
   ...resourcesAudits,
   ...tenantsAudits,
 };

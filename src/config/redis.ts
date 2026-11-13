@@ -2,6 +2,8 @@ import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
+import { domainRecheck } from "@/modules/domains/recheck.queue";
+import { tlsAskLimit } from "@/modules/domains/tls-limit";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,
@@ -41,8 +43,12 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
-      queues: { keyRotation },
-      limits: { ...signInLimits(limits), ...passkeyLimits(passkeys) },
+      queues: { keyRotation, domainRecheck },
+      limits: {
+        ...signInLimits(limits),
+        ...passkeyLimits(passkeys),
+        tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
+      },
       background: {
         onDown: () => log("redis unavailable: tenant cache degraded"),
         onUp: () => log("redis is back"),
