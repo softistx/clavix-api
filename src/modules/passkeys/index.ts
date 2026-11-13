@@ -2,6 +2,7 @@ import { denial, passkeyResolvers } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireMethod } from "@/modules/sign-in-methods/gate";
 import {
   asPasskeyInvalid,
   currentOf,
@@ -44,6 +45,7 @@ export const passkeys: Resolvers = {
       // throttle budget is spent. The key is the client address and the tenant.
       const tenant = await ctx.tenant();
       if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      requireMethod(tenant, "passkey");
       await ctx.passkeyThrottle?.check({
         tenantId: tenant.tenantId,
         ip: ctx.ip,
@@ -51,6 +53,9 @@ export const passkeys: Resolvers = {
       return signInOptions(_, __, ctx);
     },
     signInWithPasskey: async (_, { challenge, response }, ctx) => {
+      const tenant = await ctx.tenant();
+      if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      requireMethod(tenant, "passkey");
       const signedIn = await asPasskeyInvalid(() =>
         passkeySignIn(_, { challenge, assertion: response }, ctx),
       );

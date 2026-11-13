@@ -1,5 +1,5 @@
 import { createTenantAuth } from "@/users/tenant-auth";
-import { env } from "./env";
+import { secretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { tenantResolver } from "./tenancy";
 
@@ -11,6 +11,6 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
   {
     resolver: tenantResolver,
     db: oauthDb,
-    magicLink: env.CLAVIX_MAGIC_LINK,
+    secrets: secretBox,
   },
 );

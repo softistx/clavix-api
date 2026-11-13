@@ -3,6 +3,7 @@ import { tenantMail } from "@/config/mail";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireMethod } from "@/modules/sign-in-methods/gate";
 import {
   confirmMagicLink,
   magicLinkDisabled,
@@ -45,6 +46,7 @@ export const auth: Resolvers = {
   Mutation: {
     requestSignInCode: async (_, { email }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
+      requireMethod(tenant, "emailCode");
       ctx.set.headers.set("cache-control", "no-store");
       await ctx.signInThrottle?.check({
         tenantId: tenant.tenantId,
@@ -56,7 +58,8 @@ export const auth: Resolvers = {
       );
     },
     verifySignInCode: async (_, { challenge, code }, ctx) => {
-      const { auth } = await tenantOf(ctx);
+      const { auth, tenant } = await tenantOf(ctx);
+      requireMethod(tenant, "emailCode");
       const signedIn = await verifySignInCode(auth, challenge, code);
       ctx.set.headers.set("cache-control", "no-store");
       ctx.set.headers.append(

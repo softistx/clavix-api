@@ -16,6 +16,7 @@ export interface TenantRecord {
   signUp: boolean;
   status: "active" | "suspended";
   version: number;
+  signIn: ResolvedTenant["signIn"];
 }
 
 export interface TenantResolverOptions {
@@ -57,6 +58,7 @@ function toResolved(
         issuer: issuerOf(tenant.slug, config),
         partition: partitionOf(tenant._id),
         version: tenant.version,
+        signIn: tenant.signIn,
       };
 }
 
