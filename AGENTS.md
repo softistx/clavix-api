@@ -207,16 +207,21 @@ every other failure a 401).
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards) and lists it
   in `modules/index.ts`; the SDL lives there, never in `src/modules`.
 - **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
-  membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`); every role change goes
-  through `setRole` (`service.ts`), the one place that keeps the last owner (`LAST_OWNER`: checked
-  before the write, counted again after it and put back, so concurrent removals never leave none).
+  membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
+  tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
+  per key in the process, plus the app's Redis lock when there is one, `config/exclusive.ts`): the
+  relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
+  Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
   Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
   (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
-  mails, lists and revokes the invitations of any tenant's user pool; the admins use the `clavix`
-  tenant's with scope = the managed tenant's id, and a users slice reuses it for a tenant's own pool
-  (never copy it). Accepting is the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`,
-  `acceptInvitation`, every refusal `INVITATION_INVALID`); what acceptance grants is janus's
-  `invitations.onAccepted` in `src/users/tenant-janus.ts` (on `clavix`: `adminAccepted`, the relation).
+  mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
+  (never copy it). An admin invitation is one of the `clavix` tenant under the scope
+  `adminScope(tenantId)` (`src/invitations/scope.ts`, `admin:<id>`); **only that scope grants a console
+  role**, so an invitation into a pool (the `clavix` pool included) uses any other scope. Accepting is
+  the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`, `acceptInvitation`, every
+  refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
+  `onAccepted`, given per tenant by `invitationHooks` (`src/config/users.ts`; on `clavix`:
+  `adminInvitationHooks`, which refuses a suspended or deleted tenant and grants the relation).
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed

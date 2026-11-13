@@ -9,7 +9,7 @@ Today it serves:
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
-- on `POST /console/graphql`, the console API (only `me` for now), behind a bearer token;
+- on `POST /console/graphql`, the console API (`me` and the admins of a tenant: memberships and invitations), behind a bearer token;
 - scripts that create tenants, OAuth clients and API resources until the console can.
 
 ## Documentation
@@ -141,8 +141,8 @@ Clavix adds no `jose`.
 cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
 tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. Today it
-exposes only `me { user platformRole memberships { tenant { slug } role } }`, so the scripts above
-still create tenants, clients and resources.
+exposes `me { user platformRole memberships { tenant { slug } role } }` and the admins of a tenant
+(below); the scripts above still create tenants, clients and resources.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
@@ -153,12 +153,16 @@ A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `
 `memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
 email, role)`, `changeMembership`, `removeMembership` and `revokeAdminInvitation` need `manage` (the
 tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
-the managed tenant's id, role = the console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
+`admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.
 That hosted page calls `invitationPreview(code)` and `acceptInvitation(code)` on `/graphql` (the clavix
 host): accepting makes the account (e-mail proved), grants the relation (`onAccepted`, once; a spent,
 revoked or lapsed code is `INVITATION_INVALID`, 400) and opens the session. Inviting an address that is
 already a member is `ALREADY_MEMBER` (409); a second invitation to a pending address replaces it. The
-last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409).
+last owner of a tenant can be neither demoted nor removed: `LAST_OWNER` (409). Role changes of one
+tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
+within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
+already has an account is not signed in by accepting (`signedIn: false`): the role is granted and they
+sign in as usual. An invitation to a suspended or deleted tenant is `INVITATION_INVALID` until it is back.
 
 Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-console` migration
 registers the console resource and its confidential client `console` in the `clavix` tenant and

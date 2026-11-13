@@ -9,6 +9,7 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
+import { adminScope } from "@/invitations/scope";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { CONSOLE_PATH } from "../../identity";
@@ -399,6 +400,130 @@ describe("inviting and accepting", () => {
         ),
       ),
     ).toBe("INVITATION_INVALID");
+  });
+});
+
+describe("accepting, the edges", () => {
+  const clavixJanus = async () => {
+    const janus = await janusIssuers.forRequest(new Request(hosted));
+    if (janus === null) throw new Error("no clavix janus");
+    return janus;
+  };
+  const hostedB = () => `${issuerOf("adm-b", origin)}/graphql`;
+  const accept = (url: string, secret: string | undefined) =>
+    post(
+      url,
+      `mutation { acceptInvitation(code: "${secret}") { signedIn organization user { email } } }`,
+    );
+  const idOf = async (email: string) =>
+    (await (await clavixJanus()).findByEmail(email))?.id ?? "";
+
+  test("an invitee who already has an account is not signed in, and gets the role", async () => {
+    // newadmin@adm.test was made (e-mail proved) by the invitation to A.
+    const email = "newadmin@adm.test";
+    expect(
+      (await invite(ownB, tenantB, email, "VIEWER")).errors,
+    ).toBeUndefined();
+    const accepted = await accept(hosted, codeMailedTo(email));
+    expect(accepted.errors).toBeUndefined();
+    expect(accepted.data?.["acceptInvitation"]).toEqual({
+      signedIn: false,
+      organization: "Beta",
+      user: null,
+    });
+    expect(accepted.cookies.join(";")).not.toContain("__Host-clavix-session=");
+    expect(await access.holders(tenantB, "viewer")).toContain(
+      await idOf(email),
+    );
+    // Their role on A is untouched.
+    expect(await roleIn(tenantA, await idOf(email))).toBe("ADMIN");
+  });
+
+  test("a code of the clavix tenant is unknown on another tenant's host", async () => {
+    const email = "wrong-host@adm.test";
+    await invite(ownA, tenantA, email);
+    const secret = codeMailedTo(email);
+    expect(code(await accept(hostedB(), secret))).toBe("INVITATION_INVALID");
+    expect(
+      code(
+        await post(
+          hostedB(),
+          `{ invitationPreview(code: "${secret}") { email } }`,
+        ),
+      ),
+    ).toBe("INVITATION_INVALID");
+    // Still pending where it belongs.
+    expect((await accept(hosted, secret)).errors).toBeUndefined();
+  });
+
+  test("only an admin invitation of the clavix tenant grants a console role", async () => {
+    const owners = await access.holders(tenantA, "owner");
+    // In another tenant's pool, even under A's admin scope and the role `owner`.
+    const janusB = await janusIssuers.forRequest(new Request(hostedB()));
+    const inB = await janusB?.invitations.issue({
+      scope: adminScope(tenantA),
+      email: "pool-b@adm.test",
+      name: "Pool B",
+      role: "owner",
+      invitedBy: null,
+    });
+    const acceptedB = await accept(hostedB(), inB?.code);
+    expect(acceptedB.data?.["acceptInvitation"]).toMatchObject({
+      signedIn: true,
+      organization: "Beta",
+    });
+    // In the clavix pool, under a scope that is not an admin one.
+    const plain = await (await clavixJanus()).invitations.issue({
+      scope: tenantA,
+      email: "pool-clavix@adm.test",
+      name: "Pool",
+      role: "owner",
+      invitedBy: null,
+    });
+    expect((await accept(hosted, plain.code)).errors).toBeUndefined();
+    expect(await access.holders(tenantA, "owner")).toEqual(owners);
+    expect(await roleIn(tenantA, await idOf("pool-clavix@adm.test"))).toBe(
+      undefined,
+    );
+  });
+
+  test("an admin invitation with a role the console does not know is refused", async () => {
+    const odd = await (await clavixJanus()).invitations.issue({
+      scope: adminScope(tenantA),
+      email: "odd-role@adm.test",
+      name: "Odd",
+      role: "member",
+      invitedBy: null,
+    });
+    expect(code(await accept(hosted, odd.code))).toBe("INVITATION_INVALID");
+    expect(await idOf("odd-role@adm.test")).toBe("");
+  });
+
+  test("an invitation to a suspended tenant is invalid until the tenant is back", async () => {
+    const tenantC = (
+      await tenantsService.create({ slug: "adm-c", name: "Gamma" })
+    ).id;
+    await access.grantTenant(tenantC, ownA, "owner");
+    const email = "gamma@adm.test";
+    expect((await invite(ownA, tenantC, email)).errors).toBeUndefined();
+    const secret = codeMailedTo(email);
+    await tenantsService.suspend(tenantC);
+    expect(
+      code(
+        await post(
+          hosted,
+          `{ invitationPreview(code: "${secret}") { email } }`,
+        ),
+      ),
+    ).toBe("INVITATION_INVALID");
+    expect(code(await accept(hosted, secret))).toBe("INVITATION_INVALID");
+    expect(await access.holders(tenantC, "admin")).toEqual([]);
+    expect(await idOf(email)).toBe("");
+    await tenantsService.reactivate(tenantC);
+    expect(
+      (await accept(hosted, secret)).data?.["acceptInvitation"],
+    ).toMatchObject({ signedIn: true, organization: "Gamma" });
+    expect(await access.holders(tenantC, "admin")).toEqual([await idOf(email)]);
   });
 });
 

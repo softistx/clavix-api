@@ -5,9 +5,9 @@ import type { Role } from "../../model";
 import {
   activeTenant,
   assertNotMember,
+  changeRole,
   members,
-  roleOf,
-  setRole,
+  removeMember,
 } from "./service";
 
 const GRAPHQL_ROLE = {
@@ -58,7 +58,7 @@ export const admins: Resolvers = {
   Mutation: {
     inviteAdmin: async (_, { tenantId, email, role }, ctx) => {
       const tenant = await activeTenant(ctx.directory, tenantId);
-      const known = await ctx.admins.userByEmail(email);
+      const known = await ctx.directory.findUserByEmail(email);
       if (known !== null) await assertNotMember(ctx.access, tenantId, known.id);
       const inviter = await ctx.directory.findUser(ctx.principal.userId);
       return invitationOf(
@@ -76,16 +76,13 @@ export const admins: Resolvers = {
     },
     changeMembership: async (_, { tenantId, userId, role }, ctx) => {
       await activeTenant(ctx.directory, tenantId);
-      if ((await roleOf(ctx.access, tenantId, userId)) === null) {
-        throw denial("NOT_FOUND", "Not a member of this tenant");
-      }
-      await setRole(ctx.access, tenantId, userId, ROLE_OF[role]);
+      const stored = await changeRole(ctx, tenantId, userId, ROLE_OF[role]);
       const user = await ctx.directory.findUser(userId);
       if (user === null) throw denial("NOT_FOUND", "No such user");
-      return memberOf(user, ROLE_OF[role]);
+      return memberOf(user, stored);
     },
     removeMembership: async (_, { tenantId, userId }, ctx) => {
-      await setRole(ctx.access, tenantId, userId, null);
+      await removeMember(ctx, tenantId, userId);
       return true;
     },
     revokeAdminInvitation: async (_, { tenantId, invitationId }, ctx) => {

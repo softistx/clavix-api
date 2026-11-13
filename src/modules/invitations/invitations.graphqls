@@ -2,9 +2,9 @@
 type InvitationPreview {
   "The address the invitation was sent to."
   email: EmailAddress!
-  "What the invitee is invited to: the name of the tenant they will administer."
+  "What the invitee joins: the name of the tenant they will administer, or of the tenant whose user they become."
   organization: String!
-  "The role offered: `owner`, `admin` or `viewer`."
+  "The role offered, as it was issued. An admin invitation: `owner`, `admin` or `viewer`."
   role: String!
   expiresAt: DateTime!
 }
@@ -33,8 +33,9 @@ extend type Query {
 extend type Mutation {
   """
   Accepts an invitation of the tenant the request's host names: the invitee's
-  account is made (e-mail proved) and the role granted, once, and the session
-  opens. A second use of the code is INVITATION_INVALID, 400.
+  account is made (e-mail proved) and what the invitation offers granted, once,
+  and the session opens. A second use of the code, or an admin invitation whose
+  tenant is gone, is INVITATION_INVALID, 400.
   """
   acceptInvitation(code: String!): AcceptedInvitation!
 }

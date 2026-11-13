@@ -1,7 +1,7 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
-import type { ConsoleDirectory, ConsoleExtras } from "./context";
-import type { ConsoleAdmins } from "./modules/admins/ports";
+import type { ConsoleAdmins, ConsoleDirectory, ConsoleExtras } from "./context";
+import type { Exclusive } from "./exclusive";
 
 /** Verifies the request's bearer token: its principal, or `null`. A store outage rejects. */
 export type ConsoleAuthenticate = (
@@ -13,6 +13,7 @@ export interface ConsoleDeps {
   access: Access;
   directory: ConsoleDirectory;
   admins: ConsoleAdmins;
+  exclusive: Exclusive;
 }
 
 const refusal = (
@@ -45,6 +46,7 @@ export function useConsole({
   access,
   directory,
   admins,
+  exclusive,
 }: ConsoleDeps) {
   const principals = new WeakMap<Request, OAuthPrincipal>();
   return {
@@ -96,6 +98,7 @@ export function useConsole({
         access,
         directory,
         admins,
+        exclusive,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),
         canPlatform: (permission) =>

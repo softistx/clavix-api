@@ -1,74 +1,138 @@
 import { describe, expect, test } from "bun:test";
+import { createExclusive } from "../../exclusive";
 import type { Role } from "../../model";
-import { type AdminsAccess, setRole } from "./service";
+import { type AdminsAccess, changeRole, removeMember } from "./service";
 
-/**
- * Relations in memory. With `meet`, every revoke of `owner` waits until that
- * many are under way: the removals have then all passed their first check.
- */
-function fakeAccess(owners: string[], meet = 0) {
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 1));
+
+/** Relations in memory; every call yields, so unserialised calls would interleave. */
+function fake(start: Partial<Record<Role, string[]>>) {
   const held = new Map<Role, Set<string>>([
-    ["owner", new Set(owners)],
-    ["admin", new Set()],
-    ["viewer", new Set()],
+    ["owner", new Set(start.owner)],
+    ["admin", new Set(start.admin)],
+    ["viewer", new Set(start.viewer)],
   ]);
-  let waiting = 0;
-  let release: () => void = () => {};
-  const together = new Promise<void>((resolve) => {
-    release = resolve;
-  });
   const access: AdminsAccess = {
-    holders: async (_tenant, role) => [...(held.get(role) ?? [])],
+    holders: async (_tenant, role) => {
+      await tick();
+      return [...(held.get(role) ?? [])];
+    },
     grantTenant: async (_tenant, user, role) => {
+      await tick();
       held.get(role)?.add(user);
     },
     revokeTenant: async (_tenant, user, role) => {
-      if (role === "owner" && meet > 0) {
-        waiting += 1;
-        if (waiting >= meet) release();
-        await together;
-      }
+      await tick();
       held.get(role)?.delete(user);
     },
   };
-  return { access, held };
+  const of = (role: Role) => [...(held.get(role) ?? [])].sort();
+  return { deps: { access, exclusive: createExclusive() }, of };
 }
 
-const codeOf = (result: PromiseSettledResult<void>) =>
+const codeOf = (result: PromiseSettledResult<unknown>) =>
   result.status === "rejected"
     ? (result.reason as { extensions?: { code?: string } }).extensions?.code
-    : undefined;
+    : "ok";
 
-describe("setRole, the last owner", () => {
-  test("two owners removed at the same moment: the tenant keeps an owner", async () => {
-    const { access, held } = fakeAccess(["a", "b"], 2);
+describe("the last owner, under concurrent changes", () => {
+  test("two owners removed at the same moment: one goes, the other is refused", async () => {
+    const { deps, of } = fake({ owner: ["a", "b"] });
     const results = await Promise.allSettled([
-      setRole(access, "t", "a", null),
-      setRole(access, "t", "b", null),
+      removeMember(deps, "t", "a"),
+      removeMember(deps, "t", "b"),
     ]);
-    expect(held.get("owner")?.size).toBeGreaterThanOrEqual(1);
-    expect(results.map(codeOf)).toContain("LAST_OWNER");
+    expect(results.map(codeOf)).toEqual(["ok", "LAST_OWNER"]);
+    expect(of("owner")).toEqual(["b"]);
   });
 
-  test("two owners demoted at the same moment: an owner stays, and a refused one keeps only owner", async () => {
-    const { access, held } = fakeAccess(["a", "b"], 2);
+  test("two owners demoted at the same moment: an owner stays", async () => {
+    const { deps, of } = fake({ owner: ["a", "b"] });
     const results = await Promise.allSettled([
-      setRole(access, "t", "a", "admin"),
-      setRole(access, "t", "b", "viewer"),
+      changeRole(deps, "t", "a", "admin"),
+      changeRole(deps, "t", "b", "viewer"),
     ]);
-    const owners = held.get("owner") ?? new Set();
-    expect(owners.size).toBeGreaterThanOrEqual(1);
-    expect(results.map(codeOf)).toContain("LAST_OWNER");
-    for (const owner of owners) {
-      expect(held.get("admin")?.has(owner)).toBe(false);
-      expect(held.get("viewer")?.has(owner)).toBe(false);
-    }
+    expect(results.map(codeOf)).toEqual(["ok", "LAST_OWNER"]);
+    expect(of("owner")).toEqual(["b"]);
+    expect(of("admin")).toEqual(["a"]);
+    expect(of("viewer")).toEqual([]);
   });
 
-  test("one of two owners steps down", async () => {
-    const { access, held } = fakeAccess(["a", "b"]);
-    await setRole(access, "t", "a", "admin");
-    expect([...(held.get("owner") ?? [])]).toEqual(["b"]);
-    expect([...(held.get("admin") ?? [])]).toEqual(["a"]);
+  test("a no-op on b beside b's promotion and a's demotion never leaves no owner", async () => {
+    // Unserialised, the first call read `b` as an admin, then revoked the
+    // owner role `b` got meanwhile, after `a` had stepped down.
+    const { deps, of } = fake({ owner: ["a"], admin: ["b"] });
+    await Promise.allSettled([
+      changeRole(deps, "t", "b", "admin"),
+      changeRole(deps, "t", "b", "owner"),
+      changeRole(deps, "t", "a", "admin"),
+    ]);
+    expect(of("owner")).toEqual(["b"]);
+    expect(of("admin")).toEqual(["a"]);
+  });
+
+  test("two changes of one member: the member keeps exactly one role", async () => {
+    const { deps, of } = fake({ owner: ["o"], viewer: ["a"] });
+    const results = await Promise.all([
+      changeRole(deps, "t", "a", "admin"),
+      changeRole(deps, "t", "a", "viewer"),
+    ]);
+    expect(results).toEqual(["admin", "viewer"]);
+    expect(of("admin")).toEqual([]);
+    expect(of("viewer")).toEqual(["a"]);
+  });
+
+  test("a change answers NOT_FOUND for a non-member; removing one is a no-op", async () => {
+    const { deps, of } = fake({ owner: ["o"] });
+    const [change] = await Promise.allSettled([
+      changeRole(deps, "t", "x", "admin"),
+    ]);
+    expect(codeOf(change as PromiseSettledResult<unknown>)).toBe("NOT_FOUND");
+    await removeMember(deps, "t", "x");
+    expect(of("admin")).toEqual([]);
+    expect(of("owner")).toEqual(["o"]);
+  });
+});
+
+describe("createExclusive", () => {
+  test("one at a time per key, other keys beside it, a failure frees the key", async () => {
+    const exclusive = createExclusive();
+    const log: string[] = [];
+    const work =
+      (name: string, fail = false) =>
+      async () => {
+        log.push(`${name}+`);
+        await tick();
+        log.push(`${name}-`);
+        if (fail) throw new Error(name);
+        return name;
+      };
+    const results = await Promise.allSettled([
+      exclusive("k", work("1", true)),
+      exclusive("k", work("2")),
+      exclusive("other", work("3")),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([
+      "rejected",
+      "fulfilled",
+      "fulfilled",
+    ]);
+    expect(log.filter((entry) => entry !== "3+" && entry !== "3-")).toEqual([
+      "1+",
+      "1-",
+      "2+",
+      "2-",
+    ]);
+    expect(log.indexOf("3+")).toBeLessThan(log.indexOf("2+"));
+  });
+
+  test("a shared lock wraps the work, under its own key", async () => {
+    const keys: string[] = [];
+    const exclusive = createExclusive(async (key, work) => {
+      keys.push(key);
+      return work();
+    });
+    expect(await exclusive("console:members:t", async () => 1)).toBe(1);
+    expect(keys).toEqual(["exclusive:console:members:t"]);
   });
 });

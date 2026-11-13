@@ -1,5 +1,4 @@
 import { JanusError } from "@softistx/janus";
-import type { JanusMail } from "@softistx/janus-mail";
 
 /** A pending invitation of a tenant's user pool, as a console lists it. */
 export interface PendingInvitation {
@@ -31,8 +30,16 @@ export interface InvitationsAuth {
     }): Promise<{ code: string; invitation: StoredInvitation }>;
     list(
       scope: string,
-      page: { status: "pending"; lapsed: "exclude"; limit: number },
-    ): Promise<{ items: readonly StoredInvitation[] }>;
+      page: {
+        status: "pending";
+        lapsed: "exclude";
+        limit: number;
+        after: string | null;
+      },
+    ): Promise<{
+      items: readonly StoredInvitation[];
+      nextCursor: string | null;
+    }>;
     revoke(input: { id: string; scope: string }): Promise<unknown>;
   };
 }
@@ -41,7 +48,19 @@ export interface InvitationsAuth {
 export interface InvitationSource {
   /** The janus instance of the tenant whose user pool the invitee joins. */
   auth: InvitationsAuth;
-  mail: Pick<JanusMail, "invitation">;
+  /** The tenant's e-mails (janus-mail's `invitation`). */
+  mail: {
+    invitation(
+      to: { email: string },
+      data: {
+        inviter?: string;
+        organization: string;
+        role: string;
+        link: string;
+        expiresAt: Date;
+      },
+    ): Promise<unknown>;
+  };
   /** The hosted page that accepts a code (`INVITATION_PATH` on the tenant's host). */
   link(code: string): string;
 }
@@ -60,7 +79,7 @@ export interface InviteInput {
 export interface TenantInvitations {
   /** Issues the invitation (a pending one of the same scope and address is replaced) and mails its link. */
   invite(input: InviteInput): Promise<PendingInvitation>;
-  /** The pending, unlapsed invitations of the scope (the first 100). */
+  /** The pending, unlapsed invitations of the scope, all of them. */
   pending(scope: string): Promise<PendingInvitation[]>;
   /** Revokes a pending invitation of the scope; `false` when it is not one. */
   revoke(scope: string, invitationId: string): Promise<boolean>;
@@ -111,12 +130,19 @@ export function createTenantInvitations(
     },
     async pending(scope) {
       const { auth } = await need();
-      const page = await auth.invitations.list(scope, {
-        status: "pending",
-        lapsed: "exclude",
-        limit: 100,
-      });
-      return page.items.map(toPending);
+      const found: PendingInvitation[] = [];
+      let after: string | null = null;
+      do {
+        const page = await auth.invitations.list(scope, {
+          status: "pending",
+          lapsed: "exclude",
+          limit: 100,
+          after,
+        });
+        found.push(...page.items.map(toPending));
+        after = page.nextCursor;
+      } while (after !== null);
+      return found;
     },
     async revoke(scope, invitationId) {
       const { auth } = await need();

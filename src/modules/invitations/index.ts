@@ -5,6 +5,8 @@ import { tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { adminTenantOf } from "@/invitations/scope";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 
 const invalid = () =>
   new GraphQLError("The invitation is invalid or has expired", {
@@ -23,27 +25,45 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-async function authOf(ctx: Context) {
-  const auth = await janusIssuers.forRequest(ctx.request);
-  if (auth === null) throw denial("NOT_FOUND", "No such tenant");
-  return auth;
+// The janus instance and the tenant of the request's host.
+async function tenantOf(ctx: Context) {
+  const [auth, tenant] = await Promise.all([
+    janusIssuers.forRequest(ctx.request),
+    ctx.tenant(),
+  ]);
+  if (auth === null || tenant === null) {
+    throw denial("NOT_FOUND", "No such tenant");
+  }
+  return { auth, tenant };
 }
 
-/** The scope of an invitation is the id of the tenant it is for; its name is the organization. */
-async function organizationOf(scope: string): Promise<string> {
-  const [tenant] = await tenantsService.activeByIds([scope]);
-  return tenant?.name ?? "";
+/**
+ * What the invitee joins: the tenant they will administer for an admin
+ * invitation (gone or suspended: the invitation is invalid), else the tenant
+ * of the host, whose user pool they enter.
+ */
+async function organizationOf(
+  scope: string,
+  host: { name: string; slug: string },
+) {
+  // An admin scope only has that meaning where admins are invited: on `clavix`.
+  const managed =
+    host.slug === PLATFORM_TENANT_SLUG ? adminTenantOf(scope) : null;
+  if (managed === null) return host.name;
+  const [tenant] = await tenantsService.activeByIds([managed]);
+  if (tenant === undefined) throw invalid();
+  return tenant.name;
 }
 
 export const invitations: Resolvers = {
   Query: {
     invitationPreview: async (_, { code }, ctx) => {
-      const auth = await authOf(ctx);
+      const { auth, tenant } = await tenantOf(ctx);
       ctx.set.headers.set("cache-control", "no-store");
       const preview = await guarded(() => auth.invitations.preview(code));
       return {
         email: preview.email,
-        organization: await organizationOf(preview.scope),
+        organization: await organizationOf(preview.scope, tenant),
         role: preview.role,
         expiresAt: preview.expiresAt,
       };
@@ -51,10 +71,13 @@ export const invitations: Resolvers = {
   },
   Mutation: {
     acceptInvitation: async (_, { code }, ctx) => {
-      const auth = await authOf(ctx);
+      const { auth, tenant } = await tenantOf(ctx);
       ctx.set.headers.set("cache-control", "no-store");
       const accepted = await guarded(() => auth.invitations.accept({ code }));
-      const organization = await organizationOf(accepted.invitation.scope);
+      const organization = await organizationOf(
+        accepted.invitation.scope,
+        tenant,
+      ).catch(() => ""); // accepted already: a tenant gone since is no refusal
       if (accepted.status === "signedIn") {
         ctx.set.headers.append(
           "set-cookie",

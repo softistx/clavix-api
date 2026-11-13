@@ -6,6 +6,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
 import { env } from "./env";
+import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
@@ -42,16 +43,8 @@ export function createConsoleDeps(
       },
     }),
     access,
-    admins: createJanusAdmins({
-      invitations: invitationsOf(clavixTenant),
-      userByEmail: async (email) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        if (janus === null)
-          throw new Error("the clavix tenant is not available");
-        return janus.findByEmail(email);
-      },
-    }),
+    admins: createJanusAdmins(invitationsOf(clavixTenant)),
+    exclusive,
     directory: {
       findUser: async (id) => {
         const tenant = await clavixTenant();
@@ -60,6 +53,12 @@ export function createConsoleDeps(
         return user === null
           ? null
           : { id: user.id, email: user.email, name: user.name };
+      },
+      findUserByEmail: async (email) => {
+        const tenant = await clavixTenant();
+        const janus = tenant === null ? null : await forTenant(tenant);
+        if (janus === null) throw new Error("the clavix tenant is unavailable");
+        return janus.findByEmail(email);
       },
       tenantsByIds: async (ids) =>
         (await tenantsService.activeByIds(ids)).map((tenant) => ({

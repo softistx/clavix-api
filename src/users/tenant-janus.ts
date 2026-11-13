@@ -5,7 +5,6 @@ import {
 } from "@softistx/janus-mongo";
 import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
 import type { Db } from "mongodb";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { originOf, rpIdOf } from "./rp";
@@ -37,22 +36,33 @@ export interface TenantJanusOptions {
   db: Db;
   /** The global magic-link switch (`CLAVIX_MAGIC_LINK`); off when left out. */
   magicLink?: boolean;
-  /** What an accepted invitation does on the `clavix` tenant (the console's admins); nothing on the others. */
-  onAdminAccepted?: AcceptedHandler;
+  /** What accepting an invitation of this tenant checks and does; nothing when left out. */
+  invitationHooks?: InvitationHooksFor;
 }
 
-/** `invitations.onAccepted`, as janus calls it. */
-export type AcceptedHandler = (accepted: {
-  invitation: { scope: string; role: string };
-  user: { id: string };
-}) => void | Promise<void>;
+/** janus's `invitations.beforeAccept` and `onAccepted` of one tenant. */
+export interface InvitationHooks {
+  /** `false` refuses (`INVITATION_REFUSED`), nothing written. Free of side effects. */
+  beforeAccept(accepting: {
+    invitation: { scope: string; role: string };
+  }): boolean | Promise<boolean>;
+  /** Runs once per accepted invitation; throwing releases it. */
+  onAccepted(accepted: {
+    invitation: { scope: string; role: string };
+    user: { id: string };
+  }): void | Promise<void>;
+}
+
+export type InvitationHooksFor = (
+  tenant: ResolvedTenant,
+) => InvitationHooks | undefined;
 
 /** The janus instance of a tenant: its own partition of the user stores (ADR-0006, ADR-0008). */
 function buildJanus(
   db: Db,
   tenant: ResolvedTenant,
   magicLink: boolean,
-  onAdminAccepted?: AcceptedHandler,
+  hooks?: InvitationHooks,
 ) {
   return janus({
     user: userSchema,
@@ -84,20 +94,17 @@ function buildJanus(
     },
     // How a user enters a tenant that closed sign-up (`tenant.signUp`): the
     // invitation makes the user, e-mail proved. Who may invite and the role
-    // are M2: on the `clavix` tenant an invitation is an admin's, and
-    // `onAccepted` grants the console relation (scope = the tenant's id, role
-    // = owner, admin or viewer). janus claims an invitation once, so the grant
-    // runs once; it throws on a role it does not know, which releases the code.
+    // are the caller's (`invitationHooks`): what the scope and the role mean,
+    // and what accepting grants. janus claims an invitation once, so
+    // `onAccepted` runs once.
     invitations: {
       store: createMongoInvitations(db, { partition: tenant.partition }),
       create: (invitation) => ({
         email: invitation.email,
         name: invitation.name,
       }),
-      onAccepted:
-        tenant.slug === PLATFORM_TENANT_SLUG && onAdminAccepted !== undefined
-          ? onAdminAccepted
-          : () => {},
+      ...(hooks === undefined ? {} : { beforeAccept: hooks.beforeAccept }),
+      onAccepted: hooks?.onAccepted ?? (() => {}),
     },
   });
 }
@@ -108,9 +115,9 @@ export function buildTenantJanus(
   db: Db,
   tenant: ResolvedTenant,
   magicLink = false,
-  onAdminAccepted?: AcceptedHandler,
+  hooks?: InvitationHooks,
 ): TenantJanus {
-  return buildJanus(db, tenant, magicLink, onAdminAccepted);
+  return buildJanus(db, tenant, magicLink, hooks);
 }
 
 /**
@@ -121,7 +128,7 @@ export function createTenantJanusIssuers({
   resolver,
   db,
   magicLink = false,
-  onAdminAccepted,
+  invitationHooks,
 }: TenantJanusOptions) {
   return createJanusIssuers({
     resolve: async (request) => {
@@ -131,6 +138,6 @@ export function createTenantJanusIssuers({
         : { issuer: tenant.issuer, version: String(tenant.version), tenant };
     },
     build: ({ tenant }) =>
-      buildTenantJanus(db, tenant, magicLink, onAdminAccepted),
+      buildTenantJanus(db, tenant, magicLink, invitationHooks?.(tenant)),
   });
 }

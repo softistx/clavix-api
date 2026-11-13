@@ -232,6 +232,22 @@ The caller's role does not give the permission the field needs (a viewer cannot 
 admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
 role `bun run operators:grant --email <address> --role <role>`.
 
+### `LAST_OWNER` (409) on `changeMembership` or `removeMembership`
+
+The change would leave the tenant with no owner. Name or invite another owner first, then demote or
+remove this one. Of two owners removed at the same moment, the second is refused.
+
+### `ALREADY_MEMBER` (409) on `inviteAdmin`
+
+The address already holds a role on the tenant. Change it with `changeMembership`.
+
+### `INVITATION_INVALID` (400) on `invitationPreview` or `acceptInvitation`
+
+The code is unknown, already used, revoked or expired; the hosted API gives one answer for all four,
+so a code cannot be probed. An admin invitation is also invalid while its tenant is suspended or
+deleted, and on any host but the `clavix` tenant's. Have an owner of the tenant send a new invitation with `inviteAdmin`
+(inviting again replaces the pending one).
+
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
