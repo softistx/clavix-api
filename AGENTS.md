@@ -250,7 +250,7 @@ every other failure a 401).
   (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
-  has no insert-only write, so `createClient` runs under `ctx.exclusive(clientsKey(tenant), ...)`
+  has no insert-only write, so `createClient`, `updateClient`, `rotateClientSecret` and `deleteClient` run under `ctx.exclusive(clientsKey(tenant), ...)` (a racing delete never brings a client back; an update or rotation of a missing client is `NOT_FOUND`, from `ClientsService.require` inside the lock)
   (`console:clients:<hex>`, the same queue and Redis lock as the admins): the id check and the
   upsert of two creations of one id are never interleaved (one wins, the other is `CONFLICT`), and
   the `clients` quota (`assertClientQuota`: `usageService.count` against `quotasOf`, `QUOTA_EXCEEDED`)
@@ -449,7 +449,9 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   punycode); IPs, localhost, wildcards, reserved suffixes and the platform domain are refused.
 - The quota (`effectiveQuotas(...).domains`) counts pending claims too and is checked on
   `addDomain` (`assertWithinQuota`), which runs under the tenant's `ctx.exclusive` lock
-  (`console:domains:<tenantId>`); the post-insert recount stays as a second guard.
+  (`console:domains:<tenantId>`, shared by `removeDomain` and `setPrimaryDomain`, so two
+  concurrent `setPrimaryDomain` leave one primary); the post-insert recount stays as a second guard.
+  `removeDomain` records `domain.remove` on a repeat too (an id the trail cannot hold is not recorded).
   `usage.domains` is `domainStore.count`. These slice decisions stand (issue #127): pending
   claims count toward the quota; a lapsed primary keeps resolving but the TLS ask refuses it;
   recheck every 6 h with a 7-day grace.

@@ -767,7 +767,7 @@ describe("update and rotate of a client that is being deleted", () => {
     expect(codeOf(await admin(ROTATE, { tenantId: tenantA, id }))).toBe(
       "NOT_FOUND",
     );
-    expect((await storeOf(tenantA)).findClient(id)).resolves.toBeNull();
+    expect(await (await storeOf(tenantA)).findClient(id)).toBeNull();
   });
 
   test("a racing delete is never undone: the client stays deleted", async () => {
@@ -790,7 +790,7 @@ describe("update and rotate of a client that is being deleted", () => {
           expect(codeOf(result)).toBe("NOT_FOUND");
         }
       }
-      expect((await storeOf(tenantA)).findClient(id)).resolves.toBeNull();
+      expect(await (await storeOf(tenantA)).findClient(id)).toBeNull();
     }
   });
 });

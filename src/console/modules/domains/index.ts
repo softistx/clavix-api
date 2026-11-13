@@ -131,7 +131,10 @@ export const domains: Resolvers = {
         refusing(() => domainStore.remove(tenant._id, id)),
       );
       // Recorded on a repeat too (it may be the event the first run missed).
-      await ctx.audit("domain.remove", target(tenant._id, id));
+      // An id the trail cannot hold (empty, over 200) names no claim.
+      if (id.length >= 1 && id.length <= 200) {
+        await ctx.audit("domain.remove", target(tenant._id, id));
+      }
       return removed;
     },
     setPrimaryDomain: async (_, { tenantId, id }, ctx) => {

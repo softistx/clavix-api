@@ -264,6 +264,17 @@ describe("audit", () => {
   });
 });
 
+describe("removeDomain with an id the trail cannot hold", () => {
+  test("is false, not an error", async () => {
+    const result = await admin(REMOVE, {
+      tenantId: tenantA,
+      id: "x".repeat(300),
+    });
+    expect(result.errors).toBeUndefined();
+    expect(result.data).toEqual({ removeDomain: false });
+  });
+});
+
 describe("setPrimaryDomain at the very same time", () => {
   test("exactly one domain is primary afterwards", async () => {
     await mongo.db.domains.raw.deleteMany({});
