@@ -44,6 +44,7 @@ describe("resolveHost", () => {
       slug: "acme",
       name: "Acme",
       signUp: false,
+      status: "active",
       issuer: "https://acme.clavix.test",
       partition: acme._id.toHexString(),
       version: 3,

@@ -58,6 +58,7 @@ export class TenantsService {
     slug: string;
     name: string;
     signUp?: boolean;
+    plan?: Tenant["plan"];
   }): Promise<Tenant> {
     const problem = slugProblem(input.slug);
     if (problem !== undefined) throw new InvalidSlugError(problem);
@@ -69,6 +70,7 @@ export class TenantsService {
         slug: input.slug,
         name,
         ...(input.signUp === undefined ? {} : { signUp: input.signUp }),
+        ...(input.plan === undefined ? {} : { plan: input.plan }),
       });
     } catch (error) {
       if (error instanceof ConflictError) {

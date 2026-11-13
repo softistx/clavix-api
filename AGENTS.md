@@ -272,6 +272,42 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   live in `src/console/modules/branding`; the anonymous `tenantBranding` by host is in
   `src/modules/branding` and shows only what a hosted page draws (no seed, no tenant id).
 
+## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`, `src/console/modules/tenants`)
+
+- **Two services on the one collection**: `TenantsService` creates and flips the status (script and
+  tests); `TenantAdminService` (`config/tenancy.ts`: `tenantAdmin`) is what the console uses: `find` /
+  `get` (trash included, a purging tenant is gone), `list`, `update`, `setPlan`, `trash`, `restore` and
+  the three writes of the purge. Every write drops the tenant's host from the resolver's cache.
+- **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
+  The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
+  tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
+  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
+  Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
+  already issued live to expiry, and the console stays readable.
+- **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
+  `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
+- **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
+  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey sign-in and a successful `/token` (the `sub`
+  of the access token, so refreshes count); `recordActive` never throws. The month is snapshotted in
+  `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
+  `oauthPartitionedClients` by `partition`; domains count 0 until A4 (clavix-api#11). `assertWithinQuota`
+  / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
+  clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
+- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
+  (`purge.ts`) claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
+  partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
+  record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
+  tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. A failing tenant stays
+  claimed and the next run resumes it. **Not scheduled, and `PartitionPurger` has no implementation**:
+  Temporary, until @softistx/janus-oauth-mongo#710; wiring is clavix-api#112. A new tenant-owned
+  collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
+- **Console API**: `tenants`, `tenant`, `plans`, `usage` and the seven mutations are in
+  `src/console/modules/tenants`, with their audit actions (`tenant.create`, `.update`, `.setPlan`,
+  `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin; the rest
+  is platform-only. The `Tenant` parent is `TenantParent` (codegen mapper), so `Me.memberships` keeps
+  working with the extended type.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`

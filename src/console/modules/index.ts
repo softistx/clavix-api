@@ -4,10 +4,15 @@ import type { Audits } from "../audit";
 import type { Guards } from "../guard";
 import { branding, brandingAudits, brandingGuards } from "./branding";
 import { me, meGuards } from "./me";
+import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 
 // One entry per module: its resolvers, the guard of each root field it adds
 // and the audit action of each mutation it adds. A root field with no guard is
 // denied (guard.ts); a mutation with no audit action fails audit.spec.ts.
-export const resolvers: Resolvers = mergeResolvers([me, branding]);
-export const guards: Guards = { ...meGuards, ...brandingGuards };
-export const audits: Audits = { ...brandingAudits };
+export const resolvers: Resolvers = mergeResolvers([me, branding, tenants]);
+export const guards: Guards = {
+  ...meGuards,
+  ...brandingGuards,
+  ...tenantsGuards,
+};
+export const audits: Audits = { ...brandingAudits, ...tenantsAudits };

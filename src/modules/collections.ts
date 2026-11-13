@@ -7,3 +7,4 @@ export { adminEvents } from "../console/admin-events/admin-events.model";
 export { branding } from "./branding/branding.model";
 export { resources } from "./resources/resources.model";
 export { tenants } from "./tenants/tenants.model";
+export { usageCounters } from "./usage/usage.model";

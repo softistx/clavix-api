@@ -1,4 +1,4 @@
-import { defineRedis, openRedis } from "@softistx/redis";
+import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
@@ -6,6 +6,7 @@ import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
+import { monthlyActiveUsers } from "@/modules/usage/mau";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
@@ -50,6 +51,8 @@ export async function openAppRedis(
   );
   return {
     ...redis,
+    // Active users of the month per tenant (usage, quotas).
+    mau: bindUniqueCounter(client, monthlyActiveUsers),
     close: async () => {
       await redis.close();
       client.close();
