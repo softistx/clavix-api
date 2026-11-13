@@ -106,8 +106,8 @@ nxgt-janus release says which.
   ([#5](https://github.com/softistx/clavix-api/issues/5)).
 - **Clients registered by script** — `bun run clients:create` registers or updates a public
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once
-  ([#6](https://github.com/softistx/clavix-api/issues/6)). Grants other than code and
-  refresh wait on a per-client grant list in janus-oauth.
+  ([#6](https://github.com/softistx/clavix-api/issues/6)). A client's grant types are
+  recorded and shown, not enforced; grants other than code and refresh wait on janus-oauth.
 - **Tenants created by script** — `bun run tenants:create` creates a tenant (slug rules,
   reserved and deleted slugs refused, first signing key) idempotently and prints its issuer
   ([#74](https://github.com/softistx/clavix-api/issues/74)).

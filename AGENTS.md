@@ -237,7 +237,7 @@ every other failure a 401).
 - **Clients are listed from the janus store** (`ClientsService`, `src/modules/clients`): the
   tenant's partition store answers `listClients` in id order, and each record is mapped to a
   `ClientView` there, so a `secretHash` never reaches a resolver or a GraphQL type. The store has
-  no search: `q` is applied in the service, which reads what the page still lacks until it is full
+  no search: `q` is applied by `listClientViews` (`client-listing.ts`), which reads what the page still lacks until it is full
   (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. Two

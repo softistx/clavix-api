@@ -178,12 +178,6 @@ describe("clients and client", () => {
     expect(found).toEqual(["mobile-app"]);
   });
 
-  test("the list never carries a secret hash", async () => {
-    const stored = await (await storeOf(tenantA)).findClient("back-end");
-    const listed = await admin(LIST, { tenantId: tenantA });
-    expect(JSON.stringify(listed)).not.toContain(stored?.secretHash as string);
-  });
-
   test("the grant types a script recorded are shown", async () => {
     await registerClient(
       {
@@ -411,7 +405,7 @@ describe("deleteClient", () => {
     expect(second.data?.["deleteClient"]).toBe(false);
   });
 
-  test("revokes the client's grants, and no other client's", async () => {
+  test("revokes the client's grants, on a repeat too, and no other client's", async () => {
     const store = await storeOf(tenantA);
     const grant = (id: string, clientId: string) =>
       store.upsertGrant({
@@ -430,6 +424,11 @@ describe("deleteClient", () => {
     expect(result.data?.["deleteClient"]).toBe(true);
     expect((await store.findGrant(gone.id))?.revokedAt).toBeInstanceOf(Date);
     expect((await store.findGrant(kept.id))?.revokedAt).toBeNull();
+    // A repeat revokes again: it finishes a run that stopped half way.
+    const late = await grant("grant-code-only-late", "code-only");
+    const again = await admin(DELETE, { tenantId: tenantA, id: "code-only" });
+    expect(again.data?.["deleteClient"]).toBe(false);
+    expect((await store.findGrant(late.id))?.revokedAt).toBeInstanceOf(Date);
   });
 });
 

@@ -98,6 +98,9 @@ function validate(input: RegisterClientInput): {
       throw new CliInputError(`redirect URI "${uri}": ${problem}`);
     }
   }
+  if (input.grants?.length === 0) {
+    throw new CliInputError("--grants needs at least one grant type");
+  }
   for (const grant of input.grants ?? []) {
     if (!(OFFERED_GRANTS as readonly string[]).includes(grant)) {
       throw new CliInputError(

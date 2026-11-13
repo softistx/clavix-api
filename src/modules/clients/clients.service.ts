@@ -1,27 +1,17 @@
-import type {
-  OAuthClientGrantType,
-  OAuthClientRecord,
-} from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import { CliInputError, type CliTenant } from "@/cli/errors";
-import {
-  clientIdOf,
-  OFFERED_GRANTS,
-  registerClient,
-} from "@/clients/register-client";
+import { clientIdOf, registerClient } from "@/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
+import {
+  type ClientView,
+  capability,
+  listClientViews,
+  viewOf,
+} from "./client-listing";
 
-export interface ClientView {
-  clientId: string;
-  name: string;
-  type: "public" | "confidential";
-  redirectUris: readonly string[];
-  /** As recorded on the client (both when nothing is); the token endpoint does not enforce it. */
-  grantTypes: readonly OAuthClientGrantType[];
-  createdAt: Date;
-}
+export type { ClientView } from "./client-listing";
 
 export interface ClientsServiceOptions {
   /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
@@ -35,26 +25,6 @@ const MAX_NAME = 100;
 const MAX_REDIRECT_URIS = 20;
 const MAX_QUERY = 100;
 const MAX_CURSOR = 200;
-// A search reads the store page by page and keeps what matches; it stops
-// after this many reads and answers a short page with its cursor.
-const MAX_READS = 20;
-
-/** A capability the janus port leaves optional; the Mongo store has them all. */
-function capability<T>(method: T | undefined, name: string): T {
-  if (method === undefined) {
-    throw new Error(`the OAuth store has no ${name}()`);
-  }
-  return method;
-}
-
-const viewOf = (record: OAuthClientRecord): ClientView => ({
-  clientId: record.id,
-  name: record.name,
-  type: record.secretHash === undefined ? "public" : "confidential",
-  redirectUris: record.redirectUris,
-  grantTypes: record.grantTypes ?? OFFERED_GRANTS,
-  createdAt: record.createdAt,
-});
 
 function checkSizes(input: {
   name?: string | undefined;
@@ -123,32 +93,10 @@ export class ClientsService {
     if ((options.after?.length ?? 0) > MAX_CURSOR) {
       throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
     }
-    const listClients = capability(
-      this.storeOf(tenant).listClients,
-      "listClients",
+    return listClientViews(
+      capability(this.storeOf(tenant).listClients, "listClients"),
+      options,
     );
-    const needle = options.q?.trim().toLowerCase() ?? "";
-    const keep = (record: OAuthClientRecord) =>
-      record.source === "registered" &&
-      (needle === "" ||
-        record.name.toLowerCase().includes(needle) ||
-        record.id.includes(needle));
-    // The store lists in id order and has no search: each read asks for what
-    // the page still lacks, so a page never ends inside a read and the
-    // store's own cursor stays the page's.
-    const items: ClientView[] = [];
-    let cursor = options.after ?? undefined;
-    for (let reads = 0; reads < MAX_READS; reads += 1) {
-      const page = await listClients({
-        cursor,
-        limit: options.limit - items.length,
-      });
-      items.push(...page.items.filter(keep).map(viewOf));
-      if (page.nextCursor === null) return { items, nextCursor: null };
-      cursor = page.nextCursor;
-      if (items.length >= options.limit) break;
-    }
-    return { items, nextCursor: cursor ?? null };
   }
 
   async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {

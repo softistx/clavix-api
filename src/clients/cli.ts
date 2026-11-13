@@ -9,7 +9,7 @@ export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name
   --redirect-uri <uri>     an exact redirect URI; repeat for several (required)
   --confidential           a back end with a secret (client_secret_basic); default is a public client with PKCE
   --client-id <id>         the client's id in the tenant; default: the name as a-z0-9-. Re-running with the same id updates the client
-  --grants <a,b>           ${OFFERED_GRANTS.join(",")} (default: both; recorded, not enforced)
+  --grants <a,b>           ${OFFERED_GRANTS.join(",")} (recorded, not enforced; default: kept, else both)
   --rotate-secret          mint a new secret for an existing confidential client`;
 
 /** The script's flags as a registration input; a `CliInputError` for a bad line. */

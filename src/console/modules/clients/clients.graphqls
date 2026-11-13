@@ -4,7 +4,7 @@ enum ClientType {
   CONFIDENTIAL
 }
 
-"A grant type a client may use at the token endpoint."
+"A grant type recorded on a client."
 enum ClientGrantType {
   AUTHORIZATION_CODE
   REFRESH_TOKEN
@@ -28,9 +28,9 @@ type Client {
 }
 
 """
-A page of a tenant's clients; `nextCursor` is `null` on the last. A search
-(`q`) may answer fewer than `first` items, even none, with a `nextCursor`:
-follow it until it is `null`.
+A page of a tenant's clients; `nextCursor` is `null` on the last. A page may
+hold fewer than `first` items, even none, with a `nextCursor` (a search with
+`q` does): follow it until it is `null`.
 """
 type ClientPage {
   items: [Client!]!
