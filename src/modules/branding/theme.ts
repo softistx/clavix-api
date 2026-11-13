@@ -151,8 +151,9 @@ export function measureTheme(theme: Theme): CompiledTheme {
     scope: "attribute",
   });
   // The hosted pages put this text in a `<style>`: the generator writes
-  // colours and lengths it parsed, never the input, and this refuses anything
-  // that could close the element should that ever change.
+  // colours and lengths it parsed, never the input, so nothing reaches this
+  // today. It is a backstop: it refuses anything that could close the element
+  // should the generator ever change.
   if (css.includes("<")) {
     throw new BrandingInputError("seed", "the theme's CSS is not safe");
   }

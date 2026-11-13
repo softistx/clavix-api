@@ -248,5 +248,7 @@ text and indicators) in light or dark. `extensions.failures` lists each pair (`f
 means a pair that could not be solved.
 
 **Fix:** pick a seed closer to mid lightness and less saturated, or drop the background preset, and
-send the call again. A colour the library cannot read, or an unsafe radius, is `BAD_USER_INPUT` with
-`extensions.field` instead.
+send the call again. A colour the library cannot read, an unsafe radius, an unknown preset or motif, or
+a logo that is not a PNG, JPEG or WebP of at most 256 KiB (checked by its bytes) is `BAD_USER_INPUT`
+with `extensions.field` instead. `CONFLICT` (409) means other calls changed the brand at the same
+time: read it and send the call again.

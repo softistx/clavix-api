@@ -183,7 +183,11 @@ The display name is a label only: it is stored as text and never written into th
 and the radius are parsed, and the CSS is built from the parsed values, so a value that is not a colour
 or a length is refused rather than copied. Escape the display name where you print it. Two calls at the
 same time apply one after the other (the document carries a `version`), so a logo one of them sets or
-removes is not undone by the other.
+removes is not undone by the other; a call that keeps losing to others is `CONFLICT` (409) and stored
+nothing: read the brand and send it again.
+
+Limits: `displayName` 1 to 80 characters; `radius` in rem or px up to 3rem (48px); `backgroundPreset`
+and `motif` must be ids of `@softistx/material-core/backgrounds`.
 
 ```graphql
 mutation {
@@ -222,7 +226,8 @@ request host; `null` keeps Clavix's own theme): they put `css` in a `<style>` an
 ```
 
 `GET /branding/logo` on the tenant's host serves the logo with an `ETag` (its sha256), `304` on
-`If-None-Match`, `nosniff` and a sandboxing CSP; `404` without a logo. `logoUrl` is
+`If-None-Match`, `nosniff` and a sandboxing CSP; `404` (not stored) for an unknown host or a tenant
+without a logo, `405` for a method other than GET or HEAD. `logoUrl` is
 `/branding/logo?v=<start of the hash>`, so it changes with the image: asked with the current `v` the
 logo is `Cache-Control: public, max-age=31536000, immutable`; the bare path, or an old `v`, is
 `max-age=300, must-revalidate`.

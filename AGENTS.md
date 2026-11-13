@@ -227,7 +227,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   taken from a closed list, and gets a case in the "break out of the stylesheet" spec.
 - **`updateBranding` is a whole replacement, idempotent** (`changed: false` when nothing differs) and
   serialised by the optimistic lock: `update` writes at the version it read and decides again after a
-  concurrent write (three attempts). A new field joins `same()` or a repeat stops being a no-op.
+  concurrent write (three attempts, then `CONFLICT`, 409). A new field joins `same()` or a repeat stops being a no-op.
 - **The logo** (`logo.ts`, `logo-route.ts`) is a PNG, JPEG or WebP of at most 256 KiB, checked by its
   magic bytes and stored inline; never SVG (it runs script on the tenant's own host). Its sha256 is the
   `ETag`, and `immutable` is sent only when `?v=` names the current image (`logoUrl`).

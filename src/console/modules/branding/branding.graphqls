@@ -60,7 +60,8 @@ type Mutation {
   """
   Sets the tenant's brand. Needs `edit` on the tenant. A theme that fails AA
   is refused with BRANDING_CONTRAST (422, `extensions.failures`); a bad value
-  is BAD_USER_INPUT (400, `extensions.field`).
+  is BAD_USER_INPUT (400, `extensions.field`). Calls at the same time apply
+  one after the other; one that keeps losing is CONFLICT (409): read and retry.
   """
   updateBranding(
     tenantId: ID!

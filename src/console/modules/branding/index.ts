@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { brandingService } from "@/config/branding";
 import { tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { BrandingConflictError } from "@/modules/branding/branding.service";
 import { logoUrl } from "@/modules/branding/logo-route";
 import {
   BrandingContrastError,
@@ -90,6 +91,11 @@ export const branding: Resolvers = {
               http: { status: 400 },
               field: error.field,
             },
+          });
+        }
+        if (error instanceof BrandingConflictError) {
+          throw new GraphQLError(error.message, {
+            extensions: { code: error.code, http: { status: 409 } },
           });
         }
         throw error;

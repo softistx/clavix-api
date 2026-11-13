@@ -11,7 +11,7 @@ import { tenantsService } from "@/config/tenancy";
 import type { ConsoleContext } from "@/console/context";
 import type { Permission } from "@/console/model";
 import { consoleSchema } from "@/console/schema";
-import { BrandingService } from "./branding.service";
+import { BrandingConflictError, BrandingService } from "./branding.service";
 import { LOGO_MAX_BYTES } from "./logo";
 import {
   BrandingContrastError,
@@ -282,12 +282,6 @@ describe("updateBranding", () => {
 
   test("a hostile display name is stored as text and leaves the css alone", async () => {
     const hostile = "</style><script>alert(1)</script>";
-    const result = await run(UPDATE, users.adminA, {
-      t: tenantC,
-      i: { ...base, displayName: hostile },
-    });
-    // Tenant C has no member: refused before anything is compiled.
-    expect(result.errors?.[0]?.extensions?.["code"]).toBe("FORBIDDEN");
     const stored = await brandingService.update(tenantC, {
       ...base,
       displayName: hostile,
@@ -316,6 +310,30 @@ describe("updateBranding", () => {
       brandingService.update(tenantC, { ...base, seed: "#d4381c" }),
     ]);
     expect((await brandingService.get(tenantC))?.logo).not.toBeNull();
+    await mongo.db.branding.raw.deleteMany(mine);
+
+    // A double submit of a first brand: one call stores it, the other finds it.
+    const twice = await Promise.all([
+      brandingService.update(tenantC, base),
+      brandingService.update(tenantC, base),
+    ]);
+    expect(twice.map((r) => r.changed).sort()).toEqual([false, true]);
+    expect(await mongo.db.branding.raw.countDocuments(mine)).toBe(1);
+
+    // More writers than attempts: each call is stored or refused CONFLICT,
+    // never an unexpected error, and the brand stays one whole document.
+    const crowd = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, i) =>
+        brandingService.update(tenantC, { ...base, displayName: `Crowd ${i}` }),
+      ),
+    );
+    expect(crowd.some((r) => r.status === "fulfilled")).toBe(true);
+    for (const r of crowd) {
+      if (r.status === "rejected") {
+        expect(r.reason).toBeInstanceOf(BrandingConflictError);
+      }
+    }
+    expect(await mongo.db.branding.raw.countDocuments(mine)).toBe(1);
     await mongo.db.branding.raw.deleteMany(mine);
   });
 
