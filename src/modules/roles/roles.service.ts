@@ -158,14 +158,19 @@ export class RolesService {
     }
   }
 
-  /** Deletes the role and its assignments; `false` when it was not there. */
+  /**
+   * Deletes the role and its assignments; `false` when it was not there. The
+   * role goes first, then the sweep, and the sweep runs on a repeat too: an
+   * `assign` that re-checks the role after its write then sees it gone, in
+   * every ordering, and a run that stopped between the two is finished.
+   */
   async delete(tenantId: ObjectId, roleId: string): Promise<boolean> {
-    const existing = await this.find(tenantId, roleId);
-    if (existing === undefined) return false;
-    // Assignments first: a role never goes while someone still holds it.
-    await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: existing._id });
-    await this.rolesOf(tenantId).hardDeleteMany({ _id: existing._id });
-    return true;
+    if (!ObjectId.isValid(roleId)) return false;
+    const id = new ObjectId(roleId);
+    const removed =
+      (await this.rolesOf(tenantId).hardDeleteMany({ _id: id })) > 0;
+    await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: id });
+    return removed;
   }
 
   /** The roles scoped to a resource that is being deleted, removed with their assignments; the roles removed. */

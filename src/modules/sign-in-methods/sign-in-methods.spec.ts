@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
+import { janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
@@ -226,6 +227,16 @@ describe("social sign-in", () => {
     ] as const) {
       const start = await startOn(slug);
       expect(new URL(start.url).searchParams.get("client_id")).toBe(clientId);
+    }
+  });
+
+  test("one request resolves the tenant's instance once", async () => {
+    const spy = spyOn(janusIssuers, "forRequest");
+    try {
+      await startOn("sih-social");
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
     }
   });
 
