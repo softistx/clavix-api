@@ -11,6 +11,8 @@ import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
+import type { ConsoleAdmins } from "@/console/context";
+import { createExclusive } from "@/console/exclusive";
 import { secretContext } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { socialProvidersOf } from "@/modules/sign-in-methods/social";
@@ -60,7 +62,13 @@ const as = async (
       }),
       access,
       adminEvents: adminEventRecorder,
-      directory: { findUser: async () => null, tenantsByIds: async () => [] },
+      admins: {} as ConsoleAdmins,
+      exclusive: createExclusive(),
+      directory: {
+        findUser: async () => null,
+        findUserByEmail: async () => null,
+        tenantsByIds: async () => [],
+      },
     },
   }).request(`http://localhost${CONSOLE_PATH}`, {
     method: "POST",

@@ -1,0 +1,50 @@
+"An admin of a tenant: a user of the `clavix` tenant who holds a role there directly."
+type TenantMember {
+  user: ConsoleUser!
+  role: Role!
+}
+
+"A pending invitation to administer a tenant. The code only goes by e-mail."
+type AdminInvitation {
+  id: ID!
+  email: EmailAddress!
+  role: Role!
+  invitedAt: DateTime!
+  expiresAt: DateTime!
+}
+
+extend type Query {
+  "The admins of a tenant (tenant viewer). Owners first."
+  memberships(tenantId: ID!): [TenantMember!]!
+  "The pending invitations of a tenant (tenant viewer)."
+  adminInvitations(tenantId: ID!): [AdminInvitation!]!
+}
+
+# `type`, not `extend`: the console SDL has no other Mutation base, and slices merge theirs.
+type Mutation {
+  """
+  Invites an e-mail address to administer a tenant (tenant owner). The invitee
+  accepts on the hosted `/invitation` page of the `clavix` tenant; accepting
+  grants the role, once. A pending invitation of the same address is replaced
+  (a new mail goes out). Errors: ALREADY_MEMBER (409) when the address already
+  holds a role there, NOT_FOUND for an unknown tenant.
+  """
+  inviteAdmin(
+    tenantId: ID!
+    email: EmailAddress!
+    role: Role!
+  ): AdminInvitation!
+  """
+  Gives a member another role (tenant owner). Idempotent. Errors: NOT_FOUND for
+  a user who is not a member, LAST_OWNER (409) when it would leave the tenant
+  with no owner.
+  """
+  changeMembership(tenantId: ID!, userId: ID!, role: Role!): TenantMember!
+  """
+  Removes a member (tenant owner), whatever the role. True also when the user
+  was not a member. Errors: LAST_OWNER (409) for the last owner.
+  """
+  removeMembership(tenantId: ID!, userId: ID!): Boolean!
+  "Revokes a pending invitation of the tenant (tenant owner). True also when there is none."
+  revokeAdminInvitation(tenantId: ID!, invitationId: ID!): Boolean!
+}

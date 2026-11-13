@@ -304,6 +304,30 @@ scope name with a space or a quote, a scope without `resourceId` that is not `op
 or `email`, an empty name, or `rotateClientSecret` on a public client (`A public client has no
 secret to rotate`).
 
+### `LAST_OWNER` (409) on `changeMembership` or `removeMembership`
+
+The change would leave the tenant with no owner. Name or invite another owner first, then demote or
+remove this one. Of two owners removed at the same moment, the second is refused.
+
+### `ALREADY_MEMBER` (409) on `inviteAdmin`
+
+The address already holds a role on the tenant. Change it with `changeMembership`.
+
+### `BAD_USER_INPUT` (400) `userId is not an id` / `invitationId is not an id`, and `NOT_FOUND` `No such tenant`, on the membership mutations
+
+The id is empty or longer than 200 characters, or `tenantId` is not 24 hexadecimal characters.
+Nothing was written. Send the id the console returned.
+
+A membership mutation that fails after its change because its admin event could not be stored is
+safe to repeat: it changes nothing twice and records the event it missed.
+
+### `INVITATION_INVALID` (400) on `invitationPreview` or `acceptInvitation`
+
+The code is unknown, already used, revoked or expired; the hosted API gives one answer for all four,
+so a code cannot be probed. An admin invitation is also invalid while its tenant is suspended or
+deleted, and on any host but the `clavix` tenant's. Have an owner of the tenant send a new invitation with `inviteAdmin`
+(inviting again replaces the pending one).
+
 ### `operators:grant`: `no user with e-mail ... in the clavix tenant`, `--email is required`, `--role must be owner, admin or viewer`
 
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)

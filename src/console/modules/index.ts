@@ -2,6 +2,7 @@ import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
+import { admins, adminsAudits, adminsGuards } from "./admins";
 import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
 import { me, meGuards } from "./me";
@@ -18,6 +19,7 @@ import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 // denied (guard.ts); a mutation with no audit action fails audit.spec.ts.
 export const resolvers: Resolvers = mergeResolvers([
   me,
+  admins,
   branding,
   signInMethods,
   clients,
@@ -26,6 +28,7 @@ export const resolvers: Resolvers = mergeResolvers([
 ]);
 export const guards: Guards = {
   ...meGuards,
+  ...adminsGuards,
   ...brandingGuards,
   ...clientsGuards,
   ...resourcesGuards,
@@ -33,6 +36,7 @@ export const guards: Guards = {
   ...signInMethodsGuards,
 };
 export const audits: Audits = {
+  ...adminsAudits,
   ...brandingAudits,
   ...clientsAudits,
   ...resourcesAudits,
