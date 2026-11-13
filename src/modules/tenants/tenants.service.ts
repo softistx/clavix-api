@@ -112,6 +112,36 @@ export class TenantsService {
     });
   }
 
+  /**
+   * Changes the tenant's sign-in policy (slice A5). `change` gets the stored
+   * tenant and answers the new policy, or `null` for no change (no write, no
+   * version bump, so no janus rebuild). The version read is the version
+   * expected; on a lost race the tenant is read again (three attempts, then
+   * the `OptimisticLockError` is thrown).
+   */
+  async updateSignIn(
+    id: IdOf<typeof tenants> | string,
+    change: (tenant: Tenant) => Tenant["signIn"] | null,
+  ): Promise<Tenant> {
+    for (let attempt = 1; ; attempt++) {
+      const tenant = await this.collection.getById(id);
+      const signIn = change(tenant);
+      if (signIn === null) return tenant;
+      try {
+        const updated = await this.collection.update(tenant._id, {
+          signIn,
+          version: tenant.version,
+        });
+        await this.changed(updated);
+        return updated;
+      } catch (error) {
+        if (!(error instanceof OptimisticLockError) || attempt === 3) {
+          throw error;
+        }
+      }
+    }
+  }
+
   suspend(id: IdOf<typeof tenants> | string): Promise<Tenant> {
     return this.setStatus(id, "suspended");
   }

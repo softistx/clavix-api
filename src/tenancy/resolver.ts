@@ -27,6 +27,7 @@ export interface TenantRecord {
   /** Set once the purge claimed the tenant: it resolves nowhere from then on. */
   purgeStartedAt?: Date | undefined;
   version: number;
+  signIn: ResolvedTenant["signIn"];
 }
 
 export interface TenantResolverOptions {
@@ -85,6 +86,7 @@ function toResolved(
         slugIssuer: issuerOf(tenant.slug, config),
         partition: partitionOf(tenant._id),
         version: tenant.version,
+        signIn: tenant.signIn,
       };
 }
 

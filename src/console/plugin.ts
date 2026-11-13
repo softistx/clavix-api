@@ -1,7 +1,8 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
-import type { ConsoleDirectory, ConsoleExtras } from "./context";
+import type { ConsoleAdmins, ConsoleDirectory, ConsoleExtras } from "./context";
+import type { Exclusive } from "./exclusive";
 
 /** Verifies the request's bearer token: its principal, or `null`. A store outage rejects. */
 export type ConsoleAuthenticate = (
@@ -12,6 +13,8 @@ export interface ConsoleDeps {
   authenticate: ConsoleAuthenticate;
   access: Access;
   directory: ConsoleDirectory;
+  admins: ConsoleAdmins;
+  exclusive: Exclusive;
   /** Where `ctx.audit` appends its events. */
   adminEvents: AdminEventRecorder;
 }
@@ -45,6 +48,8 @@ export function useConsole({
   authenticate,
   access,
   directory,
+  admins,
+  exclusive,
   adminEvents,
 }: ConsoleDeps) {
   const principals = new WeakMap<Request, OAuthPrincipal>();
@@ -106,6 +111,8 @@ export function useConsole({
         principal,
         access,
         directory,
+        admins,
+        exclusive,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),
         canPlatform: (permission) =>

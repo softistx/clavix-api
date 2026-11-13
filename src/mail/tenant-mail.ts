@@ -6,6 +6,9 @@ import { senderAddress } from "./mailer";
 /** The hosted page a sign-in link opens (clavix-ui); the token is its `token` query parameter. */
 export const MAGIC_LINK_PATH = "/sign-in/link";
 
+/** The hosted page an invitation e-mail opens (clavix-ui); the code is its `code` query parameter. */
+export const INVITATION_PATH = "/invitation";
+
 export interface TenantMailOptions {
   mailer: Mailer;
   /** The apex (`CLAVIX_DOMAIN`): the sender is `no-reply@<domain>`. */

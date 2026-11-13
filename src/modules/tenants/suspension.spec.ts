@@ -6,6 +6,7 @@ import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
 import { tenantsService } from "@/config/tenancy";
 import { settled } from "@/modules/auth/outbox";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { withTenantState } from "@/oauth/tenant-state";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { issuerOf } from "./identity";
@@ -110,6 +111,7 @@ describe("withTenantState", () => {
     issuer: "https://acme.clavix.test",
     partition: "t1",
     version: 1,
+    signIn: signInPolicySchema.parse(undefined),
   });
   const token = (sub: string) =>
     `h.${Buffer.from(JSON.stringify({ sub })).toString("base64url")}.s`;

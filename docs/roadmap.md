@@ -82,11 +82,10 @@ nxgt-janus release says which.
   server per issuer, users and sessions per tenant, passkeys and e-mailed codes, clients,
   resources and tenants registered by script, and a migration guide. Each piece is listed below.
 
-- **Magic-link sign-in (toggleable)** — `requestMagicLink` and `confirmMagicLink` behind the
-  `CLAVIX_MAGIC_LINK` switch, off by default (404 `MAGIC_LINK_DISABLED` when off). The answer is the
-  same for any address, requests are throttled, and the link proves the e-mail
-  ([#89](https://github.com/softistx/clavix-api/issues/89)). A per-tenant toggle comes later with
-  sign-in methods per tenant ([#12](https://github.com/softistx/clavix-api/issues/12)).
+- **Magic-link sign-in (toggleable)** — `requestMagicLink` and `confirmMagicLink`, off by default
+  (404 `MAGIC_LINK_DISABLED` when off) and turned on per tenant in its sign-in policy. The answer is
+  the same for any address, requests are throttled, and the link proves the e-mail
+  ([#89](https://github.com/softistx/clavix-api/issues/89)).
 - **Skeleton** — the repository builds, lints, type checks and tests: a `health` query and
   `GET /healthz`.
 - **Tenants** — a tenant model, the tenant a host belongs to (resolved from the `Host` and

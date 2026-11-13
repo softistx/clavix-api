@@ -3,6 +3,7 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import {
   asPasskeyInvalid,
@@ -47,6 +48,7 @@ export const passkeys: Resolvers = {
       const tenant = await ctx.tenant();
       if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
       requireLive(tenant);
+      requireMethod(tenant, "passkey");
       await ctx.passkeyThrottle?.check({
         tenantId: tenant.tenantId,
         ip: ctx.ip,
@@ -57,6 +59,7 @@ export const passkeys: Resolvers = {
       const tenant = await ctx.tenant();
       if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
       requireLive(tenant);
+      requireMethod(tenant, "passkey");
       const signedIn = await asPasskeyInvalid(() =>
         passkeySignIn(_, { challenge, assertion: response }, ctx),
       );

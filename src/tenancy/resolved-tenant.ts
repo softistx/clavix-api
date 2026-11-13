@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 
 /**
  * What a host resolves to: plain data, so it can sit in Redis. `issuer` and
@@ -24,6 +25,7 @@ export const resolvedTenant = z.object({
   slugIssuer: z.string().optional(),
   partition: z.string(),
   version: z.number(),
+  signIn: signInPolicySchema, // slice A5; the social secrets stay sealed here (this value sits in Redis)
 });
 
 export type ResolvedTenant = z.infer<typeof resolvedTenant>;

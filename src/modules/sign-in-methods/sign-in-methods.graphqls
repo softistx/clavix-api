@@ -1,0 +1,72 @@
+"A social provider the tenant offers on its hosted sign-in page."
+type HostedSocialProvider {
+  "The provider's name in the URL and in `socialSignInStart` (`google`)."
+  id: String!
+  "What the button says (`Google`)."
+  label: String!
+}
+
+"A way to sign in the hosted pages can offer."
+enum HostedSignInMethod {
+  PASSKEY
+  EMAIL_CODE
+  MAGIC_LINK
+  PASSWORD
+}
+
+"""
+What the hosted sign-in page of the tenant the host names offers. Public; it
+says nothing about who may sign in. `methods` lists the enabled methods only,
+in the enum's order (PASSWORD never appears yet); `social` the enabled
+providers. Never both empty.
+"""
+type HostedSignInMethods {
+  methods: [HostedSignInMethod!]!
+  social: [HostedSocialProvider!]!
+}
+
+"A social sign-in begun: send the visitor to `url`, and keep `flow` until the callback."
+type SocialFlowStart {
+  "The provider's authorization URL."
+  url: String!
+  """
+  A secret like a session token: the hosted page's server keeps it in its own
+  HttpOnly SameSite=Lax cookie and hands it back to `socialSignInComplete`.
+  Never in a URL or a log.
+  """
+  flow: String!
+  expiresAt: DateTime!
+}
+
+"A social sign-in that opened a session; the session cookie is set on the response."
+type SocialSignedIn {
+  user: CurrentUser!
+  expiresAt: DateTime!
+  "Whether a user was made for this account."
+  created: Boolean!
+  "The path the flow was started with, or null."
+  returnTo: String
+}
+
+type Query {
+  "The methods the tenant of this host offers; 404 for a host that names no tenant."
+  hostedSignInMethods: HostedSignInMethods!
+}
+
+type Mutation {
+  """
+  Begins a sign-in with the tenant's own app of `provider`. `returnTo` is a
+  path of this site. SIGN_IN_METHOD_DISABLED (404) when the tenant does not
+  offer that provider; the sign-in limits apply (MAIL_THROTTLED, 429).
+  """
+  socialSignInStart(provider: String!, returnTo: String): SocialFlowStart!
+  """
+  Completes the flow with the provider's callback URL and the `flow`
+  `socialSignInStart` answered, and opens the session (the cookie is set on the
+  response). Refusals are janus's codes: FLOW_EXPIRED, FLOW_MISMATCH,
+  PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, the tenant closed sign-up and no
+  user holds the address), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
+  (409), USER_INACTIVE (403).
+  """
+  socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignedIn!
+}

@@ -86,7 +86,14 @@ too (janus answers it itself). The `roles` claim is M2.
 
 ## Users and sessions
 
-Magic-link sign-in is a global switch, `CLAVIX_MAGIC_LINK`, off by default: janus 0.56 defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }`. `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`, README "Magic-link sign-in") answer 404 `MAGIC_LINK_DISABLED` while it is off, checked in the resolver before the throttle. The test script runs `magic-link.spec.ts` twice: off (default, the "off" half) and with `CLAVIX_MAGIC_LINK=true` (the "on" half), because the flag is read once at start.
+Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:
+- **One field, one schema**: `signIn: signInPolicySchema` (`sign-in.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (a later `mfa` block goes beside it) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
+- **Every write goes through `SignInPolicyService`** (`service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
+- **Gates**: `requireMethod(tenant, method)` (`gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked in the resolver before the throttle. Registering a passkey while signed in is not gated.
+- **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
+- **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` on the tenant's instance (made once per instance); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
+- **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
+- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.kid)`, so a provider sealed under another master key is not shown.
 
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
@@ -104,8 +111,8 @@ partitioned: never use them for tenant users.
   passkey is scoped to its rpId for good.
 - **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
   closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
-  Invitations: `createMongoInvitations(db, { partition })`; accepting one has no GraphQL surface
-  until the M2 console.
+  Invitations: `createMongoInvitations(db, { partition })`; accepting one is the hosted
+  `acceptInvitation` (below, "Admins of a tenant and invitations").
 
 ## E-mail code sign-in (`src/modules/auth`, `src/mail`)
 
@@ -243,6 +250,26 @@ every other failure a 401).
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. Two
   `createClient` of one id at the very same time are not told apart (the store has no
   insert-only write): the last one wins.
+- **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
+  membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
+  tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
+  per key in the process, plus the app's Redis lock when there is one, `config/exclusive.ts`): the
+  relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
+  Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
+  Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
+  (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
+  mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
+  (never copy it). An admin invitation is one of the `clavix` tenant under the scope
+  `adminScope(tenantId)` (`src/invitations/scope.ts`, `admin:<id>`); **only that scope grants a console
+  role**, so an invitation into a pool (the `clavix` pool included) uses any other scope. Accepting is
+  the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`, `acceptInvitation`, every
+  refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
+  `onAccepted`, given per tenant by `invitationHooks` (`src/config/users.ts`; on `clavix`:
+  `adminInvitationHooks`, which refuses a suspended or deleted tenant and grants the relation).
+  Its events are `membership.invite` / `.revokeInvitation` (target `invitation`) and `membership.change`
+  / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
+  canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse
+  after a write. Accepting (hosted, no console caller) records none.
 - **The migration** `2026-11-12-console` (`src/migrations/console-seed.ts`) registers the console
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed

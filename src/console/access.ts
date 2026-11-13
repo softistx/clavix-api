@@ -71,6 +71,12 @@ export function createAccess(store: RelationStore) {
       return [...found].map(([tenantId, role]) => ({ tenantId, role }));
     },
 
+    /** The users who hold `role` directly on the tenant. */
+    async holders(tenantId: string, role: Role): Promise<string[]> {
+      const found = await store.findEntities(tenantOf(tenantId), role);
+      return found.filter(({ type }) => type === "user").map(({ id }) => id);
+    },
+
     linkTenant,
 
     /** The ids of the users holding `owner` directly on the tenant. */

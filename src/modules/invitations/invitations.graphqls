@@ -1,0 +1,41 @@
+"What the holder of an invitation code sees before accepting it."
+type InvitationPreview {
+  "The address the invitation was sent to."
+  email: EmailAddress!
+  "What the invitee joins: the name of the tenant they will administer, or of the tenant whose user they become."
+  organization: String!
+  "The role offered, as it was issued. An admin invitation: `owner`, `admin` or `viewer`."
+  role: String!
+  expiresAt: DateTime!
+}
+
+"""
+What accepting did. `signedIn` is false when the address already had an
+account: the invitation is accepted and the person signs in as usual.
+"""
+type AcceptedInvitation {
+  signedIn: Boolean!
+  "Set when `signedIn`; the session cookie is on the response."
+  user: CurrentUser
+  expiresAt: DateTime
+  organization: String!
+}
+
+extend type Query {
+  """
+  Reads an invitation code without using it. Every code that cannot be
+  accepted (unknown, spent, revoked, expired) is the same INVITATION_INVALID,
+  400.
+  """
+  invitationPreview(code: String!): InvitationPreview!
+}
+
+extend type Mutation {
+  """
+  Accepts an invitation of the tenant the request's host names: the invitee's
+  account is made (e-mail proved) and what the invitation offers granted, once,
+  and the session opens. A second use of the code, or an admin invitation whose
+  tenant is gone, is INVITATION_INVALID, 400.
+  """
+  acceptInvitation(code: String!): AcceptedInvitation!
+}
