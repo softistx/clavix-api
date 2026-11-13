@@ -11,8 +11,8 @@ Today it serves:
   passkey sign-in and registration, and the consent API of the hosted pages;
 - on `POST /console/graphql`, the console API (`me`, tenants with plans, quotas, usage, suspension and
   trash, the admins of a tenant, a tenant's clients, resources, scopes and branding), behind a bearer token;
-- scripts that create tenants, OAuth clients and API resources. Emptying the trash after 30 days is not
-  scheduled yet (clavix-api#112); the console's refusals are in `docs/troubleshooting.md`.
+- scripts that create tenants, OAuth clients and API resources. The trash is emptied after 30 days by a
+  daily scheduled purge (see "Tenants, plans and usage"); the console's refusals are in `docs/troubleshooting.md`.
 
 ## Documentation
 
@@ -145,8 +145,8 @@ tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authori
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
 resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
-tenant's sign-in policy (see "Sign-in methods and social providers"); tenants are still created by
-script.
+tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, their plans and their
+trash are managed here too (below); `tenants:create` remains for the first tenants.
 
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
@@ -316,6 +316,56 @@ mutation {
 - **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
   opened are revoked.
 
+### Tenants, plans and usage
+
+Queries: `tenants` needs `view` on the platform (any operator role); `tenant` and `usage` need
+`view` on that tenant; `plans` is open to any signed-in caller. Mutations: `updateTenant` needs
+`edit` on the tenant (`owner` or `admin`, a tenant admin included); the other six need `edit` on the
+platform (`owner` or `admin` operator). Every mutation is audited (`tenant.create`, `.update`,
+`.setPlan`, `.suspend`, `.resume`, `.delete`, `.restore`, see "Admin events"). Errors carry
+`extensions.code`: `NOT_FOUND`, `BAD_USER_INPUT`, `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`,
+`TENANT_SUSPENDED`, `FORBIDDEN`.
+
+| Field                                   | What it does                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `tenants(q, status, after, first)`      | a page of tenants by slug, the trash included (status `DELETED`), purged ones left out           |
+| `tenant(id)`                            | one tenant; a tenant in the trash is `null` unless the caller is a platform operator             |
+| `plans`                                 | `free`, `pro`, `enterprise`, with their quotas (`mau`, `clients`, `domains`; `null` is no limit) |
+| `usage(tenantId, month)`                | monthly active users, clients and domains against the quotas that apply                          |
+| `createTenant(input)`                   | slug (for ever), name, `signUp`, `plan`; `SLUG_TAKEN` for a slug in use, in the trash or purged  |
+| `updateTenant(id, input)`               | the name and `signUp`; the slug never changes                                                    |
+| `setTenantPlan(id, input)`              | the plan and the whole set of quota overrides (`null` follows the plan)                          |
+| `suspendTenant(id)`, `resumeTenant(id)` | sign-in, authorize and token are refused with `TENANT_SUSPENDED` until resumed; idempotent       |
+| `deleteTenant(id)`, `restoreTenant(id)` | the trash (below)                                                                                |
+
+The `Tenant` type carries `status` (`ACTIVE`, `SUSPENDED`, `DELETED`), `plan`, `quotas`, `deletedAt`
+and `purgeAt`. The `clavix` tenant cannot be suspended or deleted (`PLATFORM_TENANT_PROTECTED`).
+
+```sh
+curl -s https://api.clavix.example/console/graphql \
+  -H "authorization: Bearer $CONSOLE_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"query":"mutation { suspendTenant(id: \"6731…\") { status } }"}'
+```
+
+**The trash.** `deleteTenant` puts the tenant in the trash: it behaves as suspended, is hidden from
+its own admins and keeps `deletedAt`; `purgeAt` is 30 days later. Until then a platform operator can
+`restoreTenant` it, with the status it had. At `purgeAt` the scheduled purge empties it for good.
+The job (`tenant-purge`, a Redis queue with a daily cron at 03:17 UTC, plus one pass at server start;
+without Redis only the start pass runs) takes only tenants whose 30 days are over, never a live,
+suspended or restored one. Per tenant it claims it first (from then on it resolves nowhere and
+cannot be restored), then removes:
+- the janus partition: OAuth clients, requests, codes, grants, access and refresh tokens and the
+  signing keys, then users, sessions, tokens, social links, passkeys and invitations (the counts per
+  collection are logged);
+- the tenant-owned collections (branding, usage counters, ...);
+- its roles and platform link in the console's permissions.
+
+`adminEvents` stay (the platform's record), and the Redis active-user counters are not deleted (they
+hold hashed ids and expire after 400 days). A purge is not a transaction: a failing tenant stays
+claimed, the tick fails and the next run resumes it; a second run finds nothing to remove. What is
+left is a tombstone (slug, `deletedAt`, `purgedAt`): the slug stays reserved for good, so
+`createTenant` with it is `SLUG_TAKEN`.
+
 ### Admin events
 
 Every console mutation records what it did in the `adminEvents` collection (ADR-0037): the actor
@@ -451,7 +501,7 @@ logo is `Cache-Control: public, max-age=31536000, immutable`; the bare path, or 
 
 ## Tenants
 
-Until the console exists (M2), a tenant is created by script, through the same `TenantsService` the
+The console API (`createTenant`) is the normal way to create a tenant; the script is for the first ones, and goes through the same `TenantsService` the
 platform uses (slug rules, reserved slugs, the tenant's first signing key). The script prints the
 tenant as JSON, with its issuer, `https://<slug>.<CLAVIX_DOMAIN>`.
 

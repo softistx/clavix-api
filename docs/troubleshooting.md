@@ -227,6 +227,13 @@ changed, so enter the client secret again with `setSocialProvider`.
 The change would leave the tenant with no enabled sign-in method and no enabled social provider, so
 nobody could sign in. Enable another method or provider first, then repeat the change.
 
+### `PLATFORM_FIRST_PARTY_METHOD` (409)
+
+`updateSignInMethods` on the platform tenant would leave neither `PASSKEY` nor `EMAIL_CODE` enabled.
+The platform tenant signs the console's operators in and always keeps one of these two, even when a
+social provider is enabled, because a provider depends on an outside service. Keep one of the two
+on. Other tenants are not bound by this rule.
+
 ### `SIGN_IN_METHOD_UNAVAILABLE` (409)
 
 The method cannot be enabled yet: `PASSWORD` is listed with `available: false` until password
@@ -256,6 +263,13 @@ The ID token has no `xms_edov` claim, so the account's e-mail does not count as 
 
 The provider account's e-mail belongs to no user of the tenant, and the tenant's sign-up is closed.
 Invite the user, or open the tenant's sign-up.
+
+### `FORBIDDEN` (403) "Sign-in could not be completed" on `socialSignInComplete`
+
+The provider answered, but the sign-in did not end in a session: the flow finished in a state that is
+not a plain sign-in, or the user it named can no longer be read. Nothing was opened and no cookie
+was set. Start again with `socialSignInStart`; if it keeps happening for one account, look for the
+user in the tenant (it may have been deleted since the flow began).
 
 ## `MAGIC_LINK_INVALID` (401) on `confirmMagicLink`
 

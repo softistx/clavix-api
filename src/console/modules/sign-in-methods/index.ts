@@ -35,11 +35,21 @@ const KIND = {
   microsoft: "MICROSOFT",
 } as const satisfies Record<SocialProviderId, string>;
 
-/** The stored name of a GraphQL enum value (`EMAIL_CODE` to `emailCode`). */
+/**
+ * The stored name of a GraphQL enum value (`EMAIL_CODE` to `emailCode`). The
+ * schema already limits the value to the enum, so a miss is a mismatch between
+ * the SDL and this map: it fails loudly instead of storing `undefined`.
+ */
 const storedOf = <K extends string, V extends string>(
   names: Record<K, V>,
   value: V,
-): K => (Object.keys(names) as K[]).find((key) => names[key] === value) as K;
+): K => {
+  const key = (Object.keys(names) as K[]).find((k) => names[k] === value);
+  if (key === undefined) {
+    throw new Error(`No stored name for the enum value "${String(value)}"`);
+  }
+  return key;
+};
 
 /** The policy as the console shows it: no secret, only that one is stored. */
 function policyOf(tenant: Tenant) {

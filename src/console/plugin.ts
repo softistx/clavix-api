@@ -1,6 +1,8 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
+import type { ExecutionResult } from "graphql";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
+import { withoutQuotedValue } from "./coercion";
 import type {
   ConsoleAdmins,
   ConsoleDirectory,
@@ -104,6 +106,25 @@ export function useConsole({
         return;
       }
       principals.set(request, principal);
+    },
+    // A variable that cannot be coerced is refused without quoting its value
+    // back (a client secret sent as an object, say): see coercion.ts.
+    onResultProcess({
+      result,
+      setResult,
+    }: {
+      result: ExecutionResult | readonly ExecutionResult[];
+      setResult: (result: ExecutionResult | readonly ExecutionResult[]) => void;
+    }) {
+      const scrub = (one: ExecutionResult): ExecutionResult =>
+        one.errors === undefined
+          ? one
+          : { ...one, errors: one.errors.map(withoutQuotedValue) };
+      setResult(
+        Array.isArray(result)
+          ? result.map(scrub)
+          : scrub(result as ExecutionResult),
+      );
     },
     onContextBuilding({
       context,
