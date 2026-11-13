@@ -7,7 +7,7 @@ import {
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { env } from "@/config/env";
-import { hostOf } from "./identity";
+import { dropTenantHosts } from "./hosts";
 import type { PlanId, QuotaOverrides } from "./plan.schema";
 import type { Tenant, tenants } from "./tenants.model";
 import type { TenantsService } from "./tenants.service";
@@ -306,25 +306,15 @@ export class TenantAdminService {
     }
   }
 
-  private async changed(tenant: Pick<Tenant, "slug" | "_id">) {
-    const hosts = [hostOf(tenant.slug, this.domain)];
-    try {
-      hosts.push(...(await this.hostsOf(tenant._id)));
-    } catch (error) {
-      this.log(
-        `tenants: hostsOf failed for ${hosts[0]}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    try {
-      await this.onHostsChanged(hosts);
-    } catch (error) {
-      this.log(
-        `tenants: onHostsChanged failed for ${hosts.join(", ")}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+  private changed(tenant: Pick<Tenant, "slug" | "_id">) {
+    return dropTenantHosts(
+      {
+        domain: this.domain,
+        hostsOf: this.hostsOf,
+        onHostsChanged: this.onHostsChanged,
+        log: this.log,
+      },
+      tenant,
+    );
   }
 }
