@@ -12,6 +12,7 @@ import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
+import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { CONSOLE_PATH } from "../../identity";
 
@@ -35,7 +36,7 @@ const as = (userId: string, query: string) =>
       ...deps,
       authenticate: async () => ({
         userId,
-        clientId: "c",
+        clientId: CONSOLE_CLIENT_ID,
         grantId: "g",
         scopes: ["console"],
       }),

@@ -219,7 +219,8 @@ The console's own GraphQL API, `POST /console/graphql`, apart from the hosted pa
 `src/generated/console`). No cookie and no Host-based tenant: the credential is a bearer JWT of the
 `clavix` tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, verified in process by
 `server.authenticate(request, { resource })` (`auth.ts`; no crypto of ours, a store outage is a 503,
-every other failure a 401).
+every other failure a 401). Only the console's own client (`CONSOLE_CLIENT_ID`, `identity.ts`) is
+accepted: a console-audience token minted for another client of `clavix` is a 401, whatever its scopes.
 - **Permissions** are a janus `defineModel` (`model.ts`) over the relation store in `oauthDb`
   (`config/access.ts`; `db:sync` creates its collection): platform and tenant `owner` / `admin` /
   `viewer`, permits `manage` / `edit` / `view`, a platform role inherited by every tenant through the
@@ -228,6 +229,13 @@ every other failure a 401).
 - **Deny by default** (`guard.ts`): every root field is wrapped, and one without an entry in its
   module's `guards` (`signedIn()`, `onTenant(perm, args => tenantId)`, `onPlatform(perm)`) is refused
   `FORBIDDEN`. A spec enumerates the real root fields. A new field ships with its guard.
+- **Writes on the `clavix` tenant are the platform's** (`guard.ts`, `allowed`): an `onTenant` guard
+  with `edit` or `manage` whose target is the `clavix` tenant itself asks `canPlatform` instead of
+  the tenant role (operators, the issuer's domains, sign-in policy, clients, branding and users
+  are all behind it); `view` stays tenant-level. It is central, so no module opts in. A tenant-level
+  role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
+  also removes their console relations (`access.removeUser`); disabling or deleting a `clavix` user
+  who holds a platform role or owns a tenant needs platform `manage` (`users/operators.ts`).
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
   there, never in `src/modules`.

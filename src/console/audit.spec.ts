@@ -6,6 +6,7 @@ import { adminEventRecorder } from "@/config/admin-events";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
+import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { adminEvents } from "./admin-events/admin-events.model";
 import {
   type AdminEventRecorder,
@@ -101,7 +102,7 @@ const as = (
       schema,
       authenticate: async () => ({
         userId,
-        clientId: "c",
+        clientId: CONSOLE_CLIENT_ID,
         grantId: "g",
         scopes: ["console"],
       }),
