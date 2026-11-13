@@ -95,6 +95,12 @@ export interface ConsoleUsers {
     id: string,
     active: boolean,
   ): Promise<TenantUserView | null>;
+  /** Sets the display name; the user as written, or `null` when unknown. */
+  rename(
+    tenantId: string,
+    id: string,
+    name: string,
+  ): Promise<TenantUserView | null>;
   /** Ends every session; answers how many. */
   revokeSessions(tenantId: string, id: string): Promise<number>;
   /** Deletes the user, their sessions and grants; `false` when already gone. */

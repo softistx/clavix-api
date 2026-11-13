@@ -82,6 +82,20 @@ export function createJanusUsers(source: UsersSource): ConsoleUsers {
         throw error;
       }
     },
+    async rename(tenantId, id, name) {
+      const auth = await janus(tenantId);
+      const user = await auth.findUser(id);
+      if (user === null) return null;
+      try {
+        return view(
+          user.name === name ? user : await auth.update(user, { name }),
+        );
+      } catch (error) {
+        if (error instanceof JanusError && error.code === "NOT_FOUND")
+          return null;
+        throw error;
+      }
+    },
     async revokeSessions(tenantId, id) {
       const auth = await janus(tenantId);
       if ((await auth.findUser(id)) === null) return 0;
