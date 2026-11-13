@@ -262,19 +262,12 @@ describe("the tenant purge", () => {
   });
 
   test("refuses the default partition and an empty one, touching nothing", async () => {
-    await oauthDb
-      .collection(JANUS[0] as string)
-      .insertOne({ _id: "kept", partition: "default" } as never, {
-        bypassDocumentValidation: true,
-      });
+    await seedJanus("default");
+    const before = await janusOf("default");
     await expect(real.purgePartition("default")).rejects.toBeInstanceOf(
       TypeError,
     );
     await expect(real.purgePartition("")).rejects.toBeInstanceOf(TypeError);
-    expect(
-      await oauthDb
-        .collection(JANUS[0] as string)
-        .countDocuments({ partition: "default" }),
-    ).toBe(1);
+    expect(await janusOf("default")).toEqual(before);
   });
 });

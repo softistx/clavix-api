@@ -11,8 +11,8 @@ Today it serves:
   passkey sign-in and registration, and the consent API of the hosted pages;
 - on `POST /console/graphql`, the console API (`me`, tenants with plans, quotas, usage, suspension and
   trash, a tenant's clients, resources, scopes and branding), behind a bearer token;
-- scripts that create tenants, OAuth clients and API resources. Emptying the trash after 30 days is not
-  scheduled yet (clavix-api#112); the console's refusals are in `docs/troubleshooting.md`.
+- scripts that create tenants, OAuth clients and API resources. The trash is emptied after 30 days by a
+  daily scheduled purge (see "Tenants, plans and usage"); the console's refusals are in `docs/troubleshooting.md`.
 
 ## Documentation
 
@@ -401,7 +401,7 @@ logo is `Cache-Control: public, max-age=31536000, immutable`; the bare path, or 
 
 ## Tenants
 
-Until the console exists (M2), a tenant is created by script, through the same `TenantsService` the
+The console API (`createTenant`) is the normal way to create a tenant; the script is for the first ones, and goes through the same `TenantsService` the
 platform uses (slug rules, reserved slugs, the tenant's first signing key). The script prints the
 tenant as JSON, with its issuer, `https://<slug>.<CLAVIX_DOMAIN>`.
 
