@@ -274,6 +274,33 @@ describe("social sign-in", () => {
     });
   });
 
+  test("returnTo must be a path of the site: no open redirect", async () => {
+    for (const r of [
+      "https://evil.example/x",
+      "//evil.example/x",
+      "/\\evil.example",
+      "javascript:alert(1)",
+    ]) {
+      const answer = await gql("sih-social", START, { p: "github", r });
+      expect(answer.errors).toBeDefined();
+      expect(answer.data?.["socialSignInStart"] ?? null).toBeNull();
+    }
+  });
+
+  test("a flow is single-use: completing it twice fails the second time", async () => {
+    const start = await startOn("sih-social");
+    const { run } = github("grace@social.example");
+    const vars = {
+      u: callbackOf("sih-social", start.state),
+      f: start.flow,
+    };
+    const first = await run(() => gql("sih-social", COMPLETE, vars));
+    expect(first.errors).toBeUndefined();
+    const replay = await run(() => gql("sih-social", COMPLETE, vars));
+    expect(replay.errors).toBeDefined();
+    expect(replay.cookies).toEqual([]);
+  });
+
   test("a tenant with sign-up closed does not make a user from a stranger's account", async () => {
     const start = await startOn("sih-other");
     const { run } = github("stranger@social.example");
