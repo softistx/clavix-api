@@ -14,6 +14,7 @@ import {
   signInMethodsGuards,
 } from "./sign-in-methods";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
+import { users, usersAudits, usersGuards } from "./users";
 
 // One entry per module: its resolvers, the guard of each root field it adds
 // and the audit action of each mutation it adds. A root field with no guard is
@@ -27,6 +28,7 @@ export const resolvers: Resolvers = mergeResolvers([
   domains,
   resources,
   tenants,
+  users,
 ]);
 export const guards: Guards = {
   ...meGuards,
@@ -37,6 +39,7 @@ export const guards: Guards = {
   ...resourcesGuards,
   ...tenantsGuards,
   ...signInMethodsGuards,
+  ...usersGuards,
 };
 export const audits: Audits = {
   ...adminsAudits,
@@ -46,4 +49,5 @@ export const audits: Audits = {
   ...resourcesAudits,
   ...tenantsAudits,
   ...signInMethodsAudits,
+  ...usersAudits,
 };

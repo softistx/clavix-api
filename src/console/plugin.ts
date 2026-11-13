@@ -3,7 +3,12 @@ import type { ExecutionResult } from "graphql";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
 import { withoutQuotedValue } from "./coercion";
-import type { ConsoleAdmins, ConsoleDirectory, ConsoleExtras } from "./context";
+import type {
+  ConsoleAdmins,
+  ConsoleDirectory,
+  ConsoleExtras,
+  ConsoleUsers,
+} from "./context";
 import type { Exclusive } from "./exclusive";
 
 /** Verifies the request's bearer token: its principal, or `null`. A store outage rejects. */
@@ -16,6 +21,7 @@ export interface ConsoleDeps {
   access: Access;
   directory: ConsoleDirectory;
   admins: ConsoleAdmins;
+  users: ConsoleUsers;
   exclusive: Exclusive;
   /** Where `ctx.audit` appends its events. */
   adminEvents: AdminEventRecorder;
@@ -51,6 +57,7 @@ export function useConsole({
   access,
   directory,
   admins,
+  users,
   exclusive,
   adminEvents,
 }: ConsoleDeps) {
@@ -133,6 +140,7 @@ export function useConsole({
         access,
         directory,
         admins,
+        users,
         exclusive,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),

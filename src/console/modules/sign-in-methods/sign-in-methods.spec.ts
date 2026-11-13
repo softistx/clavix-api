@@ -11,7 +11,7 @@ import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import type { ConsoleAdmins } from "@/console/context";
+import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
 import { secretContext } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
@@ -63,6 +63,7 @@ const as = async (
       access,
       adminEvents: adminEventRecorder,
       admins: {} as ConsoleAdmins,
+      users: {} as ConsoleUsers,
       exclusive: createExclusive(),
       directory: {
         findUser: async () => null,

@@ -1,0 +1,124 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { RedisError } from "@softistx/redis";
+import { access } from "@/config/access";
+import { mongo } from "@/config/db";
+import { env } from "@/config/env";
+import { sharedLockOf } from "@/config/exclusive";
+import { oauthDb } from "@/config/oauth-db";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { adminScope } from "@/invitations/scope";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { buildTenantJanus } from "@/users/tenant-janus";
+import { createExclusive } from "../../exclusive";
+import { adminInvitationHooks } from "./accept";
+import { changeRole, removeMember } from "./service";
+
+// A Redis whose lock cannot be taken (held by another past `wait`) until `free`.
+let held = true;
+const redis = {
+  lock: async (_key: string, work: () => Promise<unknown>) => {
+    if (held) throw new RedisError("LOCK_HELD", "k", "held");
+    return work();
+  },
+};
+const exclusive = createExclusive(sharedLockOf(redis));
+
+let tenantId = "";
+let member = "";
+let owner = "";
+
+beforeAll(async () => {
+  tenantId = (await tenantsService.create({ slug: "lock-a", name: "Lock" })).id;
+  member = "11111111-1111-4111-8111-111111111111";
+  owner = "22222222-2222-4222-8222-222222222222";
+  await access.grantTenant(tenantId, owner, "owner");
+  await access.grantTenant(tenantId, member, "viewer");
+});
+
+afterAll(async () => {
+  await mongo.db.tenants.raw.deleteMany({
+    slug: { $nin: [PLATFORM_TENANT_SLUG] },
+  });
+  for (const name of [
+    "partitionedUsers",
+    "partitionedSessions",
+    "partitionedInvitations",
+    "relations",
+  ]) {
+    await oauthDb.collection(name).deleteMany({});
+  }
+});
+
+const code503 = (error: unknown) =>
+  (error as { extensions?: { code?: string; http?: { status?: number } } })
+    .extensions;
+
+describe("the tenant's membership lock cannot be taken", () => {
+  test("a membership write is a retryable 503 and changes nothing", async () => {
+    held = true;
+    const deps = { access, exclusive };
+    for (const write of [
+      () => changeRole(deps, tenantId, member, "admin"),
+      () => removeMember(deps, tenantId, member),
+    ]) {
+      const error = await write().catch((e: unknown) => e);
+      expect(code503(error)).toEqual({
+        code: "SERVICE_UNAVAILABLE",
+        http: { status: 503 },
+      });
+    }
+    expect(await access.holders(tenantId, "viewer")).toEqual([member]);
+    // The lock frees: the same call goes through.
+    held = false;
+    await changeRole(deps, tenantId, member, "admin");
+    expect(await access.holders(tenantId, "admin")).toEqual([member]);
+  });
+
+  test("accepting an admin invitation stays retryable: the invitation is released and nothing granted", async () => {
+    const clavix = await tenantResolver.resolveHost(
+      `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
+    );
+    if (clavix === null) throw new Error("no clavix tenant");
+    const auth = buildTenantJanus(
+      oauthDb,
+      clavix,
+      undefined,
+      adminInvitationHooks({
+        access,
+        exclusive,
+        tenantActive: async () => true,
+      }),
+    );
+    const { code } = await auth.invitations.issue({
+      scope: adminScope(tenantId),
+      email: "late@lock.test",
+      name: "late",
+      role: "admin",
+      invitedBy: null,
+    });
+    held = true;
+    const failed = await auth.invitations
+      .accept({ code })
+      .catch((e: unknown) => e);
+    // janus lets the 503 through unchanged; the hosted resolver rethrows what
+    // is not a janus refusal, so the invitee gets "try again later".
+    expect(code503(failed)).toEqual({
+      code: "SERVICE_UNAVAILABLE",
+      http: { status: 503 },
+    });
+    const user = await auth.findByEmail("late@lock.test");
+    const grantedWhileHeld =
+      user === null
+        ? false
+        : (await access.holders(tenantId, "admin")).includes(user.id);
+    expect(grantedWhileHeld).toBe(false);
+    // The same code works once the lock is free, and grants the role once.
+    held = false;
+    const accepted = await auth.invitations.accept({ code });
+    // The account was made by the first try; the retry finds it and grants.
+    expect(accepted.status).toBe("signIn");
+    const after = await auth.findByEmail("late@lock.test");
+    expect(after).not.toBeNull();
+    expect(await access.holders(tenantId, "admin")).toContain(after?.id ?? "");
+  });
+});
