@@ -53,6 +53,34 @@ const shape = (
   updatedAt: doc.updatedAt,
 });
 
+// The service's refusals as GraphQL errors; anything else passes through.
+function refusal(error: unknown): unknown {
+  if (error instanceof BrandingContrastError) {
+    return new GraphQLError(error.message, {
+      extensions: {
+        code: error.code,
+        http: { status: 422 },
+        failures: error.failures,
+      },
+    });
+  }
+  if (error instanceof BrandingInputError) {
+    return new GraphQLError(error.message, {
+      extensions: {
+        code: error.code,
+        http: { status: 400 },
+        field: error.field,
+      },
+    });
+  }
+  if (error instanceof BrandingConflictError) {
+    return new GraphQLError(error.message, {
+      extensions: { code: error.code, http: { status: 409 } },
+    });
+  }
+  return error;
+}
+
 export const branding: Resolvers = {
   Query: {
     branding: async (_, { tenantId }) => {
@@ -62,10 +90,12 @@ export const branding: Resolvers = {
     },
   },
   Mutation: {
-    updateBranding: async (_, { tenantId, input }, ctx) => {
-      await requireTenant(tenantId);
-      try {
-        const result = await brandingService.update(tenantId, {
+    updateBranding: async (_, { tenantId: given, input }, ctx) => {
+      await requireTenant(given);
+      // One spelling of the id in the trail, whatever case the caller sent.
+      const tenantId = new ObjectId(given).toHexString();
+      const result = await brandingService
+        .update(tenantId, {
           displayName: input.displayName,
           seed: input.seed,
           radius: input.radius ?? "0.5rem",
@@ -73,46 +103,24 @@ export const branding: Resolvers = {
           motif: input.motif ?? null,
           logo: input.logo ?? undefined,
           removeLogo: input.removeLogo ?? undefined,
+        })
+        .catch((error: unknown) => {
+          throw refusal(error);
         });
-        // Recorded on a repeat too (`changed: false`): the retry of a call whose
-        // record failed must not leave the change with no event. A tenant has
-        // one brand, so the tenant's id names it.
-        await ctx.audit("branding.update", {
-          type: "branding",
-          id: tenantId,
-          tenantId,
-        });
-        return {
-          branding: shape(tenantId, result.branding),
-          changed: result.changed,
-          warnings: result.warnings,
-        };
-      } catch (error) {
-        if (error instanceof BrandingContrastError) {
-          throw new GraphQLError(error.message, {
-            extensions: {
-              code: error.code,
-              http: { status: 422 },
-              failures: error.failures,
-            },
-          });
-        }
-        if (error instanceof BrandingInputError) {
-          throw new GraphQLError(error.message, {
-            extensions: {
-              code: error.code,
-              http: { status: 400 },
-              field: error.field,
-            },
-          });
-        }
-        if (error instanceof BrandingConflictError) {
-          throw new GraphQLError(error.message, {
-            extensions: { code: error.code, http: { status: 409 } },
-          });
-        }
-        throw error;
-      }
+      // Outside the mapping above: a failed record fails the mutation as it
+      // is. Recorded on a repeat too (`changed: false`): the retry of a call
+      // whose record failed must not leave the change with no event. A tenant
+      // has one brand, so the tenant's id names it.
+      await ctx.audit("branding.update", {
+        type: "branding",
+        id: tenantId,
+        tenantId,
+      });
+      return {
+        branding: shape(tenantId, result.branding),
+        changed: result.changed,
+        warnings: result.warnings,
+      };
     },
   },
 };

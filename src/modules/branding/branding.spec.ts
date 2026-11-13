@@ -258,6 +258,8 @@ describe("updateBranding", () => {
       i: { ...base, logo: LOGO },
     });
     expect(payloadOf(again).changed).toBe(false);
+    // A repeat is recorded too: the retry of a call whose record failed.
+    expect(await eventsOf(tenantA)).toHaveLength(2);
 
     // The logo is kept when the next call sends none, and removed on request.
     const kept = await run(UPDATE, users.adminA, { t: tenantA, i: base });
