@@ -2,6 +2,7 @@ import { JanusError } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
 import { tenantsService } from "@/config/tenancy";
+import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
@@ -91,6 +92,8 @@ export const invitations: Resolvers = {
         );
         const user = await auth.findUser(accepted.user.id);
         if (user === null) throw invalid();
+        // The sign-in counts as the month's activity, like any other sign-in.
+        await usageService.recordActive(tenant.tenantId, user.id);
         return {
           signedIn: true,
           user: {

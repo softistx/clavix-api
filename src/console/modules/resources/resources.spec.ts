@@ -591,9 +591,9 @@ describe("the console's own resource", () => {
 });
 
 describe("a suspended tenant", () => {
-  test("is NOT_FOUND for its admin", async () => {
+  test("is readable, and its writes are TENANT_SUSPENDED for its admin", async () => {
     await tenantsService.suspend(tenantB);
-    expect(codeOf(await adminB(LIST, { tenantId: tenantB }))).toBe("NOT_FOUND");
+    expect((await adminB(LIST, { tenantId: tenantB })).errors).toBeUndefined();
     expect(
       codeOf(
         await adminB(CREATE, {
@@ -601,7 +601,7 @@ describe("a suspended tenant", () => {
           input: { uri: "https://late.res-b.example" },
         }),
       ),
-    ).toBe("NOT_FOUND");
+    ).toBe("TENANT_SUSPENDED");
   });
 });
 

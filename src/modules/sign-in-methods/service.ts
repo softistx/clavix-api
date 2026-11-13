@@ -57,9 +57,9 @@ export class SignInPolicyService {
     private readonly box: SecretBox,
   ) {}
 
-  /** The active tenant, or NOT_FOUND (404). */
+  /** The tenant (suspended included: its policy stays readable), or NOT_FOUND (404) for an unknown or trashed one. */
   async get(tenantId: string): Promise<Tenant> {
-    const [tenant] = await this.tenants.activeByIds([tenantId]);
+    const [tenant] = await this.tenants.liveByIds([tenantId]);
     if (tenant === undefined) throw refusal("NOT_FOUND", "No such tenant", 404);
     return tenant;
   }

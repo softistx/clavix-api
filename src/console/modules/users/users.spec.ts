@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import {
   createMemorySigningKeys,
   type SigningKeyStore,
@@ -16,6 +16,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { usageService } from "@/config/usage";
 import { authFor, claimsFor, forTenant } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -628,6 +629,27 @@ describe("invitations", () => {
     )?.[1];
   };
   const hosted = `${issuerOf(SLUG.a, origin)}/graphql`;
+
+  test("accepting records the new user as active, once", async () => {
+    const email = "active@end.test";
+    await asConsole(
+      ownA,
+      `mutation { inviteUser(tenantId: "${tenantA}", email: "${email}") { id } }`,
+    );
+    const secret = codeMailedTo(email);
+    const spy = spyOn(usageService, "recordActive");
+    try {
+      const accepted = await post(
+        hosted,
+        `mutation { acceptInvitation(code: "${secret}") { signedIn user { id } } }`,
+      );
+      expect(accepted.errors).toBeUndefined();
+      const id = accepted.data?.["acceptInvitation"].user.id as string;
+      expect(spy.mock.calls).toEqual([[tenantA, id]]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
   test("inviting mails a link; accepting makes the user in A's pool only; a repeat is refused", async () => {
     const email = "fresh@end.test";

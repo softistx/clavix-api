@@ -335,8 +335,7 @@ role `bun run operators:grant --email <address> --role <role>`.
 
 ### `NOT_FOUND: No such client`, `No such resource`, `No such scope`
 
-The id is unknown in that tenant: it never existed, it belongs to another tenant, or the tenant
-is suspended. A query answers `null` and a delete `false` instead of this error. Read the ids
+The id is unknown in that tenant: it never existed or it belongs to another tenant. A query answers `null` and a delete `false` instead of this error. Read the ids
 again with `clients(tenantId)`, `resources(tenantId)` or `scopes(tenantId)`.
 
 ### `CONFLICT` on `createClient`, `createResource`, `createScope`
@@ -374,7 +373,7 @@ after the renewal), the old code is already dead: wait the 60 s and resend.
 
 `INVITATION_NOT_PENDING`: the invitation was accepted or revoked, so there is nothing to renew. If
 it was revoked, invite the address again with `inviteAdmin`; if it was accepted, the address already
-holds the role. `NOT_FOUND`: the tenant does not exist (or is suspended), or the id is not one of
+holds the role. `NOT_FOUND`: the tenant does not exist (or is in the trash), or the id is not one of
 this tenant's invitations (an id of another tenant is as unknown). A lapsed pending invitation is
 not an error: resending it renews it.
 
@@ -425,7 +424,7 @@ runs the console itself.
 (`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
 Monthly active users never block: `usage` only reports `exceeded`.
 
-**`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on `updateTenant` by a tenant admin (platform operators can still edit), and as `access_denied` JSON on
+**`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on every console write of a tenant's own admins (clients, resources, roles, users, admins, domains, branding, sign-in methods, `updateTenant`: the console stays readable on a suspended tenant, platform operators can still write), and as `access_denied` JSON on
 `/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
 `restoreTenant` lifts it at once (the host cache is dropped). Tokens already issued still work until they expire.
 
@@ -530,7 +529,7 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
   Caddy retries and certificates already issued keep serving.
 - Caddy: `on_demand_tls { ask http://api:3000/internal/tls/ask?token=<secret> }` (Caddy
   appends `&domain=<host>`). Never route `/internal/` from the public listener.
-- **`NOT_FOUND` on a domain mutation**: the tenant is unknown or suspended, or the id belongs to
+- **`NOT_FOUND` on a domain mutation**: the tenant is unknown or in the trash, or the id belongs to
   another tenant. Pending claims count toward the `domains` quota: remove an abandoned one to free it.
 - Caddy's access log must not record the ask URL: its `token` is the secret.
 ### `USER_EXISTS` (409) on `inviteUser`

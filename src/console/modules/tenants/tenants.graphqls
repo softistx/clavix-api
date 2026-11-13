@@ -139,7 +139,7 @@ type Mutation {
   Renames a tenant or opens / closes its sign-up. Needs `edit` on the tenant.
   Idempotent. Errors: NOT_FOUND, BAD_USER_INPUT (400), TENANT_SUSPENDED (403)
   for a tenant admin when the tenant is suspended (a platform operator still
-  may).
+  may; every other tenant-scoped write is refused the same way).
   """
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
   """

@@ -5,7 +5,7 @@ import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ConsoleContext } from "../../context";
-import { activeTenant, idArg, tenantIdOf } from "../ids";
+import { idArg, liveTenant, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
 import { keepOwners } from "./operators";
 import { shape, target } from "./shapes";
@@ -15,7 +15,7 @@ const MAX_NAME = 200;
 export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   inviteUser: async (_, { tenantId: given, email }, ctx) => {
     const tenantId = tenantIdOf(given);
-    const tenant = await activeTenant(ctx.directory, tenantId);
+    const tenant = await liveTenant(ctx.directory, tenantId);
     if ((await ctx.users.findByEmail(tenantId, email)) !== null) {
       throw new GraphQLError("This address already has an account", {
         extensions: { code: "USER_EXISTS", http: { status: 409 } },
@@ -40,7 +40,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   revokeInvitation: async (_, { tenantId: given, invitationId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(invitationId, "invitationId");
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     await ctx.users.revokeInvitation(tenantId, invitationId);
     await ctx.audit(
       "user.revokeInvitation",
@@ -57,7 +57,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
         extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
       });
     }
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     const user = await ctx.users.rename(tenantId, userId, name);
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.update", target("user", userId, tenantId));
@@ -70,7 +70,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   deleteUser: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    const tenant = await activeTenant(ctx.directory, tenantId);
+    const tenant = await liveTenant(ctx.directory, tenantId);
     // Alone with an `assignRole` of the same user: no assignment can be
     // written between the delete and the sweep.
     await keepOwners(ctx, tenant, tenantId, userId, () =>
@@ -92,7 +92,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   revokeUserSessions: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     const ended = await ctx.users.revokeSessions(tenantId, userId);
     await ctx.audit("user.revokeSessions", target("user", userId, tenantId));
     return ended;
@@ -104,7 +104,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   ) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     const user = await ctx.users.setEmailVerified(tenantId, userId, verified);
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.setEmailVerified", target("user", userId, tenantId));
@@ -114,7 +114,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
     idArg(grantId, "grantId");
-    await activeTenant(ctx.directory, tenantId);
+    await liveTenant(ctx.directory, tenantId);
     const revoked = await ctx.users.revokeGrant(tenantId, userId, grantId);
     // Recorded on a repeat and on a grant that is not this user's too:
     // the id is only named, never read.
@@ -131,7 +131,7 @@ async function setActive(
 ) {
   const tenantId = tenantIdOf(given);
   idArg(userId, "userId");
-  const tenant = await activeTenant(ctx.directory, tenantId);
+  const tenant = await liveTenant(ctx.directory, tenantId);
   const user = await (active
     ? ctx.users.setActive(tenantId, userId, true)
     : keepOwners(ctx, tenant, tenantId, userId, () =>
