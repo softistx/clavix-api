@@ -274,6 +274,11 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   per key in the process, plus the app's Redis lock when there is one, `config/exclusive.ts`): the
   relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
   Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
+  **One owner rule** (`otherLiveOwners`, `service.ts`): an owner counts only while they exist and can
+  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable and
+  delete of a `clavix` user, tenant ownerships and the last live platform owner, under
+  `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
+  ghost or a deleted inviter) all use it. A repeat `disableUser` is never `LAST_OWNER`.
   Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
   (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
   mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it

@@ -6,7 +6,10 @@ import { type AdminsAccess, changeRole, removeMember } from "./service";
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 1));
 
 /** Relations in memory; every call yields, so unserialised calls would interleave. */
-function fake(start: Partial<Record<Role, string[]>>) {
+function fake(
+  start: Partial<Record<Role, string[]>>,
+  { disabled = [], gone = [] }: { disabled?: string[]; gone?: string[] } = {},
+) {
   const held = new Map<Role, Set<string>>([
     ["owner", new Set(start.owner)],
     ["admin", new Set(start.admin)],
@@ -27,7 +30,13 @@ function fake(start: Partial<Record<Role, string[]>>) {
     },
   };
   const of = (role: Role) => [...(held.get(role) ?? [])].sort();
-  return { deps: { access, exclusive: createExclusive() }, of };
+  const directory = {
+    findUser: async (id: string) =>
+      gone.includes(id)
+        ? null
+        : { id, email: `${id}@t.test`, active: !disabled.includes(id) },
+  };
+  return { deps: { access, exclusive: createExclusive(), directory }, of };
 }
 
 const codeOf = (result: PromiseSettledResult<unknown>) =>
@@ -91,5 +100,30 @@ describe("the last owner, under concurrent changes", () => {
     await removeMember(deps, "t", "x");
     expect(of("admin")).toEqual([]);
     expect(of("owner")).toEqual(["o"]);
+  });
+});
+
+describe("one owner rule: an owner who cannot sign in does not count", () => {
+  test("disable X, then Y steps down or is removed: LAST_OWNER, nothing changed", async () => {
+    const { deps, of } = fake({ owner: ["x", "y"] }, { disabled: ["x"] });
+    const results = await Promise.allSettled([
+      changeRole(deps, "t", "y", "admin"),
+      removeMember(deps, "t", "y"),
+    ]);
+    expect(results.map(codeOf)).toEqual(["LAST_OWNER", "LAST_OWNER"]);
+    expect(of("owner")).toEqual(["x", "y"]);
+  });
+
+  test("an owner whose account is gone does not count either", async () => {
+    const { deps, of } = fake({ owner: ["ghost", "y"] }, { gone: ["ghost"] });
+    const [removal] = await Promise.allSettled([removeMember(deps, "t", "y")]);
+    expect(codeOf(removal as PromiseSettledResult<unknown>)).toBe("LAST_OWNER");
+    expect(of("owner")).toEqual(["ghost", "y"]);
+  });
+
+  test("a live owner beside the one stepping down is enough", async () => {
+    const { deps, of } = fake({ owner: ["x", "y", "z"] }, { disabled: ["x"] });
+    await removeMember(deps, "t", "y");
+    expect(of("owner")).toEqual(["x", "z"]);
   });
 });

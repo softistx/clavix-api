@@ -73,18 +73,23 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenant = await activeTenant(ctx.directory, tenantId);
     // Alone with an `assignRole` of the same user: no assignment can be
     // written between the delete and the sweep.
-    await keepOwners(ctx, tenant, tenantId, userId, () =>
-      ctx.exclusive(userKey(tenantId, userId), async () => {
-        await ctx.users.delete(tenantId, userId);
-        // Their role assignments go with them; on a repeat too, so a retry
-        // finishes what a failed first run left.
-        await rolesService.removeUser(new ObjectId(tenantId), userId);
-        // An operator (a user of `clavix`) also holds console roles: they go
-        // too, or a deleted account would keep its platform and tenant roles.
-        if (tenant.slug === PLATFORM_TENANT_SLUG) {
-          await ctx.access.removeUser(userId);
-        }
-      }),
+    await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () =>
+        ctx.exclusive(userKey(tenantId, userId), async () => {
+          await ctx.users.delete(tenantId, userId);
+          // Their role assignments go with them; on a repeat too, so a retry
+          // finishes what a failed first run left.
+          await rolesService.removeUser(new ObjectId(tenantId), userId);
+          // An operator (a user of `clavix`) also holds console roles: they go
+          // too, or a deleted account would keep its platform and tenant roles.
+          if (tenant.slug === PLATFORM_TENANT_SLUG) {
+            await ctx.access.removeUser(userId);
+          }
+        }),
+      "delete",
     );
     await ctx.audit("user.delete", target("user", userId, tenantId));
     return true;
@@ -134,8 +139,12 @@ async function setActive(
   const tenant = await activeTenant(ctx.directory, tenantId);
   const user = await (active
     ? ctx.users.setActive(tenantId, userId, true)
-    : keepOwners(ctx, tenant, tenantId, userId, () =>
-        ctx.users.setActive(tenantId, userId, false),
+    : keepOwners(
+        ctx,
+        tenant,
+        userId,
+        () => ctx.users.setActive(tenantId, userId, false),
+        "disable",
       ));
   if (user === null) throw denial("NOT_FOUND", "No such user");
   await ctx.audit(

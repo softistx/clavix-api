@@ -56,7 +56,17 @@ const code503 = (error: unknown) =>
 describe("the tenant's membership lock cannot be taken", () => {
   test("a membership write is a retryable 503 and changes nothing", async () => {
     held = true;
-    const deps = { access, exclusive };
+    const deps = {
+      access,
+      exclusive,
+      directory: {
+        findUser: async (id: string) => ({
+          id,
+          email: `${id}@t`,
+          active: true,
+        }),
+      },
+    };
     for (const write of [
       () => changeRole(deps, tenantId, member, "admin"),
       () => removeMember(deps, tenantId, member),
@@ -87,6 +97,7 @@ describe("the tenant's membership lock cannot be taken", () => {
         access,
         exclusive,
         tenantActive: async () => true,
+        findUser: async (id) => auth.findUser(id),
       }),
     );
     const { code } = await auth.invitations.issue({
@@ -138,6 +149,7 @@ describe("the operator invitation (operators:grant --create)", () => {
         access,
         exclusive,
         tenantActive: async () => true,
+        findUser: async (id) => auth.findUser(id),
       }),
     );
     const issue = (role: string) =>
