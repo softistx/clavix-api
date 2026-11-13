@@ -42,10 +42,15 @@ async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   ip = "198.51.100.7",
+  extra: Record<string, string> = {},
 ): Promise<Answer> {
   const response = await app.request(url(slug), {
     method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": ip,
+      ...extra,
+    },
     body: JSON.stringify({ query, variables }),
   });
   const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
@@ -184,6 +189,22 @@ describe("magic link turned on by the tenant", () => {
     expect(((await me.json()) as { data: unknown }).data).toEqual({
       currentUser: { email: "lin@example.test", emailVerified: true },
     });
+  });
+
+  test("the session records the User-Agent as its device label", async () => {
+    const { token } = await ask("acme", "dev-link@example.test");
+    const agent = "Mozilla/5.0 (Macintosh) Safari/605.1";
+    const signedIn = await gql("acme", CONFIRM, { token }, undefined, {
+      "user-agent": agent,
+    });
+    const confirmed = signedIn.data?.["confirmMagicLink"] as {
+      user: { id: string };
+    };
+    const auth = await janusIssuers.forRequest(new Request(url("acme")));
+    const id = confirmed.user.id;
+    expect(
+      (await auth?.sessions.list({ id }))?.map((session) => session.device),
+    ).toEqual([agent]);
   });
 
   test("a link works once: the second confirm is MAGIC_LINK_INVALID, 401", async () => {

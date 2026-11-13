@@ -336,6 +336,14 @@ describe("search by e-mail prefix", () => {
         )
       ).data?.["users"].totalCount,
     ).toBe(0);
+    expect(
+      code(
+        await asConsole(
+          ownA,
+          `{ users(tenantId: "${tenantA}", emailPrefix: "${"a".repeat(255)}") { totalCount } }`,
+        ),
+      ),
+    ).toBe("BAD_USER_INPUT");
     // Both filters at once is ambiguous.
     expect(
       code(

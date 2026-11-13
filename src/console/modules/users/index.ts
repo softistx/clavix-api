@@ -20,7 +20,6 @@ export const usersGuards: Guards = {
   "Query.user": onTenant("view", lowerTenantArg),
   "Query.userInvitations": onTenant("view", lowerTenantArg),
   "Query.userGrants": onTenant("view", lowerTenantArg),
-  "Query.userSessions": onTenant("view", lowerTenantArg),
   "Mutation.inviteUser": onTenant("edit", lowerTenantArg),
   "Mutation.revokeInvitation": onTenant("edit", lowerTenantArg),
   "Mutation.updateUser": onTenant("edit", lowerTenantArg),
@@ -28,7 +27,6 @@ export const usersGuards: Guards = {
   "Mutation.enableUser": onTenant("edit", lowerTenantArg),
   "Mutation.deleteUser": onTenant("edit", lowerTenantArg),
   "Mutation.revokeUserSessions": onTenant("edit", lowerTenantArg),
-  "Mutation.revokeUserSession": onTenant("edit", lowerTenantArg),
   "Mutation.setUserEmailVerified": onTenant("edit", lowerTenantArg),
   "Mutation.revokeGrant": onTenant("edit", lowerTenantArg),
 };
@@ -44,7 +42,6 @@ export const usersAudits: Audits = {
   "Mutation.enableUser": "user.enable",
   "Mutation.deleteUser": "user.delete",
   "Mutation.revokeUserSessions": "user.revokeSessions",
-  "Mutation.revokeUserSession": "user.revokeSession",
   "Mutation.setUserEmailVerified": "user.setEmailVerified",
   "Mutation.revokeGrant": "user.revokeGrant",
 };
@@ -124,15 +121,6 @@ export const users: Resolvers = {
       await activeTenant(ctx.directory, tenantId);
       const found = await ctx.users.find(tenantId, id);
       return found === null ? null : shape(found);
-    },
-    userSessions: async (_, { tenantId: given, userId }, ctx) => {
-      const tenantId = tenantIdOf(given);
-      await activeTenant(ctx.directory, tenantId);
-      return (await ctx.users.sessions(tenantId, userId)).map((session) => ({
-        ...session,
-        device: session.device ?? null,
-        lastUsedAt: session.lastUsedAt ?? null,
-      }));
     },
     userInvitations: async (_, { tenantId: given }, ctx) => {
       const tenantId = tenantIdOf(given);
@@ -217,24 +205,6 @@ export const users: Resolvers = {
       await activeTenant(ctx.directory, tenantId);
       const ended = await ctx.users.revokeSessions(tenantId, userId);
       await ctx.audit("user.revokeSessions", target("user", userId, tenantId));
-      return ended;
-    },
-    revokeUserSession: async (
-      _,
-      { tenantId: given, userId, sessionId },
-      ctx,
-    ) => {
-      const tenantId = tenantIdOf(given);
-      idArg(userId, "userId");
-      idArg(sessionId, "sessionId");
-      await activeTenant(ctx.directory, tenantId);
-      const ended = await ctx.users.revokeSession(tenantId, userId, sessionId);
-      // Recorded on a repeat and on a session that is not this user's too:
-      // the id is only named, never read.
-      await ctx.audit(
-        "user.revokeSession",
-        target("session", sessionId, tenantId),
-      );
       return ended;
     },
     setUserEmailVerified: async (
