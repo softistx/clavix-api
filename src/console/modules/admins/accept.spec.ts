@@ -167,7 +167,7 @@ describe("an accept racing a disableUser", () => {
     const known: Record<string, boolean> = { vic: true };
     const { hooks, granted, exclusive } = setup(known);
     const disabling = exclusive(lockOf("vic"), async () => {
-      known.vic = false;
+      known["vic"] = false;
       await new Promise((r) => setTimeout(r, 20));
     });
     await expect(
