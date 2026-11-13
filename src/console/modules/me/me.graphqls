@@ -39,6 +39,8 @@ type SwitchableTenant {
 type SwitchableTenantPage {
   items: [SwitchableTenant!]!
   nextCursor: String
+  "How many tenants the caller can switch to that match `q` in all, whatever the cursor or the page's size."
+  totalCount: Int!
 }
 
 "The caller: who the bearer token belongs to, and where they have a role."

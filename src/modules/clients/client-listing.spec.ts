@@ -4,7 +4,12 @@ import {
   hashOAuthSecret,
   type OAuthClientRecord,
 } from "@softistx/janus-oauth";
-import { capability, listClientViews, MAX_READS } from "./client-listing";
+import {
+  capability,
+  countClientViews,
+  listClientViews,
+  MAX_READS,
+} from "./client-listing";
 
 const record = (
   id: string,
@@ -129,4 +134,19 @@ test("capability refuses a store without the method", () => {
   expect(() => capability(undefined, "listClients")).toThrow(
     "the OAuth store has no listClients()",
   );
+});
+
+describe("countClientViews", () => {
+  test("counts every registered client over several reads, with or without q", async () => {
+    const store = await storeWith([
+      ...Array.from({ length: 130 }, (_, n) => record(`app-${pad(n)}`)),
+      record("other", { name: "Zed" }),
+      record("meta", { source: "metadata" }),
+    ]);
+    expect(await countClientViews(store.listClients)).toBe(131);
+    expect(await countClientViews(store.listClients, { q: "  APP-12 " })).toBe(
+      11,
+    );
+    expect(await countClientViews(store.listClients, { q: "nothing" })).toBe(0);
+  });
 });

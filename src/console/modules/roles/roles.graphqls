@@ -27,6 +27,8 @@ type RoleMember {
 type RoleMemberPage {
   items: [RoleMember!]!
   nextCursor: String
+  "How many users hold the role in all, whatever the cursor or the page's size."
+  totalCount: Int!
 }
 
 input CreateRoleInput {

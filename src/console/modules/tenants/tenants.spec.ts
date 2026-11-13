@@ -292,7 +292,7 @@ describe("queries", () => {
     await as(OPERATOR, `mutation { deleteTenant(id: "${a.id}") { id } }`);
     const all = await as(
       OPERATOR,
-      "{ tenants(first: 2) { items { slug status } nextCursor } }",
+      "{ tenants(first: 2) { items { slug status } nextCursor totalCount } }",
     );
     const page = all.data?.["tenants"];
     expect(page.items.map((t: { slug: string }) => t.slug)).toEqual([
@@ -307,6 +307,22 @@ describe("queries", () => {
     expect(
       next.data?.["tenants"].items.map((t: { slug: string }) => t.slug),
     ).toEqual(["charlie", PLATFORM_TENANT_SLUG].sort());
+    // totalCount ignores the page and the cursor, and follows q and status.
+    expect(page.totalCount).toBe(4);
+    const second = await as(
+      OPERATOR,
+      `{ tenants(first: 2, after: "${page.nextCursor}") { totalCount } }`,
+    );
+    expect(second.data?.["tenants"].totalCount).toBe(4);
+    const counted = await as(
+      OPERATOR,
+      '{ a: tenants(q: "BRA") { totalCount } b: tenants(status: DELETED) { totalCount } c: tenants(q: "zzz") { totalCount } }',
+    );
+    expect(counted.data).toEqual({
+      a: { totalCount: 1 },
+      b: { totalCount: 1 },
+      c: { totalCount: 0 },
+    });
     const q = await as(OPERATOR, '{ tenants(q: "BRA") { items { slug } } }');
     expect(q.data?.["tenants"].items).toEqual([{ slug: "bravo" }]);
     const deleted = await as(
