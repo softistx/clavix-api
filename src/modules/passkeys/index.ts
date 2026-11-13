@@ -1,7 +1,9 @@
 import { denial, passkeyResolvers } from "@softistx/janus-graphql";
+import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { requireLive } from "@/tenancy/live";
 import {
   asPasskeyInvalid,
   currentOf,
@@ -44,6 +46,7 @@ export const passkeys: Resolvers = {
       // throttle budget is spent. The key is the client address and the tenant.
       const tenant = await ctx.tenant();
       if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      requireLive(tenant);
       await ctx.passkeyThrottle?.check({
         tenantId: tenant.tenantId,
         ip: ctx.ip,
@@ -51,6 +54,9 @@ export const passkeys: Resolvers = {
       return signInOptions(_, __, ctx);
     },
     signInWithPasskey: async (_, { challenge, response }, ctx) => {
+      const tenant = await ctx.tenant();
+      if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      requireLive(tenant);
       const signedIn = await asPasskeyInvalid(() =>
         passkeySignIn(_, { challenge, assertion: response }, ctx),
       );
@@ -58,6 +64,7 @@ export const passkeys: Resolvers = {
       const auth = await authOf(ctx);
       const user = await auth.findUser(signedIn.userId);
       if (user === null) throw passkeyInvalid();
+      await usageService.recordActive(tenant.tenantId, user.id);
       return {
         user: {
           id: user.id,

@@ -21,7 +21,7 @@ const origin = {
 /** The audience of the console's access tokens: `https://console.<CLAVIX_DOMAIN>/api`. */
 export const consoleResource = consoleAudience(origin);
 
-/** The `clavix` tenant (the console signs in through it); `null` while it is missing or suspended. */
+/** The `clavix` tenant (the console signs in through it); `null` while it is missing (it cannot be suspended). */
 const clavixTenant = () =>
   tenantResolver.resolveHost(`${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`);
 

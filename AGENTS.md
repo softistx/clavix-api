@@ -4,7 +4,8 @@ The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (
 issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
-services behind them; tenants, clients and resources are created by script until the M2 console.
+services behind them; tenants are created by script until the M2 console; clients, resources and
+scopes are managed in the console API or by script.
 The UI is `softistx/clavix-ui`.
 
 The owner's rules for every repository (worktrees, Conventional Commits, integration
@@ -46,16 +47,28 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 ## Resources (`src/modules/resources`)
 
 A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the access tokens asked with
-`resource=<uri>`, its `scopes` what a client may request on it. `bun run resources:create --tenant
+`resource=<uri>`, its scopes what a client may request on it. `bun run resources:create --tenant
 <slug> --uri <https uri> --scope <s> [--scope <s>] [--name <label>]` stores or updates one
-(idempotent on the URI; the scopes are replaced), until the console (M2). The `resources`
-collection is tenant-owned and reached only through `scopeToTenant` (`storedResourcesFor`,
-`registerResource`; `src/config/resources.ts` exports `registerStoredResource`, never the collection), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
+(idempotent on the URI; the scopes are replaced), beside the console. The `resources` and `scopes`
+collections are tenant-owned and reached only through `scopeToTenant` (`Catalog` in `catalog.ts`,
+`storedResourcesFor`, `registerResource`; `src/config/resources.ts` exports `catalog`,
+`registerStoredResource` and `scopeTextsFor`, never the collections), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
 in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/resources.ts`.
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
-URL cannot be registered: it is built in, with the OpenID Connect scopes. Scopes are a plain list
-for now (assumed; the Scope entity with consent texts is M2).
+URL cannot be registered: it is built in, with the OpenID Connect scopes.
+- **A scope is a document** (`scopes.model.ts`, ADR-0025): `name`, `description { fr, en }`,
+  `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
+  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
+  or `email` (`scope-name.ts`); it exists once a tenant describes it. `claims` is stored only.
+- **`Catalog`** is the one writer of scopes and the console's writer of resources
+  (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
+  (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are
+  bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
+- **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
+  `scopes` documents), so a scope added or removed in the console serves at once.
+- **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
+  texts); `resources.scopes` stays optional in the model for its `down`.
 
 ## OpenID Connect
 
@@ -160,7 +173,10 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
-not worked around). Passkeys are the next section.
+not worked around). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
+resource's scope, else the standard one; `Accept-Language` French else English, then the other
+language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 
@@ -207,6 +223,26 @@ every other failure a 401).
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
   there, never in `src/modules`.
+- **`clients` and `resources`** (issue #9) are thin: resolvers call `ClientsService`
+  (`src/modules/clients`, wired in `src/config/clients.ts`) and `Catalog`
+  (`src/modules/resources`), after `activeTenant` (`catalog-support.ts`: a suspended tenant is
+  `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
+  its admin event (`client.create`, `client.rotateSecret`, `resource.delete`, `scope.update`, ...:
+  the target is the client id or the document id, never a secret; a delete records on a repeat
+  too, and `deleteResource` one `scope.delete` per scope it removed). `test/console.ts`
+  (`consoleAs(userId)`) runs the real console app with a stubbed token check.
+- **The console's own client and resource** (`console` in the `clavix` tenant, the migration's) are
+  refused by `modules/reserved.ts`: no update, rotation or deletion of the client, no deletion of
+  the resource or its scopes through the API (it would lock every operator out); scripts still can.
+- **Clients are listed from the janus store** (`ClientsService`, `src/modules/clients`): the
+  tenant's partition store answers `listClients` in id order, and each record is mapped to a
+  `ClientView` there, so a `secretHash` never reaches a resolver or a GraphQL type. The store has
+  no search: `q` is applied by `listClientViews` (`client-listing.ts`), which reads what the page still lacks until it is full
+  (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
+  `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
+  repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. Two
+  `createClient` of one id at the very same time are not told apart (the store has no
+  insert-only write): the last one wins.
 - **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
   membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
   tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
@@ -292,6 +328,47 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   live in `src/console/modules/branding`; the anonymous `tenantBranding` by host is in
   `src/modules/branding` and shows only what a hosted page draws (no seed, no tenant id).
 
+## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`, `src/console/modules/tenants`)
+
+- **Two services on the one collection**: `TenantsService` creates and flips the status (script and
+  tests); `TenantAdminService` (`config/tenancy.ts`: `tenantAdmin`) is what the console uses: `find` /
+  `get` (trash included, a purging tenant is gone), `list`, `update`, `setPlan`, `trash`, `restore` and
+  the three writes of the purge. Every write drops the tenant's host from the resolver's cache.
+- **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
+  The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
+  tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
+  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
+  Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
+  already issued live to expiry, and the console stays readable.
+- **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
+  `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
+- **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
+  (`clavix:usage.mau`, 400 days), counted at sign-in, passkey sign-in and a successful `/token` (the `sub`
+  of the access token, so refreshes count); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
+  `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
+  `oauthPartitionedClients` by `partition`; domains count 0 until A4 (clavix-api#11). `assertWithinQuota`
+  / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
+  clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
+- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
+  (`purge.ts`) claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
+  partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
+  record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
+  tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. The Redis MAU counters (hashed, no user ids) are not deleted: they expire on their own after 400 days.
+  A failing tenant stays
+  claimed and the next run resumes it. **Not scheduled, and `PartitionPurger` has no implementation**:
+  Temporary, until @softistx/janus-oauth-mongo#710; wiring is clavix-api#112. A new tenant-owned
+  collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
+- **Console API**: `tenants`, `tenant`, `plans`, `usage` and the seven mutations are in
+  `src/console/modules/tenants`, with their audit actions (`tenant.create`, `.update`, `.setPlan`,
+  `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin; the rest
+  is platform-only. The `Tenant` parent is `TenantParent` (codegen mapper), so `Me.memberships` keeps
+  working with the extended type.
+- **Still public for a suspended or deleted tenant**: the anonymous `tenantBranding` and the logo by host
+  (a hosted page can show its suspended screen); `createTenant` repeated with the same slug, name, plan
+  and sign-up returns the tenant and records the event again (a retry after a failed record).
+  Dynamic client registration is off; if it is ever turned on, `tenant-state.ts` must refuse `/register`.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`, the script `clients:create`
@@ -299,8 +376,9 @@ in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through t
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
-`tenantBySlug` (`src/config/tenancy.ts`). Grants are not stored: janus-oauth 0.8 has no
-per-client list (the script refuses all but code and refresh). A client keeps its type: re-running a
+`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is recorded on the client (`grantTypes`,
+shown by the console) but not enforced by janus's token endpoint; the script refuses all but code
+and refresh. A client keeps its type: re-running a
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 

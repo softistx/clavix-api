@@ -85,6 +85,9 @@ export function createAccess(store: RelationStore) {
     grantTenant: (tenantId: string, userId: string, role: Role) =>
       access.grant(tenantOf(tenantId), role, userOf(userId)),
 
+    /** Removes every tuple of the tenant: its roles and its platform link (the purge). Idempotent. */
+    removeTenant: (tenantId: string) => store.deleteEntity(tenantOf(tenantId)),
+
     revokeTenant: (tenantId: string, userId: string, role: Role) =>
       access.revoke(tenantOf(tenantId), role, userOf(userId)),
   };
