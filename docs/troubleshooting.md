@@ -256,6 +256,23 @@ secret to rotate`).
 The script never creates a user: the person signs in once to the `clavix` tenant (or is invited)
 first. Pass `--email`, and a `--role` of owner, admin or viewer.
 
+## `SLUG_TAKEN`, `PLATFORM_TENANT_PROTECTED`, `QUOTA_EXCEEDED` and `TENANT_SUSPENDED`
+
+**`SLUG_TAKEN` (409)** on `createTenant`: the slug belongs to a tenant, one in the trash, or a purged one
+(a purge leaves a tombstone, so a slug is never reused). Pick another slug, or `restoreTenant` the
+one in the trash.
+
+**`PLATFORM_TENANT_PROTECTED` (409)**: `suspendTenant` or `deleteTenant` on the `clavix` tenant, which
+runs the console itself.
+
+**`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
+(`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
+Monthly active users never block: `usage` only reports `exceeded`.
+
+**`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on `updateTenant` by a tenant admin (platform operators can still edit), and as `access_denied` JSON on
+`/authorize` and `/token`, while the tenant is suspended or in the trash. `resumeTenant` or
+`restoreTenant` lifts it at once (the host cache is dropped). Tokens already issued still work until they expire.
+
 ## `BRANDING_CONTRAST` on `updateBranding`
 
 **When:** `updateBranding` answers `422` with `extensions.code: "BRANDING_CONTRAST"`.

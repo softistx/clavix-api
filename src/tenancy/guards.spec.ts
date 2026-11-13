@@ -65,6 +65,9 @@ const allowed = [
   "src/config/resources.ts",
   "src/modules/branding/",
   "src/config/branding.ts",
+  "src/modules/usage/",
+  "src/config/usage.ts",
+  "src/config/purge.ts",
 ];
 // Where a platform collection with a `tenantId` (owned.ts) may be reached:
 // `adminEvents` by its recorder and the recorder's wiring, nowhere else.

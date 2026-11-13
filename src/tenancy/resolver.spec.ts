@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
 import { memoryTenantCache, type TenantCache } from "./tenant-cache";
 
@@ -44,6 +45,7 @@ describe("resolveHost", () => {
       slug: "acme",
       name: "Acme",
       signUp: false,
+      status: "active",
       issuer: "https://acme.clavix.test",
       partition: acme._id.toHexString(),
       version: 3,
@@ -111,9 +113,19 @@ describe("resolveHost", () => {
     expect(lookups).toEqual(["acme", "acme", "acme", "acme"]);
   });
 
-  test("a suspended tenant is null", async () => {
-    const { resolver } = setup([{ ...acme, status: "suspended" }]);
-    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+  test("a suspended or deleted tenant resolves with its status; one being purged is null", async () => {
+    const paused = setup([{ ...acme, status: "suspended" }]);
+    expect(
+      (await paused.resolver.resolveHost("acme.clavix.test"))?.status,
+    ).toBe("suspended");
+    const trashed = setup([{ ...acme, deletedAt: new Date() }]);
+    const resolved = await trashed.resolver.resolveHost("acme.clavix.test");
+    expect(resolved?.status).toBe("deleted");
+    expect(resolved && isLive(resolved)).toBe(false);
+    const purging = setup([
+      { ...acme, deletedAt: new Date(), purgeStartedAt: new Date() },
+    ]);
+    expect(await purging.resolver.resolveHost("acme.clavix.test")).toBeNull();
   });
 
   test("hosts that cannot be a tenant never reach the cache or Mongo", async () => {
@@ -167,7 +179,9 @@ describe("invalidate", () => {
     records[0] = { ...acme, status: "suspended", version: 4 };
     expect((await resolver.resolveHost("acme.clavix.test"))?.version).toBe(3);
     await resolver.invalidate(["Acme.clavix.test"]);
-    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+    expect((await resolver.resolveHost("acme.clavix.test"))?.status).toBe(
+      "suspended",
+    );
   });
 });
 
@@ -199,7 +213,9 @@ describe("cache-aside race", () => {
     expect((await resolver.resolveHost("acme.clavix.test"))?.version).toBe(3);
     // The stale entry did not survive: the next caller sees the suspension.
     expect(await inner.get("acme.clavix.test")).toBeUndefined();
-    expect(await resolver.resolveHost("acme.clavix.test")).toBeNull();
+    expect((await resolver.resolveHost("acme.clavix.test"))?.status).toBe(
+      "suspended",
+    );
   });
 
   test("a creation between the read and the set drops the cached null", async () => {

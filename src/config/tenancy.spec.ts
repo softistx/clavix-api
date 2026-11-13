@@ -37,7 +37,10 @@ describe("tenant resolver wiring", () => {
       slug: "acme",
     });
 
+    // A suspended tenant still resolves (its discovery and keys answer); callers check `isLive`.
     await service.suspend(tenant._id);
-    expect(await resolver.resolveHost(host)).toBeNull();
+    expect(await resolver.resolveHost(host)).toMatchObject({
+      status: "suspended",
+    });
   });
 });

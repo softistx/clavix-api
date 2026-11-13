@@ -1,5 +1,5 @@
 import type { TypedCollection } from "@softistx/mongo";
-import { TenantsService } from "@/modules/tenants";
+import { TenantAdminService, TenantsService } from "@/modules/tenants";
 import type { PublicOrigin } from "@/modules/tenants/identity";
 import type { tenants } from "@/modules/tenants/tenants.model";
 import { createTenantResolver } from "@/tenancy/resolver";
@@ -33,7 +33,8 @@ export function createTenancy({
   onCreated,
 }: TenancyOptions) {
   const tenantResolver = createTenantResolver({
-    lookup: (slug) => tenants.findFirst({ slug }),
+    // The trash included: a deleted tenant answers as a suspended one does.
+    lookup: (slug) => tenants.findFirst({ slug }, { withDeleted: true }),
     cache,
     config,
   });
@@ -41,11 +42,14 @@ export function createTenancy({
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
     ...(onCreated === undefined ? {} : { onCreated }),
   });
-  return { tenantResolver, tenantsService };
+  const tenantAdmin = new TenantAdminService(tenants, tenantsService, {
+    onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+  });
+  return { tenantResolver, tenantsService, tenantAdmin };
 }
 
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
-export const { tenantResolver, tenantsService } = createTenancy({
+export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
   tenants: mongo.db.tenants,
   // The first signing key, and the platform link (the console's permissions).
   onCreated: async (tenantId) => {
