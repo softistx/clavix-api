@@ -127,7 +127,11 @@ export const roles: Resolvers = {
               },
             ];
       });
-      return { items, nextCursor: page.nextCursor };
+      return {
+        items,
+        nextCursor: page.nextCursor,
+        totalCount: await rolesService.membersCount(tenant.id, roleId),
+      };
     },
     userRoles: async (_, { tenantId, userId }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);

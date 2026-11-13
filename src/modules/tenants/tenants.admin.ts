@@ -104,38 +104,54 @@ export class TenantAdminService {
     });
   }
 
-  /** A page of tenants by slug, the trash included, purged ones left out. */
-  list({ q, state, ids, after, first }: TenantListOptions) {
+  /** The filter of `list` and `count`: the trash included, purged ones left out. */
+  private filterOf({ q, state, ids }: TenantListOptions) {
     const text = q?.trim() ?? "";
-    const pattern = escapeRegex(text);
+    return {
+      purgeStartedAt: { $exists: false },
+      ...(state === undefined ? {} : STATE_FILTER[state]),
+      ...(ids === undefined
+        ? {}
+        : {
+            _id: {
+              $in: ids
+                .filter((id) => ObjectId.isValid(id))
+                .map((id) => new ObjectId(id)),
+            },
+          }),
+      ...(text === ""
+        ? {}
+        : {
+            $or: [
+              { slug: { $regex: `^${escapeRegex(text.toLowerCase())}` } },
+              { name: { $regex: escapeRegex(text), $options: "i" } },
+            ],
+          }),
+    };
+  }
+
+  /** A page of tenants by slug, the trash included, purged ones left out. */
+  list(options: TenantListOptions) {
+    const text = options.q?.trim() ?? "";
     return this.collection.paginateByCursor({
-      filter: {
-        purgeStartedAt: { $exists: false },
-        ...(state === undefined ? {} : STATE_FILTER[state]),
-        ...(ids === undefined
-          ? {}
-          : {
-              _id: {
-                $in: ids
-                  .filter((id) => ObjectId.isValid(id))
-                  .map((id) => new ObjectId(id)),
-              },
-            }),
-        ...(text === ""
-          ? {}
-          : {
-              $or: [
-                { slug: { $regex: `^${escapeRegex(text.toLowerCase())}` } },
-                { name: { $regex: pattern, $options: "i" } },
-              ],
-            }),
-      },
+      filter: this.filterOf(options),
       orderBy: "slug",
-      limit: first,
-      after,
+      limit: options.first,
+      after: options.after,
       withDeleted: true,
       // A cursor of one search is refused on another.
-      scope: JSON.stringify([text, state ?? null, ids !== undefined]),
+      scope: JSON.stringify([
+        text,
+        options.state ?? null,
+        options.ids !== undefined,
+      ]),
+    });
+  }
+
+  /** How many tenants `list` finds with these filters in all; `after` and `first` play no part. */
+  count(options: Omit<TenantListOptions, "after" | "first">) {
+    return this.collection.count(this.filterOf({ ...options, first: 0 }), {
+      withDeleted: true,
     });
   }
 

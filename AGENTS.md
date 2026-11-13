@@ -44,6 +44,17 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
 
+## Console pages carry `totalCount: Int!`
+
+Every paged console connection (`TenantUserPage`, `ClientPage`, `RoleMemberPage`, `TenantPage`,
+`SwitchableTenantPage`) exposes `totalCount`: all the matches, ignoring the cursor and `first`,
+honouring the search (`q`, `status`, `emailPrefix`). It is counted by the module's tenant-scoped
+service (`clientsService.count`, `rolesService.membersCount` through `scopeToTenant`,
+`ctx.users.count`, `tenantAdmin.count` sharing its `filterOf` with `list`), never by a copy of the
+filter. The lists that are plain arrays (resources, scopes, roles, memberships, adminInvitations,
+domains) have no connection: their length is the count. A new paged connection adds `totalCount`
+the same way.
+
 ## Resources (`src/modules/resources`)
 
 A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the access tokens asked with
@@ -255,7 +266,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   tenant's partition store answers `listClients` in id order, and each record is mapped to a
   `ClientView` there, so a `secretHash` never reaches a resolver or a GraphQL type. The store has
   no search: `q` is applied by `listClientViews` (`client-listing.ts`), which reads what the page still lacks until it is full
-  (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's.
+  (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's. `totalCount` (`countClientViews`, same filter, every page read at 100) ignores the cursor.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
   repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
   has no insert-only write, so `createClient`, `updateClient`, `rotateClientSecret` and `deleteClient` run under `ctx.exclusive(clientsKey(tenant), ...)` (a racing delete never brings a client back; an update or rotation of a missing client is `NOT_FOUND`, from `ClientsService.require` inside the lock)

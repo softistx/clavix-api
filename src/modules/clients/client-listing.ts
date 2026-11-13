@@ -38,6 +38,41 @@ export const viewOf = (record: OAuthClientRecord): ClientView => ({
   createdAt: record.createdAt,
 });
 
+/** What a listing keeps: a registered client matching `q` (part of its name or id, any case). */
+const matcher = (q: string | undefined) => {
+  const needle = q?.trim().toLowerCase() ?? "";
+  return (record: OAuthClientRecord) =>
+    record.source === "registered" &&
+    (needle === "" ||
+      record.name.toLowerCase().includes(needle) ||
+      record.id.includes(needle));
+};
+
+// The page size a count reads the store with.
+const COUNT_READ = 100;
+
+/**
+ * How many registered clients the store holds that match `q`, in all: the
+ * cursor plays no part. The store has no count, so it reads every page with
+ * the listing's own filter (a tenant holds a few clients, bounded by its quota).
+ */
+export async function countClientViews(
+  listClients: (
+    options?: OAuthPageOptions,
+  ) => Promise<OAuthPage<OAuthClientRecord>>,
+  options: { q?: string | undefined } = {},
+): Promise<number> {
+  const keep = matcher(options.q);
+  let total = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await listClients({ cursor, limit: COUNT_READ });
+    total += page.items.filter(keep).length;
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor !== undefined);
+  return total;
+}
+
 /**
  * One page of the registered clients a store lists, as views, in id order.
  * The store has no search: `q` (part of the name or the id, whatever the
@@ -50,12 +85,7 @@ export async function listClientViews(
   ) => Promise<OAuthPage<OAuthClientRecord>>,
   options: { after?: string | null; limit: number; q?: string | undefined },
 ): Promise<{ items: ClientView[]; nextCursor: string | null }> {
-  const needle = options.q?.trim().toLowerCase() ?? "";
-  const keep = (record: OAuthClientRecord) =>
-    record.source === "registered" &&
-    (needle === "" ||
-      record.name.toLowerCase().includes(needle) ||
-      record.id.includes(needle));
+  const keep = matcher(options.q);
   const items: ClientView[] = [];
   let cursor = options.after ?? undefined;
   for (let reads = 0; reads < MAX_READS; reads += 1) {

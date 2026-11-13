@@ -246,6 +246,12 @@ export class RolesService {
     });
   }
 
+  /** How many users hold the role (assignments), whatever the page. 0 for an unknown role. */
+  async membersCount(tenantId: ObjectId, roleId: string): Promise<number> {
+    if (!ObjectId.isValid(roleId)) return 0;
+    return this.assignmentsOf(tenantId).count({ roleId: new ObjectId(roleId) });
+  }
+
   /** The roles a user holds, by name. */
   rolesOfUser(tenantId: ObjectId, userId: string): Promise<RoleDoc[]> {
     return rolesOfUser(this.options, tenantId, userId);

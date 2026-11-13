@@ -49,6 +49,8 @@ extend type Tenant {
 type TenantPage {
   items: [Tenant!]!
   nextCursor: String
+  "How many tenants match `q` and `status` in all, whatever the cursor or the page's size."
+  totalCount: Int!
 }
 
 "One metered thing of a tenant against its quota."

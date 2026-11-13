@@ -52,7 +52,7 @@ const as = async (userId: string, query: string) =>
   (await (await request(userId, query)).json()) as GqlResult;
 
 const LIST = (args = "") =>
-  `{ me { switchableTenants${args} { items { role tenant { slug name status } } nextCursor } } }`;
+  `{ me { switchableTenants${args} { items { role tenant { slug name status } } nextCursor totalCount } } }`;
 // biome-ignore lint/suspicious/noExplicitAny: untyped GraphQL JSON
 const pageOf = (r: GqlResult): any => r.data?.["me"]?.switchableTenants;
 const slugs = (r: GqlResult) =>
@@ -100,6 +100,7 @@ describe("Me.switchableTenants", () => {
         },
       ],
       nextCursor: null,
+      totalCount: 1,
     });
   });
 
@@ -121,6 +122,7 @@ describe("Me.switchableTenants", () => {
     expect(pageOf(r)).toEqual({
       items: [],
       nextCursor: null,
+      totalCount: 0,
     });
   });
 
@@ -182,6 +184,26 @@ describe("Me.switchableTenants", () => {
     expect(slugs(await as(OPERATOR, LIST('(q: "amm")')))).toEqual(["sw-gamma"]);
     expect(slugs(await as(MULTI, LIST('(q: "BET")')))).toEqual(["sw-beta"]);
     expect(slugs(await as(MULTI, LIST('(q: "gamma")')))).toEqual([]);
+  });
+
+  test("totalCount counts the caller's own tenants, whatever the page, and follows q", async () => {
+    const count = async (who: string, args = "") =>
+      pageOf(await as(who, LIST(args))).totalCount;
+    // A member of one tenant never counts another's.
+    expect(await count(MEMBER)).toBe(1);
+    expect(await count(MULTI)).toBe(2);
+    expect(await count(MULTI, '(q: "BET")')).toBe(1);
+    expect(await count(MULTI, "(first: 1)")).toBe(2);
+    expect(await count(OUTSIDER)).toBe(0);
+    // An operator counts every live tenant, on page 2 as on page 1.
+    const total = await count(OPERATOR, '(q: "sw-")');
+    expect(total).toBe(3);
+    const one = await as(OPERATOR, LIST('(q: "sw-", first: 2)'));
+    const cursor = pageOf(one).nextCursor as string;
+    expect(pageOf(one).totalCount).toBe(3);
+    expect(
+      await count(OPERATOR, `(q: "sw-", first: 2, after: "${cursor}")`),
+    ).toBe(3);
   });
 
   test("an operator's page is cursor-paged", async () => {

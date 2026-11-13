@@ -130,14 +130,22 @@ export const tenants: Resolvers = {
   },
   Query: {
     tenants: async (_, { q, status, after, first }) => {
-      const page = await tenantAdmin.list({
-        q: q ?? undefined,
-        state:
-          status === null || status === undefined ? undefined : STATE[status],
-        after: after ?? undefined,
-        first: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
-      });
-      return { items: page.items.map(parentOf), nextCursor: page.nextCursor };
+      const state =
+        status === null || status === undefined ? undefined : STATE[status];
+      const [page, totalCount] = await Promise.all([
+        tenantAdmin.list({
+          q: q ?? undefined,
+          state,
+          after: after ?? undefined,
+          first: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+        }),
+        tenantAdmin.count({ q: q ?? undefined, state }),
+      ]);
+      return {
+        items: page.items.map(parentOf),
+        nextCursor: page.nextCursor,
+        totalCount,
+      };
     },
     tenant: async (_, { id }, ctx) => {
       const tenant = await tenantAdmin.find(id.toLowerCase());

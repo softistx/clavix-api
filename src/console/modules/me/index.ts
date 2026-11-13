@@ -76,13 +76,16 @@ export const me: Resolvers = {
 
       // An operator may work on every tenant outside the trash.
       if (platform !== null) {
-        const page = await listing(() =>
-          tenantAdmin.list({
-            q: text,
-            state: "live",
-            after: after ?? undefined,
-            first: limit,
-          }),
+        const [page, totalCount] = await listing(() =>
+          Promise.all([
+            tenantAdmin.list({
+              q: text,
+              state: "live",
+              after: after ?? undefined,
+              first: limit,
+            }),
+            tenantAdmin.count({ q: text, state: "live" }),
+          ]),
         );
         return {
           items: page.items.map((tenant) => ({
@@ -92,20 +95,25 @@ export const me: Resolvers = {
             ],
           })),
           nextCursor: page.nextCursor,
+          totalCount,
         };
       }
 
       // Everyone else: the tenants of their roles, a suspended one included
       // (the console stays readable on it), the trash left out. Paged by the
       // database like the operator's, so the cursor is the same opaque one.
-      const page = await listing(() =>
-        tenantAdmin.list({
-          q: text,
-          state: "live",
-          ids: [...direct.keys()],
-          after: after ?? undefined,
-          first: limit,
-        }),
+      const ids = [...direct.keys()];
+      const [page, totalCount] = await listing(() =>
+        Promise.all([
+          tenantAdmin.list({
+            q: text,
+            state: "live",
+            ids,
+            after: after ?? undefined,
+            first: limit,
+          }),
+          tenantAdmin.count({ q: text, state: "live", ids }),
+        ]),
       );
       return {
         items: page.items.flatMap((tenant) => {
@@ -115,6 +123,7 @@ export const me: Resolvers = {
             : [{ tenant: parentOf(tenant), role: GRAPHQL_ROLE[role] }];
         }),
         nextCursor: page.nextCursor,
+        totalCount,
       };
     },
   },

@@ -35,6 +35,8 @@ hold fewer than `first` items, even none, with a `nextCursor` (a search with
 type ClientPage {
   items: [Client!]!
   nextCursor: String
+  "How many clients match `q` in all (every client without it), whatever the cursor or the page's size."
+  totalCount: Int!
 }
 
 "A client just created. The secret of a confidential client is in `clientSecret`, here and nowhere else."
