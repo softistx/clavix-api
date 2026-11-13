@@ -234,7 +234,8 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   the tenant role (operators, the issuer's domains, sign-in policy, clients, branding and users
   are all behind it); `view` stays tenant-level. It is central, so no module opts in. A tenant-level
   role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
-  also removes their console relations (`access.removeUser`).
+  also removes their console relations (`access.removeUser`); disabling or deleting a `clavix` user
+  who holds a platform role or owns a tenant needs platform `manage` (`users/operators.ts`).
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
   there, never in `src/modules`.

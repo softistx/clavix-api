@@ -192,9 +192,9 @@ describe("writes on the clavix tenant", () => {
 
   test("another tenant's writes keep the tenant-level guard", async () => {
     // A tenant admin of an ordinary tenant still writes there.
-    expect(
-      codeOf(await tenantAdmin(writes(other, "ghost").disableUser)),
-    ).not.toBe("FORBIDDEN");
+    expect(codeOf(await tenantAdmin(writes(other, "ghost").disableUser))).toBe(
+      "NOT_FOUND",
+    );
     expect(codeOf(await tenantViewer(writes(other, "ghost").disableUser))).toBe(
       "FORBIDDEN",
     );
@@ -212,6 +212,19 @@ describe("platform owners", () => {
     expect(codeOf(await asAdmin(t.disableUser))).toBe("FORBIDDEN");
     expect(codeOf(await asAdmin(t.deleteUser))).toBe("FORBIDDEN");
     expect((await platformOwner(t.disableUser)).errors).toBeUndefined();
+  });
+
+  test("a platform admin cannot disable or delete a tenant owner either, but can enable", async () => {
+    const admin = await mkOperator("padmin2@pw.test");
+    await access.grantPlatform(admin, "admin");
+    const tenantOwner = await mkOperator("towner@pw.test");
+    await access.grantTenant(other, tenantOwner, "owner");
+    const t = writes(clavix, tenantOwner);
+    const asAdmin = as(() => admin);
+    expect(codeOf(await asAdmin(t.disableUser))).toBe("FORBIDDEN");
+    expect(codeOf(await asAdmin(t.deleteUser))).toBe("FORBIDDEN");
+    const enable = `mutation { enableUser(tenantId: "${clavix}", userId: "${tenantOwner}") { active } }`;
+    expect((await asAdmin(enable)).errors).toBeUndefined();
   });
 });
 
