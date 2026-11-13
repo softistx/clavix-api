@@ -80,12 +80,20 @@ by the `Host` header, which Caddy passes untouched.
    Starting the `ui` while the placeholder is still there starts it with a
    wrong client secret.
 
-6. Name the first operator, a user who already exists in the `clavix` tenant
-   (the console needs a platform role before anyone can use it):
-   `dc run --rm api bun run operators:grant --email you@example.com`
-   (see the README, "Console API"). A fresh `clavix` tenant has no users: create
-   the first one by signing in once on the `clavix` tenant's host
-   (`https://clavix.<domain>`) with your e-mail code, then run the command.
+6. Name the first operator (the console needs a platform role before anyone can
+   use it). A fresh `clavix` tenant is invitation-only and has no user, so
+   invite the first one with `--create`:
+
+   ```sh
+   dc run --rm api bun run operators:grant --email you@example.com --create
+   ```
+
+   It mails an invitation link (from the `clavix` tenant, through the mail
+   settings of step 3); opening it makes the account and grants the `owner`
+   platform role (`--role admin|viewer` for a weaker one). Re-running resends
+   the invitation, and for an address that already has an account it grants the
+   role directly. Every run is recorded as the admin event `operator.grant`.
+   See the README, "Console API".
 7. Check: `curl https://console.<domain>/healthz` answers 200 and
    `dc exec api bun -e "console.log((await fetch('http://127.0.0.1:3000/readyz')).status)"`
    prints 200.

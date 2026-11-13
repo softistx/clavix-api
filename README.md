@@ -62,7 +62,7 @@ one needs on top:
 | `tenants:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`        | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`      | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
-| `operators:grant`       | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users)                                                                                                                     |
+| `operators:grant`       | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users; `--create` also needs `CLAVIX_SMTP_URL`)                                                                            |
 | `start`                 | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
 ## Environment
@@ -211,10 +211,12 @@ Deployment order: `bun run db:sync`, `bun run db:migrate` (the `2026-11-12-conso
 registers the console resource and its confidential client `console` in the `clavix` tenant and
 prints the client secret once: save it; the `2026-11-13-scopes` migration turns each resource's
 scope strings into `Scope` documents), then name the first
-operator, a user who already exists in the `clavix` tenant:
+operator. A fresh database has no user and the `clavix` tenant is invitation-only, so invite
+the first one with `--create` (mailed link; the account and role are made when it is opened):
 
 ```sh
-bun run operators:grant --email ada@example.com            # platform owner
+bun run operators:grant --email ada@example.com --create   # first operator on a fresh database
+bun run operators:grant --email ada@example.com            # platform owner (account exists)
 bun run operators:grant --email bob@example.com --role viewer
 ```
 
