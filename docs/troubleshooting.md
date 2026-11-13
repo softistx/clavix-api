@@ -284,6 +284,20 @@ the user is deactivated. All look alike on purpose. A mail scanner that opened t
 
 ## Console API refusals (`/console/graphql`, `operators:grant`)
 
+### `no user with e-mail "<address>" in the clavix tenant: re-run with --create to invite them`
+
+`operators:grant` only grants a role to an account that exists, and a fresh database has none: the
+`clavix` tenant is invitation-only, so signing in or signing up with an unknown address sends no
+mail ("sign-up is closed"). Invite the first operator instead:
+
+```sh
+bun run operators:grant --email you@example.com --create
+```
+
+The tenant mails an invitation link and the account is made, with the role, when it is opened. No
+mail arrives: check the SMTP settings and that the address is right, then re-run the command, which
+resends the invitation. Do not set `signUp` on the tenant by hand.
+
 ### `401 UNAUTHENTICATED: A valid console token is required`
 
 The request has no bearer token, or it is forged, expired, revoked or for another audience. Ask

@@ -6,7 +6,7 @@ import { env } from "@/config/env";
 import { sharedLockOf } from "@/config/exclusive";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
-import { adminScope } from "@/invitations/scope";
+import { adminScope, operatorScope } from "@/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { buildTenantJanus } from "@/users/tenant-janus";
 import { createExclusive } from "../../exclusive";
@@ -120,5 +120,44 @@ describe("the tenant's membership lock cannot be taken", () => {
     const after = await auth.findByEmail("late@lock.test");
     expect(after).not.toBeNull();
     expect(await access.holders(tenantId, "admin")).toContain(after?.id ?? "");
+  });
+});
+
+describe("the operator invitation (operators:grant --create)", () => {
+  test("accepting it makes the account and grants the platform role once", async () => {
+    const clavix = await tenantResolver.resolveHost(
+      `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
+    );
+    if (clavix === null) throw new Error("no clavix tenant");
+    held = false;
+    const auth = buildTenantJanus(
+      oauthDb,
+      clavix,
+      undefined,
+      adminInvitationHooks({
+        access,
+        exclusive,
+        tenantActive: async () => true,
+      }),
+    );
+    const issue = (role: string) =>
+      auth.invitations.issue({
+        scope: operatorScope(),
+        email: "first@operator.test",
+        name: "first",
+        role,
+        invitedBy: null,
+      });
+    expect(await auth.findByEmail("first@operator.test")).toBeNull();
+    const { code } = await issue("owner");
+    const accepted = await auth.invitations.accept({ code });
+    expect(accepted.status).not.toBe("failed");
+    const user = await auth.findByEmail("first@operator.test");
+    expect(user).not.toBeNull();
+    expect(await access.platformRole(user?.id ?? "")).toBe("owner");
+    // A later invitation with a weaker role does not downgrade the account.
+    const again = await issue("viewer");
+    await auth.invitations.accept({ code: again.code });
+    expect(await access.platformRole(user?.id ?? "")).toBe("owner");
   });
 });

@@ -283,8 +283,11 @@ every other failure a 401).
   resource and the confidential client `console` (redirect URI `<console origin>/console/auth/callback`,
   an assumption until the UI slice settles it) in the `clavix` tenant. The client secret is printed
   once by the migration (not in tests).
-- **`bun run operators:grant --email <address> [--role owner|admin|viewer]`** gives a user of the
-  `clavix` tenant a platform role (default owner), until the console can. The user must exist.
+- **`bun run operators:grant --email <address> [--role owner|admin|viewer] [--create]`** gives a user
+  of the `clavix` tenant a platform role (default owner), until the console can. The user must exist,
+  unless `--create`: an unknown address is then invited (operator scope, `operatorScope()`, issued by
+  the system, mailed by the tenant's mail path) and accepting the invitation makes the account and
+  grants the role (`adminInvitationHooks`). Each run records the admin event `operator.grant`.
 
 ### Admin events (`src/console/audit.ts`, `src/console/admin-events/`)
 

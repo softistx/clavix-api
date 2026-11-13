@@ -402,23 +402,72 @@ describe("the console seed", () => {
 });
 
 describe("operators:grant", () => {
+  const recorded: { type: string; id: string }[] = [];
+  const invited: { email: string; role: string }[] = [];
+  const deps = {
+    access,
+    findByEmail: async (email: string) =>
+      email === "bob@console.test" ? { id: bob, email } : null,
+    invite: async (email: string, role: string) => {
+      invited.push({ email, role });
+      return { id: "inv-1" };
+    },
+    record: async (target: { type: string; id: string }) => {
+      recorded.push(target);
+    },
+  };
+
   test("grants the platform role to a known e-mail, refuses an unknown one", async () => {
     const { grantOperator, parseOperatorArgs } = await import("./operators");
-    const deps = {
-      access,
-      findByEmail: async (email: string) =>
-        email === "bob@console.test" ? { id: bob, email } : null,
-    };
     expect(parseOperatorArgs(["--email", "bob@console.test"])).toEqual({
       email: "bob@console.test",
       role: "owner",
+      create: false,
     });
-    await grantOperator(deps, { email: "bob@console.test", role: "owner" });
+    await grantOperator(deps, {
+      email: "bob@console.test",
+      role: "owner",
+      create: false,
+    });
     expect(await access.platformRole(bob)).toBe("owner");
+    expect(recorded).toEqual([{ type: "user", id: bob }]);
     await expect(
-      grantOperator(deps, { email: "nobody@console.test", role: "owner" }),
-    ).rejects.toThrow();
+      grantOperator(deps, {
+        email: "nobody@console.test",
+        role: "owner",
+        create: false,
+      }),
+    ).rejects.toThrow("--create");
+    expect(invited).toEqual([]);
     expect(() => parseOperatorArgs([])).toThrow();
+  });
+
+  test("--create invites an unknown e-mail and records it; a known one is granted, not invited", async () => {
+    const { grantOperator, parseOperatorArgs } = await import("./operators");
+    expect(
+      parseOperatorArgs(["--email", "new@console.test", "--create"]).create,
+    ).toBe(true);
+    recorded.length = 0;
+    const result = await grantOperator(deps, {
+      email: "new@console.test",
+      role: "admin",
+      create: true,
+    });
+    expect(result).toEqual({
+      invitationId: "inv-1",
+      email: "new@console.test",
+      role: "admin",
+      invited: true,
+    });
+    expect(invited).toEqual([{ email: "new@console.test", role: "admin" }]);
+    expect(recorded).toEqual([{ type: "invitation", id: "inv-1" }]);
+    const known = await grantOperator(deps, {
+      email: "bob@console.test",
+      role: "owner",
+      create: true,
+    });
+    expect("userId" in known).toBe(true);
+    expect(invited).toHaveLength(1);
   });
 });
 
