@@ -96,7 +96,12 @@ export async function grantOperator(
   const lock = deps.lock ?? ((_id, work) => work());
   const granted = await lock(user.id, async () => {
     // Read again under the lock: the account may have changed since.
-    const current = (await deps.findByEmail(input.email)) ?? user;
+    const current = await deps.findByEmail(input.email);
+    if (current === null || current.id !== user.id) {
+      throw new CliInputError(
+        `the account "${input.email}" changed while granting: run the command again`,
+      );
+    }
     if (!current.active) {
       throw new CliInputError(
         `the account "${input.email}" is disabled: enable it before granting a platform role`,

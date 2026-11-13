@@ -554,6 +554,34 @@ describe("operators:grant", () => {
     expect(String(result)).toContain("disabled");
   });
 
+  test("an account deleted or replaced under the lock is not granted", async () => {
+    const { grantOperator } = await import("./operators");
+    for (const fresh of [null, { id: "other-id" }]) {
+      let reads = 0;
+      const granted: string[] = [];
+      const error = await grantOperator(
+        {
+          ...deps,
+          findByEmail: async (email) => {
+            const found = await deps.findByEmail(email);
+            reads += 1;
+            if (reads === 1 || found === null) return found;
+            return fresh === null ? null : { ...found, ...fresh };
+          },
+          access: {
+            grantPlatform: async (id) => {
+              granted.push(id);
+            },
+          },
+          lock: (_id, work) => work(),
+        },
+        { email: "bob@console.test", role: "viewer", create: false },
+      ).catch((e: unknown) => e);
+      expect(String(error)).toContain("run the command again");
+      expect(granted).toEqual([]);
+    }
+  });
+
   test("--create invites an unknown e-mail and records it; a known one is granted, not invited", async () => {
     const { grantOperator, parseOperatorArgs } = await import("./operators");
     expect(
