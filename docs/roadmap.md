@@ -24,6 +24,9 @@ nxgt-janus release says which.
     reserved. The API and the scheduled daily purge of the trash are in the M2 integration branch
     (tenants, plans, usage, suspension, trash; the purge uses janus's partition purges,
     softistx/nxgt-janus#710, [#112](https://github.com/softistx/clavix-api/issues/112)).
+  - Switchable tenants: `me.switchableTenants`, the shell's tenant switcher (a member's tenants, an
+    operator's every live tenant, paged and searchable; done on the M2 branch,
+    [#120](https://github.com/softistx/clavix-api/issues/120)).
   - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users (list, invite,
     disable, delete, sessions and grants; done on the M2 branch,
     [#101](https://github.com/softistx/clavix-api/issues/101); the e-mail search is exact until janus
