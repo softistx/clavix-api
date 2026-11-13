@@ -3,11 +3,13 @@ import { createConsoleDeps } from "./config/console";
 import { env } from "./config/env";
 import { signingKeysFor } from "./config/keys";
 import { createIssuers } from "./config/oauth";
+import { createTenantPurge } from "./config/purge";
 import { redis } from "./config/redis";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
 import { startKeyRotation } from "./keys";
 import { drain } from "./modules/auth/outbox";
+import { startTenantPurge } from "./modules/tenants/purge-worker";
 
 // Longest wait for a sign-in code mail in flight when the server stops.
 const MAIL_DRAIN_MS = 10_000;
@@ -22,6 +24,10 @@ await startKeyRotation(
   },
   redis?.queues.keyRotation,
 );
+
+// The trash is emptied daily: a pass at start (it finishes a purge left claimed),
+// then one per tick on the Redis queue. Only tenants deleted 30 days ago or more.
+await startTenantPurge(createTenantPurge(), redis?.queues.tenantPurge);
 
 // The app with the OAuth/OIDC endpoints of every tenant, serving each tenant's
 // stored resources (`resources:create`) beside the built-in userinfo one.

@@ -8,6 +8,8 @@ import {
 import { isOwned } from "@/tenancy/owned";
 import { access } from "./access";
 import { mongo } from "./db";
+import { oauthDb } from "./oauth-db";
+import { createPartitionPurger } from "./partition-purger";
 import { tenantAdmin } from "./tenancy";
 
 /**
@@ -27,16 +29,13 @@ export const ownedPurgers = (): OwnedCollectionPurger[] =>
       },
     }));
 
-/**
- * The purge job over the real stores, for a janus `PartitionPurger`. NOT
- * scheduled and without an implementation of the port: janus cannot purge a
- * partition yet (Temporary, until @softistx/janus-oauth-mongo#710), so the
- * trash is not emptied. The wiring is clavix-api#112.
- */
-export const createTenantPurge = (partitions: PartitionPurger) => () =>
-  purgeTenants({
-    registry: tenantAdmin,
-    owned: ownedPurgers(),
-    memberships: access,
-    partitions,
-  });
+/** The purge job over the real stores: the janus partition purges, the owned collections, the roles. */
+export const createTenantPurge =
+  (partitions: PartitionPurger = createPartitionPurger(oauthDb)) =>
+  () =>
+    purgeTenants({
+      registry: tenantAdmin,
+      owned: ownedPurgers(),
+      memberships: access,
+      partitions,
+    });

@@ -21,9 +21,9 @@ nxgt-janus release says which.
     ([#8](https://github.com/softistx/clavix-api/issues/8)). A suspended tenant refuses
     sign-ins and new tokens (tokens already issued live to expiry, the console stays readable).
     A deleted tenant goes to a 30-day trash, can be restored, then is purged; its slug stays
-    reserved. The API is in the M2 integration branch (tenants, plans, usage, suspension, trash);
-    the scheduled purge waits for janus
-    ([nxgt-janus#710](https://github.com/softistx/nxgt-janus/issues/710),
+    reserved. The API and the scheduled daily purge of the trash are in the M2 integration branch
+    (tenants, plans, usage, suspension, trash; the purge uses janus's partition purges,
+    [nxgt-janus#710](https://github.com/softistx/nxgt-janus/issues/710),
     [#112](https://github.com/softistx/clavix-api/issues/112)).
   - Tenant: clients, resources and scopes with consent texts (done on the M2 branch); users,
     end-user roles and admin roles remain ([#9](https://github.com/softistx/clavix-api/issues/9)).

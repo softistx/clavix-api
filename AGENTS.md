@@ -336,8 +336,13 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
   tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. The Redis MAU counters (hashed, no user ids) are not deleted: they expire on their own after 400 days.
   A failing tenant stays
-  claimed and the next run resumes it. **Not scheduled, and `PartitionPurger` has no implementation**:
-  Temporary, until @softistx/janus-oauth-mongo#710; wiring is clavix-api#112. A new tenant-owned
+  claimed and the next run resumes it. **The janus part** is `createPartitionPurger(oauthDb)`
+  (`src/config/partition-purger.ts`, the `PartitionPurger` port): `purgeMongoOAuthPartition`,
+  `purgeMongoStoresPartition` and `purgeMongoInvitationsPartition` for the tenant's partition (its hex
+  id), refusing `default` and empty; it answers the counts per collection, which the job logs. **Scheduled**
+  by the `tenant-purge` queue (`purge-queue.ts`, daily cron `17 3 * * *`, `purge-worker.ts`
+  `startTenantPurge` in `src/server.ts`, one pass at start; without Redis only that pass). Only
+  tenants deleted 30 days ago or more are touched. A new tenant-owned
   collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
 - **Console API**: `tenants`, `tenant`, `plans`, `usage` and the seven mutations are in
   `src/console/modules/tenants`, with their audit actions (`tenant.create`, `.update`, `.setPlan`,
