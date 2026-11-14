@@ -408,8 +408,9 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 - **The console needs a verified e-mail** (ADR-0041, #179): `console/guard.ts` refuses every root
   field whose guard is not `aboutCaller()` (only `Query.me`) with `EMAIL_UNVERIFIED` (403), before the
   role check, through `requireVerifiedEmail` (`src/users/verified-email.ts`, reusable by the
-  future e-mail change) and `ConsoleDirectory.emailVerified(id)` (false for an unknown user).
-  `signedIn()` also needs the proof; a new field never opts out. Operators are held to it (the
+  future e-mail change) and `ConsoleDirectory.emailVerified(id)` (false for an unknown user, throws when the clavix tenant is unavailable), read once per request
+  (`callerProved`). `Me.memberships` and `Me.switchableTenants` call `verifiedCaller` themselves: they
+  are tenant data under the open `me`. `signedIn()` also needs the proof; a new field never opts out. Operators are held to it (the
   ADR-0039 exception is about the target tenant). Accepting an invitation proves the address (janus
   `invitations.accept`; `admins.spec.ts` covers it). Specs: `consoleAs(id)` and `verifiedCallers(deps)`
   in `test/console.ts` count the caller as proved; `console.spec.ts` covers the gate over the real

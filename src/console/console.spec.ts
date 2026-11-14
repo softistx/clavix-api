@@ -441,7 +441,19 @@ describe("the verified e-mail gate (ADR-0041)", () => {
     const me = await gql(ME_VERIFIED, token);
     expect(me.errors).toBeUndefined();
     expect(me.data?.["me"]).toEqual({ emailVerified: false });
-    expect((await gql(ME, token)).errors).toBeUndefined();
+    expect(
+      (await gql("{ me { user { id email } platformRole } }", token)).errors,
+    ).toBeUndefined();
+    // The tenants under `me` are tenant data: behind the proof too.
+    for (const field of [
+      "memberships { role }",
+      "switchableTenants { totalCount }",
+    ]) {
+      const hidden = (await (
+        await call(`{ me { ${field} } }`, token)
+      ).json()) as GqlResult;
+      expect(hidden.errors?.[0]?.extensions?.code).toBe("EMAIL_UNVERIFIED");
+    }
     // The plan catalogue is signed-in only, and still needs the proof.
     expect(
       ((await (await call("{ plans { id } }", token)).json()) as GqlResult)

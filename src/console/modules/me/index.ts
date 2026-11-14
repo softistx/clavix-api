@@ -3,7 +3,12 @@ import { InvalidCursorError } from "@softistx/mongo";
 import { GraphQLError } from "graphql";
 import { tenantAdmin } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { aboutCaller, type Guards } from "../../guard";
+import {
+  aboutCaller,
+  callerProved,
+  type Guards,
+  verifiedCaller,
+} from "../../guard";
 import { ROLES, type Role } from "../../model";
 import { parentOf } from "../tenants/parent";
 
@@ -45,13 +50,13 @@ export const me: Resolvers = {
       if (user === null) throw denial("UNAUTHENTICATED", "No such user");
       return { id: user.id, email: user.email, name: user.name ?? null };
     },
-    emailVerified: (_, __, ctx) =>
-      ctx.directory.emailVerified(ctx.principal.userId),
+    emailVerified: (_, __, ctx) => callerProved(ctx),
     platformRole: async (_, __, ctx) => {
       const role = await ctx.access.platformRole(ctx.principal.userId);
       return role === null ? null : GRAPHQL_ROLE[role];
     },
     memberships: async (_, __, ctx) => {
+      await verifiedCaller(ctx); // tenant data: behind the proof (ADR-0041)
       const roles = await ctx.access.memberships(ctx.principal.userId);
       const tenants = await ctx.directory.tenantsByIds(
         roles.map(({ tenantId }) => tenantId),
@@ -66,6 +71,7 @@ export const me: Resolvers = {
       });
     },
     switchableTenants: async (_, { q, after, first }, ctx) => {
+      await verifiedCaller(ctx); // tenant data: behind the proof (ADR-0041)
       const userId = ctx.principal.userId;
       const limit = Math.min(Math.max(first ?? 25, 1), MAX_PAGE);
       const text = q?.trim() ?? "";

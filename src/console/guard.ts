@@ -102,11 +102,21 @@ async function allowed(
   }
 }
 
+const proofs = new WeakMap<object, Promise<boolean>>();
+
+/** Whether the caller's e-mail is proved, read once per request (the principal is per request). */
+export function callerProved(ctx: ConsoleContext): Promise<boolean> {
+  let proof = proofs.get(ctx.principal);
+  if (proof === undefined) {
+    proof = ctx.directory.emailVerified(ctx.principal.userId);
+    proofs.set(ctx.principal, proof);
+  }
+  return proof;
+}
+
 /** The caller's e-mail must be proved: `EMAIL_UNVERIFIED` (403) otherwise. */
-async function verifiedCaller(ctx: ConsoleContext) {
-  requireVerifiedEmail({
-    emailVerified: await ctx.directory.emailVerified(ctx.principal.userId),
-  });
+export async function verifiedCaller(ctx: ConsoleContext) {
+  requireVerifiedEmail({ emailVerified: await callerProved(ctx) });
 }
 
 const deny = () => denial("FORBIDDEN", "Not allowed");

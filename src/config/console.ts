@@ -88,7 +88,8 @@ export function createConsoleDeps(
       emailVerified: async (id) => {
         const tenant = await clavixTenant();
         const janus = tenant === null ? null : await forTenant(tenant);
-        return (await janus?.findUser(id))?.emailVerified === true;
+        if (janus === null) throw new Error("the clavix tenant is unavailable");
+        return (await janus.findUser(id))?.emailVerified === true;
       },
       findUserByEmail: async (email) => {
         const tenant = await clavixTenant();

@@ -367,9 +367,9 @@ predates verification; accounts are not migrated). Operators are held to it too.
 
 **Fix:** `me { emailVerified }` shows the state. Sign in to the `clavix` tenant's hosted account
 page and ask for a link (`requestEmailVerification`, confirmed with `confirmEmailVerification`);
-signing in with an e-mailed code proves it too. The same console token works at once. An operator
-locked out with no other operator can use `setUserEmailVerified` from another operator, or
-re-invite the address.
+signing in with an e-mailed code proves it too. The same console token works at once. Another
+operator whose e-mail is proved can also call `setUserEmailVerified`. `me { user platformRole
+emailVerified }` stays readable; the tenants under `me` (`memberships`, `switchableTenants`) do not.
 
 ### `NOT_FOUND: No such client`, `No such resource`, `No such scope`
 
