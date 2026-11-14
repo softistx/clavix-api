@@ -86,14 +86,14 @@ Two ways. The first is the recommended one: the application keeps its embedded j
 
 ### 3a. With the Clavix preset of `@softistx/janus-social`
 
-`@softistx/janus-social` 0.2.0 and later (on GitHub Packages) has
-`clavix()`. It does the redirect, PKCE, the code exchange and the ID token checks of
+`@softistx/janus-social` 0.3.0 and later (on GitHub Packages) has
+`oidcStepUp()` (`clavix()` still works as a deprecated alias). It does the redirect, PKCE, the code exchange and the ID token checks of
 [step 2](#2-the-redirect-flow), and plugs into the app's embedded janus as a social provider:
 
 ```ts
-import { clavix } from "@softistx/janus-social";
+import { oidcStepUp } from "@softistx/janus-social";
 
-export const provider = clavix({
+export const provider = oidcStepUp({
   issuer: "https://acme.clavix.example.com", // the tenant's issuer
   clientId: process.env.CLAVIX_CLIENT_ID!,
   clientSecret: process.env.CLAVIX_CLIENT_SECRET!,
@@ -105,7 +105,7 @@ export const provider = clavix({
 The app's callback route calls `auth.social.start` and `auth.social.complete` as in the janus
 [social guide](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus/docs/guide/social.md)
 and the preset's own page,
-[`docs/guide/clavix.md`](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus-social/docs/guide/clavix.md).
+[`docs/guide/oidc-step-up.md`](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus-social/docs/guide/oidc-step-up.md).
 The preset asks for `openid email profile`. The identity it hands janus is `accountId` = the
 ID token's `sub`, `email`, `emailVerified`, `name`, `picture`. Its optional `acrValues` and
 `maxAge` need MFA and step-up on the tenant, which are **not built** yet (see the [roadmap](../roadmap.md)): leave
