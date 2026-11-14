@@ -59,7 +59,7 @@ jobs:
           restore-keys: bun-install-${{ runner.os }}-${{ runner.arch }}-
       - run: bun install --frozen-lockfile
         env:
-          GITHUB_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
       - uses: actions/cache/save@v4
         if: steps.bun-cache.outputs.cache-hit != 'true'
         with:

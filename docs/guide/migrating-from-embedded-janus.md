@@ -86,7 +86,7 @@ Two ways. The first is the recommended one: the application keeps its embedded j
 
 ### 3a. With the Clavix preset of `@softistx/janus-social`
 
-`@softistx/janus-social` 0.3.0 and later (on GitHub Packages) has
+`@softistx/janus-social` 0.3.0 and later (on the npm.softistx.com registry) has
 `oidcStepUp()` (`clavix()` still works as a deprecated alias). It does the redirect, PKCE, the code exchange and the ID token checks of
 [step 2](#2-the-redirect-flow), and plugs into the app's embedded janus as a social provider:
 
@@ -238,5 +238,5 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
 5. **Per-client grants and `client_credentials`** are not available (janus-oauth records a client's
    grant types but does not enforce them, and has no `client_credentials`), so a back end calling the API as itself cannot yet use a Clavix
    token.
-6. **`@softistx/janus-social` is on GitHub Packages only** (not npmjs); an application needs
-   a token with `read:packages`, as in the README's Run section.
+6. **`@softistx/janus-social` is on the npm.softistx.com registry only** (not npmjs); an application needs
+   its read token (`NPM_REGISTRY_TOKEN`), as in the README's Run section.

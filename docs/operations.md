@@ -36,11 +36,11 @@ by the `Host` header, which Caddy passes untouched.
    `*.<domain>` (so `console.<domain>` and every `<slug>.<domain>` resolve), and
    ports 80 and 443 open.
 2. Build and publish the images yourself. Both repositories build with their
-   `Dockerfile`; the API one needs the GitHub Packages token as a build secret:
+   `Dockerfile`; the API one needs the npm.softistx.com read token (`NPM_REGISTRY_TOKEN`) as a build secret:
 
    ```sh
-   export GITHUB_TOKEN=$(gh auth token)
-   docker build --secret id=github_token,env=GITHUB_TOKEN -t registry.example.com/clavix-api:0.1.0 .
+   export NPM_REGISTRY_TOKEN   # read token, from ~/.zshenv
+   docker build --secret id=npm_registry_token,env=NPM_REGISTRY_TOKEN -t registry.example.com/clavix-api:0.1.0 .
    ```
 
 3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate

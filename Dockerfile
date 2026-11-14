@@ -1,22 +1,22 @@
 # syntax=docker/dockerfile:1
 # The Clavix API image: the bundled server (bun run build), non-root, with a
 # healthcheck on /healthz. Build: `docker build -t clavix-api .` (see
-# docs/operations.md). @softistx packages come from GitHub Packages: pass the
+# docs/operations.md). @softistx packages come from npm.softistx.com: pass the
 # token as a build secret, it never lands in a layer.
 
 # Runtime dependencies only (the scripts and the bundle's externals need them).
 FROM oven/bun:1.4.4 AS prod
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
-RUN --mount=type=secret,id=github_token \
-    GITHUB_TOKEN="$(cat /run/secrets/github_token)" bun install --frozen-lockfile --production --ignore-scripts
+RUN --mount=type=secret,id=npm_registry_token \
+    NPM_REGISTRY_TOKEN="$(cat /run/secrets/npm_registry_token)" bun install --frozen-lockfile --production --ignore-scripts
 
 # Everything, to generate the GraphQL types and bundle the server. Install
 # scripts are skipped: a dev dependency's postinstall (a Redis download) has no
 # place in an image.
 FROM prod AS build
-RUN --mount=type=secret,id=github_token \
-    GITHUB_TOKEN="$(cat /run/secrets/github_token)" bun install --frozen-lockfile --ignore-scripts
+RUN --mount=type=secret,id=npm_registry_token \
+    NPM_REGISTRY_TOKEN="$(cat /run/secrets/npm_registry_token)" bun install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN bun run build
 
