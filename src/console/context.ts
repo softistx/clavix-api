@@ -15,6 +15,11 @@ export interface ConsoleDirectory {
     /** Whether the user can sign in (a disabled one cannot). */
     active: boolean;
   } | null>;
+  /**
+   * Whether the `clavix` user's e-mail is proved; `false` for an unknown user.
+   * The console refuses an unproved caller (ADR-0041).
+   */
+  emailVerified(id: string): Promise<boolean>;
   /** A user of the `clavix` tenant by e-mail, or `null`. */
   findUserByEmail(email: string): Promise<{ id: string } | null>;
   /**

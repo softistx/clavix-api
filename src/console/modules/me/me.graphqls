@@ -46,12 +46,15 @@ type SwitchableTenantPage {
 "The caller: who the bearer token belongs to, and where they have a role."
 type Me {
   user: ConsoleUser!
+  "Whether the caller's e-mail is proved. While it is not, every console operation is refused with EMAIL_UNVERIFIED (403), except `me { user platformRole emailVerified }`; `memberships` and `switchableTenants` need the proof too. Prove it from the hosted account page."
+  emailVerified: Boolean!
   "The caller's platform role, `null` for a tenant member who is not an operator."
   platformRole: Role
-  "The tenants where the caller holds a role directly. A platform operator is also allowed on every tenant, which `tenants` (platform) lists."
+  "The tenants where the caller holds a role directly (needs a proved e-mail: EMAIL_UNVERIFIED otherwise). A platform operator is also allowed on every tenant, which `tenants` (platform) lists."
   memberships: [Membership!]!
   """
-  The tenants the caller can work on, by slug: those of their memberships and,
+  The tenants the caller can work on (needs a proved e-mail: EMAIL_UNVERIFIED
+  otherwise), by slug: those of their memberships and,
   for a platform operator, every tenant not in the trash. A suspended tenant is
   listed (read `tenant.status`; the console stays readable on it); a tenant in
   the trash is not. `q` matches the start of the slug or part of the name.

@@ -171,6 +171,8 @@ while the user's e-mail is unproved, so a factor cannot be bound to an address n
 code is stable and passes through unchanged; the hosted UI shows it as "unverified". Sign-in with
 `signInWithPasskey` still answers the single `PASSKEY_INVALID` (401).
 
+The console API refuses an unverified caller with the same code (see "Console API refusals").
+
 **Fix:** prove the e-mail first. A signed-in user asks for a link with `requestEmailVerification` and
 confirms it with `confirmEmailVerification(token)`; signing in with an e-mailed code
 (`verifySignInCode`) proves it too. Then register the passkey again.
@@ -354,6 +356,20 @@ The token store or the `clavix` tenant could not be reached. Retry; check MongoD
 The caller's role does not give the permission the field needs (a viewer cannot edit, a tenant's
 admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
 role `bun run operators:grant --email <address> --role <role>`.
+
+### `EMAIL_UNVERIFIED` (403) on any console operation
+
+**When:** every console call but `me { user platformRole emailVerified }` is answered with HTTP 403 and
+`"extensions":{"code":"EMAIL_UNVERIFIED"}`, whatever the caller's roles.
+
+**Why:** the signed-in operator's e-mail is not proved (an admin cleared the flag, or the account
+predates verification; accounts are not migrated). Operators are held to it too.
+
+**Fix:** `me { emailVerified }` shows the state. Sign in to the `clavix` tenant's hosted account
+page and ask for a link (`requestEmailVerification`, confirmed with `confirmEmailVerification`);
+signing in with an e-mailed code proves it too. The same console token works at once. Another
+operator whose e-mail is proved can also call `setUserEmailVerified`. `me { user platformRole
+emailVerified }` stays readable; the tenants under `me` (`memberships`, `switchableTenants`) do not.
 
 ### `NOT_FOUND: No such client`, `No such resource`, `No such scope`
 

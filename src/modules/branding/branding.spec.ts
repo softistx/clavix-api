@@ -67,6 +67,7 @@ const ctxFor = (userId: string): ConsoleContext =>
     access,
     // Every id is an ordinary tenant (not `clavix`): the tenant-level guard decides.
     directory: {
+      emailVerified: async () => true,
       tenantsByIds: async (ids: readonly string[]) =>
         ids.map((id) => ({ id, slug: `t-${id}`, name: id })),
     },

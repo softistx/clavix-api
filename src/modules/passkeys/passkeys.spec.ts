@@ -340,6 +340,37 @@ describe("registration", () => {
     expect(codeOf(refused)).toBe("EMAIL_UNVERIFIED");
   });
 
+  test("registering a response is refused the same way once the proof is withdrawn", async () => {
+    const { id, cookie } = await userOf("acme", "ines@example.test");
+    const registration = field<{ options: string; challenge: string }>(
+      await gql("acme", REGISTRATION, {}, cookie),
+      "passkeyRegistrationOptions",
+    );
+    if (registration === undefined) throw new Error("no registration options");
+    const tenant = await tenantOf("acme");
+    const response = await (await softwareAuthenticator()).register({
+      challenge: challengeOf(registration.options),
+      origin: originOf(tenant),
+      rpId: rpIdOf(tenant),
+    });
+    const auth = await janusOf("acme");
+    const user = await auth.findUser(id);
+    if (user === null) throw new Error("no user");
+    await auth.setEmailVerified(user, false);
+    const refused = await gql(
+      "acme",
+      REGISTER,
+      {
+        challenge: registration.challenge,
+        response: JSON.stringify(response),
+        name: "Key",
+      },
+      cookie,
+    );
+    expect(refused.status).toBe(403);
+    expect(codeOf(refused)).toBe("EMAIL_UNVERIFIED");
+  });
+
   test("a verified e-mail gets registration options", async () => {
     const { cookie } = await userOf("acme", "grace@example.test");
     const allowed = await gql("acme", REGISTRATION, {}, cookie);

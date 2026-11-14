@@ -119,7 +119,7 @@ extend type Query {
   tenant in the trash unless the caller is a platform operator.
   """
   tenant(id: ID!): Tenant
-  "The plans of the platform, smallest first. Any signed-in caller."
+  "The plans of the platform, smallest first. Any signed-in caller with a proved e-mail (ADR-0041)."
   plans: [Plan!]!
   """
   What the tenant used. `month` is `YYYY-MM` (UTC), default the current month.

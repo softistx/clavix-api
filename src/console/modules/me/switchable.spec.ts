@@ -14,6 +14,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantAdmin, tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { verifiedCallers } from "~/console";
 import { CONSOLE_PATH } from "../../identity";
 
 const deps = createConsoleDeps({ serverFor: async () => null });
@@ -32,7 +33,7 @@ interface GqlResult {
 const request = (userId: string | null, query: string) =>
   createApp({
     console: {
-      ...deps,
+      ...verifiedCallers(deps),
       authenticate: async () =>
         userId === null
           ? null

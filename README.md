@@ -159,6 +159,15 @@ tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, t
 trash are managed here too (below); `tenants:create` stays for scripted setups. The console shell's
 tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
 
+**The console needs a verified e-mail** (ADR-0041). Every operation but `me { user platformRole emailVerified }` is refused to a caller
+whose e-mail is not proved: HTTP 403, `extensions.code` `EMAIL_UNVERIFIED`, whatever the caller's
+roles (platform operators included) and before any role check. `me { user platformRole emailVerified }` stays open and tells the UI
+why; the tenant lists under `me` (`memberships`, `switchableTenants`) need the proof. The caller proves the address on the `clavix` tenant's hosted account page
+(`requestEmailVerification`, then the link; see "E-mail verification"); the same token works at once.
+Accepting an admin invitation proves the address, so a new admin is never refused. Accounts that
+were unverified before are not migrated. Passkey and second-factor setup stay gated by janus with
+the same code.
+
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
 
@@ -171,7 +180,7 @@ stronger of their direct role and their platform role). Items are ordered by slu
 (`first` is clamped to 1 to 100, default 25; `totalCount` is how many tenants the caller can switch to that match `q`, whatever the cursor or `first`; pass `nextCursor` as `after`: any other cursor is `BAD_USER_INPUT` (400), `The cursor is not valid`); `q` matches the start of the slug or part
 of the name, case-insensitively. A suspended tenant stays listed (`tenant.status` is `SUSPENDED`; the
 console stays readable on it); a tenant in the trash is left out, and a caller with no role gets an
-empty page. Any signed-in caller may ask; it never lists a tenant the caller holds no role on.
+empty page. Any signed-in caller whose e-mail is proved may ask (an unproved one gets `EMAIL_UNVERIFIED`); it never lists a tenant the caller holds no role on.
 `me.memberships` lists direct roles only; a suspended tenant is listed with its `status`, a trashed one is left out.
 
 ```sh
@@ -382,7 +391,7 @@ mutation {
 ### Tenants, plans and usage
 
 Queries: `tenants` needs `view` on the platform (any operator role); `tenant` and `usage` need
-`view` on that tenant; `plans` is open to any signed-in caller. Mutations: `updateTenant` needs
+`view` on that tenant; `plans` is open to any signed-in caller with a proved e-mail. Mutations: `updateTenant` needs
 `edit` on the tenant (`owner` or `admin`, a tenant admin included); the other six need `edit` on the
 platform (`owner` or `admin` operator). Every mutation is audited (`tenant.create`, `.update`,
 `.setPlan`, `.suspend`, `.resume`, `.delete`, `.restore`, see "Admin events"). Errors carry

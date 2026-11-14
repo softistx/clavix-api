@@ -100,6 +100,22 @@ const call = (query: string, token?: string) =>
 const gql = async (query: string, token?: string) =>
   (await (await call(query, token)).json()) as GqlResult;
 
+/** Proves the e-mail of a `clavix` user, as a confirmed link does. */
+async function verify(userId: string, verified = true) {
+  const janus = await janusIssuers.forRequest(
+    new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
+  );
+  const user = await janus?.findUser(userId);
+  if (
+    janus === undefined ||
+    janus === null ||
+    user === null ||
+    user === undefined
+  )
+    throw new Error("no clavix user to verify");
+  await janus.setEmailVerified(user, verified);
+}
+
 const ME = "{ me { user { id email } platformRole memberships { role } } }";
 
 // A real token: authorize on the clavix issuer, approve as `userId`, exchange.
@@ -223,8 +239,11 @@ beforeAll(async () => {
     new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
   );
   if (janus === null) throw new Error("no janus for clavix");
-  ada = (await janus.create({ email: "ada@console.test", name: "Ada" })).id;
-  bob = (await janus.create({ email: "bob@console.test", name: "Bob" })).id;
+  // The console needs a proved e-mail (ADR-0041): these callers have one.
+  const verified = async (input: { email: string; name?: string }) =>
+    (await janus.setEmailVerified(await janus.create(input), true)).id;
+  ada = await verified({ email: "ada@console.test", name: "Ada" });
+  bob = await verified({ email: "bob@console.test", name: "Bob" });
   tenantA = (await tenantsService.create({ slug: "con-a", name: "A" })).id;
   tenantB = (await tenantsService.create({ slug: "con-b", name: "B" })).id;
 });
@@ -401,6 +420,110 @@ describe("the guard", () => {
     const result = (await response.json()) as GqlResult;
     expect(result.data).toBeNull();
     expect(result.errors?.[0]?.extensions?.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("the verified e-mail gate (ADR-0041)", () => {
+  const TENANT = () => `{ tenant(id: "${tenantA}") { id } }`;
+  const ME_VERIFIED = "{ me { emailVerified } }";
+  let erin = "";
+
+  beforeAll(async () => {
+    const janus = await janusIssuers.forRequest(
+      new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
+    );
+    erin = (await janus?.create({ email: "erin@console.test" }))?.id ?? "";
+    await access.grantTenant(tenantA, erin, "admin");
+  });
+
+  test("an unverified admin reads `me`, which says so, and nothing else", async () => {
+    const token = await tokenFor(erin, AUDIENCE, "console");
+    const me = await gql(ME_VERIFIED, token);
+    expect(me.errors).toBeUndefined();
+    expect(me.data?.["me"]).toEqual({ emailVerified: false });
+    expect(
+      (await gql("{ me { user { id email } platformRole } }", token)).errors,
+    ).toBeUndefined();
+    // The tenants under `me` are tenant data: behind the proof too.
+    for (const field of [
+      "memberships { role }",
+      "switchableTenants { totalCount }",
+    ]) {
+      const hidden = (await (
+        await call(`{ me { ${field} } }`, token)
+      ).json()) as GqlResult;
+      expect(hidden.errors?.[0]?.extensions?.code).toBe("EMAIL_UNVERIFIED");
+    }
+    // The plan catalogue is signed-in only, and still needs the proof.
+    expect(
+      ((await (await call("{ plans { id } }", token)).json()) as GqlResult)
+        .errors?.[0]?.extensions?.code,
+    ).toBe("EMAIL_UNVERIFIED");
+
+    const refused = await call(TENANT(), token);
+    expect(refused.status).toBe(403);
+    const body = (await refused.json()) as GqlResult;
+    expect(body.errors?.[0]?.extensions?.code).toBe("EMAIL_UNVERIFIED");
+  });
+
+  test("a mutation is refused the same way, before anything is written", async () => {
+    const token = await tokenFor(erin, AUDIENCE, "console");
+    const refused = await call(
+      `mutation { updateTenant(id: "${tenantA}", input: { name: "Hijacked" }) { id } }`,
+      token,
+    );
+    expect(refused.status).toBe(403);
+    expect(
+      ((await refused.json()) as GqlResult).errors?.[0]?.extensions?.code,
+    ).toBe("EMAIL_UNVERIFIED");
+    expect((await findTenant("con-a"))?.name).toBe("A");
+  });
+
+  test("the proof opens the console, with the same token, and clearing it closes it again", async () => {
+    const token = await tokenFor(erin, AUDIENCE, "console");
+    expect(
+      ((await (await call(TENANT(), token)).json()) as GqlResult).errors?.[0]
+        ?.extensions?.code,
+    ).toBe("EMAIL_UNVERIFIED");
+    await verify(erin);
+    const allowed = await gql(TENANT(), token);
+    expect(allowed.errors).toBeUndefined();
+    expect(allowed.data?.["tenant"]).toEqual({ id: tenantA });
+    expect((await gql(ME_VERIFIED, token)).data?.["me"]).toEqual({
+      emailVerified: true,
+    });
+    await verify(erin, false);
+    expect((await call(TENANT(), token)).status).toBe(403);
+  });
+
+  test("an unverified caller with no role is told to verify, not FORBIDDEN", async () => {
+    const janus = await janusIssuers.forRequest(
+      new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
+    );
+    const frank = (await janus?.create({ email: "frank@console.test" }))?.id;
+    const token = await tokenFor(frank ?? "", AUDIENCE, "console");
+    expect(
+      ((await (await call(TENANT(), token)).json()) as GqlResult).errors?.[0]
+        ?.extensions?.code,
+    ).toBe("EMAIL_UNVERIFIED");
+  });
+
+  test("a platform operator is held to it too: ADR-0039's exception is about the tenant, not the caller", async () => {
+    await access.grantPlatform(erin, "owner");
+    const token = await tokenFor(erin, AUDIENCE, "console");
+    await verify(erin, false);
+    expect((await call(TENANT(), token)).status).toBe(403);
+    await verify(erin);
+    expect((await gql(TENANT(), token)).errors).toBeUndefined();
+  });
+
+  test("every root field but `me` has a guard that needs the proof", async () => {
+    const { guards } = await import("./modules");
+    for (const [field, guard] of Object.entries(guards)) {
+      expect(guard.kind === "signedIn" && guard.unverifiedOk === true).toBe(
+        field === "Query.me",
+      );
+    }
   });
 });
 
@@ -714,6 +837,7 @@ describe("the guards over HTTP", () => {
           )
         )?.create({ email: "carol@console.test" })
       )?.id ?? "";
+    await verify(carol);
     await access.grantTenant(tenantA, carol, "admin");
     expect((await as(carol, `{ tenantEdit(id: "${tenantA}") }`)).data).toEqual({
       tenantEdit: "ok",
@@ -733,6 +857,7 @@ describe("the guards over HTTP", () => {
           )
         )?.create({ email: "dan@console.test" })
       )?.id ?? "";
+    await verify(dan);
     await access.grantTenant(tenantA, dan, "viewer");
     expect(code(await as(dan, `{ tenantEdit(id: "${tenantA}") }`))).toBe(
       "FORBIDDEN",

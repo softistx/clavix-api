@@ -70,6 +70,7 @@ const as = async (
       exclusive: createExclusive(),
       directory: {
         findUser: async () => null,
+        emailVerified: async () => true,
         findUserByEmail: async () => null,
         tenantsByIds: async () => [],
       },
