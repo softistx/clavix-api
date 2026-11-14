@@ -30,7 +30,7 @@ Today it serves:
 ## Run
 
 ```sh
-export GITHUB_TOKEN=$(gh auth token)   # read:packages, for the @softistx packages
+export NPM_REGISTRY_TOKEN   # read token for npm.softistx.com (the @softistx packages)
 bun install
 cp .env.example .env
 bun run generate   # GraphQL types, gitignored; also run by build and verify

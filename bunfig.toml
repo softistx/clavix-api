@@ -1,6 +1,6 @@
-# @softistx packages come from GitHub Packages; GITHUB_TOKEN needs read:packages.
+# @softistx packages come from Verdaccio (https://npm.softistx.com); NPM_REGISTRY_TOKEN is the read token.
 [install.scopes]
-"@softistx" = { url = "https://npm.pkg.github.com/", token = "$GITHUB_TOKEN" }
+"@softistx" = { url = "https://npm.softistx.com/", token = "$NPM_REGISTRY_TOKEN" }
 
 [test]
 preload = ["./test/setup.ts"]

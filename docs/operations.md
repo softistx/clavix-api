@@ -39,8 +39,8 @@ by the `Host` header, which Caddy passes untouched.
    `Dockerfile`; the API one needs the GitHub Packages token as a build secret:
 
    ```sh
-   export GITHUB_TOKEN=$(gh auth token)
-   docker build --secret id=github_token,env=GITHUB_TOKEN -t registry.example.com/clavix-api:0.1.0 .
+   export NPM_REGISTRY_TOKEN   # read token, from ~/.zshenv
+   docker build --secret id=npm_registry_token,env=NPM_REGISTRY_TOKEN -t registry.example.com/clavix-api:0.1.0 .
    ```
 
 3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate
