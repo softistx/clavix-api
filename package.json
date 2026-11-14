@@ -35,7 +35,7 @@
     "@nxgt/graphql-validation": "^0.8.1",
     "@softistx/janus": "^0.63.0",
     "@softistx/janus-graphql": "^0.28.0",
-    "@softistx/janus-mail": "^0.26.4",
+    "@softistx/janus-mail": "^0.26.5",
     "@softistx/janus-mongo": "^0.28.0",
     "@softistx/janus-oauth": "^0.11.4",
     "@softistx/janus-oauth-mongo": "^0.12.4",
