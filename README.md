@@ -84,6 +84,9 @@ one needs on top:
 | `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                                               |
 | `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                                                    |
 | `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                                                     |
+| `CLAVIX_VERIFY_USER_LIMIT` / `CLAVIX_VERIFY_USER_WINDOW_SECONDS`       | `requestEmailVerification` per signed-in user: 10 per 3600 s                                                                                                                                                                                   |
+| `CLAVIX_VERIFY_IP_LIMIT` / `CLAVIX_VERIFY_IP_WINDOW_SECONDS`           | `requestEmailVerification` per client address and tenant: 20 per 600 s                                                                                                                                                                         |
+| `CLAVIX_VERIFY_TENANT_LIMIT` / `CLAVIX_VERIFY_TENANT_WINDOW_SECONDS`   | `requestEmailVerification` per tenant: 200 per 3600 s                                                                                                                                                                                          |
 | `CLAVIX_TLS_ASK_SECRET`                                                | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
 | `CLAVIX_TLS_ASK_LIMIT`                                                 | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
 | `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
@@ -843,6 +846,43 @@ refusal (unknown, spent, expired or stale link) is `MAGIC_LINK_INVALID` (401): o
 "Sign-in code limits" apply to link requests too (one shared budget). janus 0.57 refuses to enrol a
 passkey or second factor while the e-mail is unproved (`EMAIL_UNVERIFIED`), so a link that proves
 the e-mail has no squatter's factor to wipe. More in [docs/guide/magic-link.md](docs/guide/magic-link.md).
+
+## E-mail verification
+
+A signed-in user proves their address with a mailed link, on the tenant's `/graphql`
+(`https://<slug>.<CLAVIX_DOMAIN>/graphql`). Most sign-ins already prove it (the e-mailed code, the
+magic link, an accepted invitation, a social provider that vouches); this is for the account whose
+flag is off. The OIDC `email_verified` claim (userinfo and id_token) follows the flag.
+
+```graphql
+mutation {
+  requestEmailVerification # true
+}
+mutation {
+  confirmEmailVerification(token: "...") {
+    id
+    email
+    emailVerified # true
+  }
+}
+```
+
+- `requestEmailVerification` mails `https://<slug>.<CLAVIX_DOMAIN>/verify?token=<token>` (valid 24
+  hours) to the signed-in account's own address. The answer is always `true`: an already verified
+  user gets the same answer and no mail. 401 `UNAUTHENTICATED` without a session.
+- The hosted `/verify` page must show a button that POSTs the token to `confirmEmailVerification`:
+  never confirm on the `GET`, mail scanners open links.
+- `confirmEmailVerification` is bound to the signed-in account (no first proof: the password and
+  second factor stay, no session is revoked). Every refusal (unknown, spent, expired or stale token,
+  or another account's token, which is left unspent for its owner) is `EMAIL_VERIFICATION_INVALID`
+  (400): offer a new link. 401 `UNAUTHENTICATED` without a session. A visitor who is not signed in
+  signs in first (the code proves the address anyway).
+- Both answer `TENANT_SUSPENDED` (403) on a suspended tenant.
+- `EMAIL_VERIFICATION_THROTTLED` (429, `retryAfter` in the error and `Retry-After` in seconds) on
+  `requestEmailVerification`: per user (10 per hour, `CLAVIX_VERIFY_USER_*`), per client address and
+  tenant (20 per 10 min, `CLAVIX_VERIFY_IP_*`), per tenant (200 per hour, `CLAVIX_VERIFY_TENANT_*`),
+  then janus's 5 per address and 10 minutes. The first three need `REDIS_URL` (Redis down: let
+  through, logged, janus's limit still holds); keys start with the tenant id.
 
 ## Passkey sign-in and registration
 

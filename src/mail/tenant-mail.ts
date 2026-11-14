@@ -6,6 +6,9 @@ import { senderAddress } from "./mailer";
 /** The hosted page a sign-in link opens (clavix-ui); the token is its `token` query parameter. */
 export const MAGIC_LINK_PATH = "/sign-in/link";
 
+/** The hosted page a verification e-mail opens (clavix-ui); the token is its `token` query parameter. */
+export const VERIFY_EMAIL_PATH = "/verify";
+
 /** The hosted page an invitation e-mail opens (clavix-ui); the code is its `code` query parameter. */
 export const INVITATION_PATH = "/invitation";
 
@@ -38,7 +41,7 @@ export function createTenantMail({ mailer, domain }: TenantMailOptions) {
         magicLink: (token) =>
           `${tenant.issuer}${MAGIC_LINK_PATH}?token=${encodeURIComponent(token)}`,
         verifyEmail: (token) =>
-          `${tenant.issuer}/verify?token=${encodeURIComponent(token)}`,
+          `${tenant.issuer}${VERIFY_EMAIL_PATH}?token=${encodeURIComponent(token)}`,
         resetPassword: (token) =>
           `${tenant.issuer}/reset?token=${encodeURIComponent(token)}`,
         secureAccount: () => `${tenant.issuer}/account`,

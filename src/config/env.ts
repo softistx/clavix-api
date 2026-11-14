@@ -105,6 +105,23 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Verification mails (`requestEmailVerification`, signed in): per user, then
+  // per client address and tenant, and per tenant, on top of janus's 5 per
+  // address per 10 min. Redis only, as above.
+  CLAVIX_VERIFY_USER_LIMIT: z.coerce.number().int().min(1).default(10),
+  CLAVIX_VERIFY_USER_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  CLAVIX_VERIFY_IP_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_VERIFY_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_VERIFY_TENANT_LIMIT: z.coerce.number().int().min(1).default(200),
+  CLAVIX_VERIFY_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
   // custom domains, A4): the shared secret of that URL, at least 32 characters.
   // Unset, the endpoint does not exist. The route is internal: never expose

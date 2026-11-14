@@ -75,6 +75,22 @@ type Mutation {
   is not spent then.
   """
   confirmMagicLink(token: String!): SignedIn!
+  """
+  Mails the signed-in user a link that proves their address (hosted page
+  `/verify?token=...`, which must POST the token to `confirmEmailVerification`,
+  never confirm on GET). Always true: an already verified user gets the same
+  answer and no mail. Errors: UNAUTHENTICATED (401), TENANT_SUSPENDED (403),
+  EMAIL_VERIFICATION_THROTTLED (429, `retryAfter` and `Retry-After`).
+  """
+  requestEmailVerification: Boolean!
+  """
+  Redeems the token of a verification link for the signed-in account only and
+  returns it with `emailVerified: true`. Every refusal (unknown, spent, expired
+  or stale token, another account's token, which is left unspent) is the same
+  EMAIL_VERIFICATION_INVALID, 400; the page offers a new link. UNAUTHENTICATED
+  (401) without a session, TENANT_SUSPENDED (403).
+  """
+  confirmEmailVerification(token: String!): CurrentUser!
   "Ends the session of the request and clears the cookie. True even when anonymous."
   signOut: Boolean!
 }

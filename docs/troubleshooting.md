@@ -171,8 +171,9 @@ while the user's e-mail is unproved, so a factor cannot be bound to an address n
 code is stable and passes through unchanged; the hosted UI shows it as "unverified". Sign-in with
 `signInWithPasskey` still answers the single `PASSKEY_INVALID` (401).
 
-**Fix:** prove the e-mail first. Signing in with an e-mailed code (`verifySignInCode`) proves it;
-then register the passkey again.
+**Fix:** prove the e-mail first. A signed-in user asks for a link with `requestEmailVerification` and
+confirms it with `confirmEmailVerification(token)`; signing in with an e-mailed code
+(`verifySignInCode`) proves it too. Then register the passkey again.
 
 ```graphql
 mutation {
@@ -181,7 +182,7 @@ mutation {
     options
   }
 }
-# 403 EMAIL_UNVERIFIED -> sign in with the e-mailed code, then repeat
+# 403 EMAIL_UNVERIFIED -> requestEmailVerification + confirmEmailVerification (or sign in with the e-mailed code), then repeat
 ```
 
 ## `EMAIL_CHANGE_NEEDS_PROOF` (409) when changing a user's e-mail
@@ -300,6 +301,27 @@ the user is deactivated. All look alike on purpose. A mail scanner that opened t
 `GET` would also have spent it: the page must sign in only on a POST from a button.
 
 **Fix:** offer a new link with `requestMagicLink`, and tell the user to open the latest e-mail.
+
+## `EMAIL_VERIFICATION_INVALID` (400) on `confirmEmailVerification`
+
+**When:** the hosted `/verify` page POSTs the token of a verification link and gets HTTP 400.
+
+**Why:** the token is unknown (also another tenant's), already used, expired (24 hours), sent to an
+address the user has since changed, or issued to another account than the signed-in one (that token
+is left unspent for its owner). All look alike on purpose.
+
+**Fix:** offer a new link with `requestEmailVerification` and tell the user to open the latest
+e-mail while signed in to the account the link was sent for.
+
+## `EMAIL_VERIFICATION_THROTTLED` (429) on `requestEmailVerification`
+
+**When:** the account asked for too many verification e-mails.
+
+**Why:** a limit was hit: per user (10 per hour), per client address and tenant, per tenant
+(`CLAVIX_VERIFY_*`), or janus's 5 per address and 10 minutes.
+
+**Fix:** wait `retryAfter` seconds (also the `Retry-After` header) and ask again; the page shows the
+wait. Raise the `CLAVIX_VERIFY_*` values only if real users hit them.
 
 ## Console API refusals (`/console/graphql`, `operators:grant`)
 

@@ -7,16 +7,13 @@ nxgt-janus release says which.
 
 ## Now
 
-Nothing is in progress.
+- **Self-service e-mail verification** (in progress) — a signed-in user asks for a verification
+  mail and confirms it with the link's token (stable codes for invalid, throttled and done); the
+  OIDC `email_verified` claim follows the flag; the console, passkey and second-factor setup, and
+  the future e-mail change need a verified address
+  ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
 ## Next
-
-- **Self-service e-mail verification** — a signed-in user asks for a verification mail and
-  confirms it with the link's token, with stable error codes for invalid, expired, throttled and
-  already-done answers; the OIDC `email_verified` claim follows the flag, and the sensitive
-  actions that need a verified e-mail are decided in the plan (passkey and second-factor setup,
-  e-mail change, console access)
-  ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
 - **Access rules** — an application publishes its OpenAPI and SDL from CI
   ([#34](https://github.com/softistx/clavix-api/issues/34)); a tenant drafts, publishes,

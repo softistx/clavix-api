@@ -160,6 +160,21 @@ Same shape as the e-mail code (janus `magicLink.prepare` then, after the answer,
 factor is configured, so `confirm` always opens a session; janus 0.57 refuses enrolment while the
 e-mail is unproved (janus#693 closed there, no guard of ours).
 
+## E-mail verification (`src/modules/auth/email-verification.ts`)
+
+`requestEmailVerification` / `confirmEmailVerification` (README "E-mail verification"), signed in only
+(`auth.authenticate`, else `UNAUTHENTICATED`; `requireLive` first). Request: `verifyEmail.prepare(email)`
+then, after the answer, `send()` and `mail.verifyEmail` (link `VERIFY_EMAIL_PATH`, `src/mail/tenant-mail.ts`);
+always `true`, an already verified user is mailed nothing, and the token must be issued to the signed-in
+user. Confirm: `verifyEmail.confirm(token, { user })`, **never** `firstProof` and never unbound; every
+janus refusal except `STORE_FAILED` is `EMAIL_VERIFICATION_INVALID` 400. janus's `MAIL_THROTTLED` becomes
+`EMAIL_VERIFICATION_THROTTLED` too (stable code for the UI).
+- Limits (`src/modules/auth/verification-throttle.ts`, `CLAVIX_VERIFY_*`): per user (`tenantId/userId`,
+  10 / hour), then the shared core pair per IP and tenant and per tenant. `ctx.verifyThrottle`, injected with
+  `createApp({ verifyThrottle })`; Redis down: fail open, logged.
+- Spec: `src/modules/auth/email-verification.spec.ts` (incl. OIDC `email_verified`, tenant isolation,
+  suspended tenant, Redis).
+
 ## Passkeys (`src/modules/passkeys`)
 
 Passwordless passkey sign-in and registration on `/graphql` (README, "Passkey sign-in and
@@ -428,7 +443,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 - **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
-  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, `requestEmailVerification`, `confirmEmailVerification`, the passkey sign-in,
   `socialSignInStart`, `socialSignInComplete`, `acceptInvitation` (on the tenant's own host: an end-user invitation of a suspended tenant is refused before the code is read),
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens

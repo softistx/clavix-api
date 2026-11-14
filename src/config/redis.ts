@@ -2,6 +2,10 @@ import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
+import {
+  type VerificationLimitConfig,
+  verificationLimits,
+} from "@/modules/auth/verification-throttle";
 import { domainRecheck } from "@/modules/domains/recheck.queue";
 import { tlsAskLimit } from "@/modules/domains/tls-limit";
 import {
@@ -34,6 +38,14 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_PASSKEY_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS,
   },
+  verification: VerificationLimitConfig = {
+    userLimit: env.CLAVIX_VERIFY_USER_LIMIT,
+    userWindowSeconds: env.CLAVIX_VERIFY_USER_WINDOW_SECONDS,
+    ipLimit: env.CLAVIX_VERIFY_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_VERIFY_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_VERIFY_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_VERIFY_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -48,6 +60,7 @@ export async function openAppRedis(
       limits: {
         ...signInLimits(limits),
         ...passkeyLimits(passkeys),
+        ...verificationLimits(verification),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

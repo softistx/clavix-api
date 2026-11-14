@@ -8,6 +8,10 @@ import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import { deviceOptions } from "./device";
 import {
+  confirmEmailVerification,
+  requestEmailVerification,
+} from "./email-verification";
+import {
   confirmMagicLink,
   magicLinkDisabled,
   requestMagicLink,
@@ -116,6 +120,32 @@ export const auth: Resolvers = {
         user: currentUserOf(signedIn.user),
         expiresAt: signedIn.session.expiresAt,
       };
+    },
+    requestEmailVerification: async (_, __, ctx) => {
+      const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
+      const current = await auth.authenticate(ctx.request);
+      if (current === null) throw denial("UNAUTHENTICATED");
+      ctx.set.headers.set("cache-control", "no-store");
+      await ctx.verifyThrottle?.check({
+        tenantId: tenant.tenantId,
+        userId: current.user.id,
+        ip: ctx.ip,
+      });
+      return requestEmailVerification(
+        { auth, mail: tenantMail(tenant) },
+        current.user,
+      );
+    },
+    confirmEmailVerification: async (_, { token }, ctx) => {
+      const { auth, tenant } = await tenantOf(ctx);
+      requireLive(tenant);
+      const current = await auth.authenticate(ctx.request);
+      if (current === null) throw denial("UNAUTHENTICATED");
+      ctx.set.headers.set("cache-control", "no-store");
+      return currentUserOf(
+        await confirmEmailVerification(auth, token, current.user.id),
+      );
     },
     signOut: async (_, __, ctx) => {
       const { auth } = await tenantOf(ctx);

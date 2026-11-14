@@ -1,4 +1,4 @@
-import type { Throttle } from "./core";
+import type { Throttle, UserThrottle } from "./core";
 
 /**
  * The throttles of the anonymous operations (`requestSignInCode`,
@@ -9,4 +9,6 @@ import type { Throttle } from "./core";
 export interface ThrottleContext {
   readonly signInThrottle: Throttle | undefined;
   readonly passkeyThrottle: Throttle | undefined;
+  /** The signed-in `requestEmailVerification`: per user, client address and tenant. */
+  readonly verifyThrottle: UserThrottle | undefined;
 }
