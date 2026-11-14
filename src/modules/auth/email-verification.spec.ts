@@ -642,7 +642,9 @@ describe("with a stubbed janus", () => {
         throw failure;
       },
     });
-    expect(confirmEmailVerification(auth, "t", "u1")).rejects.toBe(failure);
+    await expect(confirmEmailVerification(auth, "t", "u1")).rejects.toBe(
+      failure,
+    );
   });
 
   test("the mail is not sent when the address has since passed to another user", async () => {

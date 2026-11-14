@@ -51,7 +51,7 @@ export interface Throttle {
 }
 
 // A slow Redis must not hold a request open.
-export const REDIS_TIMEOUT_MS = 250;
+const REDIS_TIMEOUT_MS = 250;
 // A client whose address is unknown (no socket) shares one bucket.
 export const UNKNOWN_IP = "unknown";
 
