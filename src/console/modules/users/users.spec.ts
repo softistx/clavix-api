@@ -21,6 +21,7 @@ import { authFor, claimsFor, forTenant } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { verifiedCallers } from "~/console";
 import { CONSOLE_PATH } from "../../identity";
 
 const origin = {
@@ -49,7 +50,7 @@ const deps = createConsoleDeps(issuers);
 const app = createApp({
   oauth: issuers,
   console: {
-    ...deps,
+    ...verifiedCallers(deps),
     authenticate: async (request) => {
       const userId = request.headers
         .get("authorization")

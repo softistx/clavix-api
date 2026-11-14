@@ -3,7 +3,7 @@ import { InvalidCursorError } from "@softistx/mongo";
 import { GraphQLError } from "graphql";
 import { tenantAdmin } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { type Guards, signedIn } from "../../guard";
+import { aboutCaller, type Guards } from "../../guard";
 import { ROLES, type Role } from "../../model";
 import { parentOf } from "../tenants/parent";
 
@@ -16,7 +16,7 @@ const GRAPHQL_ROLE = {
 /** `Me` has no stored document: its fields read the caller from the context. */
 export type MeParent = Record<string, never>;
 
-export const meGuards: Guards = { "Query.me": signedIn() };
+export const meGuards: Guards = { "Query.me": aboutCaller() };
 
 const MAX_PAGE = 100;
 
@@ -45,6 +45,8 @@ export const me: Resolvers = {
       if (user === null) throw denial("UNAUTHENTICATED", "No such user");
       return { id: user.id, email: user.email, name: user.name ?? null };
     },
+    emailVerified: (_, __, ctx) =>
+      ctx.directory.emailVerified(ctx.principal.userId),
     platformRole: async (_, __, ctx) => {
       const role = await ctx.access.platformRole(ctx.principal.userId);
       return role === null ? null : GRAPHQL_ROLE[role];

@@ -85,6 +85,11 @@ export function createConsoleDeps(
               active: user.active,
             };
       },
+      emailVerified: async (id) => {
+        const tenant = await clavixTenant();
+        const janus = tenant === null ? null : await forTenant(tenant);
+        return (await janus?.findUser(id))?.emailVerified === true;
+      },
       findUserByEmail: async (email) => {
         const tenant = await clavixTenant();
         const janus = tenant === null ? null : await forTenant(tenant);

@@ -13,6 +13,7 @@ import { janusIssuers } from "@/config/users";
 import { adminScope } from "@/invitations/scope";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { verifiedCallers } from "~/console";
 import { CONSOLE_PATH } from "../../identity";
 
 // The bearer token is the user id: tokens are console.spec's business, this
@@ -20,7 +21,7 @@ import { CONSOLE_PATH } from "../../identity";
 const deps = createConsoleDeps({ serverFor: async () => null });
 const app = createApp({
   console: {
-    ...deps,
+    ...verifiedCallers(deps),
     authenticate: async (request) => {
       const userId = request.headers
         .get("authorization")
@@ -306,13 +307,14 @@ describe("inviting and accepting", () => {
 
     const accepted = await post(
       hosted,
-      `mutation { acceptInvitation(code: "${secret}") { signedIn organization user { email } } }`,
+      `mutation { acceptInvitation(code: "${secret}") { signedIn organization user { email emailVerified } } }`,
     );
     expect(accepted.errors).toBeUndefined();
+    // The code is the proof of the inbox: the new admin can use the console at once (ADR-0041).
     expect(accepted.data?.["acceptInvitation"]).toMatchObject({
       signedIn: true,
       organization: "Alpha",
-      user: { email },
+      user: { email, emailVerified: true },
     });
     expect(accepted.cookies.join(";")).toContain("__Host-clavix-session=");
 

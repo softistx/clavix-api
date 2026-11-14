@@ -46,6 +46,8 @@ type SwitchableTenantPage {
 "The caller: who the bearer token belongs to, and where they have a role."
 type Me {
   user: ConsoleUser!
+  "Whether the caller's e-mail is proved. While it is not, every console operation but `me` is refused with EMAIL_UNVERIFIED (403): prove it from the hosted account page."
+  emailVerified: Boolean!
   "The caller's platform role, `null` for a tenant member who is not an operator."
   platformRole: Role
   "The tenants where the caller holds a role directly. A platform operator is also allowed on every tenant, which `tenants` (platform) lists."

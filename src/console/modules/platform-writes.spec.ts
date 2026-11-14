@@ -15,7 +15,7 @@ import { authFor, claimsFor, forTenant } from "@/config/users";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { type ConsoleResult, codeOf } from "~/console";
+import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
 
 // A tenant-level role on the `clavix` tenant is not the platform's: every
 // console write that targets it needs the platform permission.
@@ -44,7 +44,7 @@ const issuers = createClavixOAuthIssuers({
 const app = createApp({
   oauth: issuers,
   console: {
-    ...createConsoleDeps(issuers),
+    ...verifiedCallers(createConsoleDeps(issuers)),
     authenticate: async (request) => {
       const userId = request.headers
         .get("authorization")

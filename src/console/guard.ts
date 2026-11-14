@@ -3,6 +3,7 @@ import { denial } from "@softistx/janus-graphql";
 import { GraphQLError, type GraphQLSchema } from "graphql";
 import { ObjectId } from "mongodb";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { requireVerifiedEmail } from "@/users/verified-email";
 import type { ConsoleContext } from "./context";
 import type { Permission } from "./model";
 
@@ -11,7 +12,7 @@ import type { Permission } from "./model";
  * one (`Query.me`, `Mutation.createTenant`...): a field with none is denied.
  */
 export type Guard =
-  | { kind: "signedIn" }
+  | { kind: "signedIn"; unverifiedOk?: true }
   | {
       kind: "tenant";
       permission: Permission;
@@ -20,8 +21,20 @@ export type Guard =
     }
   | { kind: "platform"; permission: Permission };
 
-/** Any caller with a valid console token (a field about the caller itself). */
+/**
+ * Any caller with a valid console token **and a proved e-mail** (ADR-0041),
+ * like every other guard: the catalogue of plans, for one.
+ */
 export const signedIn = (): Guard => ({ kind: "signedIn" });
+
+/**
+ * Any caller with a valid console token, **proved e-mail or not**: only `me`,
+ * so the UI can tell the caller why the rest is refused (EMAIL_UNVERIFIED).
+ */
+export const aboutCaller = (): Guard => ({
+  kind: "signedIn",
+  unverifiedOk: true,
+});
 
 /** `permission` on the tenant `tenant(args)` names (`ctx.can`). */
 export const onTenant = (
@@ -89,6 +102,13 @@ async function allowed(
   }
 }
 
+/** The caller's e-mail must be proved: `EMAIL_UNVERIFIED` (403) otherwise. */
+async function verifiedCaller(ctx: ConsoleContext) {
+  requireVerifiedEmail({
+    emailVerified: await ctx.directory.emailVerified(ctx.principal.userId),
+  });
+}
+
 const deny = () => denial("FORBIDDEN", "Not allowed");
 
 /**
@@ -108,9 +128,16 @@ export function guardSchema(
         args: Record<string, unknown>,
         ctx: ConsoleContext,
       ) => {
-        if (guard === undefined || !(await allowed(guard, args, ctx))) {
-          throw deny();
+        if (guard === undefined) throw deny();
+        // Every field but `me` (`aboutCaller`, so the UI can explain) needs
+        // the caller's e-mail proved (ADR-0041). Before the role check:
+        // an unproved caller can do nothing, whatever their roles. Platform
+        // operators are held to it too; ADR-0039's exception is about the
+        // target tenant's state, not the caller's.
+        if (guard.kind !== "signedIn" || guard.unverifiedOk !== true) {
+          await verifiedCaller(ctx);
         }
+        if (!(await allowed(guard, args, ctx))) throw deny();
       };
       return {
         ...config,

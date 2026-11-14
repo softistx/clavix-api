@@ -159,6 +159,15 @@ tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, t
 trash are managed here too (below); `tenants:create` stays for scripted setups. The console shell's
 tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
 
+**The console needs a verified e-mail** (ADR-0041). Every operation but `me` is refused to a caller
+whose e-mail is not proved: HTTP 403, `extensions.code` `EMAIL_UNVERIFIED`, whatever the caller's
+roles (platform operators included) and before any role check. `me { emailVerified }` tells the UI
+why. The caller proves the address on the `clavix` tenant's hosted account page
+(`requestEmailVerification`, then the link; see "E-mail verification"); the same token works at once.
+Accepting an admin invitation proves the address, so a new admin is never refused. Accounts that
+were unverified before are not migrated. Passkey and second-factor setup stay gated by janus with
+the same code.
+
 Roles are `owner`, `admin` and `viewer`, on the platform (inherited by every tenant) or on one
 tenant; every field is refused unless its guard allows it.
 
