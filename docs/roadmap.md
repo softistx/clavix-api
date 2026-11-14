@@ -10,7 +10,7 @@ nxgt-janus release says which.
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with
-  `EMAIL_UNVERIFIED` until the address is proved (`me { emailVerified }` stays open), as passkey
+  `EMAIL_UNVERIFIED` until the address is proved (`me { user platformRole emailVerified }` stays open; the tenant lists under `me` need the proof), as passkey
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 

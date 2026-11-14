@@ -159,7 +159,7 @@ tenant's sign-in policy (see "Sign-in methods and social providers"). Tenants, t
 trash are managed here too (below); `tenants:create` stays for scripted setups. The console shell's
 tenant switcher, `me { switchableTenants }`, is described under "Switchable tenants" below.
 
-**The console needs a verified e-mail** (ADR-0041). Every operation but `me` is refused to a caller
+**The console needs a verified e-mail** (ADR-0041). Every operation but `me { user platformRole emailVerified }` is refused to a caller
 whose e-mail is not proved: HTTP 403, `extensions.code` `EMAIL_UNVERIFIED`, whatever the caller's
 roles (platform operators included) and before any role check. `me { user platformRole emailVerified }` stays open and tells the UI
 why; the tenant lists under `me` (`memberships`, `switchableTenants`) need the proof. The caller proves the address on the `clavix` tenant's hosted account page

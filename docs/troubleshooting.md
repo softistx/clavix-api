@@ -359,7 +359,7 @@ role `bun run operators:grant --email <address> --role <role>`.
 
 ### `EMAIL_UNVERIFIED` (403) on any console operation
 
-**When:** every console call but `me` is answered with HTTP 403 and
+**When:** every console call but `me { user platformRole emailVerified }` is answered with HTTP 403 and
 `"extensions":{"code":"EMAIL_UNVERIFIED"}`, whatever the caller's roles.
 
 **Why:** the signed-in operator's e-mail is not proved (an admin cleared the flag, or the account
