@@ -8,7 +8,11 @@ import {
 } from "./config/domains-routes";
 import { readyz } from "./config/ready";
 import { scopeTextsFor } from "./config/resources";
-import { passkeyThrottle, signInThrottle } from "./config/throttle";
+import {
+  passkeyThrottle,
+  signInThrottle,
+  verifyThrottle,
+} from "./config/throttle";
 import { CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
@@ -18,6 +22,7 @@ import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
+import type { VerificationThrottle } from "./modules/auth/verification-throttle";
 import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
 import type { ScopeTextsFor } from "./modules/consent/scope-labels";
@@ -42,6 +47,8 @@ export function createApp(
     signInThrottle?: Throttle | undefined;
     // The same for `passkeySignInOptions`.
     passkeyThrottle?: Throttle | undefined;
+    // The same for `requestEmailVerification` (per user too).
+    verifyThrottle?: VerificationThrottle | undefined;
     // The console API (`/console/graphql`, src/console): bearer token, its own
     // schema. Off without it, the route does not exist.
     console?: ConsoleDeps & { schema?: typeof consoleSchema };
@@ -56,6 +63,8 @@ export function createApp(
       "signInThrottle" in options ? options.signInThrottle : signInThrottle,
     passkeyThrottle:
       "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
+    verifyThrottle:
+      "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
