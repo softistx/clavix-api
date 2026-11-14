@@ -443,7 +443,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 - **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
-  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, the passkey sign-in,
+  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, `requestEmailVerification`, `confirmEmailVerification`, the passkey sign-in,
   `socialSignInStart`, `socialSignInComplete`, `acceptInvitation` (on the tenant's own host: an end-user invitation of a suspended tenant is refused before the code is read),
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
