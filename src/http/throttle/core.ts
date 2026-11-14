@@ -51,9 +51,37 @@ export interface Throttle {
 }
 
 // A slow Redis must not hold a request open.
-const REDIS_TIMEOUT_MS = 250;
+export const REDIS_TIMEOUT_MS = 250;
 // A client whose address is unknown (no socket) shares one bucket.
 export const UNKNOWN_IP = "unknown";
+
+/** Logs that a limit was skipped because Redis is down or slow; the request goes through. */
+export function logSkipped(
+  error: unknown,
+  skipped: string,
+  log: (message: string) => void,
+) {
+  const reason = error instanceof GuardError ? error.code : "connection failed";
+  log(`redis unavailable: ${skipped} skipped (${reason})`);
+}
+
+/**
+ * Counts one request on a single limit of its own (the signed-in operations
+ * add one beside the pair): `undefined` when Redis is down, logged.
+ */
+export async function consumeOrSkip<P>(
+  limit: Bound<P>,
+  params: P,
+  skipped: string,
+  log: (message: string) => void,
+): Promise<LimitResult | undefined> {
+  try {
+    return await limit.consume(params, 1, { timeoutMs: REDIS_TIMEOUT_MS });
+  } catch (error) {
+    logSkipped(error, skipped, log);
+    return undefined;
+  }
+}
 
 /** Whole seconds a refused client waits, at least 1. */
 export const retryAfterSeconds = (result: LimitResult) =>
@@ -92,10 +120,17 @@ export function createThrottle(
         if (!byTenant.allowed) throw deny(byTenant);
       } catch (error) {
         if (error instanceof Error && refusals.has(error)) throw error;
-        const reason =
-          error instanceof GuardError ? error.code : "connection failed";
-        log(`redis unavailable: ${skipped} skipped (${reason})`);
+        logSkipped(error, skipped, log);
       }
     },
   };
+}
+
+/** The throttle of a signed-in operation: the user is counted too. */
+export interface UserThrottle {
+  check(who: {
+    tenantId: string;
+    userId: string;
+    ip: string | undefined;
+  }): Promise<void>;
 }

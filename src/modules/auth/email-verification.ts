@@ -25,6 +25,8 @@ export async function requestEmailVerification(
   user: { id: string; email: string },
 ): Promise<true> {
   try {
+    // `prepare(email)` then the id check, not `send(user)`: `send(user)` issues
+    // for the current address whatever its state, so a verified user would be mailed.
     const pending = await auth.verifyEmail.prepare(user.email);
     afterAnswer(async () => {
       const issued = await pending.send();

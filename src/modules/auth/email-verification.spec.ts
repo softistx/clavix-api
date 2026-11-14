@@ -6,6 +6,7 @@ import {
   expect,
   test,
 } from "bun:test";
+import { JanusError } from "@softistx/janus";
 import {
   createMemorySigningKeys,
   rotateSigningKeys,
@@ -28,6 +29,10 @@ import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import {
+  confirmEmailVerification,
+  requestEmailVerification,
+} from "./email-verification";
 import { settled } from "./outbox";
 import {
   createVerificationThrottle,
@@ -622,5 +627,45 @@ describe("limits over Redis", () => {
     expect(answer.data).toEqual({ requestEmailVerification: true });
     expect(logs.length).toBeGreaterThanOrEqual(1);
     expect(mailsTo(session.user.email, before).mails).toHaveLength(1);
+  });
+});
+
+describe("with a stubbed janus", () => {
+  const stub = (verifyEmail: object) => ({ verifyEmail }) as never;
+
+  test("a store outage on confirm is not turned into EMAIL_VERIFICATION_INVALID", async () => {
+    const failure = Object.assign(new JanusError("STORE_FAILED"), {
+      code: "STORE_FAILED",
+    });
+    const auth = stub({
+      confirm: async () => {
+        throw failure;
+      },
+    });
+    expect(confirmEmailVerification(auth, "t", "u1")).rejects.toBe(failure);
+  });
+
+  test("the mail is not sent when the address has since passed to another user", async () => {
+    const sent: unknown[] = [];
+    const auth = stub({
+      prepare: async () => ({
+        send: async () => ({
+          user: { id: "other", name: null },
+          email: "a@b.c",
+        }),
+      }),
+    });
+    const mail = { verifyEmail: async (issued: unknown) => sent.push(issued) };
+    expect(
+      await requestEmailVerification(
+        { auth, mail: mail as never },
+        {
+          id: "u1",
+          email: "a@b.c",
+        },
+      ),
+    ).toBe(true);
+    await settled();
+    expect(sent).toHaveLength(0);
   });
 });

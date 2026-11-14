@@ -1,5 +1,4 @@
-import type { VerificationThrottle } from "@/modules/auth/verification-throttle";
-import type { Throttle } from "./core";
+import type { Throttle, UserThrottle } from "./core";
 
 /**
  * The throttles of the anonymous operations (`requestSignInCode`,
@@ -11,5 +10,5 @@ export interface ThrottleContext {
   readonly signInThrottle: Throttle | undefined;
   readonly passkeyThrottle: Throttle | undefined;
   /** The signed-in `requestEmailVerification`: per user, client address and tenant. */
-  readonly verifyThrottle: VerificationThrottle | undefined;
+  readonly verifyThrottle: UserThrottle | undefined;
 }

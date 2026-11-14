@@ -1,11 +1,13 @@
-import { defineRateLimit, GuardError, type LimitResult } from "@softistx/redis";
+import { defineRateLimit, type LimitResult } from "@softistx/redis";
 import { GraphQLError } from "graphql";
 import {
   type BoundLimits,
+  consumeOrSkip,
   createThrottle,
   ipAndTenantLimits,
   type LimitConfig,
   retryAfterSeconds,
+  type UserThrottle,
 } from "@/http/throttle/core";
 
 export interface VerificationLimitConfig extends LimitConfig {
@@ -14,14 +16,7 @@ export interface VerificationLimitConfig extends LimitConfig {
   userWindowSeconds: number;
 }
 
-export interface VerificationThrottle {
-  /** Counts one `requestEmailVerification`; past a limit it throws `EMAIL_VERIFICATION_THROTTLED`. */
-  check(who: {
-    tenantId: string;
-    userId: string;
-    ip: string | undefined;
-  }): Promise<void>;
-}
+export type VerificationThrottle = UserThrottle;
 
 // The three limits on `requestEmailVerification`, on top of janus's per-address
 // one (5 per 10 min): per user (the signed-in account), per client address and
@@ -52,9 +47,6 @@ export const emailVerificationThrottled = (retryAfter: number) =>
     },
   });
 
-// A slow Redis must not hold a request open (as in the shared core).
-const REDIS_TIMEOUT_MS = 250;
-
 /**
  * The user first (a refused user spends no address or tenant budget), then
  * the address and the tenant over the shared core. Redis down or slow: the
@@ -82,18 +74,12 @@ export function createVerificationThrottle(
   );
   return {
     async check({ tenantId, userId, ip }) {
-      let byUser: LimitResult | undefined;
-      try {
-        byUser = await limits.verifyUser.consume({ tenantId, userId }, 1, {
-          timeoutMs: REDIS_TIMEOUT_MS,
-        });
-      } catch (error) {
-        const reason =
-          error instanceof GuardError ? error.code : "connection failed";
-        log(
-          `redis unavailable: e-mail verification limits skipped (${reason})`,
-        );
-      }
+      const byUser = await consumeOrSkip(
+        limits.verifyUser,
+        { tenantId, userId },
+        "e-mail verification limits",
+        log,
+      );
       if (byUser !== undefined && !byUser.allowed) {
         throw emailVerificationThrottled(retryAfterSeconds(byUser));
       }
