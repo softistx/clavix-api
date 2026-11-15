@@ -4,7 +4,6 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
-import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { secretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
@@ -19,13 +18,9 @@ const adminHooks = (tenant: ResolvedTenant) =>
     userLock: (id) => userKey(tenant.tenantId, id),
     tenantActive: async (id) =>
       (await tenantsService.activeByIds([id])).length === 1,
-    findUser: async (id) => {
-      const tenant = await tenantResolver.resolveHost(
-        `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
-      );
-      const janus = tenant === null ? null : await forTenant(tenant);
-      return (await janus?.findUser(id)) ?? null;
-    },
+    // These hooks only serve the `clavix` tenant: `tenant` is it.
+    findUser: async (id) =>
+      (await (await forTenant(tenant))?.findUser(id)) ?? null,
   });
 
 // The users of every tenant: one janus instance per tenant over its partition

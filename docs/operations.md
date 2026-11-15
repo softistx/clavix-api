@@ -92,7 +92,7 @@ by the `Host` header, which Caddy passes untouched.
    settings of step 3); opening it makes the account and grants the `owner`
    platform role (`--role admin|viewer` for a weaker one). Re-running resends
    the invitation, and for an address that already has an account it grants the
-   role directly. Every run is recorded as the admin event `operator.grant`.
+   role directly, unless that account is disabled (the command refuses it; enable the user first). Every run is recorded as the admin event `operator.grant`.
    See the README, "Console API".
 7. Check: `curl https://console.<domain>/healthz` answers 200 and
    `dc exec api bun -e "console.log((await fetch('http://127.0.0.1:3000/readyz')).status)"`
