@@ -197,6 +197,8 @@ it. Custom domains stay on demand.
    rejects a grant with `bound`, and creates the `bound` and `clientId` indexes).
    Skipped, approving a bound grant fails with `Document failed validation`
    (code 121, `STORE_FAILED`).
+   janus-oauth-mongo 0.13 needs it again: it widens the clients validator
+   (the device grant type) and adds the device-authorization indexes.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 
