@@ -8,6 +8,13 @@ import { lifetimes } from "./lifetimes";
 import type { AuthFor, RolesFor, SigningKeysFor } from "./ports";
 import type { Keyed } from "./resolution";
 
+// janus refuses a resource with no scope (a TypeError when the server is built),
+// so a stored resource that has none is left out instead of taking the tenant down.
+const withScopes = (resources: Keyed["resources"]): Keyed["resources"] =>
+  Object.fromEntries(
+    Object.entries(resources).filter(([, { scopes }]) => scopes.length > 0),
+  );
+
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
 export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
 
@@ -34,7 +41,10 @@ export const buildIssuer =
       auth: authFor(tenant),
       store: createMongoOAuth(db, { partition: tenant.partition }),
       issuer: tenant.issuer,
-      resources: { ...resources, [userinfo]: { scopes: [...OIDC_SCOPES] } },
+      resources: {
+        ...withScopes(resources),
+        [userinfo]: { scopes: [...OIDC_SCOPES] },
+      },
       defaultResource: userinfo,
       lifetimes,
       accessTokens: {

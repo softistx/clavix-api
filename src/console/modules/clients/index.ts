@@ -49,14 +49,17 @@ const shape = (client: {
   name: string;
   type: "public" | "confidential";
   redirectUris: readonly string[];
-  grantTypes: readonly ("authorization_code" | "refresh_token")[];
+  grantTypes: readonly string[];
   createdAt: Date;
 }) => ({
   id: client.clientId,
   name: client.name,
   type: TYPE[client.type],
   redirectUris: [...client.redirectUris],
-  grantTypes: client.grantTypes.map((grant) => GRANT[grant]),
+  // The device grant (RFC 8628) is not exposed in the console until its own slice.
+  grantTypes: client.grantTypes.flatMap((grant) =>
+    Object.hasOwn(GRANT, grant) ? [GRANT[grant as keyof typeof GRANT]] : [],
+  ),
   createdAt: client.createdAt,
 });
 

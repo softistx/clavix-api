@@ -17,6 +17,7 @@ import type { AuthFor, SigningKeysFor } from "./ports";
 
 const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";
+const NO_SCOPE_RESOURCE = "https://api.clavix.test/empty";
 const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 
@@ -62,7 +63,11 @@ const issuers = createClavixOAuthIssuers({
   signingKeysFor,
   authFor,
   claimsFor: () => async () => ({}),
-  resourcesFor: () => ({ [RESOURCE]: { scopes: ["read", "write"] } }),
+  resourcesFor: () => ({
+    [RESOURCE]: { scopes: ["read", "write"] },
+    // A stored resource with no scope: left out, it must not crash the server.
+    [NO_SCOPE_RESOURCE]: { scopes: [] },
+  }),
 });
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
@@ -289,6 +294,18 @@ describe("metadata", () => {
       );
       expect(metadata["jwks_uri"]).toBe(`https://${slug}.${DOMAIN}/jwks.json`);
     }
+  });
+});
+
+describe("a resource with no scope", () => {
+  test("is left out and the tenant's server still builds and serves", async () => {
+    const response = await get(
+      "acme",
+      "/.well-known/oauth-authorization-server",
+    );
+    expect(response.status).toBe(200);
+    const server = await serverOf("acme");
+    expect(server).toBeDefined();
   });
 });
 
