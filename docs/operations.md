@@ -161,6 +161,11 @@ caddy:
 
 ## TLS
 
+Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the
+Caddyfile). Caddy's automatic HTTPS adds that redirect only for host names
+written in the config, and the catch-all site names none, so it is explicit;
+ACME HTTP-01 challenges are answered before any route and are not affected.
+
 Caddy gets a certificate for a host the first time it is asked for, but only
 after it asks the API: `GET http://api:3000/internal/tls/ask?token=...&domain=<host>`.
 The answer is 200 for
