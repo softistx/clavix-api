@@ -10,6 +10,14 @@
 	}
 }
 
+# Plain HTTP: Caddy's automatic HTTPS adds http->https redirects only for host
+# names written in the config, and the catch-all site below names none, so the
+# redirect is explicit. ACME HTTP-01 challenges are answered by Caddy before
+# any route, so this block does not get in their way.
+http:// {
+	redir https://{host}{uri} permanent
+}
+
 # Every host that reaches this server: <slug>.{$CLAVIX_DOMAIN}, console.,
 # the apex and the tenants' custom domains.
 https:// {

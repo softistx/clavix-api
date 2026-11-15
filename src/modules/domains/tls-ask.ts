@@ -70,7 +70,6 @@ export function tlsAsk(deps: TlsAskDeps) {
     if (!timingSafeEqual(digest(token), digest(deps.secret))) {
       return answer(404);
     }
-    if (deps.limit !== undefined && !(await deps.limit())) return answer(429);
     const raw = url.searchParams.get("domain") ?? "";
     const platformHost = normalizeHost(raw);
     const platform = deps.platformDomain.toLowerCase();
@@ -79,6 +78,14 @@ export function tlsAsk(deps: TlsAskDeps) {
       (platformHost === platform || platformHost.endsWith(`.${platform}`));
     let host: string;
     if (underPlatform) {
+      // Cheap shape check: the apex, `console.` or `<slug>.<domain>`.
+      if (
+        platformHost !== platform &&
+        platformHost !== `console.${platform}` &&
+        slugOfHost(platformHost, platform) === null
+      ) {
+        return answer(404);
+      }
       host = platformHost;
     } else {
       try {
@@ -87,6 +94,8 @@ export function tlsAsk(deps: TlsAskDeps) {
         return answer(404);
       }
     }
+    // The limit counts only well-formed asks: every shape check is above.
+    if (deps.limit !== undefined && !(await deps.limit())) return answer(429);
     try {
       const ok = underPlatform
         ? ((await deps.allowedPlatformHost?.(host)) ?? false)

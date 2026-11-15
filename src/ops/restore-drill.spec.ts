@@ -4,19 +4,37 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import {
+  dockerToolsAvailable,
+  writeDockerToolWrappers,
+} from "./docker-mongo-tools";
 
 // The restore drill (docs/operations.md, "Restore drill"): dump the test
 // database with scripts/mongo-backup.ts, restore the archive into a scratch
 // database with scripts/mongo-restore.ts, and compare. It needs the MongoDB
 // database tools (mongodump, mongorestore) on the PATH, or MONGODUMP and
-// MONGORESTORE pointing at them; without them it is skipped, never faked.
-const dumpBin = Bun.env["MONGODUMP"] ?? "mongodump";
-const restoreBin = Bun.env["MONGORESTORE"] ?? "mongorestore";
-const hasTools = Bun.which(dumpBin) !== null && Bun.which(restoreBin) !== null;
+// MONGORESTORE pointing at them. Without them, and when Docker answers and the
+// mongo:8 image is local, the tools run inside a throwaway mongo container
+// (src/ops/docker-mongo-tools.ts); with neither it is skipped, never faked.
+const hostDump = Bun.env["MONGODUMP"] ?? "mongodump";
+const hostRestore = Bun.env["MONGORESTORE"] ?? "mongorestore";
+const hasHostTools =
+  Bun.which(hostDump) !== null && Bun.which(hostRestore) !== null;
+const useDocker = !hasHostTools && dockerToolsAvailable();
+const hasTools = hasHostTools || useDocker;
 
 const SCRATCH = "clavix-test-drill";
 const out = mkdtempSync(join(tmpdir(), "clavix-drill-"));
 const root = join(import.meta.dir, "../..");
+const toolEnv: Record<string, string> = useDocker
+  ? (() => {
+      const wrappers = writeDockerToolWrappers(join(out, "bin"));
+      return {
+        MONGODUMP: wrappers.mongodump,
+        MONGORESTORE: wrappers.mongorestore,
+      };
+    })()
+  : {};
 
 const run = async (
   script: string,
@@ -24,7 +42,7 @@ const run = async (
   extra: Record<string, string>,
 ) => {
   const proc = Bun.spawn(["bun", join(root, "scripts", script), ...args], {
-    env: { ...Bun.env, MONGO_URI: env.MONGO_URI, ...extra },
+    env: { ...Bun.env, MONGO_URI: env.MONGO_URI, ...toolEnv, ...extra },
     stdout: "pipe",
     stderr: "pipe",
   });

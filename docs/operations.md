@@ -161,6 +161,11 @@ caddy:
 
 ## TLS
 
+Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the
+Caddyfile). Caddy's automatic HTTPS adds that redirect only for host names
+written in the config, and the catch-all site names none, so it is explicit;
+ACME HTTP-01 challenges are answered before any route and are not affected.
+
 Caddy gets a certificate for a host the first time it is asked for, but only
 after it asks the API: `GET http://api:3000/internal/tls/ask?token=...&domain=<host>`.
 The answer is 200 for
@@ -224,6 +229,12 @@ taken in step 2 (below).
 dc --profile tools run --rm backup          # archive in BACKUP_DIR (default backups/)
 ```
 
+The backup container runs as `BACKUP_UID:BACKUP_GID` (default `1000:1000`), not
+root, so the archives belong to the host user instead of root. Create the folder
+as that user first (`mkdir -p backups`), and export
+`BACKUP_UID=$(id -u) BACKUP_GID=$(id -g)` when your user is not 1000. Archives an
+earlier run left owned by root: `sudo chown -R "$(id -u):$(id -g)" backups`.
+
 The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun) that holds both. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
 
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
@@ -268,7 +279,9 @@ collection counts with production and drop `clavix-drill`. The repository's spec
 restore into a scratch database, compare collections, documents and indexes,
 refuse a damaged archive). It needs `mongodump` and `mongorestore` on the PATH
 (`brew install mongodb-database-tools`, or set `MONGODUMP` / `MONGORESTORE`) and
-is skipped without them.
+uses them. Without them, when Docker answers and the `mongo:8` image is local, the
+spec runs the tools inside a throwaway `mongo:8` container (never pulling the
+image); with neither it is skipped.
 
 The drill also covers the tenant purge (see the README, "The trash"): a backup older than a purge
 brings the purged tenant's data back, still marked as trashed and long due. After a real restore the
