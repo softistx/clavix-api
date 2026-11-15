@@ -68,6 +68,20 @@ describe(id, () => {
     }
   });
 
+  test("a stored null list is left alone", async () => {
+    await db.collection("oauthClients").insertOne({
+      _id: "nul" as never,
+      name: "nul",
+      redirectUris: [],
+      source: "registered",
+      createdAt: new Date(),
+      expiresAt: null,
+      grantTypes: null,
+    } as never);
+    await migrate(db, [clientGrantsMigration]);
+    expect(await grantsOf("oauthClients", "nul")).toBeNull();
+  });
+
   test("a second run changes nothing", async () => {
     await put("oauthClients", "c", ["authorization_code"]);
     expect(await migrateClientGrants(db)).toEqual({

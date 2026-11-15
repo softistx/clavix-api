@@ -29,7 +29,7 @@ export async function migrateClientGrants(
       await db.collection(name).updateMany(
         {
           grantTypes: {
-            $exists: true,
+            $type: "array",
             $nin: ["authorization_code", DEVICE_GRANT],
           },
         },
@@ -46,7 +46,7 @@ export async function migrateClientGrants(
       await db
         .collection(name)
         .updateMany(
-          { grantTypes: { $exists: true, $ne: [], $nin: ["refresh_token"] } },
+          { grantTypes: { $type: "array", $ne: [], $nin: ["refresh_token"] } },
           { $addToSet: { grantTypes: "refresh_token" } },
         )
     ).modifiedCount;
