@@ -121,7 +121,12 @@ services:
       dockerfile: tools.Dockerfile
     entrypoint: ["bun"]
     command: ["/scripts/mongo-backup.ts", "/backups"]
+    # Not root: the archives belong to the host user that owns BACKUP_DIR
+    # (BACKUP_UID / BACKUP_GID, default 1000:1000; `export BACKUP_UID=$(id -u)
+    # BACKUP_GID=$(id -g)` for any other). Create the folder first, as that user.
+    user: "${BACKUP_UID:-1000}:${BACKUP_GID:-1000}"
     environment:
+      HOME: /tmp
       MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
       KEEP: ${BACKUP_KEEP:-14}
     volumes:

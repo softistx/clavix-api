@@ -229,6 +229,12 @@ taken in step 2 (below).
 dc --profile tools run --rm backup          # archive in BACKUP_DIR (default backups/)
 ```
 
+The backup container runs as `BACKUP_UID:BACKUP_GID` (default `1000:1000`), not
+root, so the archives belong to the host user instead of root. Create the folder
+as that user first (`mkdir -p backups`), and export
+`BACKUP_UID=$(id -u) BACKUP_GID=$(id -g)` when your user is not 1000. Archives an
+earlier run left owned by root: `sudo chown -R "$(id -u):$(id -g)" backups`.
+
 The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun) that holds both. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
 
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
