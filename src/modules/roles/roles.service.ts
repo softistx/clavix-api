@@ -6,14 +6,9 @@ import {
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import type { resources } from "../resources/resources.model";
+import { assign, members, removeUser, unassign } from "./role-assignments";
 import { claimRoles, rolesOfUser } from "./role-claims";
-import {
-  cleanDescription,
-  cleanName,
-  conflict,
-  MAX_ID,
-  refuse,
-} from "./roles.input";
+import { cleanDescription, cleanName, conflict, refuse } from "./roles.input";
 import type { roleAssignments, roles } from "./roles.model";
 
 export type RoleDoc = ReadDocumentOf<typeof roles>;
@@ -195,65 +190,37 @@ export class RolesService {
     return own;
   }
 
-  /**
-   * Gives the user the role. Idempotent. The caller checked the user exists in
-   * the tenant's pool. `NOT_FOUND` for an unknown role.
-   */
-  async assign(
-    tenantId: ObjectId,
-    roleId: string,
-    userId: string,
-  ): Promise<void> {
-    const role = await this.find(tenantId, roleId);
-    if (role === undefined) return refuse("NOT_FOUND", "No such role");
-    if (userId.length === 0 || userId.length > MAX_ID) {
-      refuse("BAD_USER_INPUT", "userId is not an id");
-    }
-    try {
-      await this.assignmentsOf(tenantId).create({ roleId: role._id, userId });
-    } catch (error) {
-      if (!(error instanceof ConflictError)) throw error;
-    }
-    // The role may have been deleted between the check and the write: leave
-    // no assignment to a role that is gone.
-    if ((await this.find(tenantId, roleId)) === undefined) {
-      await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: role._id });
-      refuse("NOT_FOUND", "No such role");
-    }
+  /** See `assign` of `role-assignments.ts`. */
+  assign(tenantId: ObjectId, roleId: string, userId: string): Promise<void> {
+    return assign(
+      this.assignmentsOf(tenantId),
+      (id) => this.find(tenantId, id),
+      roleId,
+      userId,
+    );
   }
 
   /** `true` when the user held the role. */
-  async unassign(
+  unassign(
     tenantId: ObjectId,
     roleId: string,
     userId: string,
   ): Promise<boolean> {
-    if (!ObjectId.isValid(roleId)) return false;
-    return (
-      (await this.assignmentsOf(tenantId).hardDeleteMany({
-        roleId: new ObjectId(roleId),
-        userId,
-      })) > 0
-    );
+    return unassign(this.assignmentsOf(tenantId), roleId, userId);
   }
 
   /** Removes every assignment of a deleted user. */
-  async removeUser(tenantId: ObjectId, userId: string): Promise<number> {
-    return this.assignmentsOf(tenantId).hardDeleteMany({ userId });
+  removeUser(tenantId: ObjectId, userId: string): Promise<number> {
+    return removeUser(this.assignmentsOf(tenantId), userId);
   }
 
   /** One page of a role's assignments, oldest first. */
-  async members(
+  members(
     tenantId: ObjectId,
     roleId: string,
     page: { after: string | null; limit: number },
   ): Promise<{ items: AssignmentDoc[]; nextCursor: string | null }> {
-    if (!ObjectId.isValid(roleId)) return { items: [], nextCursor: null };
-    return this.assignmentsOf(tenantId).paginateByCursor({
-      filter: { roleId: new ObjectId(roleId) },
-      after: page.after,
-      limit: page.limit,
-    });
+    return members(this.assignmentsOf(tenantId), roleId, page);
   }
 
   /** How many users hold the role (assignments), whatever the page. 0 for an unknown role. */

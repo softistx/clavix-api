@@ -1,10 +1,4 @@
 import {
-  BACKGROUND_PRESETS,
-  type BackgroundPreset,
-  MOTIF_SHAPES_ALL,
-  type MotifShape,
-} from "@softistx/material-core/backgrounds";
-import {
   type ContrastResult,
   checkThemeContrast,
   defineTheme,
@@ -13,27 +7,25 @@ import {
   type ThemeWarning,
   themeToCss,
 } from "@softistx/material-core/theme";
+import { assertSafeCss } from "./safe-css";
+import {
+  BrandingInputError,
+  type ThemeInput,
+  type ValidThemeInput,
+  validateThemeInput,
+} from "./theme-input";
+
+export { assertSafeCss } from "./safe-css";
+export {
+  BrandingInputError,
+  DEFAULT_RADIUS,
+  type ThemeInput,
+  type ValidThemeInput,
+  validateThemeInput,
+} from "./theme-input";
 
 /** The theme's name: the value of `data-nxgt-theme` the hosted pages and the console preview set. */
 export const THEME_NAME = "tenant";
-
-export interface ThemeInput {
-  displayName: string;
-  /** The brand's primary colour (`#rgb`, `#rrggbb`, `rgb()`, `oklch()`...). */
-  seed: string;
-  /** A CSS length in `rem` or `px`, 0 to 3rem. */
-  radius: string;
-  backgroundPreset: string | null;
-  motif: string | null;
-}
-
-/** A `ThemeInput` that passed `validateThemeInput`: trimmed, its preset and motif known ids. */
-export interface ValidThemeInput extends ThemeInput {
-  backgroundPreset: BackgroundPreset | null;
-  motif: MotifShape | null;
-}
-
-export const DEFAULT_RADIUS = "0.5rem";
 
 /** A pair that fails its minimum ratio in one mode. */
 export interface ContrastFailure {
@@ -42,16 +34,6 @@ export interface ContrastFailure {
   mode: string;
   ratio: number;
   minimum: number;
-}
-
-export class BrandingInputError extends Error {
-  readonly code = "BAD_USER_INPUT";
-  constructor(
-    readonly field: string,
-    message: string,
-  ) {
-    super(message);
-  }
 }
 
 /** The brand's colours do not meet WCAG AA (`BRANDING_CONTRAST`). */
@@ -79,48 +61,6 @@ export interface CompiledTheme {
 /** Compiles a theme and measures it; what `updateBranding` runs. Injectable for specs. */
 export type CompileTheme = (input: ValidThemeInput) => CompiledTheme;
 
-const RADIUS = /^(\d{1,2}(?:\.\d{1,3})?)(rem|px)$/;
-const PRESETS = new Set<string>(BACKGROUND_PRESETS.map((p) => p.id));
-const SHAPES = new Set<string>(MOTIF_SHAPES_ALL);
-const isPreset = (value: string): value is BackgroundPreset =>
-  PRESETS.has(value);
-const isShape = (value: string): value is MotifShape => SHAPES.has(value);
-
-/** Checks the input's shape; throws `BrandingInputError`. Returns it trimmed. */
-export function validateThemeInput(input: ThemeInput): ValidThemeInput {
-  const displayName = input.displayName.trim();
-  if (displayName === "" || displayName.length > 80) {
-    throw new BrandingInputError("displayName", "1 to 80 characters");
-  }
-  const radius = input.radius.trim();
-  const match = RADIUS.exec(radius);
-  const value = Number(match?.[1]);
-  const max = match?.[2] === "px" ? 48 : 3;
-  if (match === null || value > max) {
-    throw new BrandingInputError(
-      "radius",
-      "a length in rem or px, up to 3rem (48px)",
-    );
-  }
-  const { backgroundPreset, motif } = input;
-  if (backgroundPreset !== null && !isPreset(backgroundPreset)) {
-    throw new BrandingInputError(
-      "backgroundPreset",
-      "an unknown background preset",
-    );
-  }
-  if (motif !== null && !isShape(motif)) {
-    throw new BrandingInputError("motif", "an unknown motif shape");
-  }
-  return {
-    displayName,
-    seed: input.seed.trim(),
-    radius,
-    backgroundPreset,
-    motif,
-  };
-}
-
 /** The theme definition of a brand: one seed, a radius, and the background when a preset is chosen. */
 export function themeDefinitionOf(input: ValidThemeInput): ThemeDefinition {
   return {
@@ -140,31 +80,6 @@ export function themeDefinitionOf(input: ValidThemeInput): ThemeDefinition {
           },
         }),
   };
-}
-
-// `<` and a backslash are refused anywhere, comments included: the HTML parser
-// ends a `<style>` at `</style` inside a comment too. The other tokens are
-// looked for once comments are stripped, so `u/**/rl(` cannot hide them.
-const UNSAFE_RAW = /<|\\/;
-const UNSAFE_TOKENS = /@import|url\(|image-set\(|src\(|image\(|cross-fade\(/i;
-
-/**
- * Refuses a tenant stylesheet that could close the hosted pages' `<style>`,
- * load a resource or hide a token behind an escape: `<`, `@import`, `url(`,
- * `image-set(`, `src(` or a backslash, in any case (`<` and the backslash
- * even inside a comment; the other tokens once comments are stripped). Every write of a tenant's CSS goes through `buildTheme`, which
- * calls it; the UI refuses the same at read (`safeCss`). Throws
- * `BrandingInputError` on field `css`.
- */
-export function assertSafeCss(css: string): void {
-  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const found = UNSAFE_RAW.exec(css) ?? UNSAFE_TOKENS.exec(stripped);
-  if (found !== null) {
-    throw new BrandingInputError(
-      "css",
-      `the theme's CSS is not safe: it contains "${found[0].toLowerCase()}", which a tenant stylesheet may not use (no <, @import, url(, image-set(, src( or backslash)`,
-    );
-  }
 }
 
 /**

@@ -9,9 +9,9 @@ import { ObjectId } from "mongodb";
 import { env } from "@/config/env";
 import { dropTenantHosts } from "./hosts";
 import type { PlanId, QuotaOverrides } from "./plan.schema";
+import { createPurgeRegistry, type PurgeRegistry } from "./purge-registry";
 import type { Tenant, tenants } from "./tenants.model";
 import type { TenantsService } from "./tenants.service";
-import { purgeCutoff } from "./trash.schema";
 
 /** Where a tenant stands for the console: `deleted` is the trash. */
 export type TenantState = "active" | "suspended" | "deleted";
@@ -76,6 +76,7 @@ export class TenantAdminService {
     tenantId: ObjectId,
   ) => string[] | Promise<string[]>;
   private readonly log: (message: string) => void;
+  private readonly purges: PurgeRegistry;
 
   constructor(
     private readonly collection: TypedCollection<typeof tenants>,
@@ -86,6 +87,9 @@ export class TenantAdminService {
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
     this.hostsOf = options.hostsOf ?? (() => []);
     this.log = options.log ?? ((message) => console.warn(message));
+    this.purges = createPurgeRegistry(collection, (tenant) =>
+      this.changed(tenant),
+    );
   }
 
   /** The tenant with this id (hex), in the trash or not; `undefined` when unknown or being purged. */
@@ -238,47 +242,17 @@ export class TenantAdminService {
 
   /** The tenants whose 30 days are over at `now`, a purge left unfinished included. */
   purgeDue(now: Date): Promise<Tenant[]> {
-    return this.collection.findMany({
-      filter: {
-        deletedAt: { $lte: purgeCutoff(now) },
-        purgedAt: { $exists: false },
-      },
-      withDeleted: true,
-    });
+    return this.purges.purgeDue(now);
   }
 
-  /**
-   * Claims the tenant for the purge: from here it resolves nowhere and cannot
-   * be restored. `false` when it is not in the trash, not due at `now`, or
-   * already purged; claiming again an unfinished purge is `true` (a resume).
-   */
-  async claimPurge(tenant: Tenant, now: Date): Promise<boolean> {
-    const result = await this.collection.raw.updateOne(
-      {
-        _id: tenant._id,
-        deletedAt: { $ne: null, $lte: purgeCutoff(now) },
-        purgedAt: { $exists: false },
-      },
-      { $set: { purgeStartedAt: now }, $inc: { version: 1 } },
-    );
-    if (result.matchedCount === 0) return false;
-    await this.changed(tenant);
-    return true;
+  /** See `PurgeRegistry.claimPurge`. */
+  claimPurge(tenant: Tenant, now: Date): Promise<boolean> {
+    return this.purges.claimPurge(tenant, now);
   }
 
-  /**
-   * Ends a purge: what stays is the tombstone (the slug, `deletedAt`,
-   * `purgedAt`), which keeps the slug reserved for ever through the unique
-   * index. The name goes with the data.
-   */
-  async markPurged(tenant: Tenant, now: Date): Promise<void> {
-    await this.collection.raw.updateOne(
-      { _id: tenant._id, purgeStartedAt: { $exists: true } },
-      {
-        $set: { purgedAt: now, name: "", signUp: false, quotaOverrides: {} },
-        $inc: { version: 1 },
-      },
-    );
+  /** See `PurgeRegistry.markPurged`. */
+  markPurged(tenant: Tenant, now: Date): Promise<void> {
+    return this.purges.markPurged(tenant, now);
   }
 
   // As `TenantsService.setStatus`: the version read is the version expected,
