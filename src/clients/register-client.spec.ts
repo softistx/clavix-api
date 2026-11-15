@@ -244,6 +244,38 @@ describe("registerClient", () => {
     expect(await store.findClient("app")).toBeNull();
   });
 
+  test("--grants is stored as written, in the offered order, and kept by a re-run without it", async () => {
+    const base = { tenant: "regalpha", redirectUris: [REDIRECT] };
+    const store = await storeOf("regalpha");
+    await registerClient(options, {
+      ...base,
+      name: "Code only",
+      grants: ["authorization_code"],
+    });
+    expect((await store.findClient("code-only"))?.grantTypes).toEqual([
+      "authorization_code",
+    ]);
+    await registerClient(options, {
+      ...base,
+      name: "Code only",
+      grants: ["refresh_token", "authorization_code"],
+    });
+    expect((await store.findClient("code-only"))?.grantTypes).toEqual([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    await registerClient(options, { ...base, name: "Code only" });
+    expect((await store.findClient("code-only"))?.grantTypes).toEqual([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    await registerClient(options, { ...base, name: "Fresh" });
+    expect((await store.findClient("fresh"))?.grantTypes).toEqual([
+      "authorization_code",
+      "refresh_token",
+    ]);
+  });
+
   test("bad input is refused before anything is written", async () => {
     const base = { tenant: "regalpha", name: "Bad", redirectUris: [REDIRECT] };
     for (const input of [
@@ -252,6 +284,8 @@ describe("registerClient", () => {
       { ...base, redirectUris: ["http://app.example/cb"] },
       { ...base, redirectUris: ["https://app.example/cb#frag"] },
       { ...base, grants: ["client_credentials"] },
+      { ...base, grants: [] },
+      { ...base, grants: ["refresh_token"] },
       { ...base, clientId: "Not Valid" },
     ]) {
       await expect(registerClient(options, input)).rejects.toBeInstanceOf(

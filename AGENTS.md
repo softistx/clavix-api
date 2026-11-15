@@ -283,7 +283,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   no search: `q` is applied by `listClientViews` (`client-listing.ts`), which reads what the page still lacks until it is full
   (at most 20 reads, then a short page with its cursor), so the store's cursor stays the page's. `totalCount` (`countClientViews`, same filter, every page read at 100) ignores the cursor.
   `deleteClient` deletes the client, then calls `revokeClientGrants` (grants and tokens), on a
-  repeat too. `Client.grantTypes` shows what the record holds; nothing enforces it. The store
+  repeat too. `Client.grantTypes` shows what the record holds, and janus-oauth 0.13 enforces it (`unauthorized_client` on `/authorize`, the code exchange and the refresh grant); the console sends no list, so a console client takes the default `authorization_code` + `refresh_token`. The store
   has no insert-only write, so `createClient`, `updateClient`, `rotateClientSecret` and `deleteClient` run under `ctx.exclusive(clientsKey(tenant), ...)` (a racing delete never brings a client back; an update or rotation of a missing client is `NOT_FOUND`, from `ClientsService.require` inside the lock)
   (`console:clients:<hex>`, the same queue and Redis lock as the admins): the id check and the
   upsert of two creations of one id are never interleaved (one wins, the other is `CONFLICT`), and
@@ -543,9 +543,7 @@ in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through t
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
-`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is recorded on the client (`grantTypes`,
-shown by the console) but not enforced by janus's token endpoint; the script refuses all but code
-and refresh. A client keeps its type: re-running a
+`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is stored on the client (`grantTypes`, shown by the console) and enforced by janus-oauth 0.13, which takes an explicit list as written: the script refuses all but code and refresh, and a list must name `authorization_code` (`refresh_token` alone is refused), plus `refresh_token` for a client that refreshes. The migration `2026-11-15-client-grants` (`db:migrate`) repairs stored lists written before 0.13. A client keeps its type: re-running a
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 

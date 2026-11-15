@@ -22,6 +22,16 @@ export const fingerprintOf = (
     ),
   ).toString(36);
 
+// janus refuses a resource with no scope (a TypeError when the server is built)
+// and the introspection list must not name one, so a stored resource that has
+// none is left out here, once, for both.
+const withScopes = (
+  resources: Readonly<Record<string, OAuthResource>>,
+): Readonly<Record<string, OAuthResource>> =>
+  Object.fromEntries(
+    Object.entries(resources).filter(([, { scopes }]) => scopes.length > 0),
+  );
+
 /**
  * janus's `resolve`: the request's host to its tenant (`null`: none, a 404) and
  * the tenant's stored resources, whose fingerprint is part of the version.
@@ -34,7 +44,7 @@ export const resolveIssuer =
   async (request: Request): Promise<Keyed | null> => {
     const tenant = await resolver.resolveRequest(request);
     if (tenant === null) return null;
-    const resources = (await resourcesFor?.(tenant)) ?? {};
+    const resources = withScopes((await resourcesFor?.(tenant)) ?? {});
     return {
       issuer: tenant.issuer,
       version: `${tenant.version}.${fingerprintOf(resources)}`,
