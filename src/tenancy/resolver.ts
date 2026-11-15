@@ -109,6 +109,63 @@ async function attempt<T>(
   }
 }
 
+// The tenant a host belongs to, from the stores: a slug host by its slug, a
+// custom host through the domains. `null`: not a host of ours.
+async function loadTenant(
+  options: TenantResolverOptions,
+  host: string,
+  slug: string | null,
+): Promise<ResolvedTenant | null> {
+  let record: TenantRecord | undefined;
+  if (slug !== null) {
+    record = await options.lookup(slug);
+  } else {
+    const id = await options.domains?.tenantOfHost(host);
+    record = id === undefined ? undefined : await options.lookupById?.(id);
+  }
+  const primary =
+    record === undefined
+      ? undefined
+      : await options.domains?.primaryHostOf(record._id);
+  return toResolved(record, options.config, primary);
+}
+
+const stamp = (tenant: ResolvedTenant | null) =>
+  tenant === null ? null : [tenant.version, tenant.issuer, tenant.status];
+
+// Cache-aside: read the cache, else load and store, then re-check.
+async function resolveCached(
+  options: TenantResolverOptions,
+  log: (message: string) => void,
+  host: string,
+  slug: string | null,
+): Promise<ResolvedTenant | null> {
+  const { cache } = options;
+  const hitTtl = options.hitTtl ?? 60;
+  const missTtl = options.missTtl ?? 30;
+  const cached = await attempt(log, "read", host, () => cache.get(host));
+  if (cached !== undefined) return cached;
+
+  const resolved = await loadTenant(options, host, slug);
+  // An unknown custom host is not cached: any Host header would fill the cache.
+  const keep = slug !== null || resolved !== null;
+  if (keep) {
+    await attempt(log, "write", host, () =>
+      cache.set(host, resolved, resolved === null ? missTtl : hitTtl),
+    );
+  }
+  // Cache-aside race: a write (suspend, delete, create, a domain) may have
+  // run its invalidation between our read and our `set`, leaving a stale
+  // entry. Read again; if it changed, drop what we just stored.
+  // Nothing was stored with `noTenantCache`, so there is nothing to drop.
+  if (cache === noTenantCache || !keep) return resolved;
+  const after = await loadTenant(options, host, slug);
+  if (JSON.stringify(stamp(after)) !== JSON.stringify(stamp(resolved))) {
+    await attempt(log, "delete", host, () => cache.delete(host));
+  }
+  return resolved;
+}
+
 /**
  * Host to tenant: `<slug>.<CLAVIX_DOMAIN>` with a tenant of that slug, whatever
  * its status (a purged one is none): the callers that open or extend a session
@@ -119,32 +176,8 @@ async function attempt<T>(
 export function createTenantResolver(
   options: TenantResolverOptions,
 ): TenantResolver {
-  const { lookup, cache, config } = options;
+  const { cache, config } = options;
   const log = options.log ?? ((message) => console.warn(message));
-  const hitTtl = options.hitTtl ?? 60;
-  const missTtl = options.missTtl ?? 30;
-
-  // The tenant a host belongs to, from the stores: a slug host by its slug, a
-  // custom host through the domains. `undefined`: not a host of ours.
-  const load = async (
-    host: string,
-    slug: string | null,
-  ): Promise<ResolvedTenant | null> => {
-    let record: TenantRecord | undefined;
-    if (slug !== null) {
-      record = await lookup(slug);
-    } else {
-      const id = await options.domains?.tenantOfHost(host);
-      record = id === undefined ? undefined : await options.lookupById?.(id);
-    }
-    const primary =
-      record === undefined
-        ? undefined
-        : await options.domains?.primaryHostOf(record._id);
-    return toResolved(record, config, primary);
-  };
-  const stamp = (tenant: ResolvedTenant | null) =>
-    tenant === null ? null : [tenant.version, tenant.issuer, tenant.status];
 
   const resolveHost = async (raw: string) => {
     const host = normalizeHost(raw);
@@ -156,28 +189,7 @@ export function createTenantResolver(
     // Under the platform apex but not a valid slug: never a custom domain.
     if (slug === null && host.endsWith(`.${config.domain}`)) return null;
     if (slug === null && host === config.domain) return null;
-
-    const cached = await attempt(log, "read", host, () => cache.get(host));
-    if (cached !== undefined) return cached;
-
-    const resolved = await load(host, slug);
-    // An unknown custom host is not cached: any Host header would fill the cache.
-    const keep = slug !== null || resolved !== null;
-    if (keep) {
-      await attempt(log, "write", host, () =>
-        cache.set(host, resolved, resolved === null ? missTtl : hitTtl),
-      );
-    }
-    // Cache-aside race: a write (suspend, delete, create, a domain) may have
-    // run its invalidation between our read and our `set`, leaving a stale
-    // entry. Read again; if it changed, drop what we just stored.
-    // Nothing was stored with `noTenantCache`, so there is nothing to drop.
-    if (cache === noTenantCache || !keep) return resolved;
-    const after = await load(host, slug);
-    if (JSON.stringify(stamp(after)) !== JSON.stringify(stamp(resolved))) {
-      await attempt(log, "delete", host, () => cache.delete(host));
-    }
-    return resolved;
+    return resolveCached(options, log, host, slug);
   };
 
   return {
