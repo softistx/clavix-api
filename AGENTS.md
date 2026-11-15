@@ -61,7 +61,7 @@ A resource is an API of a tenant (RFC 8707): its `uri` is the `aud` of the acces
 `resource=<uri>`, its scopes what a client may request on it. `bun run resources:create --tenant
 <slug> --uri <https uri> --scope <s> [--scope <s>] [--name <label>]` stores or updates one
 (idempotent on the URI; the scopes are replaced), beside the console. The `resources` and `scopes`
-collections are tenant-owned and reached only through `scopeToTenant` (`Catalog` in `catalog.ts`,
+collections are tenant-owned and reached only through `scopeToTenant` (`Catalog` in `catalog/index.ts`,
 `storedResourcesFor`, `registerResource`; `src/config/resources.ts` exports `catalog`,
 `registerStoredResource` and `scopeTextsFor`, never the collections), so a resource of tenant A is unknown to B (`invalid_target`); the source scan
 in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/resources.ts`.
