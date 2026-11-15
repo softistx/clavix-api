@@ -77,19 +77,19 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
       ctx,
       tenant,
       userId,
-      () =>
-        ctx.exclusive(userKey(tenantId, userId), async () => {
-          await ctx.users.delete(tenantId, userId);
-          // Their role assignments go with them; on a repeat too, so a retry
-          // finishes what a failed first run left.
-          await rolesService.removeUser(new ObjectId(tenantId), userId);
-          // An operator (a user of `clavix`) also holds console roles: they go
-          // too, or a deleted account would keep its platform and tenant roles.
-          if (tenant.slug === PLATFORM_TENANT_SLUG) {
-            await ctx.access.removeUser(userId);
-          }
-        }),
+      async () => {
+        await ctx.users.delete(tenantId, userId);
+        // Their role assignments go with them; on a repeat too, so a retry
+        // finishes what a failed first run left.
+        await rolesService.removeUser(new ObjectId(tenantId), userId);
+        // An operator (a user of `clavix`) also holds console roles: they go
+        // too, or a deleted account would keep its platform and tenant roles.
+        if (tenant.slug === PLATFORM_TENANT_SLUG) {
+          await ctx.access.removeUser(userId);
+        }
+      },
       "delete",
+      userKey(tenantId, userId),
     );
     await ctx.audit("user.delete", target("user", userId, tenantId));
     return true;
@@ -143,13 +143,11 @@ async function setActive(
         ctx,
         tenant,
         userId,
-        // Under the user lock like the accept hooks: an owner role is not
-        // granted to an account disabled meanwhile.
-        () =>
-          ctx.exclusive(userKey(tenantId, userId), () =>
-            ctx.users.setActive(tenantId, userId, false),
-          ),
+        // Under the user lock (taken by `keepOwners`) like the accept hooks:
+        // an owner role is not granted to an account disabled meanwhile.
+        () => ctx.users.setActive(tenantId, userId, false),
         "disable",
+        userKey(tenantId, userId),
       ));
   if (user === null) throw denial("NOT_FOUND", "No such user");
   await ctx.audit(

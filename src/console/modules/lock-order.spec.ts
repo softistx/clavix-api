@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { rolesService } from "@/config/roles";
 import { adminScope } from "@/invitations/scope";
 import type { ConsoleContext } from "../context";
 import { createExclusive } from "../exclusive";
 import { adminInvitationHooks } from "./admins/accept";
 import { membersKey, PLATFORM_OWNERS_KEY } from "./admins/service";
 import { userKey } from "./user-key";
+import { userMutations } from "./users/mutations";
 import { keepOwners } from "./users/operators";
 
 // The lock order every writer keeps, so two of them cannot deadlock:
@@ -72,8 +74,9 @@ describe("the lock order", () => {
       ctx,
       { slug: "clavix" },
       "u",
-      () => exclusive(userKey(PLATFORM_ID, "u"), async () => {}),
+      async () => {},
       "delete",
+      userKey(PLATFORM_ID, "u"),
     );
     expect(taken.map((t) => t.key)).toEqual([
       PLATFORM_OWNERS_KEY,
@@ -107,5 +110,85 @@ describe("the lock order", () => {
       userKey(PLATFORM_ID, "u"),
     ]);
     expectOrdered(taken);
+  });
+
+  const consoleCtx = (exclusive: ConsoleContext["exclusive"]) =>
+    ({
+      exclusive,
+      canPlatform: async () => true,
+      audit: async () => {},
+      directory: {
+        tenantsByIds: async () => [{ slug: "clavix", name: "Clavix" }],
+        findUser: async (id: string) => ({ id, active: true }),
+      },
+      users: {
+        setActive: async (_t: string, id: string, active: boolean) => ({
+          id,
+          active,
+        }),
+        delete: async () => {},
+      },
+      access: {
+        memberships: async () => [{ tenantId: TENANT_A, role: "owner" }],
+        platformRole: async () => null,
+        owners: async () => ["u", "other"],
+        platformOwners: async () => [],
+        removeUser: async () => {},
+      },
+    }) as unknown as ConsoleContext;
+  const call = (
+    field: "disableUser" | "deleteUser",
+    ctx: ConsoleContext,
+  ): Promise<unknown> =>
+    (
+      userMutations[field] as unknown as (
+        parent: unknown,
+        args: unknown,
+        ctx: ConsoleContext,
+      ) => Promise<unknown>
+    )(null, { tenantId: PLATFORM_ID, userId: "u" }, ctx);
+
+  test("disableUser: members, then the user, innermost", async () => {
+    const { exclusive, taken } = recording();
+    await call("disableUser", consoleCtx(exclusive));
+    expect(taken.map((t) => t.key)).toEqual([
+      PLATFORM_OWNERS_KEY,
+      membersKey(TENANT_A),
+      userKey(PLATFORM_ID, "u"),
+    ]);
+    expectOrdered(taken);
+  });
+
+  test("deleteUser takes the same user key as the invitation hooks", async () => {
+    const { exclusive, taken } = recording();
+    const rm = spyOn(rolesService, "removeUser").mockResolvedValue(
+      undefined as never,
+    );
+    try {
+      await call("deleteUser", consoleCtx(exclusive));
+    } finally {
+      rm.mockRestore();
+    }
+    const hooksLocks = recording();
+    const hooks = adminInvitationHooks({
+      access: {
+        holders: async () => [],
+        grantTenant: async () => {},
+        grantPlatform: async () => {},
+        platformRole: async () => null,
+      },
+      exclusive: hooksLocks.exclusive,
+      userLock: (id: string) => userKey(PLATFORM_ID, id),
+      tenantActive: async () => true,
+      findUser: async () => ({ active: true }),
+    } as never);
+    await hooks.onAccepted({
+      invitation: { scope: adminScope(TENANT_A), role: "admin" },
+      user: { id: "u" },
+    } as never);
+    const userKeys = (t: typeof taken) =>
+      t.map((x) => x.key).filter((k) => k.startsWith("console:user:"));
+    expect(userKeys(taken)).toEqual(userKeys(hooksLocks.taken));
+    expect(userKeys(taken)).toEqual([userKey(PLATFORM_ID, "u")]);
   });
 });

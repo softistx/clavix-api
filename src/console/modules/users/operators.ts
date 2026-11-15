@@ -40,7 +40,10 @@ class OwnershipMoved extends Error {
  * work; the roles are read again under the locks, and the whole step starts
  * over when one was granted meanwhile. The locks are nested (10 s TTL each,
  * see `exclusive.ts`): the guarantee holds while the whole step stays under it.
- * A user of another tenant is not an operator: `work` runs as is.
+ * `work` and the last read of the roles run inside the user's own lock
+ * (`userLock`, `userKey`), the innermost one: a role granted to the user
+ * (under that lock) cannot land between the read and the work. A user of
+ * another tenant is not an operator: only the user lock is taken.
  */
 export async function keepOwners<T>(
   ctx: ConsoleContext,
@@ -48,8 +51,11 @@ export async function keepOwners<T>(
   userId: string,
   work: () => Promise<T>,
   kind: "disable" | "delete",
+  userLock: string,
 ): Promise<T> {
-  if (tenant.slug !== PLATFORM_TENANT_SLUG) return work();
+  if (tenant.slug !== PLATFORM_TENANT_SLUG) {
+    return ctx.exclusive(userLock, work);
+  }
   const guard = async (owns: boolean) => {
     if (
       (owns || (await ctx.access.platformRole(userId)) !== null) &&
@@ -88,10 +94,12 @@ export async function keepOwners<T>(
     }
     return work();
   };
+  // The user lock is the innermost one: members, then the user.
+  const underUser = () => ctx.exclusive(userLock, inside);
   const nest = (rest: readonly string[]): Promise<T> => {
     const [next, ...others] = rest;
     return next === undefined
-      ? inside()
+      ? underUser()
       : ctx.exclusive(membersKey(next), () => nest(others));
   };
   // The platform owners lock comes first, always: a fixed order.

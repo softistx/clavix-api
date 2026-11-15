@@ -39,19 +39,19 @@ bun dev            # http://localhost:3000/graphql and /healthz
 
 ## Scripts
 
-| Script                    | Does                                                                      |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `generate`                | scalar/validation SDL, then GraphQL codegen                               |
-| `dev`, `build`, `start`   | watch server; bundle into `dist/`; run the bundle                         |
-| `test`                    | `bun test`                                                                |
-| `typecheck`               | `bun check`                                                               |
-| `lint`, `fix`, `check:ci` | Biome                                                                     |
-| `db:sync`, `db:migrate`   | collections, indexes and relations; pending migrations (deployment steps) |
-| `tenants:create`          | create a tenant (see "Tenants")                                           |
-| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")      |
-| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")   |
-| `operators:grant`         | give a clavix-tenant user a platform role for the console (`--email`)     |
-| `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`)  |
+| Script                    | Does                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------- |
+| `generate`                | scalar/validation SDL, then GraphQL codegen                                                       |
+| `dev`, `build`, `start`   | watch server; bundle into `dist/`; run the bundle                                                 |
+| `test`                    | `bun test`                                                                                        |
+| `typecheck`               | `bun check`                                                                                       |
+| `lint`, `fix`, `check:ci` | Biome                                                                                             |
+| `db:sync`, `db:migrate`   | collections, indexes and relations; pending migrations (deployment steps)                         |
+| `tenants:create`          | create a tenant (see "Tenants")                                                                   |
+| `clients:create`          | register or update an OAuth client on a tenant (see "OAuth clients")                              |
+| `resources:create`        | register or update a tenant's API resource and scopes (see "Resources")                           |
+| `operators:grant`         | give a clavix-tenant user a platform role for the console (`--email`; refuses a disabled account) |
+| `verify`                  | `generate`, `check:ci`, `typecheck`, `test` (what CI runs, plus `build`)                          |
 
 Every script reads `MONGO_URI` and validates the rest of the environment below at start, so with `NODE_ENV=production` a script also needs the production-required variables. What each
 one needs on top:

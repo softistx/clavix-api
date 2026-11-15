@@ -57,9 +57,9 @@ const code = async (run: Promise<unknown>) =>
     (e: { extensions?: { code?: string } }) => e.extensions?.code,
   );
 const disable = (ctx: ConsoleContext, id: string) =>
-  keepOwners(ctx, PLATFORM, id, async () => "done", "disable");
+  keepOwners(ctx, PLATFORM, id, async () => "done", "disable", `u:${id}`);
 const remove = (ctx: ConsoleContext, id: string) =>
-  keepOwners(ctx, PLATFORM, id, async () => "done", "delete");
+  keepOwners(ctx, PLATFORM, id, async () => "done", "delete", `u:${id}`);
 
 describe("the last live platform owner", () => {
   test("cannot be disabled or deleted", async () => {
@@ -86,10 +86,39 @@ describe("the last live platform owner", () => {
           platform.splice(platform.indexOf(id), 1);
         },
         "delete",
+        `u:${id}`,
       );
     const results = await Promise.all([drop("p1"), drop("p2")].map(code));
     expect(results.sort()).toEqual(["LAST_OWNER", "ok"]);
     expect(platform).toHaveLength(1);
+  });
+});
+
+describe("the user lock", () => {
+  test("is held when the memberships are read the last time", async () => {
+    const key = "u:o1";
+    const held: string[] = [];
+    let readsUnder: boolean[] = [];
+    const base = fake({
+      owners: { t1: ["o1", "o2"] },
+      onMemberships: () => {
+        readsUnder.push(held.includes(key));
+      },
+    });
+    const inner = base.exclusive;
+    (base as { exclusive: unknown }).exclusive = ((
+      k: string,
+      work: () => Promise<unknown>,
+    ) =>
+      inner(k, () => {
+        held.push(k);
+        return work().finally(() => held.pop());
+      })) as typeof base.exclusive;
+    readsUnder = [];
+    await keepOwners(base, PLATFORM, "o1", async () => "done", "delete", key);
+    // The first reads (the guard, the tenants to lock) are before any lock; the
+    // one that decides runs under the user lock.
+    expect(readsUnder.at(-1)).toBe(true);
   });
 });
 
