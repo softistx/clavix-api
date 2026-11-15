@@ -58,7 +58,7 @@ const shape = (client: {
   redirectUris: [...client.redirectUris],
   // The device grant (RFC 8628) is not exposed in the console until its own slice.
   grantTypes: client.grantTypes.flatMap((grant) =>
-    grant in GRANT ? [GRANT[grant as keyof typeof GRANT]] : [],
+    Object.hasOwn(GRANT, grant) ? [GRANT[grant as keyof typeof GRANT]] : [],
   ),
   createdAt: client.createdAt,
 });
