@@ -120,6 +120,30 @@ describe("tlsAsk", () => {
     expect(asked).toBe(0);
   });
 
+  test("malformed asks are refused without spending a limit slot", async () => {
+    let spent = 0;
+    const handler = ask({
+      limit: async () => {
+        spent++;
+        return true;
+      },
+    });
+    for (const domain of ["a.b.clavix.test", "1.2.3.4", "localhost", ""]) {
+      expect(
+        (await get(handler, `token=${SECRET}&domain=${domain}`)).status,
+      ).toBe(404);
+    }
+    expect((await get(handler, "token=nope&domain=auth.acme.com")).status).toBe(
+      404,
+    );
+    expect(spent).toBe(0);
+    // a well-formed ask does spend one
+    expect(
+      (await get(handler, `token=${SECRET}&domain=auth.acme.com`)).status,
+    ).toBe(200);
+    expect(spent).toBe(1);
+  });
+
   test("a failing lookup answers 404", async () => {
     const handler = ask({
       allowed: async () => {
