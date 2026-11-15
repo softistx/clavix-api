@@ -279,7 +279,9 @@ collection counts with production and drop `clavix-drill`. The repository's spec
 restore into a scratch database, compare collections, documents and indexes,
 refuse a damaged archive). It needs `mongodump` and `mongorestore` on the PATH
 (`brew install mongodb-database-tools`, or set `MONGODUMP` / `MONGORESTORE`) and
-is skipped without them.
+uses them. Without them, when Docker answers and the `mongo:8` image is local, the
+spec runs the tools inside a throwaway `mongo:8` container (never pulling the
+image); with neither it is skipped.
 
 The drill also covers the tenant purge (see the README, "The trash"): a backup older than a purge
 brings the purged tenant's data back, still marked as trashed and long due. After a real restore the
