@@ -19,9 +19,8 @@ type Client {
   "Exact-match redirect URIs."
   redirectUris: [String!]!
   """
-  The grant types recorded on the client, for display only: the token endpoint
-  does not enforce them, so every client may use both. Both when the client
-  records none.
+  The grant types the client may use, enforced by the token endpoint
+  (`unauthorized_client` for another). Both when the client records none.
   """
   grantTypes: [ClientGrantType!]!
   createdAt: DateTime!

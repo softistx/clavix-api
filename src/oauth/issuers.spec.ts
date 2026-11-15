@@ -14,6 +14,7 @@ import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { createClavixOAuthIssuers } from "./issuers";
 import type { AuthFor, SigningKeysFor } from "./ports";
+import { resolveIssuer } from "./resolution";
 
 const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";
@@ -57,17 +58,18 @@ const authFor: AuthFor = (tenant) => {
   };
 };
 
+// A stored resource with no scope: left out, it must not crash the server.
+const resourcesFor = () => ({
+  [RESOURCE]: { scopes: ["read", "write"] },
+  [NO_SCOPE_RESOURCE]: { scopes: [] },
+});
 const issuers = createClavixOAuthIssuers({
   resolver,
   db: oauthDb,
   signingKeysFor,
   authFor,
   claimsFor: () => async () => ({}),
-  resourcesFor: () => ({
-    [RESOURCE]: { scopes: ["read", "write"] },
-    // A stored resource with no scope: left out, it must not crash the server.
-    [NO_SCOPE_RESOURCE]: { scopes: [] },
-  }),
+  resourcesFor,
 });
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
@@ -259,6 +261,52 @@ describe("refresh tokens", () => {
   });
 });
 
+describe("a client's grant types (janus-oauth enforces them)", () => {
+  test("a client without refresh_token gets its first tokens but cannot refresh", async () => {
+    const server = await serverOf("acme");
+    const { client } = await server.createClient({
+      name: "Code only",
+      redirectUris: [REDIRECT],
+      grantTypes: ["authorization_code"],
+    });
+    const code = await codeFor("acme", client.id);
+    const exchanged = await exchange("acme", client.id, code);
+    expect(exchanged.status).toBe(200);
+    const tokens = (await exchanged.json()) as Tokens;
+    const refused = await refresh("acme", client.id, tokens.refresh_token);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: "unauthorized_client",
+    });
+  });
+
+  test("a client that lists refresh_token refreshes", async () => {
+    const server = await serverOf("acme");
+    const { client } = await server.createClient({
+      name: "Code and refresh",
+      redirectUris: [REDIRECT],
+      grantTypes: ["authorization_code", "refresh_token"],
+    });
+    const tokens = (await (
+      await exchange("acme", client.id, await codeFor("acme", client.id))
+    ).json()) as Tokens;
+    expect(
+      (await refresh("acme", client.id, tokens.refresh_token)).status,
+    ).toBe(200);
+  });
+
+  test("a client without authorization_code cannot use the code grant", async () => {
+    const server = await serverOf("acme");
+    await expect(
+      server.createClient({
+        name: "Refresh only",
+        redirectUris: [REDIRECT],
+        grantTypes: ["refresh_token"],
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+});
+
 describe("revocation", () => {
   test("revoking a refresh token ends its use", async () => {
     const code = await codeFor("acme", clients["acme"] as string);
@@ -306,6 +354,14 @@ describe("a resource with no scope", () => {
     expect(response.status).toBe(200);
     const server = await serverOf("acme");
     expect(server).toBeDefined();
+  });
+
+  test("is absent from what resolve answers, so from the server and the introspection list", async () => {
+    const keyed = await resolveIssuer(
+      resolver,
+      resourcesFor,
+    )(new Request(url("acme", "/")));
+    expect(Object.keys(keyed?.resources ?? {})).toEqual([RESOURCE]);
   });
 });
 

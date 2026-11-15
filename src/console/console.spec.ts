@@ -314,8 +314,7 @@ describe("the console's bearer token", () => {
 
   test("a client_credentials token is refused at the token endpoint", async () => {
     // The console client has no user behind a client_credentials token: the
-    // token endpoint offers authorization_code and refresh_token only, whatever
-    // grant types a client records.
+    // token endpoint offers authorization_code and refresh_token only.
     const issuer = issuerOf(PLATFORM_TENANT_SLUG, origin);
     const response = await issuers.handle(
       new Request(`${issuer}/token`, {

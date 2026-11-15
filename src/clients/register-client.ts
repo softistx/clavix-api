@@ -15,9 +15,12 @@ import {
 import { partitionOf } from "@/modules/tenants/identity";
 
 /**
- * The grant types janus-oauth knows. A client records the ones it was
- * registered with (`grantTypes`, for display); the token endpoint does not
- * enforce the list, so every client may use both.
+ * The grant types Clavix offers (janus-oauth also knows the device grant, not
+ * offered yet). A client's `grantTypes` is enforced by janus-oauth 0.13 on
+ * `/authorize`, the code exchange and the refresh grant (`unauthorized_client`),
+ * and an explicit list is taken as written: a client that refreshes lists
+ * `refresh_token` beside `authorization_code`. A list needs
+ * `authorization_code` (`refresh_token` alone is refused by janus).
  */
 export const OFFERED_GRANTS = ["authorization_code", "refresh_token"] as const;
 export type OfferedGrant = (typeof OFFERED_GRANTS)[number];
@@ -35,8 +38,9 @@ export interface RegisterClientInput {
    */
   clientId?: string;
   /**
-   * Recorded on the client for display, not enforced. Default: what the
-   * client already records, else both. Anything else is refused.
+   * The grants the client may use, enforced by janus. Default: what the
+   * client already records, else both. A list must name `authorization_code`
+   * (add `refresh_token` for a client that refreshes); anything else is refused.
    */
   grants?: readonly string[];
   /** Mint a new secret for an existing confidential client. */
@@ -107,6 +111,14 @@ function validate(input: RegisterClientInput): {
         `grant "${grant}" is not offered: janus-oauth knows ${OFFERED_GRANTS.join(" and ")} only`,
       );
     }
+  }
+  if (
+    input.grants !== undefined &&
+    !input.grants.includes("authorization_code")
+  ) {
+    throw new CliInputError(
+      "--grants must include authorization_code: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)",
+    );
   }
   const grantTypes =
     input.grants === undefined

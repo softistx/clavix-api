@@ -383,8 +383,8 @@ mutation {
   `q`, a page may hold fewer than `first` items (even none) and still give a `nextCursor`: follow
   it until it is `null`.
 - **`grantTypes`** on a client is what was recorded when it was registered (both grant types by
-  default, or the script's `--grants`). It is shown for information: the token endpoint does not
-  enforce it.
+  default, or the script's `--grants`), and the token endpoint enforces it: a client that does not
+  list a grant gets `unauthorized_client` on it. A list that omits `refresh_token` cannot refresh.
 - **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
   opened are revoked.
 
@@ -651,9 +651,12 @@ bun run clients:create --tenant acme --name "Web app" \
   becomes confidential and gets a secret.
 - The output also carries `issuer`, `tenant`, `redirectUris` and `type`. `--help` prints the
   usage; bad input prints the message and the usage and exits 1.
-- **Grants**: `--grants` is recorded on the client and shown by the console (`grantTypes`), but
-  the token endpoint does not enforce it: every client may use the authorization code and refresh
-  grants. Any other (device code, token exchange, client credentials) is refused.
+- **Grants**: `--grants` is stored on the client and shown by the console (`grantTypes`), and janus-oauth
+  enforces it (`unauthorized_client` on `/authorize`, the code exchange and the refresh grant). An
+  absent list means authorization code and refresh. An explicit list is taken as written: it must
+  name `authorization_code`, and `refresh_token` for a client that refreshes (`--grants
+  authorization_code` alone cannot refresh; `refresh_token` alone is refused). Any other grant
+  (device code, token exchange, client credentials) is refused.
 
 ## OpenID Connect
 

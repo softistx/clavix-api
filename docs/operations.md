@@ -199,6 +199,16 @@ it. Custom domains stay on demand.
    (code 121, `STORE_FAILED`).
    janus-oauth-mongo 0.13 needs it again: it widens the clients validator
    (the device grant type) and adds the device-authorization indexes.
+   janus-oauth 0.13 enforces a client's `grantTypes` (`unauthorized_client`
+   on `/authorize`, the code exchange and the refresh grant) and takes an
+   explicit list as written. `db:migrate` runs the migration
+   `2026-11-15-client-grants`, janus-oauth's two `updateMany` steps on
+   `oauthClients` then `oauthPartitionedClients`, in that order: a stored list
+   that holds neither `authorization_code` nor the device grant (`[]`,
+   `['refresh_token']`) gets both default grants, then an explicit list that
+   lacks `refresh_token` gets it. A client with no list is untouched; a second
+   run changes nothing. A client registered by `clients:create --grants
+   authorization_code` cannot refresh: list `refresh_token` too.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 
