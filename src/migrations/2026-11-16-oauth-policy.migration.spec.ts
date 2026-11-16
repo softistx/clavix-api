@@ -9,15 +9,20 @@ import {
 } from "./2026-11-16-oauth-policy.migration";
 
 let db: Db;
+// A tenant as it was stored before the policy existed: the validator `db:sync`
+// now installs requires `oauth`, so the old document goes in unvalidated.
 const put = (slug: string, extra: Record<string, unknown> = {}) =>
-  db.collection("tenants").insertOne({
-    slug,
-    name: slug,
-    status: "active",
-    signUp: false,
-    version: 3,
-    ...extra,
-  });
+  db.collection("tenants").insertOne(
+    {
+      slug,
+      name: slug,
+      status: "active",
+      signUp: false,
+      version: 3,
+      ...extra,
+    },
+    { bypassDocumentValidation: true },
+  );
 const oauthOf = async (slug: string) =>
   (await db.collection("tenants").findOne({ slug }))?.["oauth"];
 

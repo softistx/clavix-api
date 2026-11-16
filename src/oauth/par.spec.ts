@@ -52,6 +52,16 @@ beforeAll(async () => {
   pusherSecret = registered.clientSecret ?? "";
 });
 
+// An /authorize refusal is a redirect to the client with `error=` when the
+// client is known, a JSON body otherwise.
+async function errorOf(response: Response): Promise<string | null> {
+  if (response.status === 302) {
+    const location = response.headers.get("location") ?? "";
+    return new URL(location, "https://x.invalid").searchParams.get("error");
+  }
+  return ((await response.json()) as { error: string }).error;
+}
+
 describe("pushed authorization requests", () => {
   test("a new tenant requires them, an existing one is off", async () => {
     const created = await tenantsService.create({ slug: "par-new", name: "N" });
@@ -62,9 +72,7 @@ describe("pushed authorization requests", () => {
 
   test("a tenant that requires PAR refuses /authorize without a request_uri", async () => {
     const response = await authorize("par-on", await params("backend"));
-    expect(response.status).not.toBe(302);
-    const body = (await response.json()) as { error: string };
-    expect(body.error).toBe("invalid_request");
+    expect(await errorOf(response)).toBe("invalid_request");
   });
 
   test("/par with Basic auth, then /authorize?request_uri= completes code + PKCE", async () => {
@@ -90,10 +98,7 @@ describe("pushed authorization requests", () => {
       client_id: "backend",
       request_uri,
     });
-    expect(again.status).not.toBe(302);
-    expect(((await again.json()) as { error: string }).error).toBe(
-      "invalid_request_uri",
-    );
+    expect(await errorOf(again)).toBe("invalid_request_uri");
 
     const server = await flow.issuers.serverFor(
       new Request(flow.url("par-on", "/")),
@@ -122,10 +127,7 @@ describe("pushed authorization requests", () => {
     const direct = await authorize("par-client", await params("backend"));
     expect(direct.status).toBe(302);
     const refused = await authorize("par-client", await params("pusher"));
-    expect(refused.status).not.toBe(302);
-    expect(((await refused.json()) as { error: string }).error).toBe(
-      "invalid_request",
-    );
+    expect(await errorOf(refused)).toBe("invalid_request");
     const pushed = await push("par-client", "pusher", pusherSecret);
     expect(pushed.status).toBe(201);
     const { request_uri } = (await pushed.json()) as { request_uri: string };
