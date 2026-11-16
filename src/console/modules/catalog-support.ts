@@ -6,7 +6,12 @@ import { RolesError } from "@/modules/roles/roles.errors";
 import type { ConsoleContext } from "../context";
 import { liveTenant, tenantIdOf } from "./ids";
 
-const STATUS = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 } as const;
+const STATUS = {
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  BAD_USER_INPUT: 400,
+  ROLE_MANAGED: 403,
+} as const;
 
 /** A catalog or roles refusal as a GraphQL error carrying its code. */
 export const catalogError = (error: CatalogError | RolesError) =>

@@ -5,6 +5,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
+import { rolesService } from "@/config/roles";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -23,7 +24,7 @@ let userA2 = "";
 let userB1 = "";
 let resourceA = "";
 
-const ROLE = "id name description resourceId memberCount createdAt";
+const ROLE = "id name description resourceId managed memberCount createdAt";
 const CREATE = `mutation($t: ID!, $input: CreateRoleInput!) { createRole(tenantId: $t, input: $input) { ${ROLE} } }`;
 const UPDATE = `mutation($t: ID!, $id: ID!, $input: UpdateRoleInput!) { updateRole(tenantId: $t, id: $id, input: $input) { ${ROLE} } }`;
 const DELETE = `mutation($t: ID!, $id: ID!) { deleteRole(tenantId: $t, id: $id) }`;
@@ -134,6 +135,7 @@ describe("CRUD", () => {
       name: "crud.role",
       description: "d",
       resourceId: null,
+      managed: false,
       memberCount: 0,
     });
     const id = role["id"] as string;
@@ -163,6 +165,38 @@ describe("CRUD", () => {
     expect(
       codeOf(await admin(UPDATE, { t: tenantA, id, input: { name: "x" } })),
     ).toBe("NOT_FOUND");
+  });
+
+  test("a managed role reads managed: true and is refused for update and delete", async () => {
+    const created = await rolesService.create(new ObjectId(tenantA), {
+      name: "system.admin",
+      description: "kept",
+      managed: true,
+    });
+    const id = created._id.toHexString();
+    expect(
+      (await viewer(GET, { t: tenantA, id })).data?.["role"],
+    ).toMatchObject({ name: "system.admin", managed: true });
+    const rename = await admin(UPDATE, {
+      t: tenantA,
+      id,
+      input: { name: "other" },
+    });
+    expect(codeOf(rename)).toBe("ROLE_MANAGED");
+    expect(
+      codeOf(
+        await admin(UPDATE, { t: tenantA, id, input: { description: "x" } }),
+      ),
+    ).toBe("ROLE_MANAGED");
+    expect(codeOf(await admin(DELETE, { t: tenantA, id }))).toBe(
+      "ROLE_MANAGED",
+    );
+    const kept = (await viewer(GET, { t: tenantA, id })).data?.["role"];
+    expect(kept).toMatchObject({ name: "system.admin", description: "kept" });
+    // Holding it is still allowed, and a tenant's own role stays editable.
+    expect(
+      (await admin(ASSIGN, { t: tenantA, r: id, u: userA1 })).data,
+    ).toEqual({ assignRole: true });
   });
 
   test("names are validated and unique per resource", async () => {
@@ -423,6 +457,31 @@ describe("assignments", () => {
     expect(by["cnt-same"]).toBe(2);
     expect(by["cnt-empty"]).toBe(0);
     expect(two).toBeString();
+  });
+
+  test("deleting a resource also removes a managed role scoped to it", async () => {
+    const uri = "https://api.rl-a.example/managed-gone";
+    await registerStoredResource({ tenant: "rl-a", uri, scopes: ["read"] });
+    const found = await mongo.db.resources.raw.findOne({
+      tenantId: new ObjectId(tenantA),
+      uri,
+    });
+    const rid = found?._id.toHexString() as string;
+    const role = await rolesService.create(new ObjectId(tenantA), {
+      name: "res-managed",
+      resourceId: rid,
+      managed: true,
+    });
+    const removed = await admin(
+      `mutation($t: ID!, $id: ID!) { deleteResource(tenantId: $t, id: $id) }`,
+      { t: tenantA, id: rid },
+    );
+    expect(removed.errors).toBeUndefined();
+    expect(
+      (await viewer(GET, { t: tenantA, id: role._id.toHexString() })).data?.[
+        "role"
+      ],
+    ).toBeNull();
   });
 
   test("deleting a resource deletes the roles scoped to it and their assignments", async () => {

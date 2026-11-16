@@ -52,6 +52,7 @@ const shape = (role: RoleDoc, memberCount: number) => ({
   name: role.name,
   description: role.description === "" ? null : role.description,
   resourceId: role.resourceId?.toHexString() ?? null,
+  managed: role.managed,
   memberCount,
   createdAt: role.createdAt,
 });
@@ -174,7 +175,7 @@ export const roles: Resolvers = {
     deleteRole: async (_, { tenantId, id }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
       idArg(id, "id");
-      await rolesService.delete(tenant.id, id);
+      await refusing(() => rolesService.delete(tenant.id, id));
       // Recorded on a repeat too (it may be the event the first run missed).
       await ctx.audit("role.delete", target("role", id, tenant.hex));
       return true;

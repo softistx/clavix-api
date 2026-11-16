@@ -12,6 +12,8 @@ type TenantRole {
   description: String
   "The resource (API) the role is scoped to, or `null` for the whole tenant. Fixed at creation."
   resourceId: ID
+  "`true` for a role Clavix itself provides: `updateRole` and `deleteRole` refuse it with `ROLE_MANAGED` (403), so a UI hides Edit and Delete and shows a badge. Assigning it stays allowed."
+  managed: Boolean!
   "How many users hold the role."
   memberCount: Int!
   createdAt: DateTime!
@@ -71,9 +73,9 @@ extend type Mutation {
   unknown resource, BAD_USER_INPUT for a name that is not a claim value.
   """
   createRole(tenantId: ID!, input: CreateRoleInput!): TenantRole!
-  "Changes a role's name or description (tenant admin). Errors: NOT_FOUND, CONFLICT, BAD_USER_INPUT."
+  "Changes a role's name or description (tenant admin). Errors: NOT_FOUND, CONFLICT, BAD_USER_INPUT, ROLE_MANAGED (403) for a managed role."
   updateRole(tenantId: ID!, id: ID!, input: UpdateRoleInput!): TenantRole!
-  "Deletes a role and its assignments (tenant admin). True also when it was already gone."
+  "Deletes a role and its assignments (tenant admin). True also when it was already gone. Errors: ROLE_MANAGED (403) for a managed role."
   deleteRole(tenantId: ID!, id: ID!): Boolean!
   """
   Gives the user the role (tenant admin). Idempotent: True also when the user
