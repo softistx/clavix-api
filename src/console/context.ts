@@ -135,6 +135,16 @@ export interface ConsoleUsers {
   ): Promise<{ items: TenantUserView[]; nextCursor: string | null }>;
   /** How many users the tenant has, or those `emailPrefix` keeps. */
   count(tenantId: string, filter?: { emailPrefix?: string }): Promise<number>;
+  /**
+   * Up to `limit` users whose login (e-mail or username) or display name
+   * starts with `query` (any case), logins first, each once. Names are read
+   * from the oldest users only (a bounded scan).
+   */
+  lookup(
+    tenantId: string,
+    query: string,
+    limit: number,
+  ): Promise<TenantUserView[]>;
   find(tenantId: string, id: string): Promise<TenantUserView | null>;
   findByEmail(tenantId: string, email: string): Promise<TenantUserView | null>;
   /** The user as written, or `null` when unknown. Disabling ends the user's sessions. */

@@ -5,6 +5,7 @@ import { badInput, grantShape, shape } from "./shapes";
 
 const MAX_PAGE = 100;
 const MAX_PREFIX = 254;
+const MAX_LOOKUP = 20;
 
 export const userQueries: NonNullable<Resolvers["Query"]> = {
   users: async (
@@ -47,6 +48,25 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
       }
       throw error;
     }
+  },
+  userLookup: async (_, { tenantId: given, query, first }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    const text = query.trim();
+    if ([...text].length > MAX_PREFIX) {
+      throw badInput("The query is too long");
+    }
+    await liveTenant(ctx.directory, tenantId);
+    if (text === "") return [];
+    const found = await ctx.users.lookup(
+      tenantId,
+      text,
+      Math.min(Math.max(first ?? 10, 1), MAX_LOOKUP),
+    );
+    return found.map(({ id, email, name }) => ({
+      id,
+      email,
+      name: name ?? null,
+    }));
   },
   user: async (_, { tenantId: given, id }, ctx) => {
     const tenantId = tenantIdOf(given);

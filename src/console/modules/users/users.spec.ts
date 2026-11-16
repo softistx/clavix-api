@@ -366,6 +366,106 @@ describe("search by e-mail prefix", () => {
   });
 });
 
+describe("user lookup for the role member picker", () => {
+  const lookupOf = (who: string, tenant: string, query: string, first = "") =>
+    asConsole(
+      who,
+      `{ userLookup(tenantId: "${tenant}", query: "${query}"${first}) { id email name } }`,
+    );
+
+  test("a role writer may call it; a viewer and a stranger are refused", async () => {
+    for (const who of [ownA, admA]) {
+      expect((await lookupOf(who, tenantA, "one")).errors).toBeUndefined();
+    }
+    for (const who of [vwA, nobody]) {
+      expect(code(await lookupOf(who, tenantA, "one"))).toBe("FORBIDDEN");
+    }
+  });
+
+  test("returns id, e-mail and name only", async () => {
+    const wide = await asConsole(
+      admA,
+      `{ userLookup(tenantId: "${tenantA}", query: "one@") { emailVerified } }`,
+    );
+    expect(code(wide)).toBe("GRAPHQL_VALIDATION_FAILED");
+    const ok = await lookupOf(admA, tenantA, "one@");
+    expect(ok.data?.["userLookup"]).toEqual([
+      { id: uA1, email: "one@end.test", name: "One" },
+    ]);
+  });
+
+  test("finds by e-mail prefix and by name prefix, any case, e-mail matches first, each user once", async () => {
+    const a = await poolOf(SLUG.a);
+    const byName = (
+      await a.auth.create({ email: "zz1@look.test", name: "Marta Lookup" })
+    ).id;
+    const byMail = (
+      await a.auth.create({ email: "marta.mail@look.test", name: "Other" })
+    ).id;
+    const both = (
+      await a.auth.create({ email: "marta.both@look.test", name: "Marta Both" })
+    ).id;
+    const found = await lookupOf(admA, tenantA, "MARTA");
+    expect(found.errors).toBeUndefined();
+    const rows = (found.data?.["userLookup"] ?? []) as { id: string }[];
+    const ids = rows.map((u) => u.id);
+    expect(ids).toEqual([byMail, both, byName]);
+    expect(
+      (await lookupOf(admA, tenantA, "zzz-none")).data?.["userLookup"],
+    ).toEqual([]);
+    // A blank query is an empty list, not the whole pool.
+    expect((await lookupOf(admA, tenantA, "  ")).data?.["userLookup"]).toEqual(
+      [],
+    );
+    // Plain text, never a pattern.
+    expect((await lookupOf(admA, tenantA, ".*")).data?.["userLookup"]).toEqual(
+      [],
+    );
+  });
+
+  test("caps the answer: first defaults to 10, at most 20", async () => {
+    const a = await poolOf(SLUG.a);
+    for (let n = 0; n < 25; n++) {
+      await a.auth.create({
+        email: `cap${String(n).padStart(2, "0")}@cap.test`,
+      });
+    }
+    const count = async (first: string) => {
+      const answer = await lookupOf(admA, tenantA, "cap", first);
+      return ((answer.data?.["userLookup"] ?? []) as unknown[]).length;
+    };
+    expect(await count("")).toBe(10);
+    expect(await count(", first: 3")).toBe(3);
+    expect(await count(", first: 500")).toBe(20);
+    expect(await count(", first: 0")).toBe(1);
+  });
+
+  test("is scoped to the tenant: B's users are not found under A and A's not under B", async () => {
+    const b = await poolOf(SLUG.b);
+    await b.auth.create({ email: "only-b@look.test", name: "Bertha Only" });
+    expect(
+      (await lookupOf(admA, tenantA, "only-b")).data?.["userLookup"],
+    ).toEqual([]);
+    expect(
+      (await lookupOf(admA, tenantA, "Bertha")).data?.["userLookup"],
+    ).toEqual([]);
+    expect(
+      (await lookupOf(ownB, tenantB, "Bertha")).data?.["userLookup"],
+    ).toHaveLength(1);
+    // The owner of B has no say on A.
+    expect(code(await lookupOf(ownB, tenantA, "one"))).toBe("FORBIDDEN");
+    expect(
+      (await lookupOf(ownB, tenantB, "marta")).data?.["userLookup"],
+    ).toEqual([]);
+  });
+
+  test("refuses a query over 254 characters", async () => {
+    expect(code(await lookupOf(admA, tenantA, "a".repeat(255)))).toBe(
+      "BAD_USER_INPUT",
+    );
+  });
+});
+
 describe("user sessions", () => {
   test("lists a user's sessions with their device, newest first; revokes one", async () => {
     const a = await poolOf(SLUG.a);
