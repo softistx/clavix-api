@@ -112,7 +112,7 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `ACME_EMAIL`                                | caddy                       | the ACME account address                                                                                                                                       |
 | `REDIS_PASSWORD`                            | redis, api                  | the password in `REDIS_URL`                                                                                                                                    |
 | `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`    | mongo                       | the server's root user (default `root`), created on the first start; used by the healthcheck only                                                              |
-| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`      | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` on the `clavix` database; its credentials are in `MONGO_URI`                                              |
+| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`      | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                              |
 | `MONGO_KEYFILE`                             | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                            |
 | `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`        | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                    |
 | `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api                         | required in production                                                                                                                                         |
@@ -179,14 +179,15 @@ root and key file variables it would otherwise inherit from `deploy/.env`.
 Use hex passwords (`openssl rand -hex 24`): they are put in a URI unescaped.
 The restore drill (`restore ... clavix-drill`) writes to another database, which
 the application user cannot: run it with a root URI
-(`mongodb://root:<MONGO_ROOT_PASSWORD>@mongo:27017/clavix-drill?replicaSet=rs0&authSource=admin`)
-as `MONGO_URI` of the `restore` service.
+(`mongodb://root:<MONGO_ROOT_PASSWORD>@mongo:27017/clavix-drill?replicaSet=rs0&authSource=admin`,
+followed by `MONGO_URI_OPTIONS` when TLS is on), passed to the run:
+`docker compose ... --profile tools run --rm -e MONGO_URI=<that URI> restore <file>`.
 
 The users are created by an empty volume's first start only. **An existing
 deployment** (data, no users) keeps its volume: start `mongo` once with the old
 command (`--replSet rs0 --bind_ip_all --wiredTigerCacheSizeGB 1`, no key file) to create them, e.g. with `mongosh` inside the container
 (`use admin; db.createUser({user: "root", pwd: "...", roles: ["root"]})`,
-`use clavix; db.createUser({user: "clavix", pwd: "...", roles: [{role: "readWrite", db: "clavix"}]})`),
+`use clavix; db.createUser({user: "clavix", pwd: "...", roles: [{role: "readWrite", db: "clavix"}, {role: "dbAdmin", db: "clavix"}]})`),
 then switch to this file (the key file turns authorization on).
 
 **TLS between the containers is optional.** `deploy/tls/` (or `MONGO_TLS_DIR`,

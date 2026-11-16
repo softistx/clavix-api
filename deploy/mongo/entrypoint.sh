@@ -3,6 +3,7 @@
 # $MONGO_KEYFILE), and TLS when a certificate is mounted in /etc/mongo-tls.
 # Then hands over to the image's own entrypoint, which creates the root user
 # (MONGO_INITDB_ROOT_*) and runs /docker-entrypoint-initdb.d on a first start.
+# (Shell, not Bun: it runs inside the stock mongo image.)
 set -eu
 
 : "${MONGO_KEYFILE:?set MONGO_KEYFILE (6 to 1024 base64 characters)}"
