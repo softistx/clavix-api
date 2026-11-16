@@ -35,6 +35,7 @@ const app = createApp({
             scopes: ["console"],
             clientName: null,
             bound: null,
+            jkt: null,
           };
     },
   },

@@ -108,6 +108,7 @@ const as = (
         scopes: ["console"],
         clientName: null,
         bound: null,
+        jkt: null,
       }),
     },
   })
