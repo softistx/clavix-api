@@ -2,11 +2,6 @@ import { JanusError } from "@softistx/janus";
 import type { ConsoleUsers, TenantUserView } from "../../context";
 import { type Pool, view } from "./pool";
 
-// Temporary, until nxgt-janus#842: janus filters by login only, so a
-// name match scans the oldest users, page by page, up to this many.
-const NAME_SCAN = 1000;
-const SCAN_PAGE = 200;
-
 /** The user records of `ConsoleUsers`: reads, the flags, the name and the deletion. */
 export const poolUsers = ({
   janus,
@@ -41,22 +36,15 @@ export const poolUsers = ({
     const found = new Map<string, TenantUserView>();
     const logins = await auth.list({ limit, emailPrefix: query });
     for (const user of logins.items) found.set(user.id, view(user));
-    const wanted = query.trim().toLowerCase();
-    let after: string | null = null;
-    for (
-      let seen = 0;
-      found.size < limit && seen < NAME_SCAN && wanted !== "";
-      seen += SCAN_PAGE
-    ) {
-      const page = await auth.list({ after, limit: SCAN_PAGE });
-      for (const user of page.items) {
+    if (query.trim() !== "" && found.size < limit) {
+      const names = await auth.list({
+        limit: limit + found.size,
+        namePrefix: query,
+      });
+      for (const user of names.items) {
         if (found.size >= limit) break;
-        if (user.name?.toLowerCase().startsWith(wanted) === true) {
-          found.set(user.id, view(user));
-        }
+        found.set(user.id, view(user));
       }
-      if (page.nextCursor === null) break;
-      after = page.nextCursor;
     }
     return [...found.values()].slice(0, limit);
   },
