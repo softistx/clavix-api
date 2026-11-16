@@ -17,9 +17,9 @@
         "@softistx/janus-graphql": "^0.28.5",
         "@softistx/janus-mail": "^0.26.9",
         "@softistx/janus-mongo": "^0.29.0",
-        "@softistx/janus-oauth": "^0.18.0",
-        "@softistx/janus-oauth-mongo": "^0.16.2",
-        "@softistx/janus-oidc": "^0.3.25",
+        "@softistx/janus-oauth": "^0.19.0",
+        "@softistx/janus-oauth-mongo": "^0.16.3",
+        "@softistx/janus-oidc": "^0.3.26",
         "@softistx/janus-passkeys": "^0.3.13",
         "@softistx/janus-social": "^0.3.7",
         "@softistx/mail": "^1.5.0",
@@ -323,11 +323,11 @@
 
     "@softistx/janus-mongo": ["@softistx/janus-mongo@0.29.0", "https://npm.softistx.com/@softistx/janus-mongo/-/janus-mongo-0.29.0.tgz", { "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-jbGnZYlMncqeo7rB1DLZYYEEVgpbKkkV2r2F57ZzwFldlOXKYdjj31PhCF0xKcB3EdhR3/OPc5mc5DGCAkhlgA=="],
 
-    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.18.0", "https://npm.softistx.com/@softistx/janus-oauth/-/janus-oauth-0.18.0.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/janus-graphql": "^0.28.5", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/janus-graphql", "graphql"] }, "sha512-cnkJ6sDhNCq8B2ED+HnlcgiVlqPSy7mpoC5W/L9BwIsxKJTH/+OwCGD0D4XwR31o+vTAKQACbOA5TcygFlymTA=="],
+    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.19.0", "https://npm.softistx.com/@softistx/janus-oauth/-/janus-oauth-0.19.0.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/janus-graphql": "^0.28.5", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/janus-graphql", "graphql"] }, "sha512-q1rY6pYqceqB+MLCeqESAvp3J5lgcnAdPMzQN4ruh0PJwsBMYDk26npO91LHO8P8+VpODP/z3rF0Zlyi4lgPdA=="],
 
-    "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.16.2", "https://npm.softistx.com/@softistx/janus-oauth-mongo/-/janus-oauth-mongo-0.16.2.tgz", { "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/janus-oauth": "^0.18.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-7PaNBZpWTx50oAer9NS++76yMReNZ9CaA8wGXY+gRj8UB4GKkQxTs5ED9OxwiSv02jISXfoVLiYySdvUUmj85w=="],
+    "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.16.3", "https://npm.softistx.com/@softistx/janus-oauth-mongo/-/janus-oauth-mongo-0.16.3.tgz", { "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/janus-oauth": "^0.19.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-P733tPGwuj8ZEfB5PTEP66g5tAL2Vz/omeV5sSZxV5PKpg2UCvgBlB9GdfKIPgoV/q2N+Pvj4s7lYA2MWwze8w=="],
 
-    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.25", "https://npm.softistx.com/@softistx/janus-oidc/-/janus-oidc-0.3.25.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/janus-oauth": "^0.18.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-xs8FdL7x3zfDuyihgIibNgdsMwi6TnsXNsr8l8bcT+KJEtyQoW0NTK8GJJQp2nSZdzD+mBbFC3G1uVt2XU0ulw=="],
+    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.26", "https://npm.softistx.com/@softistx/janus-oidc/-/janus-oidc-0.3.26.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.66.0", "@softistx/janus-oauth": "^0.19.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-e6AUTWn+UVa6MDj3oBJaNW/EuheRdT8YtmgcQirS4g450oGTJGYVpNBiqNOy30ogx+6WHepy/Wr8evYK6dmPXA=="],
 
     "@softistx/janus-passkeys": ["@softistx/janus-passkeys@0.3.13", "https://npm.softistx.com/@softistx/janus-passkeys/-/janus-passkeys-0.3.13.tgz", { "dependencies": { "@simplewebauthn/server": "^14.0.3" }, "peerDependencies": { "@softistx/janus": "^0.66.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-ElhJl91yhztMPIVK/9IZXMftyaF911k9qEmKlwCWhiBmbNCP0p1oZeoz8RjIZTD9zTnbNkjoMVKDoDExPbwjxw=="],
 

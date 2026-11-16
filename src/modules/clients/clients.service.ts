@@ -1,10 +1,10 @@
+import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import { CliInputError, type CliTenant } from "@/cli/errors";
 import { clientIdOf, registerClient } from "@/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
-import { deleteClientRevoking } from "./client-deletion";
 import {
   type ClientView,
   capability,
@@ -259,11 +259,9 @@ export class ClientsService {
     if (record !== null && record.source !== "registered") {
       return { removed: false, unmanaged: true };
     }
-    const removed = await deleteClientRevoking(
-      store,
-      clientId,
-      this.options.now ?? (() => new Date()),
-    );
+    const removed = await deleteClient(store, clientId, {
+      now: (this.options.now ?? (() => new Date()))(),
+    });
     return { removed, unmanaged: false };
   }
 }
