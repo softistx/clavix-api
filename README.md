@@ -531,8 +531,12 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
 mutation ($t: ID!) {
   updateOAuthPolicy(tenantId: $t, input: { par: { required: true } }) {
     version
-    par { required }
-    dpop { required }
+    par {
+      required
+    }
+    dpop {
+      required
+    }
   }
 }
 ```
@@ -667,16 +671,16 @@ bun run clients:create --tenant acme --name "Web app" \
   --redirect-uri https://app.example.com/callback          # a public client, PKCE only
 ```
 
-| Flag                   | Meaning                                                                                        |
-| ---------------------- | ---------------------------------------------------------------------------------------------- |
-| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                     |
-| `--name <name>`        | required                                                                                       |
-| `--redirect-uri <uri>` | required, repeatable; exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed) |
-| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                        |
-| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                      |
-| `--grants <a,b>`       | `authorization_code,refresh_token` (the default and all there is: see below)                   |
+| Flag                   | Meaning                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                                 |
+| `--name <name>`        | required                                                                                                   |
+| `--redirect-uri <uri>` | required, repeatable; exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed)             |
+| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                                    |
+| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                  |
+| `--grants <a,b>`       | `authorization_code,refresh_token` (the default and all there is: see below)                               |
 | `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it) |
-| `--rotate-secret`      | a new secret for an existing confidential client                                               |
+| `--rotate-secret`      | a new secret for an existing confidential client                                                           |
 - **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client
   and creates nothing new. The output (JSON) says `created: true | false`.
 - **A confidential client's secret is printed once**, in `clientSecret`; janus keeps only its
