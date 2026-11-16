@@ -307,7 +307,7 @@ as that user first (`mkdir -p backups`), and export
 `BACKUP_UID=$(id -u) BACKUP_GID=$(id -g)` when your user is not 1000. Archives an
 earlier run left owned by root: `sudo chown -R "$(id -u):$(id -g)" backups`.
 
-The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies; the build needs `NPM_REGISTRY_TOKEN` in the environment or `deploy/.env`, as the API image does) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
+The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies; the build needs `NPM_REGISTRY_TOKEN` exported in the shell, as the API image does) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
 
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
 `clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and
