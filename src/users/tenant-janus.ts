@@ -97,9 +97,11 @@ function buildJanus(
     passkeys: {
       rpId: rpIdOf(tenant),
       rpName: tenant.name,
-      // The slug host's own origin, and each verified custom domain's
-      // (WebAuthn Related Origins, ADR-0036): janus-passkeys compares exactly.
-      origins: [originOf(tenant), ...tenant.relatedOrigins],
+      // The slug host's own origin; each verified custom domain is a related
+      // origin (WebAuthn Related Origins, ADR-0036), on another host than the
+      // rpId. `/.well-known/webauthn` serves the same list (`relatedOriginsOf`).
+      origins: [originOf(tenant)],
+      relatedOrigins: tenant.relatedOrigins,
       verifier: simpleWebAuthnVerifier(),
       firstFactor: true as const,
       userVerification: "required" as const,
