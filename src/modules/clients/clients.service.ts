@@ -4,6 +4,7 @@ import { CliInputError, type CliTenant } from "@/cli/errors";
 import { clientIdOf, registerClient } from "@/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
+import { deleteClientRevoking } from "./client-deletion";
 import {
   type ClientView,
   capability,
@@ -258,10 +259,10 @@ export class ClientsService {
     if (record !== null && record.source !== "registered") {
       return { removed: false, unmanaged: true };
     }
-    const removed = record !== null && (await store.deleteClient(clientId));
-    await capability(store.revokeClientGrants, "revokeClientGrants")(
+    const removed = await deleteClientRevoking(
+      store,
       clientId,
-      (this.options.now ?? (() => new Date()))(),
+      this.options.now ?? (() => new Date()),
     );
     return { removed, unmanaged: false };
   }
