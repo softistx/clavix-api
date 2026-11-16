@@ -25,6 +25,7 @@ afterEach(async () => {
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
+  await mongo.db.domains.raw.deleteMany({});
   await cache.delete(host);
 });
 
