@@ -42,6 +42,7 @@ const as = (userId: string, query: string) =>
         scopes: ["console"],
         clientName: null,
         bound: null,
+        jkt: null,
       }),
     },
   })

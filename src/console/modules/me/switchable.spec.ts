@@ -44,6 +44,7 @@ const request = (userId: string | null, query: string) =>
               scopes: ["console"],
               clientName: null,
               bound: null,
+              jkt: null,
             },
     },
   }).request(`http://localhost${CONSOLE_PATH}`, {

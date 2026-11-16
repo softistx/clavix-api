@@ -350,6 +350,7 @@ describe("the console's bearer token", () => {
             scopes: ["console"],
             clientName: null,
             bound: null,
+            jkt: null,
           }),
         }) as never,
     });
@@ -405,6 +406,7 @@ describe("the guard", () => {
           scopes: [],
           clientName: null,
           bound: null,
+          jkt: null,
         }),
       },
     });
@@ -813,6 +815,7 @@ describe("the guards over HTTP", () => {
           scopes,
           clientName: null,
           bound: null,
+          jkt: null,
         }),
       },
     })
