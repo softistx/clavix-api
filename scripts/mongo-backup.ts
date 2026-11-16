@@ -6,11 +6,20 @@
 // MONGO_URI    required, with the database in its path (as the API reads it).
 // KEEP         archives to keep in out-dir (default 14); older ones are removed.
 // MONGODUMP    the mongodump binary (default: mongodump).
+// BACKUP_OFFSITE_*  optional off-host copy on S3-compatible storage, see
+//               scripts/lib/offsite.ts and docs/operations.md ("Off-host copies").
+//               A failed upload exits non-zero; the local archive stays.
 // The archive holds the tenants' ENCRYPTED signing keys: it is useless without
 // CLAVIX_KEYS_MASTER_KEY, which is never in the archive. Keep both, apart.
 import { mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { $ } from "bun";
+import {
+  pruneRemote,
+  readOffsiteConfig,
+  s3Archives,
+  shipArchive,
+} from "./lib/offsite";
 
 const fail = (message: string, code = 1): never => {
   console.error(message);
@@ -23,6 +32,13 @@ const keepText = Bun.env["KEEP"] ?? "14";
 const dump = Bun.env["MONGODUMP"] ?? "mongodump";
 if (!/^[1-9][0-9]*$/.test(keepText)) fail("KEEP must be a positive integer");
 const keep = Number(keepText);
+// Read first: a half-configured off-host copy fails before the dump is taken.
+let offsite: ReturnType<typeof readOffsiteConfig>;
+try {
+  offsite = readOffsiteConfig(Bun.env);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
 
 mkdirSync(out, { recursive: true });
 process.umask(0o077);
@@ -62,3 +78,30 @@ for (const { f } of archives.slice(keep)) {
 }
 
 console.log(file);
+
+if (offsite !== undefined) {
+  // The local archive is already safe on disk: whatever happens below, it stays.
+  const remote = s3Archives(offsite);
+  try {
+    const sent = await shipArchive(remote, file);
+    console.error(`offsite: uploaded ${sent.join(", ")}`);
+  } catch (error) {
+    console.error(
+      `offsite: FAILED, the local archive ${file} is kept: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(3);
+  }
+  try {
+    const removed = await pruneRemote(remote, offsite.keepDays);
+    if (removed.length > 0) {
+      console.error(
+        `offsite: removed ${removed.length} object(s) older than ${offsite.keepDays} days`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `offsite: uploaded, but the remote retention FAILED: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(3);
+  }
+}

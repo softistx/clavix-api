@@ -12,6 +12,16 @@ name: clavix
 x-restart: &restart
   restart: unless-stopped
 
+# The off-host backup copy (S3-compatible storage); all empty = off.
+x-offsite: &offsite
+  BACKUP_OFFSITE_S3_BUCKET: ${BACKUP_OFFSITE_S3_BUCKET:-}
+  BACKUP_OFFSITE_S3_ENDPOINT: ${BACKUP_OFFSITE_S3_ENDPOINT:-}
+  BACKUP_OFFSITE_S3_REGION: ${BACKUP_OFFSITE_S3_REGION:-}
+  BACKUP_OFFSITE_S3_ACCESS_KEY_ID: ${BACKUP_OFFSITE_S3_ACCESS_KEY_ID:-}
+  BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY: ${BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY:-}
+  BACKUP_OFFSITE_S3_PREFIX: ${BACKUP_OFFSITE_S3_PREFIX:-}
+  BACKUP_OFFSITE_KEEP_DAYS: ${BACKUP_OFFSITE_KEEP_DAYS:-}
+
 services:
   api:
     <<: *restart
@@ -126,10 +136,11 @@ services:
   backup:
     profiles: ["tools"]
     build:
-      context: .
-      dockerfile: tools.Dockerfile
+      context: ..
+      dockerfile: deploy/tools.Dockerfile
+      secrets: [npm_registry_token]
     entrypoint: ["bun"]
-    command: ["/scripts/mongo-backup.ts", "/backups"]
+    command: ["/scripts/mongo-backup.js", "/backups"]
     # Not root: the archives belong to the host user that owns BACKUP_DIR
     # (BACKUP_UID / BACKUP_GID, default 1000:1000; `export BACKUP_UID=$(id -u)
     # BACKUP_GID=$(id -g)` for any other). Create the folder first, as that user.
@@ -138,8 +149,9 @@ services:
       HOME: /tmp
       MONGO_URI: *mongo-uri
       KEEP: ${BACKUP_KEEP:-14}
+      # Off-host copy, opt-in: empty bucket = off (docs/operations.md, "Off-host copies").
+      <<: *offsite
     volumes:
-      - ../scripts:/scripts:ro
       - ${BACKUP_DIR:-../backups}:/backups
       - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
@@ -148,18 +160,24 @@ services:
   restore:
     profiles: ["tools"]
     build:
-      context: .
-      dockerfile: tools.Dockerfile
-    entrypoint: ["bun", "/scripts/mongo-restore.ts"]
+      context: ..
+      dockerfile: deploy/tools.Dockerfile
+      secrets: [npm_registry_token]
+    entrypoint: ["bun", "/scripts/mongo-restore.js"]
     environment:
       MONGO_URI: *mongo-uri
       CONFIRM: ${CONFIRM:-}
+      <<: *offsite
     volumes:
-      - ../scripts:/scripts:ro
       - ${BACKUP_DIR:-../backups}:/backups:ro
       - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
       mongo: { condition: service_healthy }
+
+# Read at build time by the tools image (the registry token of @softistx packages).
+secrets:
+  npm_registry_token:
+    environment: NPM_REGISTRY_TOKEN
 
 volumes:
   mongo-data:
