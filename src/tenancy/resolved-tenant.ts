@@ -24,6 +24,11 @@ export const resolvedTenant = z.object({
   // (ADR-0036). Always set by the resolver; an entry cached before custom
   // domains has none, fails this schema and reads as a cache miss (60 s TTL).
   slugIssuer: z.string(),
+  // Origins of the tenant's verified custom domains (ADR-0036): the passkey
+  // layer accepts a ceremony from each. A domain write drops the slug host's
+  // entry, so it follows verification and removal. An entry cached before the
+  // field existed has none until it expires (60 s).
+  relatedOrigins: z.array(z.string()).default([]),
   partition: z.string(),
   version: z.number(),
   signIn: signInPolicySchema, // slice A5; the social secrets stay sealed here (this value sits in Redis)

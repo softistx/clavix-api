@@ -100,6 +100,7 @@ export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
   domains: {
     tenantOfHost: (host) => domainStore.tenantOfHost(host),
     primaryHostOf: (tenantId) => domainStore.primaryHostOf(tenantId),
+    verifiedHostsOf: (tenantId) => domainStore.verifiedHostsOf(tenantId),
   },
   hostsOf: (tenantId) => domainStore.resolvingHostsOf(tenantId),
   config: origin,

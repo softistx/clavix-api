@@ -173,7 +173,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     return (await response.json()) as {
       access_token: string;
       id_token?: string;
-      refresh_token?: string;
+      refresh_token?: string | null;
     };
   };
 

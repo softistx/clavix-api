@@ -50,6 +50,7 @@ describe("resolveHost", () => {
       status: "active",
       issuer: "https://acme.clavix.test",
       slugIssuer: "https://acme.clavix.test",
+      relatedOrigins: [],
       partition: acme._id.toHexString(),
       version: 3,
       signIn: acme.signIn,
@@ -288,6 +289,7 @@ describe("custom domains", () => {
       domains: {
         tenantOfHost: async (host) => verified[host],
         primaryHostOf: async () => primary,
+        verifiedHostsOf: async () => [],
       },
       cache: memoryTenantCache(),
       config,
@@ -313,6 +315,29 @@ describe("custom domains", () => {
       expect(resolved?.issuer).toBe("https://auth.acme.com");
       expect(resolved?.slugIssuer).toBe("https://acme.clavix.test");
     }
+  });
+
+  test("carries the origins of the tenant's verified domains (ADR-0036), none without a directory", async () => {
+    const resolver = createTenantResolver({
+      lookup: async () => acme,
+      domains: {
+        tenantOfHost: async () => undefined,
+        primaryHostOf: async () => undefined,
+        verifiedHostsOf: async () => ["login.acme.test", "auth.acme.com"],
+      },
+      cache: memoryTenantCache(),
+      config,
+      log: () => {},
+    });
+    const resolved = await resolver.resolveHost("acme.clavix.test");
+    expect(resolved?.relatedOrigins).toEqual([
+      "https://login.acme.test",
+      "https://auth.acme.com",
+    ]);
+    const plain = setup([acme]).resolver;
+    expect(
+      (await plain.resolveHost("acme.clavix.test"))?.relatedOrigins,
+    ).toEqual([]);
   });
 
   test("a suspended tenant's custom host resolves but is not live", async () => {

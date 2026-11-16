@@ -704,7 +704,7 @@ or suspended host has no instance.
 - **Lifetime**: 14 days, sliding (renewed once a day), and never more than 30 days after sign-in
   (`session.absolute`): past it the session is anonymous however recently it was used.
 - **Passkey relying party** (a default to confirm before the first production passkey, since a passkey is bound to its relying party for good): the tenant's own host. `rpIdOf(tenant)` is
-  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`).
+  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`); the verified custom domains are its related origins (`passkeys.relatedOrigins`, see Custom domains).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
   `src/server.ts`. Consent and passkeys are below, and a client's `/authorize` needs a resource: userinfo's, or one
   registered with `resources:create`. `__Host-` cookies need https (Chrome accepts `localhost`).
@@ -901,7 +901,7 @@ mutation {
 Passwordless sign-in with a passkey, on the same `/graphql` of the tenant's host (every operation
 below goes through the same-origin guard). janus passkeys are the **first factor** here
 (`passkeys.firstFactor`, `@softistx/janus-passkeys`): no password and no TOTP. The relying party
-is the tenant's own host (`rpIdOf`) and the only origin `originOf`, so a passkey belongs to one
+is the tenant's own host (`rpIdOf`) and its origin `originOf` (plus the verified custom domains as related origins, ADR-0036), so a passkey belongs to one
 tenant for good, and is unknown to every other one. WebAuthn options and responses travel as
 **JSON text** (`String`); in the browser, parse the options with
 `PublicKeyCredential.parseRequestOptionsFromJSON` / `parseCreationOptionsFromJSON` and send
@@ -1049,7 +1049,9 @@ mutation {
   tenant's slug host), 429 past the limit, a bare 404 otherwise. Call the app directly (a request carrying `X-Forwarded-*` is refused) and
   keep `/internal/` off the public proxy. Redis down: the limit is skipped.
 - `GET /.well-known/webauthn` on the slug host lists the verified domains' origins (WebAuthn Related
-  Origins); janus does not honour it yet.
+  Origins). The passkey layer accepts the same origins: a ceremony run on a verified domain passes, one
+  on an unverified or removed domain is refused (the tenant's cache entry drops on verify and remove, which
+  rebuilds its janus instance).
 
 ## How a host maps to a tenant
 

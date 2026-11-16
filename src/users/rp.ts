@@ -3,7 +3,7 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 // Assumed, not answered (2026-11-12), confirm before the first production
 // passkey: the passkey relying party is the tenant's own host. A passkey is
 // scoped to its rpId for good, so this is the one place to change it (a custom
-// domain would go through WebAuthn Related Origins, a later slice).
+// domain is a WebAuthn related origin of this rpId, ADR-0036).
 
 /** The WebAuthn rpId of a tenant: its host, `<slug>.<CLAVIX_DOMAIN>`, no port. */
 export const rpIdOf = (tenant: Pick<ResolvedTenant, "slugIssuer">): string =>

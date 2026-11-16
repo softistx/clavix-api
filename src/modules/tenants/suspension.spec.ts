@@ -169,6 +169,7 @@ describe("a suspension and the cached custom hosts", () => {
       domains: {
         tenantOfHost: (host) => store.tenantOfHost(host),
         primaryHostOf: (tenantId) => store.primaryHostOf(tenantId),
+        verifiedHostsOf: (tenantId) => store.verifiedHostsOf(tenantId),
       },
       hostsOf: (tenantId) => store.resolvingHostsOf(tenantId),
     });
@@ -195,6 +196,7 @@ describe("withTenantState", () => {
     status,
     issuer: "https://acme.clavix.test",
     slugIssuer: "https://acme.clavix.test",
+    relatedOrigins: [],
     partition: "t1",
     version: 1,
     signIn: signInPolicySchema.parse(undefined),
