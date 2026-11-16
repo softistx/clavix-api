@@ -477,6 +477,48 @@ describe("deleteClient", () => {
     expect(again.data?.["deleteClient"]).toBe(false);
     expect((await store.findGrant(late.id))?.revokedAt).toBeInstanceOf(Date);
   });
+
+  test("revokes the client's access and refresh tokens, and no other client's", async () => {
+    await create(admin, tenantA, { name: "Tokens", clientId: "tok-gone" });
+    const store = await storeOf(tenantA);
+    const now = new Date();
+    const later = new Date(now.getTime() + 3_600_000);
+    const tokens = async (grantId: string, clientId: string) => {
+      const base = {
+        grantId,
+        userId: "user-1",
+        clientId,
+        resource: "https://api.example/v1",
+        scopes: ["read"],
+        createdAt: now,
+        expiresAt: later,
+        revokedAt: null,
+      };
+      await store.insertAccessToken({ ...base, tokenHash: `a-${grantId}` });
+      await store.insertRefreshToken({
+        ...base,
+        tokenHash: `r-${grantId}`,
+        absoluteExpiresAt: later,
+        rotatedAt: null,
+      });
+    };
+    await tokens("grant-tok-gone", "tok-gone");
+    await tokens("grant-tok-kept", "back-end");
+    const result = await admin(DELETE, { tenantId: tenantA, id: "tok-gone" });
+    expect(result.data?.["deleteClient"]).toBe(true);
+    expect(
+      (await store.findAccessToken("a-grant-tok-gone"))?.revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      (await store.findRefreshToken("r-grant-tok-gone"))?.revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      (await store.findAccessToken("a-grant-tok-kept"))?.revokedAt,
+    ).toBeNull();
+    expect(
+      (await store.findRefreshToken("r-grant-tok-kept"))?.revokedAt,
+    ).toBeNull();
+  });
 });
 
 describe("limits", () => {

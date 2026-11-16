@@ -10,6 +10,7 @@ import {
   consoleAudience,
   consoleRedirectUri,
 } from "@/console/identity";
+import { deleteClientRevoking } from "@/modules/clients/client-deletion";
 import { registerResource } from "@/modules/resources/register-resource";
 import { resources } from "@/modules/resources/resources.model";
 import { scopes } from "@/modules/resources/scopes.model";
@@ -76,7 +77,12 @@ export async function unseedConsole(db: Db, origin: PublicOrigin) {
   });
   if (tenant === undefined) return;
   const partition = partitionOf(tenant._id);
-  await createMongoOAuth(db, { partition }).deleteClient(CONSOLE_CLIENT_ID);
+  // The console client has live sessions: its grants and tokens go with it.
+  await deleteClientRevoking(
+    createMongoOAuth(db, { partition }),
+    CONSOLE_CLIENT_ID,
+    () => new Date(),
+  );
   await db
     .collection("resources")
     .deleteMany({ tenantId: tenant._id, uri: consoleAudience(origin) });
