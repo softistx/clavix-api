@@ -498,6 +498,12 @@ On `createRole` or `updateRole`: a role of the same name already exists in the s
 unique among the roles of the whole tenant, and among those of one resource, so `admin` may exist
 once tenant-wide and once on each resource. Pick another name, or update the existing role.
 
+### `ROLE_MANAGED` (403) `The role "<name>" is managed by Clavix and cannot be changed or deleted`
+
+On `updateRole` or `deleteRole` of a role whose `managed` field is `true`: Clavix created it for the
+tenant and keeps it as it is. Nothing was written. Hide Edit and Delete on such a role; assigning
+it with `assignRole` still works. A tenant's own roles (`managed: false`) are not affected.
+
 ### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
 
 `No such role`: the id names no role of this tenant (another tenant's id is not found either), or the
