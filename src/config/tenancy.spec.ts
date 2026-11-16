@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createTenancy } from "@/config/tenancy";
+import type { TxtAnswer } from "@/modules/domains/dns";
+import { DomainStore } from "@/modules/domains/domains.service";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 
@@ -23,6 +25,7 @@ afterEach(async () => {
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
+  await mongo.db.domains.raw.deleteMany({});
   await cache.delete(host);
 });
 
@@ -42,5 +45,51 @@ describe("tenant resolver wiring", () => {
     expect(await resolver.resolveHost(host)).toMatchObject({
       status: "suspended",
     });
+  });
+});
+
+describe("custom domains in the production wiring", () => {
+  test("a verified custom domain reaches relatedOrigins through the domains object of config/tenancy.ts", async () => {
+    const tenant = await service.create({ slug: "acme", name: "Acme" });
+    const records = new Map<string, TxtAnswer>();
+    const store = new DomainStore(mongo.db.domains, {
+      dns: {
+        resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
+      },
+      platformDomain: env.CLAVIX_DOMAIN,
+      log: () => {},
+    });
+    const tenancy = createTenancy({
+      tenants: mongo.db.tenants,
+      cache: memoryTenantCache(),
+      config: {
+        scheme: env.CLAVIX_PUBLIC_SCHEME,
+        domain: env.CLAVIX_DOMAIN,
+        port: env.CLAVIX_PUBLIC_PORT,
+      },
+      // The same object config/tenancy.ts builds, over a store with a fake DNS.
+      domains: {
+        tenantOfHost: (h) => store.tenantOfHost(h),
+        primaryHostOf: (tenantId) => store.primaryHostOf(tenantId),
+        verifiedHostsOf: (tenantId) => store.verifiedHostsOf(tenantId),
+      },
+      hostsOf: (tenantId) => store.resolvingHostsOf(tenantId),
+    });
+    expect(
+      (await tenancy.tenantResolver.resolveHost(host))?.relatedOrigins,
+    ).toEqual([]);
+
+    const custom = "login.acme-corp.com";
+    const claim = await store.add(tenant._id, custom, null);
+    records.set(`_clavix.${custom}`, {
+      kind: "records",
+      values: [claim.txtToken],
+    });
+    await store.verify(tenant._id, claim._id.toHexString());
+    await tenancy.tenantResolver.invalidate([host, custom]);
+
+    expect(
+      (await tenancy.tenantResolver.resolveHost(host))?.relatedOrigins,
+    ).toContain(`https://${custom}`);
   });
 });
