@@ -12,7 +12,7 @@ and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts`.
 | `caddy` | `caddy:2`                             | the internet (80, 443)     | the only published ports; certificates on demand |
 | `api`   | `CLAVIX_API_IMAGE` (the `Dockerfile`) | `caddy`, `ui`              | non-root, healthcheck on `/healthz`, port 3000   |
 | `ui`    | `CLAVIX_UI_IMAGE` (clavix-ui)         | `caddy`                    | hosted pages, console, landing; port 3001        |
-| `mongo` | `mongo:8`                             | `api`, `backup`, `restore` | `--replSet rs0`, initiated by its healthcheck    |
+| `mongo` | `mongo:8`                             | `api`, `backup`, `restore` | `--replSet rs0`, key file, users, optional TLS   |
 | `redis` | `redis:7-alpine`                      | `api`                      | password, append-only file                       |
 
 Caddy sends the authorization server, the GraphQL APIs, JWKS, userinfo, the logo
@@ -46,7 +46,9 @@ by the `Host` header, which Caddy passes untouched.
 3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate
    the secrets: `openssl rand -base64 32` for `CLAVIX_KEYS_MASTER_KEY`,
    `openssl rand -hex 32` for `CLAVIX_TLS_ASK_SECRET`, `openssl rand -hex 24` for
-   `REDIS_PASSWORD`, `openssl rand -base64 48` for `CONSOLE_SESSION_SECRET`.
+   `REDIS_PASSWORD`, `MONGO_ROOT_PASSWORD` and `MONGO_APP_PASSWORD`,
+   `openssl rand -hex 64` for `MONGO_KEYFILE`, `openssl rand -base64 48` for
+   `CONSOLE_SESSION_SECRET`.
    `CONSOLE_CLIENT_SECRET` stays a placeholder until step 5.
 4. **Master key custody.** `CLAVIX_KEYS_MASTER_KEY` encrypts every tenant's
    signing keys and social secrets. Store it in a secret manager apart from the
@@ -103,21 +105,25 @@ by the `Host` header, which Caddy passes untouched.
 The variables of the API are in the README ("Environment") and `.env.example`.
 Beyond them, the deployment reads, in `deploy/.env`:
 
-| Variable                                    | Read by        | Meaning                                                                                                                                                        |
-| ------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`       | compose        | the images to run                                                                                                                                              |
-| `CLAVIX_DOMAIN`                             | api, ui, caddy | the apex; tenants live at `<slug>.<domain>`                                                                                                                    |
-| `ACME_EMAIL`                                | caddy          | the ACME account address                                                                                                                                       |
-| `REDIS_PASSWORD`                            | redis, api     | the password in `REDIS_URL`                                                                                                                                    |
-| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api            | required in production                                                                                                                                         |
-| `CLAVIX_TLS_ASK_SECRET`                     | api, caddy     | the token of the `ask` URL, 32 characters or more                                                                                                              |
-| `CONSOLE_CLIENT_SECRET`                     | ui             | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                  |
-| `CONSOLE_SESSION_SECRET`                    | ui             | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                          |
-| `CONSOLE_ISSUER`                            | ui             | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
-| `CONTACT_EMAIL`                             | ui             | the public contact address                                                                                                                                     |
-| `BACKUP_DIR`, `BACKUP_KEEP`                 | backup         | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
+| Variable                                    | Read by                     | Meaning                                                                                                                                                        |
+| ------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`       | compose                     | the images to run                                                                                                                                              |
+| `CLAVIX_DOMAIN`                             | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                    |
+| `ACME_EMAIL`                                | caddy                       | the ACME account address                                                                                                                                       |
+| `REDIS_PASSWORD`                            | redis, api                  | the password in `REDIS_URL`                                                                                                                                    |
+| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`    | mongo                       | the server's root user (default `root`), created on the first start; used by the healthcheck only                                                              |
+| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`      | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` on the `clavix` database; its credentials are in `MONGO_URI`                                              |
+| `MONGO_KEYFILE`                             | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                            |
+| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`        | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                    |
+| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api                         | required in production                                                                                                                                         |
+| `CLAVIX_TLS_ASK_SECRET`                     | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                              |
+| `CONSOLE_CLIENT_SECRET`                     | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                  |
+| `CONSOLE_SESSION_SECRET`                    | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                          |
+| `CONSOLE_ISSUER`                            | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
+| `CONTACT_EMAIL`                             | ui                          | the public contact address                                                                                                                                     |
+| `BACKUP_DIR`, `BACKUP_KEEP`                 | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
 
-Compose sets `MONGO_URI`, `REDIS_URL`, `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
+Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
 ignored by git. Compose hands the whole file to `api` only (so it also holds the two
 console variables, which it does not read); the `ui` gets just `CLAVIX_DOMAIN`,
@@ -158,6 +164,56 @@ caddy:
     default:
       aliases: ["clavix.${CLAVIX_DOMAIN}", "console.${CLAVIX_DOMAIN}"]
 ```
+
+## MongoDB
+
+The database is authenticated. `deploy/mongo/entrypoint.sh` starts `mongod` with
+`--replSet rs0` and `--keyFile` (written from `MONGO_KEYFILE`, which also turns
+authorization on). On the first start of an empty volume the image creates the
+root user from `MONGO_ROOT_USER` / `MONGO_ROOT_PASSWORD`, then
+`deploy/mongo/init-app-user.js` creates the application user in the `clavix`
+database with `readWrite` and `dbAdmin` on it (`db:sync` applies validators and indexes), nothing on any other database. The api, `backup` and `restore`
+connect as that user (`authSource=clavix`); only the healthcheck, which initiates
+the replica set, uses root, and the api container's environment blanks the
+root and key file variables it would otherwise inherit from `deploy/.env`.
+Use hex passwords (`openssl rand -hex 24`): they are put in a URI unescaped.
+The restore drill (`restore ... clavix-drill`) writes to another database, which
+the application user cannot: run it with a root URI
+(`mongodb://root:<MONGO_ROOT_PASSWORD>@mongo:27017/clavix-drill?replicaSet=rs0&authSource=admin`)
+as `MONGO_URI` of the `restore` service.
+
+The users are created by an empty volume's first start only. **An existing
+deployment** (data, no users) keeps its volume: start `mongo` once with the old
+command (`--replSet rs0 --bind_ip_all --wiredTigerCacheSizeGB 1`, no key file) to create them, e.g. with `mongosh` inside the container
+(`use admin; db.createUser({user: "root", pwd: "...", roles: ["root"]})`,
+`use clavix; db.createUser({user: "clavix", pwd: "...", roles: [{role: "readWrite", db: "clavix"}]})`),
+then switch to this file (the key file turns authorization on).
+
+**TLS between the containers is optional.** `deploy/tls/` (or `MONGO_TLS_DIR`,
+ignored by git) has two folders: `server/` with `mongo.pem` (the certificate and
+its key, SAN `mongo`) and `ca.pem`, mounted into `mongo` only, and `ca/` with
+`ca.pem` alone, mounted into the api, `backup` and `restore`, so no private key
+reaches them. Set `MONGO_URI_OPTIONS=&tls=true&tlsCAFile=/etc/mongo-tls-ca/ca.pem`
+in `deploy/.env`. Without `server/mongo.pem` the server starts without TLS.
+`mongod` reads its files as user `mongodb` (uid 999): `chmod 640` and
+`chown :999 server/mongo.pem` (or 644 on a host you alone use). A self-signed pair:
+
+```sh
+cd deploy/tls   # keep ca.key here, outside the mounted folders
+openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj "/CN=clavix-mongo-ca" -keyout ca.key -out ca.pem
+openssl req -newkey rsa:4096 -nodes -subj "/CN=mongo" -addext "subjectAltName=DNS:mongo" -keyout mongo.key -out mongo.csr
+printf 'subjectAltName=DNS:mongo' > ext.cnf
+openssl x509 -req -in mongo.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 825 -extfile ext.cnf -out mongo.crt
+cat mongo.crt mongo.key > server/mongo.pem && cp ca.pem server/ca.pem && cp ca.pem ca/ca.pem
+chmod 644 server/mongo.pem; rm mongo.key mongo.csr mongo.crt ext.cnf
+```
+
+## Redis
+
+Redis starts with `--requirepass "$REDIS_PASSWORD"` (read from the environment, so
+it is not in the process list), the healthcheck authenticates with
+`REDISCLI_AUTH`, and the api's `REDIS_URL` is `redis://:<REDIS_PASSWORD>@redis:6379`.
+Redis is on the private network only; use a hex password (it sits in a URL).
 
 ## TLS
 
@@ -382,7 +438,6 @@ Application errors and their causes: [troubleshooting.md](troubleshooting.md).
 
 ## Not covered yet
 
-- MongoDB authentication and TLS between containers (an accepted risk for now): the database listens on the
-  private compose network only, shared by api, ui, caddy and the tools. Add auth with a key file before exposing it.
+- TLS on Redis (the connection is authenticated, on the private network).
 - Image publishing and any deploy pipeline (workflows are off).
 - Point-in-time recovery (oplog) and off-host backup shipping.
