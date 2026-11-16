@@ -86,7 +86,9 @@ nxgt-janus release says which.
 - **Users in the console** — list, invite, disable and delete users, with their sessions (revoked
   one by one), grants and an e-mail verified flag, and an e-mail prefix search with a total
   ([#101](https://github.com/softistx/clavix-api/issues/101),
-  [#132](https://github.com/softistx/clavix-api/issues/132)).
+  [#132](https://github.com/softistx/clavix-api/issues/132)), and a `userLookup` for the role
+  member picker, by e-mail or name prefix, for a role writer
+  ([#208](https://github.com/softistx/clavix-api/issues/208)).
 - **End-user roles** — roles per tenant, scoped to a resource or not, assigned to users and released
   in the `roles` claim ([#102](https://github.com/softistx/clavix-api/issues/102)); a `managed` marker
   on a role Clavix provides, refused for update and delete

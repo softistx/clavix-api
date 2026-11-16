@@ -5,6 +5,8 @@ import { tenantArg } from "../ids";
 // Reading the users is `view`; changing them is `edit` (a tenant admin).
 export const usersGuards: Guards = {
   "Query.users": onTenant("view", tenantArg),
+  // A picker for assigning roles: the permission that assigns them.
+  "Query.userLookup": onTenant("edit", tenantArg),
   "Query.user": onTenant("view", tenantArg),
   "Query.userInvitations": onTenant("view", tenantArg),
   "Query.userGrants": onTenant("view", tenantArg),
