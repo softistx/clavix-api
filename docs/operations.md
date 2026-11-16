@@ -219,6 +219,12 @@ it. Custom domains stay on demand.
    janus-oauth-mongo 0.15 adds the TTL collection `oauthDpopReplay` (DPoP replay cache, RFC 9449):
    run `db:sync` (`syncMongoOAuthPartitioned`) before the deploy so it exists. DPoP stays off until `dpop` is
    configured (clavix-api #14).
+   janus-oauth-mongo 0.16 and janus-mongo 0.29 need `db:sync` again before the deploy: the
+   new OAuth index, `typeNameKey` on the users and the validator that accepts `nameKey` (a user
+   written with a name is refused, code 121, until it runs). Then `db:migrate` runs
+   `2026-11-16-name-keys`, which writes `nameKey` (the folded display name) on the users written
+   before janus 0.66, so the console's `userLookup` finds them by name; idempotent, it moves
+   neither `version` nor `updatedAt`.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

@@ -97,9 +97,8 @@ extend type Query {
   or of the display name (any case, plain text, never a pattern); blank gives
   an empty list. `first` defaults to 10, at most 20. E-mail matches come first,
   then name matches; each user once. Only id, e-mail and name are returned. The
-  name match reads a bounded part of the pool (the oldest 1000 users), so on a
-  larger pool a name may be missed: type the e-mail then. A `query` over 254
-  characters is BAD_USER_INPUT (400).
+  name match uses janus's indexed name search, whatever the pool's size. A `query`
+  over 254 characters is BAD_USER_INPUT (400).
   """
   userLookup(tenantId: ID!, query: String!, first: Int): [UserLookupResult!]!
   "One user of the tenant (tenant viewer), or `null`: unknown, or of another tenant."
