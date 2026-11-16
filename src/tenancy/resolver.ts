@@ -15,7 +15,7 @@ export interface DomainDirectory {
   tenantOfHost(host: string): Promise<ObjectId | undefined>;
   primaryHostOf(tenantId: ObjectId): Promise<string | undefined>;
   /** The tenant's verified hosts: the passkey related origins (ADR-0036). */
-  verifiedHostsOf?(tenantId: ObjectId): Promise<string[]>;
+  verifiedHostsOf(tenantId: ObjectId): Promise<string[]>;
 }
 
 /** What the resolver needs of a stored tenant. */
@@ -135,7 +135,7 @@ async function loadTenant(
   const verifiedHosts =
     record === undefined
       ? undefined
-      : await options.domains?.verifiedHostsOf?.(record._id);
+      : await options.domains?.verifiedHostsOf(record._id);
   return toResolved(record, options.config, primary, verifiedHosts);
 }
 

@@ -169,6 +169,7 @@ describe("a suspension and the cached custom hosts", () => {
       domains: {
         tenantOfHost: (host) => store.tenantOfHost(host),
         primaryHostOf: (tenantId) => store.primaryHostOf(tenantId),
+        verifiedHostsOf: (tenantId) => store.verifiedHostsOf(tenantId),
       },
       hostsOf: (tenantId) => store.resolvingHostsOf(tenantId),
     });

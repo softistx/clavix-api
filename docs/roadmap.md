@@ -93,7 +93,7 @@ nxgt-janus release says which.
   host; unsafe CSS is refused on save ([#10](https://github.com/softistx/clavix-api/issues/10)).
 - **Custom domains** — add, verify by DNS TXT, remove and make primary; a 6-hourly recheck with a
   7-day grace, automatic TLS only for verified domains of active tenants, and the Related Origins
-  document ([#11](https://github.com/softistx/clavix-api/issues/11)).
+  document, also accepted by the passkey layer ([#11](https://github.com/softistx/clavix-api/issues/11)).
 - **Going live** — a `Dockerfile`, a compose file with Caddy (on-demand TLS asking the API, a
   wildcard option), `/healthz` and `/readyz`, a MongoDB backup and restore script with a restore
   drill, and the runbook [operations.md](operations.md); no deploy pipeline, images are built by

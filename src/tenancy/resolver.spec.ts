@@ -289,6 +289,7 @@ describe("custom domains", () => {
       domains: {
         tenantOfHost: async (host) => verified[host],
         primaryHostOf: async () => primary,
+        verifiedHostsOf: async () => [],
       },
       cache: memoryTenantCache(),
       config,
