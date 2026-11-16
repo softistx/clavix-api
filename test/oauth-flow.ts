@@ -80,8 +80,20 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
   const clients: Record<string, { id: string; secret: string }> = {};
 
   /** A tenant with a signing key, a confidential client `backend` and these resources (each with a `read` scope). */
-  async function setUp(slug: string, resourceUris: readonly string[] = []) {
+  async function setUp(
+    slug: string,
+    resourceUris: readonly string[] = [],
+    options: { par?: boolean } = {},
+  ) {
     const { id } = await tenantsService.create({ slug, name: slug });
+    // A new tenant requires pushed authorization requests (M3): the specs that
+    // authorize directly turn it off, the PAR specs keep it.
+    if (options.par !== true) {
+      await tenantsService.updateOAuth(id, (tenant) => ({
+        ...tenant.oauth,
+        par: { required: false },
+      }));
+    }
     const tenant = await tenantResolver.resolveHost(`${slug}.${DOMAIN}`);
     if (tenant === null) throw new Error("tenant not resolved");
     await rotateSigningKeys(signingKeysFor(tenant.tenantId), {

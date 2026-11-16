@@ -288,6 +288,13 @@ it. Custom domains stay on demand.
    `2026-11-16-name-keys`, which writes `nameKey` (the folded display name) on the users written
    before janus 0.66, so the console's `userLookup` finds them by name; idempotent, it moves
    neither `version` nor `updatedAt`.
+   Pushed authorization requests (clavix-api #13): run `db:sync` **before** `db:migrate` and before the
+   deploy (the PAR validators, the replay collection and the clients validator that accepts
+   `requirePushedAuthorizationRequests`). `db:migrate` then runs `2026-11-16-oauth-policy`, which writes
+   an explicit `oauth: { par: { required: false }, dpop: { required: false } }` on every tenant
+   that has none, so tenants that existed keep PAR off whatever the schema default becomes; new tenants
+   start with PAR required. Idempotent; it moves neither `version` nor `updatedAt`. The proxy must
+   route `/par` to the API (the Caddyfile's `@api` matcher does).
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

@@ -45,6 +45,12 @@ export interface RegisterClientInput {
   grants?: readonly string[];
   /** Mint a new secret for an existing confidential client. */
   rotateSecret?: boolean;
+  /**
+   * Make this client push its authorization requests to `/par` (RFC 9126), on
+   * a tenant that does not require it of everyone. Default: what the client
+   * already records, else `false`.
+   */
+  requirePar?: boolean;
 }
 
 export interface RegisteredClient {
@@ -57,6 +63,8 @@ export interface RegisteredClient {
   type: "public" | "confidential";
   /** The plain secret, shown here once; `null` for a public client or an unchanged secret. */
   clientSecret: string | null;
+  /** Whether the client must push its authorization requests. */
+  requirePar: boolean;
 }
 
 export interface RegisterClientOptions {
@@ -178,6 +186,8 @@ export async function registerClient(
   const secretHash =
     keptHash ??
     (clientSecret === null ? undefined : hashOAuthSecret(clientSecret));
+  const requirePar =
+    input.requirePar ?? existing?.requirePushedAuthorizationRequests === true;
   const record: OAuthClientRecord = {
     id: clientId,
     name,
@@ -186,6 +196,7 @@ export async function registerClient(
     createdAt: existing?.createdAt ?? (options.now ?? (() => new Date()))(),
     expiresAt: null,
     grantTypes: grantTypes ?? existing?.grantTypes ?? [...OFFERED_GRANTS],
+    ...(requirePar ? { requirePushedAuthorizationRequests: true } : {}),
     ...(confidential && secretHash !== undefined
       ? {
           tokenEndpointAuthMethod: "client_secret_basic" as const,
@@ -202,5 +213,6 @@ export async function registerClient(
     redirectUris,
     type,
     clientSecret,
+    requirePar,
   };
 }

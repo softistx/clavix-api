@@ -19,6 +19,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 
 const RESOURCE = "https://api.clavix.test/mcp";
 const REDIRECT = "https://app.example/callback";
@@ -132,7 +133,7 @@ async function exchange(slug: string, redirectTo: string) {
 
 beforeAll(async () => {
   for (const slug of ["acme", "globex", "initech"]) {
-    await tenants.create({ slug, name: slug });
+    await createTenantParOff(tenants, { slug, name: slug });
     const tenant = await tenantResolver.resolveHost(new URL(url(slug)).host);
     if (tenant === null) throw new Error("tenant not resolved");
     await rotateSigningKeys(signingKeysFor(tenant.tenantId), {

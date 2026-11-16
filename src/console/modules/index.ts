@@ -7,6 +7,11 @@ import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
 import { domains, domainsAudits, domainsGuards } from "./domains";
 import { me, meGuards } from "./me";
+import {
+  oauthPolicy,
+  oauthPolicyAudits,
+  oauthPolicyGuards,
+} from "./oauth-policy";
 import { resources, resourcesAudits, resourcesGuards } from "./resources";
 import { roles, rolesAudits, rolesGuards } from "./roles";
 import {
@@ -26,6 +31,7 @@ export const resolvers: Resolvers = mergeResolvers([
   admins,
   branding,
   signInMethods,
+  oauthPolicy,
   clients,
   domains,
   resources,
@@ -44,6 +50,7 @@ export const guards: Guards = {
   ...rolesGuards,
   ...tenantsGuards,
   ...signInMethodsGuards,
+  ...oauthPolicyGuards,
   ...usersGuards,
   ...sessionsGuards,
 };
@@ -56,6 +63,7 @@ export const audits: Audits = {
   ...rolesAudits,
   ...tenantsAudits,
   ...signInMethodsAudits,
+  ...oauthPolicyAudits,
   ...usersAudits,
   ...sessionsAudits,
 };

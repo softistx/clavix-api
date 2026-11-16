@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { RedisClient } from "bun";
 import { openAppRedis } from "@/config/redis";
+import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { redisTenantCache } from "./tenant-cache";
 
@@ -34,6 +35,7 @@ const tenant = {
   partition: "65f0000000000000000000aa",
   version: 1,
   signIn: signInPolicySchema.parse(undefined),
+  oauth: oauthPolicySchema.parse(undefined),
 };
 const ttl = (host: string) => raw.ttl(`clavix:tenant-host:${host}`);
 

@@ -29,6 +29,7 @@ import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 import {
   confirmEmailVerification,
   requestEmailVerification,
@@ -142,7 +143,11 @@ let redis: TestRedis;
 
 beforeAll(async () => {
   for (const slug of ["acme", "globex", "paused"]) {
-    await tenantsService.create({ slug, name: slug, signUp: true });
+    await createTenantParOff(tenantsService, {
+      slug,
+      name: slug,
+      signUp: true,
+    });
   }
   redis = await startTestRedis();
 }, 300_000);

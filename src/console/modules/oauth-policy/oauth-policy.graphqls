@@ -1,0 +1,47 @@
+"One requirement of a tenant's OAuth policy."
+type OAuthRequirement {
+  "Whether every client of the tenant must meet it."
+  required: Boolean!
+}
+
+"""
+A tenant's OAuth policy. `version` is the tenant's version: it rises on every
+change, and the tenant's authorization server follows it within a minute at most.
+"""
+type OAuthPolicy {
+  tenantId: ID!
+  "Pushed authorization requests (RFC 9126): `/authorize` refuses a request that was not pushed to `/par`, whatever the client."
+  par: OAuthRequirement!
+  "DPoP-bound tokens (RFC 9449). Stored now; enforced from the DPoP slice."
+  dpop: OAuthRequirement!
+  version: Int!
+}
+
+input OAuthRequirementInput {
+  required: Boolean
+}
+
+"A flag left out keeps its value."
+input OAuthPolicyInput {
+  par: OAuthRequirementInput
+  dpop: OAuthRequirementInput
+}
+
+type Query {
+  "The tenant's OAuth policy. Needs view on the tenant."
+  oauthPolicy(tenantId: ID!): OAuthPolicy!
+}
+
+type Mutation {
+  """
+  Changes the tenant's OAuth policy; a flag left out keeps its value. Needs edit
+  on the tenant. Idempotent: a call that changes nothing writes nothing.
+  Turning `par.required` on makes every client of the tenant push its requests:
+  a client that does not breaks with `invalid_request`.
+  PLATFORM_TENANT_PROTECTED (409) when it would require PAR or DPoP on the
+  platform tenant (the console client does not push yet); CONFLICT (409) when
+  other changes kept winning the race (nothing stored: read the policy and send
+  the change again).
+  """
+  updateOAuthPolicy(tenantId: ID!, input: OAuthPolicyInput!): OAuthPolicy!
+}

@@ -20,6 +20,7 @@ import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 import { SignInPolicyService } from "./service";
 
 const app = createApp();
@@ -85,12 +86,18 @@ let social = "";
 let other = "";
 
 beforeAll(async () => {
-  await tenants.create({ slug: "sih-open", name: "Open" });
+  await createTenantParOff(tenants, { slug: "sih-open", name: "Open" });
   // "social" lets strangers sign up; "other" does not.
   social = (
-    await tenants.create({ slug: "sih-social", name: "Social", signUp: true })
+    await createTenantParOff(tenants, {
+      slug: "sih-social",
+      name: "Social",
+      signUp: true,
+    })
   ).id;
-  other = (await tenants.create({ slug: "sih-other", name: "Other" })).id;
+  other = (
+    await createTenantParOff(tenants, { slug: "sih-other", name: "Other" })
+  ).id;
   await policy.setSocial(social, {
     provider: "github",
     clientId: "gh-client-social",
@@ -255,7 +262,9 @@ describe("social sign-in", () => {
   });
 
   test("a provider changed while the app runs is read afresh on the next call", async () => {
-    const mid = (await tenants.create({ slug: "sih-mid", name: "Mid" })).id;
+    const mid = (
+      await createTenantParOff(tenants, { slug: "sih-mid", name: "Mid" })
+    ).id;
     for (const clientId of ["gh-mid-1", "gh-mid-2", "gh-mid-1"]) {
       await policy.setSocial(mid, {
         provider: "github",

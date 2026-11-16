@@ -10,6 +10,8 @@ export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name
   --confidential           a back end with a secret (client_secret_basic); default is a public client with PKCE
   --client-id <id>         the client's id in the tenant; default: the name as a-z0-9-. Re-running with the same id updates the client
   --grants <a,b>           ${OFFERED_GRANTS.join(",")} (enforced by janus: list refresh_token to let the client refresh; needs authorization_code; default: kept, else both)
+  --require-par            make the client push its authorization requests to /par (RFC 9126); kept on a re-run unless --no-require-par
+  --no-require-par         stop requiring it of this client
   --rotate-secret          mint a new secret for an existing confidential client`;
 
 /** The script's flags as a registration input; a `CliInputError` for a bad line. */
@@ -37,6 +39,11 @@ export function parseClientArgs(argv: readonly string[]): RegisterClientInput {
     ...(values.grants === undefined
       ? {}
       : { grants: values.grants.split(",").map((grant) => grant.trim()) }),
+    ...(values["require-par"] === true
+      ? { requirePar: true }
+      : values["no-require-par"] === true
+        ? { requirePar: false }
+        : {}),
     ...(values["rotate-secret"] === true ? { rotateSecret: true } : {}),
   };
 }
@@ -53,6 +60,8 @@ function read(argv: readonly string[]) {
       "client-id": { type: "string" },
       grants: { type: "string" },
       "rotate-secret": { type: "boolean" },
+      "require-par": { type: "boolean" },
+      "no-require-par": { type: "boolean" },
     },
   });
 }

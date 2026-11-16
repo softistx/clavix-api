@@ -3,7 +3,7 @@ import { isLive, TENANT_SUSPENDED } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 
 /** The paths that open or extend a session; the others keep answering for a suspended tenant (ADR-0039). */
-const REFUSED_PATHS = new Set(["/authorize", "/token"]);
+const REFUSED_PATHS = new Set(["/authorize", "/par", "/token"]);
 
 export interface TenantStateOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
@@ -28,7 +28,7 @@ export function subjectOf(token: unknown): string | undefined {
 }
 
 /**
- * Wraps the issuers' `handle`: `/authorize` and `/token` (refresh included)
+ * Wraps the issuers' `handle`: `/authorize`, `/par` and `/token` (refresh included)
  * of a suspended or deleted tenant answer 403 `TENANT_SUSPENDED`; discovery,
  * JWKS, userinfo, introspection and revocation answer as before. A token
  * issued on `/token` counts its user as active this month.

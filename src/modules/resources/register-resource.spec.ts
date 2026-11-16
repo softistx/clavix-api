@@ -16,6 +16,7 @@ import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 import { parseResourceArgs } from "./cli";
 import { registerResource, storedResourcesFor } from "./register-resource";
 
@@ -135,7 +136,7 @@ const claimsOf = (jwt: string) =>
 
 beforeAll(async () => {
   for (const slug of ["resalpha", "resbeta", "respaused"]) {
-    await tenants.create({ slug, name: slug });
+    await createTenantParOff(tenants, { slug, name: slug });
   }
   for (const slug of ["resalpha", "resbeta"]) {
     const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);

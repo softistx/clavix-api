@@ -96,6 +96,14 @@ client of the same tenant, `client_secret_basic`) answers only for tokens of the
 resources (`resourcesFor`), never for userinfo's. janus-oauth's `NoSigningKeyError` is a 503 `temporarily_unavailable` on these paths
 too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 
+## OAuth policy (`src/modules/oauth-policy`, `src/console/modules/oauth-policy/`)
+
+`tenant.oauth` (`oauthPolicySchema`: `{ par: { required }, dpop: { required } }`, every flag defaults to `false`) is on the tenant document and on `ResolvedTenant`, so an entry cached before the field parses off. `building.ts` passes `pushedAuthorizationRequests: { required: tenant.oauth.par.required }` (`/par` is always served, and is in `OAUTH_PATHS`, `REFUSED_PATHS` and the Caddyfile `@api` matcher).
+- **Every write goes through `OAuthPolicyService`** (over `TenantsService.updateOAuth`, optimistic lock, no write when nothing changes, `version` bump), modelled on `SignInPolicyService`. The `clavix` tenant refuses `par.required` / `dpop.required` true (409 `PLATFORM_TENANT_PROTECTED`) until the console client pushes.
+- `TenantsService.create` writes `par.required: true` for a new tenant (not the platform one); migration `2026-11-16-oauth-policy` writes an explicit `false` on the existing ones (`db:sync` first). Specs that authorize directly on a tenant made by `createFlow().setUp` get PAR turned off there (`{ par: true }` keeps it).
+- A client's own `requirePushedAuthorizationRequests` goes through `registerClient` (`requirePar`, CLI `--require-par`) and `ClientsService`; `ClientView` carries it.
+- Console: `oauthPolicy` needs `view`, `updateOAuthPolicy` `edit`, admin event `oauthPolicy.update`.
+
 ## Users and sessions
 
 Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:

@@ -13,6 +13,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../test/tenant-par-off";
 import { createClavixOAuthIssuers, userinfoOf } from "./issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "./ports";
 
@@ -101,7 +102,7 @@ const basic = (id: string, secret: string) =>
 const clients: Record<string, { id: string; secret: string }> = {};
 
 async function setUp(slug: string, withKey = true) {
-  await tenants.create({ slug, name: slug });
+  await createTenantParOff(tenants, { slug, name: slug });
   const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);
   if (tenant === null) throw new Error("tenant not resolved");
   if (withKey) {

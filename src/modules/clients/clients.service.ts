@@ -53,12 +53,14 @@ function sameClient(
     name: string;
     type: "public" | "confidential";
     redirectUris: readonly string[];
+    requirePar?: boolean | undefined;
   },
 ) {
   const wanted = new Set(input.redirectUris);
   return (
     stored.name === input.name.trim() &&
     stored.type === input.type &&
+    (input.requirePar ?? false) === stored.requirePushedAuthorizationRequests &&
     stored.redirectUris.length === wanted.size &&
     stored.redirectUris.every((uri) => wanted.has(uri))
   );
@@ -163,6 +165,7 @@ export class ClientsService {
       type: "public" | "confidential";
       redirectUris: readonly string[];
       clientId?: string | undefined;
+      requirePar?: boolean | undefined;
     },
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
     checkSizes(input);
@@ -186,6 +189,9 @@ export class ClientsService {
       redirectUris: input.redirectUris,
       type: input.type,
       clientId,
+      ...(input.requirePar === undefined
+        ? {}
+        : { requirePar: input.requirePar }),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -200,6 +206,7 @@ export class ClientsService {
     input: {
       name?: string | undefined;
       redirectUris?: readonly string[] | undefined;
+      requirePar?: boolean | undefined;
     },
   ): Promise<ClientView> {
     checkSizes(input);
@@ -209,6 +216,8 @@ export class ClientsService {
       redirectUris: input.redirectUris ?? current.redirectUris,
       type: current.type,
       clientId,
+      requirePar:
+        input.requirePar ?? current.requirePushedAuthorizationRequests,
     });
     return this.require(tenant, clientId);
   }
