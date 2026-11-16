@@ -12,6 +12,7 @@ import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
+import { createTenantParOff } from "./tenant-par-off";
 
 export const DOMAIN = (await import("@/config/env")).env.CLAVIX_DOMAIN;
 export const REDIRECT = "https://app.example/callback";
@@ -85,15 +86,13 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     resourceUris: readonly string[] = [],
     options: { par?: boolean } = {},
   ) {
-    const { id } = await tenantsService.create({ slug, name: slug });
     // A new tenant requires pushed authorization requests (M3): the specs that
     // authorize directly turn it off, the PAR specs keep it.
-    if (options.par !== true) {
-      await tenantsService.updateOAuth(id, (tenant) => ({
-        ...tenant.oauth,
-        par: { required: false },
-      }));
-    }
+    const input = { slug, name: slug };
+    const { id } =
+      options.par === true
+        ? await tenantsService.create(input)
+        : await createTenantParOff(tenantsService, input);
     const tenant = await tenantResolver.resolveHost(`${slug}.${DOMAIN}`);
     if (tenant === null) throw new Error("tenant not resolved");
     await rotateSigningKeys(signingKeysFor(tenant.tenantId), {
