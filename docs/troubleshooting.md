@@ -490,6 +490,32 @@ Monthly active users never block: `usage` only reports `exceeded`.
 
 It is also the answer of `acceptInvitation` on a suspended tenant's own host: an end-user invitation cannot be accepted, and so cannot sign the new user in, until `resumeTenant`; the invitation is not spent (`invitationPreview` is not refused). An admin invitation is accepted on the `clavix` tenant, which cannot be suspended: for it a suspended managed tenant gives `INVITATION_INVALID` instead. Every console write of a tenant admin (see above, `createClient`, `updateRole`, ...) gives `TENANT_SUSPENDED` too, replays included.
 
+## `invalid_request: pushed authorization request required` on `/authorize`
+
+A client redirected to its `redirect_uri` with `error=invalid_request` and
+`error_description=pushed authorization request required: push the request to the
+pushed authorization request endpoint first`.
+
+**Why**: the tenant (`oauthPolicy.par.required`) or the client
+(`requirePushedAuthorizationRequests`) requires pushed authorization requests,
+and `/authorize` was called with the parameters in the query instead of a
+`request_uri`. New tenants require it; tenants that existed before the policy
+do not.
+
+**Fix**: push first, then authorize with the returned `request_uri` (one use,
+60 seconds; reusing it gives `invalid_request_uri`).
+
+```sh
+curl -u "$CLIENT_ID:$CLIENT_SECRET" -d "response_type=code&redirect_uri=$URI&scope=openid&code_challenge=$C&code_challenge_method=S256" https://<tenant-host>/par
+# then: /authorize?client_id=$CLIENT_ID&request_uri=<request_uri>
+```
+
+To turn it off: `updateOAuthPolicy` with `par: { required: false }` for the
+tenant, `updateClient` with `requirePushedAuthorizationRequests: false`, or
+`clients:create --no-require-par` for a script-made client. The `clavix`
+platform tenant refuses `par.required: true` (`PLATFORM_TENANT_PROTECTED`, 409).
+A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED` like `/authorize`.
+
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
 
 ### `CONFLICT` (409) `A role named "<name>" already exists here`

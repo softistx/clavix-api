@@ -60,7 +60,8 @@ function sameClient(
   return (
     stored.name === input.name.trim() &&
     stored.type === input.type &&
-    (input.requirePar ?? false) === stored.requirePushedAuthorizationRequests &&
+    (input.requirePar === undefined ||
+      input.requirePar === stored.requirePushedAuthorizationRequests) &&
     stored.redirectUris.length === wanted.size &&
     stored.redirectUris.every((uri) => wanted.has(uri))
   );
