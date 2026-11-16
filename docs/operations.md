@@ -3,7 +3,7 @@
 Run Clavix on one host with Docker Compose: the API, the UI, MongoDB (a one-node
 replica set), Redis and Caddy for TLS. Nothing here is deployed by CI. The files
 are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`
-and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts`.
+and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/offsite.ts`).
 
 ## What runs
 
@@ -105,23 +105,29 @@ by the `Host` header, which Caddy passes untouched.
 The variables of the API are in the README ("Environment") and `.env.example`.
 Beyond them, the deployment reads, in `deploy/.env`:
 
-| Variable                                    | Read by                     | Meaning                                                                                                                                                        |
-| ------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`       | compose                     | the images to run                                                                                                                                              |
-| `CLAVIX_DOMAIN`                             | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                    |
-| `ACME_EMAIL`                                | caddy                       | the ACME account address                                                                                                                                       |
-| `REDIS_PASSWORD`                            | redis, api                  | the password in `REDIS_URL`                                                                                                                                    |
-| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`    | mongo                       | the server's root user (default `root`), created on the first start; used by the healthcheck only                                                              |
-| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`      | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                              |
-| `MONGO_KEYFILE`                             | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                            |
-| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`        | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                    |
-| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` | api                         | required in production                                                                                                                                         |
-| `CLAVIX_TLS_ASK_SECRET`                     | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                              |
-| `CONSOLE_CLIENT_SECRET`                     | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                  |
-| `CONSOLE_SESSION_SECRET`                    | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                          |
-| `CONSOLE_ISSUER`                            | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
-| `CONTACT_EMAIL`                             | ui                          | the public contact address                                                                                                                                     |
-| `BACKUP_DIR`, `BACKUP_KEEP`                 | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
+| Variable                                                                 | Read by                     | Meaning                                                                                                                                                         |
+| ------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`                                    | compose                     | the images to run                                                                                                                                               |
+| `CLAVIX_DOMAIN`                                                          | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                     |
+| `ACME_EMAIL`                                                             | caddy                       | the ACME account address                                                                                                                                        |
+| `REDIS_PASSWORD`                                                         | redis, api                  | the password in `REDIS_URL`                                                                                                                                     |
+| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used by the healthcheck only                                                               |
+| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                 |
+| `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                             |
+| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                     |
+| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                          |
+| `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                               |
+| `CONSOLE_CLIENT_SECRET`                                                  | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                   |
+| `CONSOLE_SESSION_SECRET`                                                 | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                           |
+| `CONSOLE_ISSUER`                                                         | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                 |
+| `CONTACT_EMAIL`                                                          | ui                          | the public contact address                                                                                                                                      |
+| `BACKUP_DIR`, `BACKUP_KEEP`                                              | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14)  |
+| `BACKUP_OFFSITE_S3_BUCKET`                                               | backup, restore             | opt-in off-host copy: the bucket. Empty = no copy. See "Off-host copies"                                                                                        |
+| `BACKUP_OFFSITE_S3_ENDPOINT`, `BACKUP_OFFSITE_S3_REGION`                 | backup, restore             | the S3-compatible service (`https://...`; empty = AWS) and its region                                                                                           |
+| `BACKUP_OFFSITE_S3_ACCESS_KEY_ID`, `BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY` | backup, restore             | the credentials; required with a bucket. Give the backup a key that may write, list and delete under the prefix only                                            |
+| `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                            |
+| `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                           |
+| `NPM_REGISTRY_TOKEN`                                                     | compose build               | read token of `npm.softistx.com`, a build secret of the backup tools image (it bundles `@softistx/s3`); export it in the shell that runs `docker compose build` |
 
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
@@ -301,19 +307,123 @@ as that user first (`mkdir -p backups`), and export
 `BACKUP_UID=$(id -u) BACKUP_GID=$(id -g)` when your user is not 1000. Archives an
 earlier run left owned by root: `sudo chown -R "$(id -u):$(id -g)" backups`.
 
-The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun) that holds both. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
+The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies; the build needs `NPM_REGISTRY_TOKEN` in the environment or `deploy/.env`, as the API image does) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
 
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
 `clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and
 keeps the newest `BACKUP_KEEP` archives. Schedule it from the host's cron, e.g.
-nightly, and copy the archives off the host. The dump is of one database and not
-point-in-time: take it at a quiet hour.
+nightly, with the off-host copy below on. The dump is of one database and not
+point-in-time (see "Point-in-time recovery"): take it at a quiet hour.
 
 The archive holds the signing keys **encrypted**. It restores a working system
 only together with the same `CLAVIX_KEYS_MASTER_KEY`. Back up the master key
 separately, in the secret manager. Redis holds only caches, queues and counters:
 it is not backed up, and a lost Redis costs a cold cache and the month's active
 user counts.
+
+## Off-host copies
+
+An archive on the host dies with the host. Setting `BACKUP_OFFSITE_S3_BUCKET` (and the
+credentials, see the environment table) makes every backup upload its archive
+and its `.sha256` to S3-compatible storage (any service Bun's S3 client signs for:
+AWS, R2, Backblaze, MinIO, SeaweedFS), through `@softistx/s3`. Without a bucket
+nothing changes.
+
+```sh
+# deploy/.env
+BACKUP_OFFSITE_S3_BUCKET=clavix-backups
+BACKUP_OFFSITE_S3_ENDPOINT=https://s3.example.com
+BACKUP_OFFSITE_S3_ACCESS_KEY_ID=...
+BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY=...
+BACKUP_OFFSITE_KEEP_DAYS=30
+```
+
+- **Order**: the local archive and its checksum are written first, then local
+  retention runs, then the upload (archive, then sidecar), then the remote
+  retention. The upload streams the file (single PUT, so an archive under 5 GiB).
+- **A failed upload fails the job**: the message `offsite: FAILED, the local
+  archive <file> is kept: <reason>` goes to stderr and the exit code is 3, so cron
+  or the monitoring sees it; the local archive stays and is not deleted by the
+  failure. A bucket with missing credentials, or a bad `BACKUP_OFFSITE_KEEP_DAYS`,
+  fails before the dump (exit 1). The next run uploads its own archive only: an
+  archive that missed its upload is uploaded by hand
+  (`bun scripts/mongo-backup.ts` does not retry old ones), or covered by the next night's.
+- **Remote retention**: after a successful upload, objects under the prefix named
+  `clavix-<stamp>.archive.gz[.sha256]` whose stamp (UTC, from the name, not the
+  provider's clock) is older than `BACKUP_OFFSITE_KEEP_DAYS` are deleted. Any other object
+  is left alone, and **the newest archive is never deleted**, so a long outage of the job cannot empty
+  the bucket. Add the provider's own lifecycle rule or object lock if you want
+  protection against a leaked key (the backup key can delete).
+- **Restore from the bucket**: pass `offsite:latest` or `offsite:<archive name>` to
+  `restore` instead of a path. It downloads the archive and its `.sha256` into
+  `RESTORE_FETCH_DIR` (default a temporary folder of the container), verifies the
+  checksum as for a local file, then restores:
+
+  ```sh
+  dc stop api ui
+  CONFIRM=yes dc --profile tools run --rm restore offsite:latest
+  CONFIRM=yes dc --profile tools run --rm restore offsite:clavix-20261112T031500Z.archive.gz clavix-drill
+  dc up -d api ui
+  ```
+
+  The restore container carries the same `BACKUP_OFFSITE_*` variables from `deploy/.env`. An
+  archive is as large in the container's temporary folder as on the bucket: mount a
+  volume on `RESTORE_FETCH_DIR` when the container's disk is small.
+- The master key is **not** in the archive and is not shipped: keep it in the
+  secret manager (see "Backup").
+- Check the copy at the drill: once a month, restore `offsite:latest` into `clavix-drill`
+  (see "Restore drill") instead of a local file.
+
+## Point-in-time recovery
+
+**Not built; this is its design.** The nightly dump restores to the moment it was
+taken; everything written since is lost (up to 24 hours). Closing that gap means
+shipping the replica set's oplog and replaying it up to a chosen instant. It was left out
+of the off-host slice on purpose: it needs a new database privilege, a change of what
+is dumped and a restore that cannot run in the local drill, so a half version would
+only look like a recovery.
+
+Why it does not fit the current backup as is:
+- `mongodump --oplog` only works on a dump of the whole instance (it refuses `--db`,
+  `--collection` and a database in the URI) and needs to read the `local` database.
+  The application user has `readWrite` on `clavix` only, so a PITR backup needs its own user.
+- `mongorestore --oplogReplay` restores into the whole instance as well: the namespace
+  rewriting the restore script does for a drill (`--nsFrom` / `--nsTo`) is not
+  available with it.
+
+The design, in slices:
+1. **A backup user**: created by `deploy/mongo/init-app-user.js` (and by hand on an existing
+   volume, as for the application user) in `admin` with the built-in `backup` role,
+   credentials `MONGO_BACKUP_USER` / `MONGO_BACKUP_PASSWORD`, used by the `backup` service only (it
+   keeps TLS and `authSource=admin`).
+2. **Full dump with its oplog**: `mongodump --uri=<backup user> --oplog --gzip --archive`
+   (all databases, `admin` included; filter with `--excludeDB` if wanted). The archive's
+   oplog part ends at the dump's last operation; the script reads that timestamp
+   from the oplog entry the dump finishes at (`local.oplog.rs`, last entry before the
+   dump returns) and records `{ "lastTs": "<seconds>:<increment>" }` in a
+   `clavix-<stamp>.archive.gz.meta.json` sidecar, shipped with the archive.
+3. **Periodic oplog slices** (every 5 to 15 minutes, a second compose service or cron
+   line, `scripts/mongo-oplog.ts`): read `local.oplog.rs` for `ts > lastTs` of the newest
+   slice or full dump, write the entries as BSON with `mongodump --db=local
+   --collection=oplog.rs --query='{"ts":{"$gt":{"$timestamp":{"t":S,"i":I}}}}' --out=-`,
+   name the file `oplog-<fromTs>-<toTs>.bson.gz` with a `.sha256`, ship it to
+   `<prefix>/oplog/`, and move `lastTs`. A slice must start exactly after the previous one
+   ends: the script refuses (exit non-zero, loudly) when the first entry it reads is newer
+   than `lastTs` + 1, which means the oplog window was exceeded and the chain is broken
+   (size the oplog for at least 24 hours: `replSetResizeOplog`; the next full dump starts a new chain).
+4. **Retention**: slices older than the oldest full dump kept are deleted with it (a
+   slice is useless without a full dump before it).
+5. **Restore to an instant** (`restore offsite:<archive> --until <ISO time>`): download the
+   full dump and every slice from its `lastTs` to the target, concatenate the slices' entries into
+   one `oplog.bson` of the dump directory, then
+   `mongorestore --drop --oplogReplay --oplogLimit=<seconds>:<increment> <dir>` (the oplog
+   limit is the first timestamp _not_ replayed, so use the target second + 1). Restore
+   into an empty instance or a scratch one first; it cannot run into a single database name.
+6. **Drill**: needs a replica set with oplog: `MongoMemoryReplSet` has one, so the
+   spec can write, take a slice, write again, and replay to the instant between.
+
+Manual recovery meanwhile: the nightly dump, plus the application's own audit trail
+(admin events) to re-apply by hand what happened after it.
 
 ## Restore
 
@@ -328,6 +438,8 @@ into the database named in `MONGO_URI`. Without `CONFIRM=yes` it prints what it
 would do and stops (exit 2). Afterwards run `db:sync`, check `/readyz`, sign in
 to the console, and confirm a tenant's JWKS (`https://<slug>.<domain>/jwks.json`)
 lists its keys. Key rotation resumes by itself.
+
+A restore reads the archive from the off-host bucket with `restore offsite:latest` (see "Off-host copies").
 
 ### Restore drill
 
@@ -441,4 +553,4 @@ Application errors and their causes: [troubleshooting.md](troubleshooting.md).
 
 - TLS on Redis (the connection is authenticated, on the private network).
 - Image publishing and any deploy pipeline (workflows are off).
-- Point-in-time recovery (oplog) and off-host backup shipping.
+- Point-in-time recovery (oplog): designed, not built (see "Point-in-time recovery").

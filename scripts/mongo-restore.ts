@@ -8,19 +8,51 @@
 // e.g. clavix-drill, and leaves production alone). Collections are dropped and
 // recreated from the archive (--drop). Stop the api first when restoring over
 // the live database (docs/operations.md, "Restore").
+// <archive> may be `offsite:latest` or `offsite:<archive name>`: the archive (and its
+// .sha256) is first downloaded from the off-host bucket (BACKUP_OFFSITE_*, as the
+// backup reads them) into RESTORE_FETCH_DIR (default: a new temporary folder).
 // MONGORESTORE  the mongorestore binary (default: mongorestore).
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { $ } from "bun";
+import { fetchArchive, readOffsiteConfig, s3Archives } from "./lib/offsite";
 
 const fail = (message: string, code = 1): never => {
   console.error(message);
   process.exit(code);
 };
 
-const archive =
-  Bun.argv[2] ?? fail("usage: mongo-restore.ts <archive> [target-db]");
+const requested =
+  Bun.argv[2] ??
+  fail(
+    "usage: mongo-restore.ts <archive | offsite:latest | offsite:<name>> [target-db]",
+  );
 const uri = Bun.env["MONGO_URI"] || fail("MONGO_URI is required");
 const restore = Bun.env["MONGORESTORE"] ?? "mongorestore";
+
+const archive = await (async () => {
+  if (!requested.startsWith("offsite:")) return requested;
+  try {
+    const config =
+      readOffsiteConfig(Bun.env) ??
+      fail("offsite: BACKUP_OFFSITE_S3_BUCKET is not set");
+    const dir =
+      Bun.env["RESTORE_FETCH_DIR"] ??
+      mkdtempSync(join(tmpdir(), "clavix-restore-"));
+    const path = await fetchArchive(
+      s3Archives(config),
+      requested.slice("offsite:".length),
+      dir,
+    );
+    console.error(`offsite: downloaded ${path}`);
+    return path;
+  } catch (error) {
+    return fail(
+      `offsite: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+})();
 
 if (!existsSync(archive)) fail(`no such archive: ${archive}`);
 const sidecar = Bun.file(`${archive}.sha256`);

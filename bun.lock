@@ -27,6 +27,7 @@
         "@softistx/material-core": "^0.84.0",
         "@softistx/mongo": "^0.29.0",
         "@softistx/redis": "^0.21.0",
+        "@softistx/s3": "^0.13.0",
         "graphql": "^17.0.2",
         "graphql-yoga": "^5.24.2",
         "mongodb": "^7",
@@ -341,6 +342,8 @@
     "@softistx/mongo": ["@softistx/mongo@0.29.0", "https://npm.softistx.com/@softistx/mongo/-/mongo-0.29.0.tgz", { "peerDependencies": { "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-f9Y4ci1BOW94sj1nGmvxI4TrmyrcYwYSEgT4utL6RuemuO7xqBonTivGC4beXSYcfwhjCFIgsYHvSDqdQ/YmDA=="],
 
     "@softistx/redis": ["@softistx/redis@0.21.0", "https://npm.softistx.com/@softistx/redis/-/redis-0.21.0.tgz", { "peerDependencies": { "redis-memory-server": ">=0.17.1 <0.18", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-kN7fYxEGoi8VXu02GI+VxnifhmQ2Vmehn4LzZh3XgnSR1Hl5VI3rzKSwjNTUcWifkPelGR6igU6b9qYO4WwOFw=="],
+
+    "@softistx/s3": ["@softistx/s3@0.13.0", "https://npm.softistx.com/@softistx/s3/-/s3-0.13.0.tgz", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-0U0zavWQ4R4AwPfUFXA1QNRENsjxyV4reu10mkqC1MYTk94X3CqBXcbQFO+LpZmy7K8Y6xWY1mrqw4yGtN3aNw=="],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 

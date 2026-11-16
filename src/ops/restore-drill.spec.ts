@@ -125,4 +125,22 @@ describe.skipIf(!hasTools)("restore drill", () => {
     expect(restored.code).toBe(1);
     expect(restored.stderr).toContain("checksum mismatch");
   }, 60_000);
+
+  test("a failed off-host upload fails the backup loudly and keeps the local archive", async () => {
+    const failing = mkdtempSync(join(tmpdir(), "clavix-offsite-fail-"));
+    try {
+      const backup = await run("mongo-backup.ts", [failing], {
+        BACKUP_OFFSITE_S3_BUCKET: "backups",
+        BACKUP_OFFSITE_S3_ENDPOINT: "http://127.0.0.1:1",
+        BACKUP_OFFSITE_S3_ACCESS_KEY_ID: "id",
+        BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY: "secret",
+      });
+      expect(backup.code).toBe(3);
+      expect(backup.stderr).toContain("offsite: FAILED");
+      const archive = backup.stdout.split("\n").pop() ?? "";
+      expect(readdirSync(failing)).toContain(archive.split("/").pop() ?? "");
+    } finally {
+      rmSync(failing, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
