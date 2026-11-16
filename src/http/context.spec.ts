@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import type { TenantResolver } from "../tenancy/resolver";
 import { createBase } from "./context";
@@ -15,6 +16,7 @@ const tenant = {
   partition: "t1",
   version: 1,
   signIn: signInPolicySchema.parse(undefined),
+  oauth: oauthPolicySchema.parse(undefined),
 };
 
 test("tenant() resolves the request's host once, on first use", async () => {

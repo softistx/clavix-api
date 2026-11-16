@@ -320,7 +320,7 @@ update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`
 | `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                             |
 | `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                     |
 | `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
-| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs; a client keeps its id and its type                                                                                                                                           |
+| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                     |
 | `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                           |
 | `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                          |
 | `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                 |
@@ -508,6 +508,39 @@ curl -s https://api.clavix.example/console/graphql \
 }
 ```
 
+## Pushed authorization requests
+
+Each tenant host serves `POST /par` (RFC 9126, `@softistx/janus-oauth`): a client authenticates on
+the back channel, pushes its authorization request, gets a one-use `request_uri` (60 s) and sends
+the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
+`pushed_authorization_request_endpoint`, and `require_pushed_authorization_requests` when the tenant requires it.
+- **Per tenant** (`oauthPolicy`, `updateOAuthPolicy`; `view` / `edit` on the tenant): `par.required`
+  makes every client push; an `/authorize` without a `request_uri` is refused `invalid_request`. A new
+  tenant starts with it **on**; a tenant that existed before it (migration `2026-11-16-oauth-policy`)
+  stays **off** until an admin turns it on. `dpop.required` is stored for the DPoP slice and not enforced yet.
+  Each change is the admin event `oauthPolicy.update` and bumps the tenant's `version`; a no-op writes nothing.
+- **Per client** (`requirePushedAuthorizationRequests` on `Client`, `CreateClientInput` and
+  `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant
+  that does not require it of everyone.
+- **The platform tenant (`clavix`)** refuses `par.required` and `dpop.required` (409
+  `PLATFORM_TENANT_PROTECTED`) until the console's own client pushes.
+- A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED`, like `/authorize`. Turning the requirement on breaks
+  a client that does not push: warn its owner first.
+
+```graphql
+mutation ($t: ID!) {
+  updateOAuthPolicy(tenantId: $t, input: { par: { required: true } }) {
+    version
+    par {
+      required
+    }
+    dpop {
+      required
+    }
+  }
+}
+```
+
 ## Branding
 
 A tenant wears its own theme on the hosted pages. The brand is one document per tenant (collection
@@ -638,15 +671,16 @@ bun run clients:create --tenant acme --name "Web app" \
   --redirect-uri https://app.example.com/callback          # a public client, PKCE only
 ```
 
-| Flag                   | Meaning                                                                                        |
-| ---------------------- | ---------------------------------------------------------------------------------------------- |
-| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                     |
-| `--name <name>`        | required                                                                                       |
-| `--redirect-uri <uri>` | required, repeatable; exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed) |
-| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                        |
-| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                      |
-| `--grants <a,b>`       | `authorization_code,refresh_token` (the default and all there is: see below)                   |
-| `--rotate-secret`      | a new secret for an existing confidential client                                               |
+| Flag                   | Meaning                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                                 |
+| `--name <name>`        | required                                                                                                   |
+| `--redirect-uri <uri>` | required, repeatable; exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed)             |
+| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                                    |
+| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                  |
+| `--grants <a,b>`       | `authorization_code,refresh_token` (the default and all there is: see below)                               |
+| `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it) |
+| `--rotate-secret`      | a new secret for an existing confidential client                                                           |
 - **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client
   and creates nothing new. The output (JSON) says `created: true | false`.
 - **A confidential client's secret is printed once**, in `clientSecret`; janus keeps only its
@@ -673,6 +707,7 @@ Each tenant host is its own OpenID Provider (ADR-0003), served by `@softistx/jan
 | `/jwks.json`                        | the tenant's public signing keys (verifies access tokens and id_tokens)        |
 | `/userinfo`                         | `sub` and the claims the token's scopes release (`profile`, `email`, ...)      |
 | `/introspect`                       | RFC 7662, for a confidential client of the same tenant (`client_secret_basic`) |
+| `/par`                              | RFC 9126 pushed authorization requests (see "Pushed authorization requests")   |
 
 A client that asks for `openid` gets an `id_token` (`iss`, `sub`, `aud`, `exp`, `iat`,
 `auth_time`, `nonce`, `at_hash`) signed with the tenant's current key. A request with no

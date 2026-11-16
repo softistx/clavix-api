@@ -7,6 +7,12 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Pushed authorization requests** (in progress, M3 slice A1,
+  [#13](https://github.com/softistx/clavix-api/issues/13)) — `/par` on every tenant host; a tenant
+  can require it of every client (on for new tenants, off for existing ones) and a client can
+  require it for itself, both from the console and the script; `/par` is routed and refused for a
+  suspended tenant. DPoP-bound tokens follow in their own slice.
+
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with
@@ -34,7 +40,7 @@ nxgt-janus release says which.
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 **Advanced protocols**
-- PAR required per tenant and per client (on for new tenants); DPoP-bound tokens.
+- DPoP-bound tokens.
 - Device authorization and its verification page; token exchange.
 - Rich authorization requests and their consent.
 - MCP and agents: dynamic registration policy, RFC 9728, consent per agent.

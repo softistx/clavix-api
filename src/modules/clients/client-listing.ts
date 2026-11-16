@@ -15,6 +15,8 @@ export interface ClientView {
   /** As recorded on the client (both when nothing is); the token endpoint does not enforce it. */
   grantTypes: readonly OAuthClientGrantType[];
   createdAt: Date;
+  /** Whether the client must push its authorization requests to `/par` (RFC 9126). */
+  requirePushedAuthorizationRequests: boolean;
 }
 
 // A listing reads the store page by page and keeps what matches; it stops
@@ -36,6 +38,8 @@ export const viewOf = (record: OAuthClientRecord): ClientView => ({
   redirectUris: record.redirectUris,
   grantTypes: record.grantTypes ?? OFFERED_GRANTS,
   createdAt: record.createdAt,
+  requirePushedAuthorizationRequests:
+    record.requirePushedAuthorizationRequests === true,
 });
 
 /** What a listing keeps: a registered client matching `q` (part of its name or id, any case). */

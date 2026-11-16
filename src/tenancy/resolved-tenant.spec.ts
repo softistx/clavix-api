@@ -22,6 +22,17 @@ describe("resolvedTenant", () => {
     );
   });
 
+  test("an entry cached before the OAuth policy reads every requirement off", () => {
+    expect(resolvedTenant.parse(entry).oauth).toEqual({
+      par: { required: false },
+      dpop: { required: false },
+    });
+    expect(
+      resolvedTenant.parse({ ...entry, oauth: { par: { required: true } } })
+        .oauth,
+    ).toEqual({ par: { required: true }, dpop: { required: false } });
+  });
+
   test("an entry cached before custom domains (no slugIssuer) is refused, so the cache reads it as a miss", () => {
     const { slugIssuer: _drop, ...old } = entry;
     expect(resolvedTenant.safeParse(old).success).toBe(false);

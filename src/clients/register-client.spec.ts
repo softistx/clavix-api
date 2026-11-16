@@ -20,6 +20,7 @@ import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../test/tenant-par-off";
 import { parseClientArgs } from "./cli";
 import { clientIdOf, registerClient } from "./register-client";
 
@@ -81,7 +82,7 @@ const authorize = async (slug: string, clientId: string) =>
 
 beforeAll(async () => {
   for (const slug of ["regalpha", "regbeta", "regpaused"]) {
-    await tenants.create({ slug, name: slug });
+    await createTenantParOff(tenants, { slug, name: slug });
   }
   for (const slug of ["regalpha", "regbeta"]) {
     const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);
@@ -334,6 +335,41 @@ describe("isolation between tenants", () => {
     expect(
       (await (await storeOf("regbeta")).findClient("shared-id"))?.redirectUris,
     ).toEqual(["https://beta.example/cb"]);
+  });
+});
+
+describe("requirePar", () => {
+  test("is stored, kept on a re-run that says nothing, and cleared by false", async () => {
+    await createTenantParOff(tenants, { slug: "regpar", name: "Par" });
+    const base = {
+      tenant: "regpar",
+      name: "App",
+      redirectUris: [REDIRECT],
+    };
+    const first = await registerClient(options, { ...base, requirePar: true });
+    expect(first.requirePar).toBe(true);
+    const store = await storeOf("regpar");
+    expect(
+      (await store.findClient("app"))?.requirePushedAuthorizationRequests,
+    ).toBe(true);
+    expect((await registerClient(options, base)).requirePar).toBe(true);
+    const cleared = await registerClient(options, {
+      ...base,
+      requirePar: false,
+    });
+    expect(cleared.requirePar).toBe(false);
+    expect(
+      (await store.findClient("app"))?.requirePushedAuthorizationRequests,
+    ).toBeUndefined();
+  });
+
+  test("the flags --require-par and --no-require-par become the input", () => {
+    const line = ["--tenant", "a", "--name", "x", "--redirect-uri", REDIRECT];
+    expect(parseClientArgs([...line, "--require-par"]).requirePar).toBe(true);
+    expect(parseClientArgs([...line, "--no-require-par"]).requirePar).toBe(
+      false,
+    );
+    expect(parseClientArgs(line).requirePar).toBeUndefined();
   });
 });
 

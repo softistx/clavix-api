@@ -24,6 +24,12 @@ type Client {
   """
   grantTypes: [ClientGrantType!]!
   createdAt: DateTime!
+  """
+  Whether the client must push its authorization requests to `/par` (RFC 9126).
+  A tenant that requires it of everyone (`oauthPolicy.par.required`) overrides
+  this: every client pushes.
+  """
+  requirePushedAuthorizationRequests: Boolean!
 }
 
 """
@@ -56,12 +62,15 @@ input CreateClientInput {
   redirectUris: [String!]!
   "The client_id (a-z, 0-9, `-`); default: the name. Creating an existing id is a CONFLICT, unless the call repeats it (same name, type and redirect URIs)."
   clientId: String
+  "Make the client push its authorization requests. Default false."
+  requirePushedAuthorizationRequests: Boolean
 }
 
 "Fields left out stay as they are. The type and the secret never change here."
 input UpdateClientInput {
   name: String
   redirectUris: [String!]
+  requirePushedAuthorizationRequests: Boolean
 }
 
 type Query {

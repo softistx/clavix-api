@@ -51,6 +51,7 @@ const shape = (client: {
   redirectUris: readonly string[];
   grantTypes: readonly string[];
   createdAt: Date;
+  requirePushedAuthorizationRequests: boolean;
 }) => ({
   id: client.clientId,
   name: client.name,
@@ -61,6 +62,7 @@ const shape = (client: {
     Object.hasOwn(GRANT, grant) ? [GRANT[grant as keyof typeof GRANT]] : [],
   ),
   createdAt: client.createdAt,
+  requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
 });
 
 const MAX_PAGE = 100;
@@ -126,6 +128,7 @@ export const clients: Resolvers = {
         type: input.type === "CONFIDENTIAL" ? "confidential" : "public",
         redirectUris: input.redirectUris,
         clientId: input.clientId ?? undefined,
+        requirePar: input.requirePushedAuthorizationRequests ?? undefined,
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
@@ -155,6 +158,7 @@ export const clients: Resolvers = {
           return clientsService.update(tenant, id, {
             name: input.name ?? undefined,
             redirectUris: input.redirectUris ?? undefined,
+            requirePar: input.requirePushedAuthorizationRequests ?? undefined,
           });
         }),
       );

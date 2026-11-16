@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 
 /**
@@ -31,6 +32,8 @@ export const resolvedTenant = z.object({
   relatedOrigins: z.array(z.string()).default([]),
   partition: z.string(),
   version: z.number(),
+  // M3: an entry cached before the field existed reads every requirement off.
+  oauth: oauthPolicySchema,
   signIn: signInPolicySchema, // slice A5; the social secrets stay sealed here (this value sits in Redis)
 });
 

@@ -39,6 +39,8 @@ export const buildIssuer =
         [userinfo]: { scopes: [...OIDC_SCOPES] },
       },
       defaultResource: userinfo,
+      // RFC 9126: `/par` is always served; `required` makes every client push.
+      pushedAuthorizationRequests: { required: tenant.oauth.par.required },
       lifetimes,
       accessTokens: {
         format: "jwt" as const,

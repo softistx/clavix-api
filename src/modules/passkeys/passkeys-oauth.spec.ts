@@ -19,6 +19,7 @@ import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { originOf, rpIdOf } from "@/users/rp";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // A passkey sign-in, then the OAuth flow of the same tenant: the id_token's
 // auth_time is the passkey session's sign-in time.
@@ -66,7 +67,7 @@ const gql = async (query: string, variables = {}, cookie = "") => {
 let secret = "";
 
 beforeAll(async () => {
-  await tenants.create({ slug: "acme", name: "Acme" });
+  await createTenantParOff(tenants, { slug: "acme", name: "Acme" });
   const tenant = await tenantResolver.resolveHost(new URL(url("/")).host);
   if (tenant === null) throw new Error("no tenant");
   await rotateSigningKeys(keys, {

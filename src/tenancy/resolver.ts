@@ -31,6 +31,7 @@ export interface TenantRecord {
   purgeStartedAt?: Date | undefined;
   version: number;
   signIn: ResolvedTenant["signIn"];
+  oauth: ResolvedTenant["oauth"];
 }
 
 export interface TenantResolverOptions {
@@ -92,6 +93,7 @@ function toResolved(
         partition: partitionOf(tenant._id),
         version: tenant.version,
         signIn: tenant.signIn,
+        oauth: tenant.oauth,
       };
 }
 

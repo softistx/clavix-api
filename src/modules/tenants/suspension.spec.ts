@@ -11,6 +11,7 @@ import {
   DomainStore,
   RECHECK_GRACE_DAYS,
 } from "@/modules/domains/domains.service";
+import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { withTenantState } from "@/oauth/tenant-state";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
@@ -200,6 +201,7 @@ describe("withTenantState", () => {
     partition: "t1",
     version: 1,
     signIn: signInPolicySchema.parse(undefined),
+    oauth: oauthPolicySchema.parse(undefined),
   });
   const token = (sub: string) =>
     `h.${Buffer.from(JSON.stringify({ sub })).toString("base64url")}.s`;
@@ -237,10 +239,10 @@ describe("withTenantState", () => {
   });
 
   test.each(["suspended", "deleted"] as const)(
-    "a %s tenant's /authorize and /token are 403 TENANT_SUSPENDED, the other endpoints answer",
+    "a %s tenant's /authorize, /par and /token are 403 TENANT_SUSPENDED, the other endpoints answer",
     async (status) => {
       const { call, seen, active } = wrap(status);
-      for (const path of ["/authorize", "/token"]) {
+      for (const path of ["/authorize", "/par", "/token"]) {
         const response = await call(path);
         expect(response.status).toBe(403);
         expect(await response.json()).toMatchObject({

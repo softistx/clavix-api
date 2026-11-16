@@ -6,6 +6,7 @@ import {
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { env } from "@/config/env";
+import { newTenantOAuthPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
 import { dropTenantHosts } from "./hosts";
 import { partitionOf } from "./identity";
 import { PLATFORM_TENANT_SLUG, slugProblem } from "./slug";
@@ -80,6 +81,11 @@ export class TenantsService {
       created = await this.collection.create({
         slug: input.slug,
         name,
+        // M3 decision 3: pushed authorization requests on for a new tenant.
+        // The platform tenant is exempt until the console client pushes.
+        ...(input.slug === PLATFORM_TENANT_SLUG
+          ? {}
+          : { oauth: newTenantOAuthPolicy() }),
         ...(input.signUp === undefined ? {} : { signUp: input.signUp }),
         ...(input.plan === undefined ? {} : { plan: input.plan }),
       });
@@ -163,6 +169,35 @@ export class TenantsService {
       try {
         const updated = await this.collection.update(tenant._id, {
           signIn,
+          version: tenant.version,
+        });
+        await this.changed(updated);
+        return updated;
+      } catch (error) {
+        if (!(error instanceof OptimisticLockError) || attempt === 3) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  /**
+   * Changes the tenant's OAuth policy (M3), as `updateSignIn` does: `change`
+   * answers the new policy, or `null` for no change (no write, no version
+   * bump, so no rebuild); three attempts on a lost race, then the
+   * `OptimisticLockError` is thrown.
+   */
+  async updateOAuth(
+    id: IdOf<typeof tenants> | string,
+    change: (tenant: Tenant) => Tenant["oauth"] | null,
+  ): Promise<Tenant> {
+    for (let attempt = 1; ; attempt++) {
+      const tenant = await this.collection.getById(id);
+      const oauth = change(tenant);
+      if (oauth === null) return tenant;
+      try {
+        const updated = await this.collection.update(tenant._id, {
+          oauth,
           version: tenant.version,
         });
         await this.changed(updated);

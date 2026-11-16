@@ -22,7 +22,8 @@ const operator = consoleAs("cli-operator");
 let tenantA = "";
 let tenantB = "";
 
-const CLIENT = "id name type redirectUris grantTypes createdAt";
+const CLIENT =
+  "id name type redirectUris grantTypes createdAt requirePushedAuthorizationRequests";
 const CREATE = `mutation($tenantId: ID!, $input: CreateClientInput!) {
   createClient(tenantId: $tenantId, input: $input) { client { ${CLIENT} } clientSecret }
 }`;
@@ -251,6 +252,41 @@ describe("clients and client", () => {
     expect(renamed.data?.["updateClient"]).toMatchObject({
       name: "Code",
       grantTypes: ["AUTHORIZATION_CODE"],
+    });
+  });
+
+  test("a client's PAR requirement is set at creation, changed by an update and kept by a rename", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Pushing app",
+      requirePushedAuthorizationRequests: true,
+    });
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: { id: "pushing-app", requirePushedAuthorizationRequests: true },
+    });
+    expect(
+      (await (await storeOf(tenantA)).findClient("pushing-app"))
+        ?.requirePushedAuthorizationRequests,
+    ).toBe(true);
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "pushing-app",
+      input: { name: "Pushing" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      requirePushedAuthorizationRequests: true,
+    });
+    const off = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "pushing-app",
+      input: { requirePushedAuthorizationRequests: false },
+    });
+    expect(off.data?.["updateClient"]).toMatchObject({
+      requirePushedAuthorizationRequests: false,
+    });
+    // A client created without it does not require it.
+    const plain = await create(admin, tenantA, { name: "Plain app" });
+    expect(plain.data?.["createClient"]).toMatchObject({
+      client: { requirePushedAuthorizationRequests: false },
     });
   });
 
