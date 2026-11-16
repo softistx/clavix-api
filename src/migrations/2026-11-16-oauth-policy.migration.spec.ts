@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { migrate } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { freshMigrationDb } from "~/migrations";
 import {
   id,
@@ -18,6 +19,12 @@ const put = (slug: string, extra: Record<string, unknown> = {}) =>
       name: slug,
       status: "active",
       signUp: false,
+      signIn: signInPolicySchema.parse(undefined),
+      plan: "free",
+      quotaOverrides: {},
+      deletedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
       version: 3,
       ...extra,
     },
