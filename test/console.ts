@@ -48,6 +48,7 @@ export function consoleAs(
         scopes: ["console"],
         clientName: null,
         bound: null,
+        jkt: null,
       }),
     },
   });

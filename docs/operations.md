@@ -216,6 +216,9 @@ it. Custom domains stay on demand.
    authorization_code` cannot refresh: list `refresh_token` too.
    janus-oauth-mongo 0.14 needs `db:sync` again: the clients validator refuses the new
    `requirePushedAuthorizationRequests` field (code 121) until it runs.
+   janus-oauth-mongo 0.15 adds the TTL collection `oauthDpopReplay` (DPoP replay cache, RFC 9449):
+   run `db:sync` (`syncMongoOAuth`) before the deploy so it exists. DPoP stays off until `dpop` is
+   configured (clavix-api #14).
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

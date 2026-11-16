@@ -62,6 +62,7 @@ const as = async (
         scopes: ["console"],
         clientName: null,
         bound: null,
+        jkt: null,
       }),
       access,
       adminEvents: adminEventRecorder,
