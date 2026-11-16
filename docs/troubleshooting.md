@@ -478,7 +478,9 @@ which names the tenant and the cause.
 one in the trash.
 
 **`PLATFORM_TENANT_PROTECTED` (409)**: `suspendTenant` or `deleteTenant` on the `clavix` tenant, which
-runs the console itself.
+runs the console itself. `updateOAuthPolicy` on that tenant gives it too when `par.required` or
+`dpop.required` becomes `true`: the console signs in through the tenant itself, whose clients do not
+push their requests. Turning a requirement off is accepted.
 
 **`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
 (`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
@@ -515,6 +517,24 @@ tenant, `updateClient` with `requirePushedAuthorizationRequests: false`, or
 `clients:create --no-require-par` for a script-made client. The `clavix`
 platform tenant refuses `par.required: true` (`PLATFORM_TENANT_PROTECTED`, 409).
 A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED` like `/authorize`.
+
+## `/par` refusals (pushed authorization requests)
+
+**`invalid_request_uri` on `/authorize`**: the `request_uri` was already used or is older than 60
+seconds. It is one-use. Push the request again (`POST /par`) and authorize with the new `request_uri`.
+
+**`invalid_request`: `request_uri must not be sent to the pushed authorization request endpoint`**:
+the body of `POST /par` carries a `request_uri`. Send the authorization parameters themselves
+(`response_type`, `redirect_uri`, `scope`, PKCE), not a reference.
+
+**`invalid_request`: `client_id is required with request_uri`**: `/authorize?request_uri=...` without
+`client_id`. Add the `client_id` of the client that pushed.
+
+**`CONFLICT` (409) on `updateOAuthPolicy`**: the policy changed at the same time as the write (three
+attempts were made). Read `oauthPolicy` and send the change again.
+
+**`TENANT_SUSPENDED` (403)** on `/par`: the tenant is suspended or in the trash, like `/authorize`
+and `/token`. `resumeTenant` or `restoreTenant` lifts it.
 
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
 
