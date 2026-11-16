@@ -20,12 +20,19 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
+      MONGO_URI: &mongo-uri mongodb://${MONGO_APP_USER:-clavix}:${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD}@mongo:27017/clavix?replicaSet=rs0&authSource=clavix${MONGO_URI_OPTIONS:-}
+      # The api gets the whole .env (env_file) but needs none of the database admin secrets.
+      MONGO_ROOT_USER: ""
+      MONGO_ROOT_PASSWORD: ""
+      MONGO_KEYFILE: ""
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
       # Caddy is the one proxy in front.
       CLAVIX_TRUSTED_PROXIES: "1"
     # No `ports`: the api is reachable by caddy and the ui on the private network only.
     expose: ["3000"]
+    volumes:
+      # CA of the mongo certificate, for MONGO_URI_OPTIONS (docs/operations.md, "MongoDB").
+      - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -53,39 +60,41 @@ services:
   mongo:
     <<: *restart
     image: mongo:8
-    command:
-      ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "1"]
+    # Replica set, key file and optional TLS: deploy/mongo/entrypoint.sh.
+    entrypoint: ["sh", "/mongo/entrypoint.sh"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD}
+      MONGO_KEYFILE: ${MONGO_KEYFILE:?set MONGO_KEYFILE}
+      MONGO_APP_USER: ${MONGO_APP_USER:-clavix}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD}
     expose: ["27017"]
     volumes:
       - mongo-data:/data/db
+      - ./mongo/entrypoint.sh:/mongo/entrypoint.sh:ro
+      - ./mongo/healthcheck.sh:/mongo/healthcheck.sh:ro
+      - ./mongo/init-app-user.js:/docker-entrypoint-initdb.d/init-app-user.js:ro
+      - ${MONGO_TLS_DIR:-./tls}/server:/etc/mongo-tls:ro
     healthcheck:
-      # Initiates the replica set on the first start, then reports it healthy.
-      test:
-        - CMD
-        - mongosh
-        - --quiet
-        - --eval
-        - "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"
+      test: ["CMD", "sh", "/mongo/healthcheck.sh"]
       interval: 10s
       timeout: 10s
       retries: 10
-      start_period: 20s
+      start_period: 30s
 
   redis:
     <<: *restart
     image: redis:7-alpine
+    # The password comes from the environment, so it is not in the process list.
     command:
-      [
-        "redis-server",
-        "--appendonly",
-        "yes",
-        "--requirepass",
-        "${REDIS_PASSWORD}",
-      ]
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     expose: ["6379"]
     volumes:
       - redis-data:/data
     environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -127,11 +136,12 @@ services:
     user: "${BACKUP_UID:-1000}:${BACKUP_GID:-1000}"
     environment:
       HOME: /tmp
-      MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
+      MONGO_URI: *mongo-uri
       KEEP: ${BACKUP_KEEP:-14}
     volumes:
       - ../scripts:/scripts:ro
       - ${BACKUP_DIR:-../backups}:/backups
+      - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
       mongo: { condition: service_healthy }
 
@@ -142,11 +152,12 @@ services:
       dockerfile: tools.Dockerfile
     entrypoint: ["bun", "/scripts/mongo-restore.ts"]
     environment:
-      MONGO_URI: mongodb://mongo:27017/clavix?replicaSet=rs0
+      MONGO_URI: *mongo-uri
       CONFIRM: ${CONFIRM:-}
     volumes:
       - ../scripts:/scripts:ro
       - ${BACKUP_DIR:-../backups}:/backups:ro
+      - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
       mongo: { condition: service_healthy }
 

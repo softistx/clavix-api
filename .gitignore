@@ -6,3 +6,11 @@ build
 .env
 .env.local
 generated
+
+# MongoDB TLS material (deploy/tls: ca.pem, mongo.pem)
+deploy/tls/*
+!deploy/tls/ca
+!deploy/tls/server
+deploy/tls/ca/*
+deploy/tls/server/*
+!deploy/tls/*/.gitkeep
