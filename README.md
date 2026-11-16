@@ -291,13 +291,17 @@ A name is 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`, unique p
 
 | Operation                                            | Does                                                                                                                                                   |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `roles(tenantId, resourceId)` / `role(tenantId, id)` | The roles by name (only a resource's with `resourceId`), with `memberCount`; one role or `null`.                                                       |
+| `roles(tenantId, resourceId)` / `role(tenantId, id)` | The roles by name (only a resource's with `resourceId`), with `memberCount` and `managed`; one role or `null`.                                         |
 | `createRole(tenantId, input)` / `updateRole(...)`    | `{ name, description, resourceId }`; update changes the name or description. `CONFLICT` for a taken name, `NOT_FOUND` for an unknown resource or role. |
-| `deleteRole(tenantId, id)`                           | Deletes the role and its assignments. True also when already gone.                                                                                     |
+| `deleteRole(tenantId, id)`                           | Deletes the role and its assignments. True also when already gone. `ROLE_MANAGED` (403) for a managed role.                                            |
 | `assignRole(tenantId, roleId, userId)`               | Idempotent. The user must be in the tenant's pool, else `NOT_FOUND`.                                                                                   |
 | `unassignRole(tenantId, roleId, userId)`             | True when the user held it, false on a repeat.                                                                                                         |
 | `roleMembers(tenantId, roleId, after, first)`        | A page (25, at most 100) of `{ user, assignedAt }`, oldest assignment first, with `totalCount` (all the holders, whatever the cursor).                 |
 | `userRoles(tenantId, userId)`                        | The roles a user holds.                                                                                                                                |
+
+`managed: Boolean!` is `true` for a role Clavix itself provides: `updateRole` and `deleteRole` refuse
+it with `ROLE_MANAGED` (403) (assigning it stays allowed), so a UI hides Edit and Delete and shows a
+badge. A role made with `createRole` is never managed.
 
 Each mutation records an admin event (`role.create`, `role.update`, `role.delete`, `role.assign`,
 `role.unassign`; an assignment records the role and the user). Deleting a user or a resource removes

@@ -14,6 +14,9 @@ export const roles = defineCollection({
     name: z.string(),
     description: z.string().default(""),
     resourceId: id().nullable().default(null),
+    // A role Clavix itself created for the tenant: the console cannot rename
+    // or delete it. Absent on older documents, so `false`.
+    managed: z.boolean().default(false),
   }),
   indexes: [
     {

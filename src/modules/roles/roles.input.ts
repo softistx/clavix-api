@@ -30,5 +30,11 @@ export function cleanDescription(text: string | undefined) {
   return clean;
 }
 
+export const managedRefusal = (name: string) =>
+  new RolesError(
+    "ROLE_MANAGED",
+    `The role "${name}" is managed by Clavix and cannot be changed or deleted`,
+  );
+
 export const conflict = (name: string) =>
   new RolesError("CONFLICT", `A role named "${name}" already exists here`);

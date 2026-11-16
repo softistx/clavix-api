@@ -8,7 +8,13 @@ import { ObjectId } from "mongodb";
 import type { resources } from "../resources/resources.model";
 import { assign, members, removeUser, unassign } from "./role-assignments";
 import { claimRoles, rolesOfUser } from "./role-claims";
-import { cleanDescription, cleanName, conflict, refuse } from "./roles.input";
+import {
+  cleanDescription,
+  cleanName,
+  conflict,
+  managedRefusal,
+  refuse,
+} from "./roles.input";
 import type { roleAssignments, roles } from "./roles.model";
 
 export type RoleDoc = ReadDocumentOf<typeof roles>;
@@ -91,6 +97,8 @@ export class RolesService {
       name: string;
       description?: string | undefined;
       resourceId?: string | null | undefined;
+      /** Set by Clavix's own code for a role it provides; never from the console's input. */
+      managed?: boolean | undefined;
     },
   ): Promise<RoleDoc> {
     const name = cleanName(input.name);
@@ -110,6 +118,7 @@ export class RolesService {
         name,
         description,
         resourceId,
+        managed: input.managed ?? false,
       });
       // The resource may have been deleted since it was read, after its roles
       // were cleaned up: take the role back rather than leave it dangling.
@@ -146,6 +155,7 @@ export class RolesService {
     const existing = await this.find(tenantId, roleId);
     if (existing === undefined) refuse("NOT_FOUND", "No such role");
     const found = existing;
+    if (found.managed) throw managedRefusal(found.name);
     const name = input.name === undefined ? found.name : cleanName(input.name);
     const description =
       input.description === undefined
@@ -164,12 +174,21 @@ export class RolesService {
   }
 
   /**
-   * Deletes the role and its assignments; `false` when it was not there. The
+   * Deletes the role and its assignments; `false` when it was not there. A
+   * managed role is refused (`ROLE_MANAGED`). The
    * role goes first, then the sweep, and the sweep runs on a repeat too: an
    * `assign` that re-checks the role after its write then sees it gone, in
    * every ordering, and a run that stopped between the two is finished.
    */
   async delete(tenantId: ObjectId, roleId: string): Promise<boolean> {
+    const existing = await this.find(tenantId, roleId);
+    // A managed role is refused; an unknown one still sweeps (a repeat).
+    if (existing?.managed) throw managedRefusal(existing.name);
+    return this.remove(tenantId, roleId);
+  }
+
+  /** The removal itself, for `delete` and for the cascade of a deleted resource (which takes managed roles too). */
+  private async remove(tenantId: ObjectId, roleId: string): Promise<boolean> {
     if (!ObjectId.isValid(roleId)) return false;
     const id = new ObjectId(roleId);
     const removed =
@@ -186,7 +205,7 @@ export class RolesService {
     const own = await this.rolesOf(tenantId).findMany({
       filter: { resourceId },
     });
-    for (const role of own) await this.delete(tenantId, role._id.toHexString());
+    for (const role of own) await this.remove(tenantId, role._id.toHexString());
     return own;
   }
 

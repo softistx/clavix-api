@@ -90,7 +90,9 @@ nxgt-janus release says which.
   member picker, by e-mail or name prefix, for a role writer
   ([#208](https://github.com/softistx/clavix-api/issues/208)).
 - **End-user roles** — roles per tenant, scoped to a resource or not, assigned to users and released
-  in the `roles` claim ([#102](https://github.com/softistx/clavix-api/issues/102)).
+  in the `roles` claim ([#102](https://github.com/softistx/clavix-api/issues/102)); a `managed` marker
+  on a role Clavix provides, refused for update and delete
+  ([#207](https://github.com/softistx/clavix-api/issues/207)).
 - **Branding** — a theme per tenant with an AA contrast check, a logo, and a public brand query by
   host; unsafe CSS is refused on save ([#10](https://github.com/softistx/clavix-api/issues/10)).
 - **Custom domains** — add, verify by DNS TXT, remove and make primary; a 6-hourly recheck with a
