@@ -57,6 +57,9 @@ describe("unseedConsole", () => {
       rotatedAt: null,
     });
     expect((await store.findAccessToken("access-hash"))?.revokedAt).toBeNull();
+    expect(
+      (await store.findRefreshToken("refresh-hash"))?.revokedAt,
+    ).toBeNull();
 
     await unseedConsole(db, origin);
 
