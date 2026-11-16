@@ -195,6 +195,7 @@ describe("withTenantState", () => {
     status,
     issuer: "https://acme.clavix.test",
     slugIssuer: "https://acme.clavix.test",
+    relatedOrigins: [],
     partition: "t1",
     version: 1,
     signIn: signInPolicySchema.parse(undefined),

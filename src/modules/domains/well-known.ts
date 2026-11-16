@@ -8,11 +8,28 @@ export const WEBAUTHN_WELL_KNOWN = "/.well-known/webauthn";
  */
 export function relatedOrigins(
   hosts: readonly string[],
-  origin: { scheme: string; port?: number | undefined },
+  origin: PublicSchemePort,
 ): Response {
-  const suffix = origin.port === undefined ? "" : `:${origin.port}`;
   return Response.json(
-    { origins: hosts.map((host) => `${origin.scheme}://${host}${suffix}`) },
+    { origins: relatedOriginsOf(hosts, origin) },
     { headers: { "cache-control": "public, max-age=300" } },
   );
+}
+
+interface PublicSchemePort {
+  scheme: string;
+  port?: number | undefined;
+}
+
+/**
+ * The origins of verified custom-domain hosts. The one list both the
+ * `/.well-known/webauthn` document serves and the passkey layer accepts
+ * (`origins` of janus-passkeys is exact), so the two cannot drift.
+ */
+export function relatedOriginsOf(
+  hosts: readonly string[],
+  origin: PublicSchemePort,
+): string[] {
+  const suffix = origin.port === undefined ? "" : `:${origin.port}`;
+  return hosts.map((host) => `${origin.scheme}://${host}${suffix}`);
 }

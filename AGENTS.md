@@ -119,8 +119,10 @@ partitioned: never use them for tenant users.
   capped at 30 days after sign-in (`session.absolute`, janus 0.53).
 - **Assumed, not answered (2026-11-12), confirm before first production passkey**: the passkey rpId is
   the tenant's host and the origin `https://<slug>.<CLAVIX_DOMAIN>`, in one place, `rpIdOf` /
-  `originOf` (`src/users/rp.ts`). A custom domain later goes through WebAuthn Related Origins. A
-  passkey is scoped to its rpId for good.
+  `originOf` (`src/users/rp.ts`). A verified custom domain is a WebAuthn related origin of it
+  (ADR-0036): `ResolvedTenant.relatedOrigins` (the same `relatedOriginsOf` list the well-known document
+  serves) joins janus's `passkeys.origins`, and the janus issuer cache's version carries its digest, so
+  verifying or removing a domain rebuilds the instance. A passkey is scoped to its rpId for good.
 - **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
   closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
   Invitations: `createMongoInvitations(db, { partition })`; accepting one is the hosted
@@ -534,7 +536,7 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
   The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
-  (Related Origins). Janus accepting those origins is not wired yet.
+  (Related Origins). The passkey layer accepts the same origins (`relatedOriginsOf`, `src/modules/domains/well-known.ts`).
 
 ## OAuth clients
 

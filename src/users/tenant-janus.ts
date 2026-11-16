@@ -97,7 +97,9 @@ function buildJanus(
     passkeys: {
       rpId: rpIdOf(tenant),
       rpName: tenant.name,
-      origins: [originOf(tenant)],
+      // The slug host's own origin, and each verified custom domain's
+      // (WebAuthn Related Origins, ADR-0036): janus-passkeys compares exactly.
+      origins: [originOf(tenant), ...tenant.relatedOrigins],
       verifier: simpleWebAuthnVerifier(),
       firstFactor: true as const,
       userVerification: "required" as const,
@@ -169,9 +171,16 @@ export const socialOf = (auth: TenantJanus): TenantSocialJanus | null =>
     ? (auth as TenantSocialJanus)
     : null;
 
+/** A short stable digest of the related origins, for the instance cache's version. */
+const fingerprintOf = (origins: readonly string[]): string =>
+  new Bun.CryptoHasher("sha256")
+    .update([...origins].sort().join("\n"))
+    .digest("hex")
+    .slice(0, 12);
+
 /**
  * One janus instance per tenant, chosen by host, rebuilt when the tenant's
- * `version` changes. The same resolver feeds the OAuth issuers.
+ * `version` or its related origins change. The same resolver feeds the OAuth issuers.
  */
 export function createTenantJanusIssuers({
   resolver,
@@ -184,7 +193,14 @@ export function createTenantJanusIssuers({
       const tenant = await resolver.resolveRequest(request);
       return tenant === null
         ? null
-        : { issuer: tenant.issuer, version: String(tenant.version), tenant };
+        : {
+            issuer: tenant.issuer,
+            // `origins` is fixed when the instance is built, so the version
+            // also carries the related origins: verifying or removing a domain
+            // rebuilds the cached instance (ADR-0036).
+            version: `${tenant.version}.${fingerprintOf(tenant.relatedOrigins)}`,
+            tenant,
+          };
     },
     build: ({ tenant }) =>
       buildTenantJanus(db, tenant, secrets, invitationHooks?.(tenant)),

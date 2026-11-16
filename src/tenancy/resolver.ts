@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import { relatedOriginsOf } from "@/modules/domains/well-known";
 import {
   issuerOf,
   issuerOfHost,
@@ -13,6 +14,8 @@ import { noTenantCache, type TenantCache } from "./tenant-cache";
 export interface DomainDirectory {
   tenantOfHost(host: string): Promise<ObjectId | undefined>;
   primaryHostOf(tenantId: ObjectId): Promise<string | undefined>;
+  /** The tenant's verified hosts: the passkey related origins (ADR-0036). */
+  verifiedHostsOf?(tenantId: ObjectId): Promise<string[]>;
 }
 
 /** What the resolver needs of a stored tenant. */
@@ -67,6 +70,7 @@ function toResolved(
   tenant: TenantRecord | undefined,
   config: PublicOrigin,
   primaryHost?: string,
+  verifiedHosts: readonly string[] = [],
 ): ResolvedTenant | null {
   return tenant === undefined || tenant.purgeStartedAt !== undefined
     ? null
@@ -84,6 +88,7 @@ function toResolved(
             ? issuerOf(tenant.slug, config)
             : issuerOfHost(primaryHost, config),
         slugIssuer: issuerOf(tenant.slug, config),
+        relatedOrigins: relatedOriginsOf(verifiedHosts, config),
         partition: partitionOf(tenant._id),
         version: tenant.version,
         signIn: tenant.signIn,
@@ -127,11 +132,17 @@ async function loadTenant(
     record === undefined
       ? undefined
       : await options.domains?.primaryHostOf(record._id);
-  return toResolved(record, options.config, primary);
+  const verifiedHosts =
+    record === undefined
+      ? undefined
+      : await options.domains?.verifiedHostsOf?.(record._id);
+  return toResolved(record, options.config, primary, verifiedHosts);
 }
 
 const stamp = (tenant: ResolvedTenant | null) =>
-  tenant === null ? null : [tenant.version, tenant.issuer, tenant.status];
+  tenant === null
+    ? null
+    : [tenant.version, tenant.issuer, tenant.status, tenant.relatedOrigins];
 
 // Cache-aside: read the cache, else load and store, then re-check.
 async function resolveCached(

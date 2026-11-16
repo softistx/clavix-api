@@ -1049,7 +1049,9 @@ mutation {
   tenant's slug host), 429 past the limit, a bare 404 otherwise. Call the app directly (a request carrying `X-Forwarded-*` is refused) and
   keep `/internal/` off the public proxy. Redis down: the limit is skipped.
 - `GET /.well-known/webauthn` on the slug host lists the verified domains' origins (WebAuthn Related
-  Origins); janus does not honour it yet.
+  Origins). The passkey layer accepts the same origins: a ceremony run on a verified domain passes, one
+  on an unverified or removed domain is refused (the tenant's cache entry drops on verify and remove, which
+  rebuilds its janus instance).
 
 ## How a host maps to a tenant
 
