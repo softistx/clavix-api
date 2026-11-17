@@ -6,9 +6,9 @@ approves it on a phone or laptop. RFC 8628, served on every tenant host.
 ## Register a device client
 
 ```sh
-bun run clients:create --tenant acme --name "Living room TV" --grants device_code
+bun run clients:create --tenant acme --name "Living room TV" --grants urn:ietf:params:oauth:grant-type:device_code
 # a refresh token too, and no redirect URI needed
-bun run clients:create --tenant acme --name "Living room TV" --grants device_code,refresh_token
+bun run clients:create --tenant acme --name "Living room TV" --grants urn:ietf:params:oauth:grant-type:device_code,refresh_token
 ```
 
 From the console: `createClient(input: { name, type: PUBLIC, grantTypes: [DEVICE_CODE] })`; `redirectUris` may be

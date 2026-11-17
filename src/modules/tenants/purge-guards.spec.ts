@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
+import { mongo } from "@/config/db";
 import { ownedPurgers } from "@/config/purge";
 import { tenantAdmin, tenantsService } from "@/config/tenancy";
 import {
@@ -27,7 +29,24 @@ describe("the tenant purge guards", () => {
     // The roles and their assignments are tenant-owned: purged with it.
     expect(names).toContain("roles");
     expect(names).toContain("roleAssignments");
+    // The clients' rules (token exchange) go with the tenant too.
+    expect(names).toContain("clientPolicies");
     expect(names).not.toContain("adminEvents");
+  });
+  test("the purge empties a tenant's clientPolicies and no other's", async () => {
+    const purger = ownedPurgers().find((p) => p.name === "clientPolicies");
+    const a = new ObjectId();
+    const b = new ObjectId();
+    for (const tenantId of [a, b]) {
+      await scopeToTenant(mongo.db.clientPolicies, tenantId).create({
+        clientId: "exch",
+      });
+    }
+    expect(await purger?.deleteOwnedBy(a)).toBe(1);
+    expect(
+      await mongo.db.clientPolicies.raw.countDocuments({ tenantId: a }),
+    ).toBe(0);
+    expect(await purger?.deleteOwnedBy(b)).toBe(1);
   });
   test("every purger reaches a real collection", async () => {
     for (const purger of ownedPurgers()) {

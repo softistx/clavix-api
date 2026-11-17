@@ -3,9 +3,11 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { registerClient } from "@/clients/register-client";
 import { access, linkTenantToPlatform } from "@/config/access";
+import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
+import { registerStoredResource } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { partitionOf } from "@/modules/tenants/identity";
@@ -631,6 +633,171 @@ describe("deleteClient", () => {
     ).toBeNull();
     expect(
       (await store.findRefreshToken("r-grant-tok-kept"))?.revokedAt,
+    ).toBeNull();
+  });
+});
+
+const EXCHANGE = `mutation($tenantId: ID!, $id: ID!, $input: ClientTokenExchangeInput!) {
+  setClientTokenExchange(tenantId: $tenantId, id: $id, input: $input) {
+    id grantTypes tokenExchange { targetResources subjectClients anySubjectClient mode }
+  }
+}`;
+const GET_EXCHANGE = `query($tenantId: ID!, $id: ID!) {
+  client(tenantId: $tenantId, id: $id) { tokenExchange { targetResources subjectClients anySubjectClient mode } }
+}`;
+const API_URI = "https://exchange-target.example/api";
+
+describe("setClientTokenExchange", () => {
+  test("sets the rules, reads them back, replaces them and records its event", async () => {
+    await registerStoredResource({
+      tenant: "cli-a",
+      uri: API_URI,
+      scopes: ["read"],
+    });
+    const created = await create(admin, tenantA, {
+      name: "Exchanger",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["TOKEN_EXCHANGE"],
+    });
+    expect(created.errors).toBeUndefined();
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: {
+        id: "exchanger",
+        grantTypes: ["TOKEN_EXCHANGE"],
+        redirectUris: [],
+      },
+    });
+    // No rules yet: the client cannot exchange.
+    const before = await admin(GET_EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+    });
+    expect(before.data?.["client"]).toEqual({ tokenExchange: null });
+
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const set = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], subjectClients: ["web", "web"] },
+    });
+    expect(set.errors).toBeUndefined();
+    expect(set.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: {
+        targetResources: [API_URI],
+        subjectClients: ["web"],
+        anySubjectClient: false,
+        mode: "DELEGATION",
+      },
+    });
+    const read = await admin(GET_EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+    });
+    expect(read.data?.["client"]).toMatchObject({
+      tokenExchange: { subjectClients: ["web"] },
+    });
+    const listed = await admin(LIST, { tenantId: tenantA, q: "exchanger" });
+    expect(idsOf(listed)).toEqual(["exchanger"]);
+
+    const replaced = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], anySubjectClient: true },
+    });
+    expect(replaced.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: { subjectClients: [], anySubjectClient: true },
+    });
+    const events = await mongo.db.adminEvents.raw
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    expect(events.map((event) => event.action)).toEqual([
+      "client.tokenExchange.set",
+      "client.tokenExchange.set",
+    ]);
+    expect(events[0]?.target).toEqual({ type: "client", id: "exchanger" });
+    // A rename keeps the rules.
+    await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { name: "X" },
+    });
+    expect(
+      (await admin(GET_EXCHANGE, { tenantId: tenantA, id: "exchanger" }))
+        .data?.["client"],
+    ).toMatchObject({ tokenExchange: { anySubjectClient: true } });
+  });
+
+  test("a target that is not the tenant's resource, a public client, bad subjects and an unknown client are refused", async () => {
+    const input = { targetResources: [API_URI], subjectClients: ["web"] };
+    const codes = async (result: ReturnType<typeof admin>) =>
+      (await result).errors?.map((error) => error.extensions?.["code"]);
+    expect(
+      await codes(
+        admin(EXCHANGE, {
+          tenantId: tenantA,
+          id: "exchanger",
+          input: {
+            ...input,
+            targetResources: ["https://not-mine.example/api"],
+          },
+        }),
+      ),
+    ).toEqual(["BAD_USER_INPUT"]);
+    await create(admin, tenantA, { name: "Pub ex" });
+    expect(
+      await codes(admin(EXCHANGE, { tenantId: tenantA, id: "pub-ex", input })),
+    ).toEqual(["BAD_USER_INPUT"]);
+    for (const bad of [
+      { targetResources: [API_URI] },
+      {
+        targetResources: [API_URI],
+        subjectClients: ["web"],
+        anySubjectClient: true,
+      },
+      { targetResources: [API_URI], subjectClients: ["Bad Id"] },
+    ]) {
+      expect(
+        await codes(
+          admin(EXCHANGE, { tenantId: tenantA, id: "exchanger", input: bad }),
+        ),
+      ).toEqual(["BAD_USER_INPUT"]);
+    }
+    expect(
+      await codes(admin(EXCHANGE, { tenantId: tenantA, id: "nope", input })),
+    ).toEqual(["NOT_FOUND"]);
+  });
+
+  test("needs edit, and a client of another tenant is unknown", async () => {
+    const input = { targetResources: [API_URI], subjectClients: ["web"] };
+    const viewed = await viewer(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input,
+    });
+    expect(viewed.errors?.[0]?.extensions?.["code"]).toBe("FORBIDDEN");
+    const across = await adminB(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input,
+    });
+    expect(across.errors).toBeDefined();
+  });
+
+  test("deleting the client removes its rules", async () => {
+    const tenant = await mongo.db.tenants.findById(tenantA);
+    if (tenant === undefined) throw new Error("no tenant");
+    expect(
+      await clientPoliciesService.tokenExchange(tenant._id, "exchanger"),
+    ).not.toBeNull();
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "exchanger" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(true);
+    expect(
+      await clientPoliciesService.tokenExchange(tenant._id, "exchanger"),
     ).toBeNull();
   });
 });

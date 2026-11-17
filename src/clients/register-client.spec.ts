@@ -6,6 +6,7 @@ import {
   rotateSigningKeys,
   type SigningKeyStore,
   s256Challenge,
+  TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import {
@@ -317,6 +318,42 @@ describe("registerClient", () => {
     expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
       "refresh_token",
       DEVICE_GRANT,
+    ]);
+  });
+
+  test("a token-exchange client is confidential, needs no redirect URI, and a public one is refused", async () => {
+    const store = await storeOf("regalpha");
+    const registered = await registerClient(options, {
+      tenant: "regalpha",
+      name: "Reports service",
+      redirectUris: [],
+      type: "confidential",
+      grants: [TOKEN_EXCHANGE_GRANT],
+    });
+    expect(registered.clientSecret).not.toBeNull();
+    expect((await store.findClient("reports-service"))?.grantTypes).toEqual([
+      TOKEN_EXCHANGE_GRANT,
+    ]);
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Public exchanger",
+        redirectUris: [],
+        grants: [TOKEN_EXCHANGE_GRANT],
+      }),
+    ).rejects.toThrow("confidential client");
+    expect(await store.findClient("public-exchanger")).toBeNull();
+    // A re-run that repeats --grants keeps the grant and the secret.
+    const again = await registerClient(options, {
+      tenant: "regalpha",
+      name: "Reports service",
+      redirectUris: [],
+      type: "confidential",
+      grants: [TOKEN_EXCHANGE_GRANT],
+    });
+    expect(again.clientSecret).toBeNull();
+    expect((await store.findClient("reports-service"))?.grantTypes).toEqual([
+      TOKEN_EXCHANGE_GRANT,
     ]);
   });
 

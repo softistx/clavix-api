@@ -308,6 +308,9 @@ it. Custom domains stay on demand.
    every instance agrees, and rotating the key (a new first key) only makes DPoP clients retry once on
    `use_dpop_nonce`. Keep the instances' clocks in sync (the replay cache and the proofs' `iat` read them).
    Turning `dpop.required` on breaks a client that sends no proof: warn its owner first.
+   Token exchange (clavix-api #16): run `db:sync` before the deploy so the `clientPolicies` collection and its
+   unique index (`tenantId`, `clientId`) exist. No migration and no backfill: a client with no rules is refused
+   (`access_denied`), which is today's behaviour.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

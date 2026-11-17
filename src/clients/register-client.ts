@@ -4,6 +4,7 @@ import {
   mintOAuthSecret,
   type OAuthClientRecord,
   redirectUriProblem,
+  TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
@@ -16,19 +17,21 @@ import {
 import { partitionOf } from "@/modules/tenants/identity";
 
 /**
- * The grant types Clavix offers (janus-oauth also knows token exchange, not
- * offered yet). A client's `grantTypes` is enforced by janus-oauth on
+ * The grant types Clavix offers. A client's `grantTypes` is enforced by janus-oauth on
  * `/authorize`, the code exchange, the refresh grant and the device grant
  * (`unauthorized_client`), and an explicit list is taken as written: a client
  * that refreshes lists `refresh_token` beside `authorization_code` or the
  * device URN. A list needs `authorization_code` or the device grant
  * (`refresh_token` alone is refused by janus). The device grant is never
- * implied: a client opts in.
+ * implied: a client opts in. The token exchange grant (RFC 8693) is the same,
+ * for a confidential client only, and it also needs the client's rules
+ * (`clientPolicies`): with none, every exchange is refused.
  */
 export const OFFERED_GRANTS = [
   "authorization_code",
   "refresh_token",
   DEVICE_GRANT,
+  TOKEN_EXCHANGE_GRANT,
 ] as const;
 export type OfferedGrant = (typeof OFFERED_GRANTS)[number];
 
@@ -54,8 +57,9 @@ export interface RegisterClientInput {
   /**
    * The grants the client may use, enforced by janus. Default: what the
    * client already records, else `authorization_code` and `refresh_token`.
-   * A list must name `authorization_code` or the device grant (add
-   * `refresh_token` for a client that refreshes); anything else is refused.
+   * A list must name `authorization_code`, the device grant or the token
+   * exchange grant (add `refresh_token` for a client that refreshes); anything
+   * else is refused. The token exchange grant needs a confidential client.
    * A client with no `authorization_code` needs no redirect URI.
    */
   grants?: readonly string[];
@@ -127,7 +131,7 @@ function validate(input: RegisterClientInput): {
   const redirectUris = [...new Set(input.redirectUris)];
   if (redirectUris.length === 0 && usesRedirect(input.grants)) {
     throw new CliInputError(
-      "a client needs at least one redirect URI (a device-only client, --grants with the device grant and no authorization_code, needs none)",
+      "a client needs at least one redirect URI (a device-only or token-exchange-only client, --grants without authorization_code, needs none)",
     );
   }
   for (const uri of redirectUris) {
@@ -149,10 +153,11 @@ function validate(input: RegisterClientInput): {
   if (
     input.grants !== undefined &&
     !input.grants.includes("authorization_code") &&
-    !input.grants.includes(DEVICE_GRANT)
+    !input.grants.includes(DEVICE_GRANT) &&
+    !input.grants.includes(TOKEN_EXCHANGE_GRANT)
   ) {
     throw new CliInputError(
-      `--grants must include authorization_code or ${DEVICE_GRANT}: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)`,
+      `--grants must include authorization_code, ${DEVICE_GRANT} or ${TOKEN_EXCHANGE_GRANT}: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)`,
     );
   }
   const grantTypes =
@@ -189,6 +194,15 @@ export async function registerClient(
   }
 
   const confidential = type === "confidential";
+  if (
+    !confidential &&
+    (grantTypes ?? existing?.grantTypes)?.includes(TOKEN_EXCHANGE_GRANT) ===
+      true
+  ) {
+    throw new CliInputError(
+      `the token exchange grant needs a confidential client (--confidential): "${clientId}" is not one`,
+    );
+  }
   const existingHash = existing?.secretHash;
   if (!confidential && existingHash !== undefined) {
     throw new CliInputError(

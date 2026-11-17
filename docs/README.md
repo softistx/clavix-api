@@ -7,6 +7,7 @@
 | [roadmap.md](roadmap.md)                                                         | what is shipped and what comes next                                                 |
 | [guide/sign-in-methods.md](guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                                     |
 | [guide/device-authorization.md](guide/device-authorization.md)                   | the device grant: registering a client, the device's polling, the verification page |
+| [guide/token-exchange.md](guide/token-exchange.md)                               | the token exchange grant: the client's rules, the exchange, its refusals            |
 | [guide/magic-link.md](guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                                   |
 | [guide/migrating-from-embedded-janus.md](guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                                 |
 
