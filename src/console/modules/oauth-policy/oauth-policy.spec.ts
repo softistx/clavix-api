@@ -177,7 +177,7 @@ describe("updateOAuthPolicy", () => {
     await as(OWNER, UPDATE, { t: a, i: { dpop: { required: false } } });
   });
 
-  test("the platform tenant refuses PAR and DPoP: PLATFORM_TENANT_PROTECTED (409), nothing stored", async () => {
+  test("the platform tenant may require PAR and DPoP (the console pushes and proves), and relax them again", async () => {
     const platform = await mongo.db.tenants.raw.findOne({
       slug: PLATFORM_TENANT_SLUG,
     });
@@ -185,26 +185,24 @@ describe("updateOAuthPolicy", () => {
     const id = platform._id.toHexString();
     await access.grantTenant(id, PLATFORM_ADMIN, "admin");
     const before = await stored(id);
-    for (const input of [
-      { par: { required: true } },
-      { dpop: { required: true } },
-    ]) {
-      expect(
-        codeOf(await as(PLATFORM_ADMIN, UPDATE, { t: id, i: input })),
-      ).toBe("PLATFORM_TENANT_PROTECTED");
-    }
-    // Turning an off flag off again is no change, so it passes.
+    const on = await as(PLATFORM_ADMIN, UPDATE, {
+      t: id,
+      i: { par: { required: true }, dpop: { required: true } },
+    });
+    expect(on.errors).toBeUndefined();
+    expect((await stored(id)).oauth).toEqual({
+      par: { required: true },
+      dpop: { required: true },
+    });
+    // Restored: the other specs share this tenant.
     const off = await as(PLATFORM_ADMIN, UPDATE, {
       t: id,
-      i: { par: { required: false } },
+      i: { par: { required: false }, dpop: { required: false } },
     });
     expect(off.errors).toBeUndefined();
     const after = await stored(id);
-    expect(after.version).toBe(before.version);
-    expect(after.oauth).toEqual({
-      par: { required: false },
-      dpop: { required: false },
-    });
+    expect(after.oauth).toEqual(before.oauth);
+    expect(after.version).toBe(before.version + 2);
   });
 
   test("a tenant that does not exist is NOT_FOUND to the service, and a lost race is CONFLICT", async () => {

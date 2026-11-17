@@ -42,6 +42,18 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   const { migrate } = await import("@softistx/mongo/migrations");
   const { migrations } = await import("@/migrations");
   await migrate(mongo.db, migrations);
+  // The `console-par-dpop` migration makes the `clavix` tenant require PAR and
+  // DPoP, as production does. The specs mint plain tokens for it: relax it for
+  // the run (the specs of the requirement set it themselves, then restore it).
+  const { relaxParAndDpopOnConsole } = await import(
+    "@/migrations/2026-11-17-console-par-dpop.migration"
+  );
+  const { env } = await import("@/config/env");
+  await relaxParAndDpopOnConsole(mongo.db, {
+    scheme: env.CLAVIX_PUBLIC_SCHEME,
+    domain: env.CLAVIX_DOMAIN,
+    port: env.CLAVIX_PUBLIC_PORT,
+  });
 }
 
 afterAll(async () => {

@@ -1,6 +1,5 @@
 import { OptimisticLockError } from "@softistx/mongo";
 import { GraphQLError } from "graphql";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
 import type { OAuthPolicy } from "./oauth-policy.schema";
@@ -45,18 +44,6 @@ export class OAuthPolicyService {
           next.dpop.required === tenant.oauth.dpop.required
         ) {
           return null;
-        }
-        // The console signs in with a client that does not push yet (ADR in
-        // the M3 plan, decision 2): requiring it would lock every operator out.
-        if (
-          tenant.slug === PLATFORM_TENANT_SLUG &&
-          (next.par.required || next.dpop.required)
-        ) {
-          throw refusal(
-            "PLATFORM_TENANT_PROTECTED",
-            "The platform tenant cannot require pushed authorization requests or DPoP yet",
-            409,
-          );
         }
         return next;
       });

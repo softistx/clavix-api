@@ -478,9 +478,8 @@ which names the tenant and the cause.
 one in the trash.
 
 **`PLATFORM_TENANT_PROTECTED` (409)**: `suspendTenant` or `deleteTenant` on the `clavix` tenant, which
-runs the console itself. `updateOAuthPolicy` on that tenant gives it too when `par.required` or
-`dpop.required` becomes `true`: the console signs in through the tenant itself, whose clients do not
-push their requests. Turning a requirement off is accepted.
+runs the console itself. `updateOAuthPolicy` on that tenant is accepted: the console pushes (PAR) and proves (DPoP), and the
+`clavix` tenant requires both since migration `2026-11-17-console-par-dpop`.
 
 **`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
 (`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
@@ -515,7 +514,8 @@ curl -u "$CLIENT_ID:$CLIENT_SECRET" -d "response_type=code&redirect_uri=$URI&sco
 To turn it off: `updateOAuthPolicy` with `par: { required: false }` for the
 tenant, `updateClient` with `requirePushedAuthorizationRequests: false`, or
 `clients:create --no-require-par` for a script-made client. The `clavix`
-platform tenant refuses `par.required: true` (`PLATFORM_TENANT_PROTECTED`, 409).
+platform tenant requires it since migration `2026-11-17-console-par-dpop`; turn it off only with the console
+still signing in with PAR.
 A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED` like `/authorize`.
 
 ## `/par` refusals (pushed authorization requests)
@@ -569,8 +569,9 @@ as `Bearer`, or an unbound one as `DPoP`, or the proof's key is not the token's.
 was not run: the tokens validators do not know `jkt` yet, or `oauthDpopReplay` does not exist
 (operations, "Deploying").
 
-**`PLATFORM_TENANT_PROTECTED` (409) on `updateOAuthPolicy`** with `dpop: { required: true }` on `clavix`:
-the console's own client does not yet push (PAR) or send proofs (DPoP). See `/par` above.
+**The console answers 401 `invalid_dpop_proof` or `use_dpop_nonce` after the update**: the `clavix` tenant
+requires PAR and DPoP (migration `2026-11-17-console-par-dpop`), so a console older than clavix-ui#228 is
+refused at sign-in. Deploy clavix-ui first or together.
 
 ## Token exchange refusals
 

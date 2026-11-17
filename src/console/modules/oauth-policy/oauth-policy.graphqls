@@ -38,9 +38,8 @@ type Mutation {
   on the tenant. Idempotent: a call that changes nothing writes nothing.
   Turning `par.required` on makes every client of the tenant push its requests:
   a client that does not breaks with `invalid_request`.
-  PLATFORM_TENANT_PROTECTED (409) when it would require PAR or DPoP on the
-  platform tenant (the console client does not push yet); CONFLICT (409) when
-  other changes kept winning the race (nothing stored: read the policy and send
+  The platform tenant takes it too: the console pushes and proves. CONFLICT
+  (409) when other changes kept winning the race (nothing stored: read the policy and send
   the change again).
   """
   updateOAuthPolicy(tenantId: ID!, input: OAuthPolicyInput!): OAuthPolicy!
