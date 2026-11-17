@@ -9,6 +9,7 @@ import {
 import { readyz } from "./config/ready";
 import { scopeTextsFor } from "./config/resources";
 import {
+  deviceThrottle,
   passkeyThrottle,
   signInThrottle,
   verifyThrottle,
@@ -25,6 +26,7 @@ import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import type { VerificationThrottle } from "./modules/auth/verification-throttle";
 import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
+import type { DeviceThrottle } from "./modules/consent/device-throttle";
 import type { ScopeTextsFor } from "./modules/consent/scope-labels";
 import { version } from "./modules/health";
 import type { ReadyReport } from "./modules/health/ready";
@@ -49,6 +51,8 @@ export function createApp(
     passkeyThrottle?: Throttle | undefined;
     // The same for `requestEmailVerification` (per user too).
     verifyThrottle?: VerificationThrottle | undefined;
+    // The same for the device verification page's code lookups.
+    deviceThrottle?: DeviceThrottle | undefined;
     // The console API (`/console/graphql`, src/console): bearer token, its own
     // schema. Off without it, the route does not exist.
     console?: ConsoleDeps & { schema?: typeof consoleSchema };
@@ -65,6 +69,8 @@ export function createApp(
       "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
     verifyThrottle:
       "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
+    deviceThrottle:
+      "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
   })
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).

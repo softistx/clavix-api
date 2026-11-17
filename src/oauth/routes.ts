@@ -5,6 +5,7 @@ import type { OAuthIssuers } from "@softistx/janus-oauth";
 export const OAUTH_PATHS = [
   "/authorize",
   "/par",
+  "/device_authorization",
   "/token",
   "/revoke",
   "/.well-known/oauth-authorization-server",

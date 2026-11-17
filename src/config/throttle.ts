@@ -1,5 +1,6 @@
 import { createSignInThrottle } from "@/modules/auth/throttle";
 import { createVerificationThrottle } from "@/modules/auth/verification-throttle";
+import { createDeviceThrottle } from "@/modules/consent/device-throttle";
 import { createPasskeyThrottle } from "@/modules/passkeys/throttle";
 import { redis } from "./redis";
 
@@ -11,3 +12,5 @@ export const passkeyThrottle =
   redis === undefined ? undefined : createPasskeyThrottle(redis.limits);
 export const verifyThrottle =
   redis === undefined ? undefined : createVerificationThrottle(redis.limits);
+export const deviceThrottle =
+  redis === undefined ? undefined : createDeviceThrottle(redis.limits);

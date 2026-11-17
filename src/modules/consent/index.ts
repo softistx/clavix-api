@@ -1,6 +1,7 @@
 import type { IResolvers } from "@graphql-tools/utils";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
+import type { Context } from "@/http/context";
 import type { OAuthHandle } from "@/oauth/routes";
 import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
@@ -11,7 +12,7 @@ import {
   textOf,
 } from "./scope-labels";
 
-/** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, `connectedApps`, `revokeConnectedApp`. */
+/** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
 
 // The OAuth servers the app serves: put on every context by `oauthContext`,
@@ -93,6 +94,20 @@ const requestOf = (ctx: unknown): Request => {
  */
 export const consentResolvers: IResolvers = {
   ...oauthResolvers({
+    // The device page's three fields: before each lookup of a user code, the
+    // signed-in user, the client address and the tenant are counted (hit or
+    // miss: janus calls the hook before it reads the store). The viewer is
+    // known to be signed in, and the tenant live, when it runs.
+    beforeUserCodeLookup: async (ctx) => {
+      const { tenant, ip, deviceThrottle, janus } = ctx as unknown as Context;
+      const [current, resolved] = await Promise.all([janus.user(), tenant()]);
+      if (current === null || resolved === null) throw denial("NOT_FOUND");
+      await deviceThrottle?.check({
+        tenantId: resolved.tenantId,
+        userId: current.id,
+        ip,
+      });
+    },
     oauth: async (ctx) => {
       // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
       const request = requestOf(ctx);
@@ -112,5 +127,6 @@ export const consentResolvers: IResolvers = {
   // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one
   // static map, not per tenant, resource and language, hence these two fields.
   OAuthRequest: { scopes: labelled },
+  OAuthDeviceRequest: { scopes: labelled },
   OAuthConnectedApp: { scopes: labelled },
 };

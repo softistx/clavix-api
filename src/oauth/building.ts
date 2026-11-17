@@ -39,6 +39,10 @@ export const buildIssuer =
         [userinfo]: { scopes: [...OIDC_SCOPES] },
       },
       defaultResource: userinfo,
+      // RFC 8628: served by every tenant, gated per client by its grants (the
+      // device URN is never implied). The page is the hosted `/device` of the
+      // issuer's own host; `/device_authorization` is janus's endpoint.
+      deviceAuthorization: { verificationUri: `${tenant.issuer}/device` },
       // RFC 9126: `/par` is always served; `required` makes every client push.
       pushedAuthorizationRequests: { required: tenant.oauth.par.required },
       lifetimes,

@@ -6,10 +6,10 @@ export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name
 
   --tenant <slug>          the tenant the client is registered on (required)
   --name <name>            the client's name (required)
-  --redirect-uri <uri>     an exact redirect URI; repeat for several (required)
+  --redirect-uri <uri>     an exact redirect URI; repeat for several (required, except for a device-only client)
   --confidential           a back end with a secret (client_secret_basic); default is a public client with PKCE
   --client-id <id>         the client's id in the tenant; default: the name as a-z0-9-. Re-running with the same id updates the client
-  --grants <a,b>           ${OFFERED_GRANTS.join(",")} (enforced by janus: list refresh_token to let the client refresh; needs authorization_code; default: kept, else both)
+  --grants <a,b>           ${OFFERED_GRANTS.join(",")} (enforced by janus: list refresh_token to let the client refresh; needs authorization_code or the device URN; default: kept, else authorization_code,refresh_token). A client without authorization_code needs no --redirect-uri
   --require-par            make the client push its authorization requests to /par (RFC 9126); kept on a re-run unless --no-require-par
   --no-require-par         stop requiring it of this client
   --rotate-secret          mint a new secret for an existing confidential client`;

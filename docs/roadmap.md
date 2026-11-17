@@ -13,6 +13,12 @@ nxgt-janus release says which.
   require it for itself, both from the console and the script; `/par` is routed and refused for a
   suspended tenant. DPoP-bound tokens follow in their own slice.
 
+- **Device authorization grant** (in progress, M3 slice A3,
+  [#15](https://github.com/softistx/clavix-api/issues/15)) — `/device_authorization` on every tenant
+  host for a client that lists the device grant (no redirect URI needed); the hosted verification
+  page shows the client, its host and the tenant's scope texts, and approving needs a fresh session;
+  guessing user codes is throttled.
+
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with

@@ -54,10 +54,15 @@ function sameClient(
     type: "public" | "confidential";
     redirectUris: readonly string[];
     requirePar?: boolean | undefined;
+    grants?: readonly string[] | undefined;
   },
 ) {
   const wanted = new Set(input.redirectUris);
+  const wantedGrants = new Set(input.grants);
   return (
+    (input.grants === undefined ||
+      (stored.grantTypes.length === wantedGrants.size &&
+        stored.grantTypes.every((grant) => wantedGrants.has(grant)))) &&
     stored.name === input.name.trim() &&
     stored.type === input.type &&
     (input.requirePar === undefined ||
@@ -167,6 +172,8 @@ export class ClientsService {
       redirectUris: readonly string[];
       clientId?: string | undefined;
       requirePar?: boolean | undefined;
+      /** Default: `authorization_code` and `refresh_token`. */
+      grants?: readonly string[] | undefined;
     },
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
     checkSizes(input);
@@ -193,6 +200,7 @@ export class ClientsService {
       ...(input.requirePar === undefined
         ? {}
         : { requirePar: input.requirePar }),
+      ...(input.grants === undefined ? {} : { grants: input.grants }),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -200,7 +208,7 @@ export class ClientsService {
     };
   }
 
-  /** Replaces the name and/or the redirect URIs; the type and the secret stay. */
+  /** Replaces the name, the redirect URIs and/or the grants; the type and the secret stay. */
   async update(
     tenant: CliTenant,
     clientId: string,
@@ -208,6 +216,7 @@ export class ClientsService {
       name?: string | undefined;
       redirectUris?: readonly string[] | undefined;
       requirePar?: boolean | undefined;
+      grants?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
     checkSizes(input);
@@ -219,6 +228,8 @@ export class ClientsService {
       clientId,
       requirePar:
         input.requirePar ?? current.requirePushedAuthorizationRequests,
+      // Kept as recorded unless the call changes them.
+      grants: input.grants ?? current.grantTypes,
     });
     return this.require(tenant, clientId);
   }
@@ -240,6 +251,7 @@ export class ClientsService {
       redirectUris: current.redirectUris,
       type: "confidential",
       clientId,
+      grants: current.grantTypes,
       rotateSecret: true,
     });
     if (registered.clientSecret === null) {

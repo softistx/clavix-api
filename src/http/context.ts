@@ -4,6 +4,7 @@ import type { JanusContext } from "@softistx/janus-graphql";
 import { env } from "@/config/env";
 import { tenantResolver } from "@/config/tenancy";
 import {
+  deviceThrottle,
   passkeyThrottle,
   signInThrottle,
   verifyThrottle,
@@ -15,7 +16,7 @@ import type { TenantJanus } from "@/users/tenant-janus";
 
 // The base: what every resolver reads, decorated or derived here.
 // The throttles of the anonymous operations (`ctx.signInThrottle`,
-// `ctx.passkeyThrottle`, `ctx.verifyThrottle`; none: no extra limit) ride on the context, typed.
+// `ctx.passkeyThrottle`, `ctx.verifyThrottle`, `ctx.deviceThrottle`; none: no extra limit) ride on the context, typed.
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for
 // the OAuth endpoints), resolved once per request, on first use.
 export function createBase(
@@ -24,6 +25,7 @@ export function createBase(
     signInThrottle,
     passkeyThrottle,
     verifyThrottle,
+    deviceThrottle,
   },
 ) {
   // `ctx.ip`: the connection's address, or, behind CLAVIX_TRUSTED_PROXIES

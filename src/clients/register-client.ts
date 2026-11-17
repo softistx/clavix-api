@@ -1,4 +1,5 @@
 import {
+  DEVICE_GRANT,
   hashOAuthSecret,
   mintOAuthSecret,
   type OAuthClientRecord,
@@ -15,15 +16,28 @@ import {
 import { partitionOf } from "@/modules/tenants/identity";
 
 /**
- * The grant types Clavix offers (janus-oauth also knows the device grant, not
- * offered yet). A client's `grantTypes` is enforced by janus-oauth 0.13 on
- * `/authorize`, the code exchange and the refresh grant (`unauthorized_client`),
- * and an explicit list is taken as written: a client that refreshes lists
- * `refresh_token` beside `authorization_code`. A list needs
- * `authorization_code` (`refresh_token` alone is refused by janus).
+ * The grant types Clavix offers (janus-oauth also knows token exchange, not
+ * offered yet). A client's `grantTypes` is enforced by janus-oauth on
+ * `/authorize`, the code exchange, the refresh grant and the device grant
+ * (`unauthorized_client`), and an explicit list is taken as written: a client
+ * that refreshes lists `refresh_token` beside `authorization_code` or the
+ * device URN. A list needs `authorization_code` or the device grant
+ * (`refresh_token` alone is refused by janus). The device grant is never
+ * implied: a client opts in.
  */
-export const OFFERED_GRANTS = ["authorization_code", "refresh_token"] as const;
+export const OFFERED_GRANTS = [
+  "authorization_code",
+  "refresh_token",
+  DEVICE_GRANT,
+] as const;
 export type OfferedGrant = (typeof OFFERED_GRANTS)[number];
+
+/** What a client with no recorded `grantTypes` may use (janus's default). */
+export const DEFAULT_GRANTS = ["authorization_code", "refresh_token"] as const;
+
+/** Whether a client with these grants goes through a browser redirect (it needs a redirect URI). */
+export const usesRedirect = (grants: readonly string[] | undefined) =>
+  grants === undefined || grants.includes("authorization_code");
 
 export interface RegisterClientInput {
   /** The tenant's slug. */
@@ -39,8 +53,10 @@ export interface RegisterClientInput {
   clientId?: string;
   /**
    * The grants the client may use, enforced by janus. Default: what the
-   * client already records, else both. A list must name `authorization_code`
-   * (add `refresh_token` for a client that refreshes); anything else is refused.
+   * client already records, else `authorization_code` and `refresh_token`.
+   * A list must name `authorization_code` or the device grant (add
+   * `refresh_token` for a client that refreshes); anything else is refused.
+   * A client with no `authorization_code` needs no redirect URI.
    */
   grants?: readonly string[];
   /** Mint a new secret for an existing confidential client. */
@@ -101,8 +117,10 @@ function validate(input: RegisterClientInput): {
     );
   }
   const redirectUris = [...new Set(input.redirectUris)];
-  if (redirectUris.length === 0) {
-    throw new CliInputError("a client needs at least one redirect URI");
+  if (redirectUris.length === 0 && usesRedirect(input.grants)) {
+    throw new CliInputError(
+      "a client needs at least one redirect URI (a device-only client, --grants with the device grant and no authorization_code, needs none)",
+    );
   }
   for (const uri of redirectUris) {
     const problem = redirectUriProblem(uri);
@@ -116,16 +134,17 @@ function validate(input: RegisterClientInput): {
   for (const grant of input.grants ?? []) {
     if (!(OFFERED_GRANTS as readonly string[]).includes(grant)) {
       throw new CliInputError(
-        `grant "${grant}" is not offered: janus-oauth knows ${OFFERED_GRANTS.join(" and ")} only`,
+        `grant "${grant}" is not offered: Clavix offers ${OFFERED_GRANTS.join(", ")}`,
       );
     }
   }
   if (
     input.grants !== undefined &&
-    !input.grants.includes("authorization_code")
+    !input.grants.includes("authorization_code") &&
+    !input.grants.includes(DEVICE_GRANT)
   ) {
     throw new CliInputError(
-      "--grants must include authorization_code: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)",
+      `--grants must include authorization_code or ${DEVICE_GRANT}: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)`,
     );
   }
   const grantTypes =
@@ -195,7 +214,7 @@ export async function registerClient(
     source: "registered",
     createdAt: existing?.createdAt ?? (options.now ?? (() => new Date()))(),
     expiresAt: null,
-    grantTypes: grantTypes ?? existing?.grantTypes ?? [...OFFERED_GRANTS],
+    grantTypes: grantTypes ?? existing?.grantTypes ?? [...DEFAULT_GRANTS],
     ...(requirePar ? { requirePushedAuthorizationRequests: true } : {}),
     ...(confidential && secretHash !== undefined
       ? {
