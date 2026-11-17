@@ -183,14 +183,15 @@ mutation ($callbackUrl: String!, $flow: String!) {
 The `__Host-clavix-session` cookie is set on the response; forward it to the browser, then go to
 `returnTo`.
 
-| Code                                                               | HTTP        | When                                                                   |
-| ------------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------- |
-| `SIGN_IN_METHOD_DISABLED`                                          | 404         | the tenant does not offer that provider (or any)                       |
-| `MAIL_THROTTLED`                                                   | 429         | the sign-in limits of the tenant or the client address (`Retry-After`) |
-| `FLOW_EXPIRED`, `FLOW_MISMATCH`                                    |             | the flow is too old, spent, or not the one the callback belongs to     |
-| `PROVIDER_ERROR`                                                   | 502         | the provider refused the code or could not be reached                  |
-| `SIGN_UP_DISABLED`                                                 | 403         | no user holds the account's e-mail and the tenant's sign-up is closed  |
-| `EMAIL_UNVERIFIED`, `EMAIL_NOT_VERIFIED_FOR_LINK`, `USER_INACTIVE` | 403/409/403 | janus's account rules                                                  |
+| Code                                                               | HTTP        | When                                                                     |
+| ------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------ |
+| `SIGN_IN_METHOD_DISABLED`                                          | 404         | the tenant does not offer that provider (or any)                         |
+| `MAIL_THROTTLED`                                                   | 429         | the sign-in limits of the tenant or the client address (`Retry-After`)   |
+| `FLOW_EXPIRED`, `FLOW_MISMATCH`                                    |             | the flow is too old, spent, or not the one the callback belongs to       |
+| `PROVIDER_ERROR`                                                   | 502         | the provider refused the code or could not be reached                    |
+| `SOCIAL_STEP_UP_UNMET`                                             | 403         | the provider's acr or max_age requirement was not met; the flow is spent |
+| `SIGN_UP_DISABLED`                                                 | 403         | no user holds the account's e-mail and the tenant's sign-up is closed    |
+| `EMAIL_UNVERIFIED`, `EMAIL_NOT_VERIFIED_FOR_LINK`, `USER_INACTIVE` | 403/409/403 | janus's account rules                                                    |
 
 A flow started on one tenant's host cannot be completed on another's.
 

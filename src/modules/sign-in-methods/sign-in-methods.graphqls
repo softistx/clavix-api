@@ -66,7 +66,8 @@ type Mutation {
   response). Refusals are janus's codes: FLOW_EXPIRED, FLOW_MISMATCH,
   PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, the tenant closed sign-up and no
   user holds the address), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
-  (409), USER_INACTIVE (403).
+  (409), USER_INACTIVE (403), SOCIAL_STEP_UP_UNMET (403, the provider's
+  acr or max_age requirement was not met; the flow is spent).
   """
   socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignedIn!
 }
