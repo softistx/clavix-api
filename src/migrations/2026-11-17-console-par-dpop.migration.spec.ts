@@ -10,6 +10,7 @@ import { freshMigrationDb } from "~/migrations";
 import { clavixTenant } from "./2026-11-10-clavix-tenant.migration";
 import { oauthPolicyMigration } from "./2026-11-16-oauth-policy.migration";
 import {
+  consolePushedDpopMigration,
   id,
   relaxParAndDpopOnConsole,
   requireParAndDpopOnConsole,
@@ -44,7 +45,7 @@ describe(id, () => {
     const client = await consoleClient();
     expect(client?.requirePushedAuthorizationRequests).toBeUndefined();
 
-    expect(await requireParAndDpopOnConsole(db, origin)).toBe(true);
+    expect(await requireParAndDpopOnConsole(db)).toBe(true);
     const after = await platform();
     expect(after?.oauth).toEqual({
       par: { required: true },
@@ -60,10 +61,10 @@ describe(id, () => {
   });
 
   test("is idempotent: a second run changes nothing, version included", async () => {
-    await requireParAndDpopOnConsole(db, origin);
+    await requireParAndDpopOnConsole(db);
     const once = await platform();
     const client = await consoleClient();
-    expect(await requireParAndDpopOnConsole(db, origin)).toBe(false);
+    expect(await requireParAndDpopOnConsole(db)).toBe(false);
     const twice = await platform();
     expect(twice?.version).toBe(once?.version ?? -1);
     expect(twice?.oauth).toEqual(once?.oauth as never);
@@ -78,12 +79,12 @@ describe(id, () => {
       },
       { bypassDocumentValidation: true },
     );
-    await requireParAndDpopOnConsole(db, origin);
+    await requireParAndDpopOnConsole(db);
     expect(
       (await db.collection("tenants").findOne({ slug: "other" }))?.["oauth"],
     ).toEqual({ par: { required: false }, dpop: { required: false } });
     expect((await platform())?.oauth.par.required).toBe(true);
-    await relaxParAndDpopOnConsole(db, origin);
+    await relaxParAndDpopOnConsole(db);
     expect((await platform())?.oauth).toEqual({
       par: { required: false },
       dpop: { required: false },
@@ -92,5 +93,41 @@ describe(id, () => {
     expect(
       (await consoleClient())?.requirePushedAuthorizationRequests,
     ).toBeUndefined();
+  });
+
+  test("keeps a redirect URI added later and the name, through up and down", async () => {
+    const tenant = await platform();
+    if (tenant === undefined) throw new Error("no clavix tenant");
+    const store = createMongoOAuth(db, {
+      partition: partitionOf(tenant._id),
+    });
+    const seeded = await consoleClient();
+    if (seeded === null) throw new Error("no console client");
+    const extra = "https://console.clavix.test/other/callback";
+    await store.upsertClient({
+      ...seeded,
+      name: "Renamed",
+      redirectUris: [...seeded.redirectUris, extra],
+    });
+    await requireParAndDpopOnConsole(db);
+    const up = await consoleClient();
+    expect(up?.redirectUris).toContain(extra);
+    expect(up?.name).toBe("Renamed");
+    expect(up?.dpopBoundAccessTokens).toBe(true);
+    await relaxParAndDpopOnConsole(db);
+    const down = await consoleClient();
+    expect(down?.redirectUris).toContain(extra);
+    expect(down?.name).toBe("Renamed");
+    expect(down?.dpopBoundAccessTokens).toBeUndefined();
+  });
+
+  test("the registered migration runs up then down", async () => {
+    await consolePushedDpopMigration.up({ db } as never);
+    expect((await platform())?.oauth.dpop.required).toBe(true);
+    expect((await consoleClient())?.requirePushedAuthorizationRequests).toBe(
+      true,
+    );
+    await consolePushedDpopMigration.down?.({ db } as never);
+    expect((await platform())?.oauth.dpop.required).toBe(false);
   });
 });

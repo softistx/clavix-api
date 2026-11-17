@@ -1,21 +1,42 @@
+import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import { defineMigration } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
-import { registerClient } from "@/clients/register-client";
-import { env } from "@/config/env";
-import { CONSOLE_CLIENT_ID, consoleRedirectUri } from "@/console/identity";
-import type { PublicOrigin } from "@/modules/tenants/identity";
+import { CONSOLE_CLIENT_ID } from "@/console/identity";
+import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { tenants } from "@/modules/tenants/tenants.model";
-import { NAME } from "./console-seed";
 
 export const id = "2026-11-17-console-par-dpop";
 
-const origin = (): PublicOrigin => ({
-  scheme: env.CLAVIX_PUBLIC_SCHEME,
-  domain: env.CLAVIX_DOMAIN,
-  port: env.CLAVIX_PUBLIC_PORT,
-});
+/**
+ * Sets only the two flags on the stored `console` client: its name, redirect
+ * URIs, grants and secret stay as they are (a URI added later is kept). A
+ * missing client (not seeded yet) is left alone.
+ */
+async function setConsoleClientFlags(db: Db, on: boolean): Promise<void> {
+  const tenant = await getCollection(db, tenants).findFirst({
+    slug: PLATFORM_TENANT_SLUG,
+  });
+  if (tenant === undefined) return;
+  const store = createMongoOAuth(db, { partition: partitionOf(tenant._id) });
+  const client = await store.findClient(CONSOLE_CLIENT_ID);
+  if (client === null) return;
+  const {
+    requirePushedAuthorizationRequests: _par,
+    dpopBoundAccessTokens: _dpop,
+    ...rest
+  } = client;
+  await store.upsertClient({
+    ...rest,
+    ...(on
+      ? {
+          requirePushedAuthorizationRequests: true,
+          dpopBoundAccessTokens: true,
+        }
+      : {}),
+  });
+}
 
 /**
  * M3 plan, decision 2: the console now signs in with PAR and DPoP (ES256), so
@@ -28,24 +49,8 @@ const origin = (): PublicOrigin => ({
  * drops its cache) only when a flag is still off. Returns whether the tenant
  * changed.
  */
-export async function requireParAndDpopOnConsole(
-  db: Db,
-  publicOrigin: PublicOrigin,
-): Promise<boolean> {
-  const collection = getCollection(db, tenants);
-  const findTenant = (slug: string) => collection.findFirst({ slug });
-  await registerClient(
-    { db, findTenant },
-    {
-      tenant: PLATFORM_TENANT_SLUG,
-      name: NAME,
-      clientId: CONSOLE_CLIENT_ID,
-      redirectUris: [consoleRedirectUri(publicOrigin)],
-      type: "confidential",
-      requirePar: true,
-      dpopBound: true,
-    },
-  );
+export async function requireParAndDpopOnConsole(db: Db): Promise<boolean> {
+  await setConsoleClientFlags(db, true);
   const { modifiedCount } = await db.collection("tenants").updateOne(
     {
       slug: PLATFORM_TENANT_SLUG,
@@ -67,25 +72,8 @@ export async function requireParAndDpopOnConsole(
 }
 
 /** Undoes {@link requireParAndDpopOnConsole}: the console client and the `clavix` tenant stop requiring them. */
-export async function relaxParAndDpopOnConsole(
-  db: Db,
-  publicOrigin: PublicOrigin,
-): Promise<void> {
-  await registerClient(
-    {
-      db,
-      findTenant: (slug) => getCollection(db, tenants).findFirst({ slug }),
-    },
-    {
-      tenant: PLATFORM_TENANT_SLUG,
-      name: NAME,
-      clientId: CONSOLE_CLIENT_ID,
-      redirectUris: [consoleRedirectUri(publicOrigin)],
-      type: "confidential",
-      requirePar: false,
-      dpopBound: false,
-    },
-  );
+export async function relaxParAndDpopOnConsole(db: Db): Promise<void> {
+  await setConsoleClientFlags(db, false);
   await db.collection("tenants").updateOne(
     { slug: PLATFORM_TENANT_SLUG },
     {
@@ -104,9 +92,9 @@ export async function relaxParAndDpopOnConsole(
 export const consolePushedDpopMigration = defineMigration({
   id,
   async up({ db }) {
-    await requireParAndDpopOnConsole(db, origin());
+    await requireParAndDpopOnConsole(db);
   },
   async down({ db }) {
-    await relaxParAndDpopOnConsole(db, origin());
+    await relaxParAndDpopOnConsole(db);
   },
 });

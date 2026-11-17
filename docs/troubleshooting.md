@@ -514,8 +514,8 @@ curl -u "$CLIENT_ID:$CLIENT_SECRET" -d "response_type=code&redirect_uri=$URI&sco
 To turn it off: `updateOAuthPolicy` with `par: { required: false }` for the
 tenant, `updateClient` with `requirePushedAuthorizationRequests: false`, or
 `clients:create --no-require-par` for a script-made client. The `clavix`
-platform tenant requires it since migration `2026-11-17-console-par-dpop`; turn it off only with the console
-still signing in with PAR.
+platform tenant requires it since migration `2026-11-17-console-par-dpop`; turning it off is always safe, and a console
+that pushes keeps working either way.
 A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED` like `/authorize`.
 
 ## `/par` refusals (pushed authorization requests)

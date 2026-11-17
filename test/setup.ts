@@ -48,12 +48,7 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   const { relaxParAndDpopOnConsole } = await import(
     "@/migrations/2026-11-17-console-par-dpop.migration"
   );
-  const { env } = await import("@/config/env");
-  await relaxParAndDpopOnConsole(mongo.db, {
-    scheme: env.CLAVIX_PUBLIC_SCHEME,
-    domain: env.CLAVIX_DOMAIN,
-    port: env.CLAVIX_PUBLIC_PORT,
-  });
+  await relaxParAndDpopOnConsole(mongo.db);
 }
 
 afterAll(async () => {
