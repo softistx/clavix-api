@@ -49,6 +49,7 @@ export function consoleAs(
         clientName: null,
         bound: null,
         jkt: null,
+        authorizationDetails: [],
       }),
     },
   });

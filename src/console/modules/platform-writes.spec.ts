@@ -60,6 +60,7 @@ const app = createApp({
             clientName: null,
             bound: null,
             jkt: null,
+            authorizationDetails: [],
           };
     },
   },

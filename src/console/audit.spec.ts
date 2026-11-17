@@ -109,6 +109,7 @@ const as = (
         clientName: null,
         bound: null,
         jkt: null,
+        authorizationDetails: [],
       }),
     },
   })

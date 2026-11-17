@@ -13,13 +13,13 @@
         "@graphql-tools/utils": "^13.1.3",
         "@nxgt/graphql-scalars": "^0.7.1",
         "@nxgt/graphql-validation": "^0.8.1",
-        "@softistx/janus": "^0.68.0",
+        "@softistx/janus": "^0.68.2",
         "@softistx/janus-graphql": "^0.29.1",
         "@softistx/janus-mail": "^0.26.11",
         "@softistx/janus-mongo": "^0.29.2",
-        "@softistx/janus-oauth": "^0.19.2",
-        "@softistx/janus-oauth-mongo": "^0.16.5",
-        "@softistx/janus-oidc": "^0.3.28",
+        "@softistx/janus-oauth": "^0.20.1",
+        "@softistx/janus-oauth-mongo": "^0.17.1",
+        "@softistx/janus-oidc": "^0.3.30",
         "@softistx/janus-passkeys": "^0.3.15",
         "@softistx/janus-social": "^0.4.1",
         "@softistx/mail": "^1.6.0",
@@ -313,7 +313,7 @@
 
     "@simplewebauthn/server": ["@simplewebauthn/server@14.1.0", "", { "dependencies": { "@hexagon/base64": "^1.1.27", "@levischuck/tiny-cbor": "^0.2.2", "@peculiar/asn1-android": "^2.6.0", "@peculiar/asn1-ecc": "^2.6.1", "@peculiar/asn1-rsa": "^2.6.1", "@peculiar/asn1-schema": "^2.6.0", "@peculiar/asn1-x509": "^2.6.1", "@peculiar/asn1-x509-post-quantum": "^2.9.4", "@peculiar/x509": "^2.1.0", "reflect-metadata": "^0.2.2" } }, "sha512-HPRRBR4Vzr45+RVvbmf6JuCfGdYYcSs4Pnnnp9YSY2IABa4JKnG+wxybczoB7rmdLCOMS/mbBa2ZL/Bcz58UlA=="],
 
-    "@softistx/janus": ["@softistx/janus@0.68.0", "https://npm.softistx.com/@softistx/janus/-/janus-0.68.0.tgz", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-Pw7zHLmeFogCV+sBhkWmRDwcldJp0ZeP7sogm0R3EH+SF+NlZOt3u/dVsk09J+dbtj2YipoB8PO+o2cXx0YhCA=="],
+    "@softistx/janus": ["@softistx/janus@0.68.2", "https://npm.softistx.com/@softistx/janus/-/janus-0.68.2.tgz", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-dfVXDkbeVrDhADM3Kt8GQJyuI0JnEcmouJq4gmE7HMeVKTBY3ci4mc5D8XRgIyNUO8twIE3IM4FeXlmPcamUDQ=="],
 
     "@softistx/janus-graphql": ["@softistx/janus-graphql@0.29.1", "https://npm.softistx.com/@softistx/janus-graphql/-/janus-graphql-0.29.1.tgz", { "peerDependencies": { "@envelop/core": "^5.0.0 || ^6.0.0", "@graphql-tools/utils": ">=10.0.0 <14", "@softistx/janus": "^0.68.0", "graphql": "^16.9.0 || ^17.0.0", "graphql-ws": "^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-MVaCU+uGdCC2I1naalXo6dtV4mR8dQiFmGPsonb75I6VdSLSUBqtRCLvekA+Uu8hVmalBUNxGIzUvpqgNsE9lg=="],
 
@@ -321,11 +321,11 @@
 
     "@softistx/janus-mongo": ["@softistx/janus-mongo@0.29.2", "https://npm.softistx.com/@softistx/janus-mongo/-/janus-mongo-0.29.2.tgz", { "peerDependencies": { "@softistx/janus": "^0.68.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-/JzaTlNcaNRpVZ+BPS5O0Hl95vimS0ZzCET0WhZxgkQfgrpq9mNcDhUoEX6dSJ1fTSJkUWWypTfQQXuB76AKuw=="],
 
-    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.19.2", "https://npm.softistx.com/@softistx/janus-oauth/-/janus-oauth-0.19.2.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.68.0", "@softistx/janus-graphql": "^0.29.1", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/janus-graphql", "graphql"] }, "sha512-qOcSVLKzNeYYzK6U1BeXiYlUqBK/IG9Im7nLCDBKZKHPfMjHXJR7PObI7jRVzmDGB++UIjwFqvojJM6006vvsQ=="],
+    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.20.1", "https://npm.softistx.com/@softistx/janus-oauth/-/janus-oauth-0.20.1.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.68.2", "@softistx/janus-graphql": "^0.29.1", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/janus-graphql", "graphql"] }, "sha512-nStdo5lI+xu9CVbs5fzCQoSDh9wMI3NbEt/7U8LUkWLyL7CdlF6YHorA3+k1mS11iai0TdgNuVHcSffxXVSLAQ=="],
 
-    "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.16.5", "https://npm.softistx.com/@softistx/janus-oauth-mongo/-/janus-oauth-mongo-0.16.5.tgz", { "peerDependencies": { "@softistx/janus": "^0.68.0", "@softistx/janus-oauth": "^0.19.2", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-909EKhqJVtBC736/me6LbgeyDHgarX6pouxstkwmg2rVfEAUCpBnetvh20kGb594osL+a4dHIJT/MVqliFUnSA=="],
+    "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.17.1", "https://npm.softistx.com/@softistx/janus-oauth-mongo/-/janus-oauth-mongo-0.17.1.tgz", { "peerDependencies": { "@softistx/janus": "^0.68.2", "@softistx/janus-oauth": "^0.20.1", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-gwo+8DFxUm4FUIglq2IWPN6gvcZ3M9MNM0hO/Tn2qvzwKtvKQF7kpS8hgE3BFIbtUapaGnrfvaMZaLKF8B4Wmw=="],
 
-    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.28", "https://npm.softistx.com/@softistx/janus-oidc/-/janus-oidc-0.3.28.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.68.0", "@softistx/janus-oauth": "^0.19.2", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-TSPhmOSFmBx1R2aSs/NHUhrvNG5fAmJuc69bjbJ2wgYdxEMGSvvxjn3KHUEvxdun5cv46pY7FvYxeby2nCqYmw=="],
+    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.30", "https://npm.softistx.com/@softistx/janus-oidc/-/janus-oidc-0.3.30.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.68.2", "@softistx/janus-oauth": "^0.20.1", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-enkeJfzLH9FSSPyqxIdhtyomuMqUiDBFDdPiy9tVR8/gbhD5hMF6vK/o9HGYno7i4mkH+qaruVpg8OxXjEdmoQ=="],
 
     "@softistx/janus-passkeys": ["@softistx/janus-passkeys@0.3.15", "https://npm.softistx.com/@softistx/janus-passkeys/-/janus-passkeys-0.3.15.tgz", { "dependencies": { "@simplewebauthn/server": "^14.0.3" }, "peerDependencies": { "@softistx/janus": "^0.68.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-pyNaVF8ymD4rxLFhjHQNDoVMUCKPS30C4eEwYxkiHGB9dw0FzrgUm8/B1qBfry6bhIvLC3Viioj/81Kivp9MHw=="],
 

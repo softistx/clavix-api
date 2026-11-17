@@ -45,6 +45,7 @@ const request = (userId: string | null, query: string) =>
               clientName: null,
               bound: null,
               jkt: null,
+              authorizationDetails: [],
             },
     },
   }).request(`http://localhost${CONSOLE_PATH}`, {
