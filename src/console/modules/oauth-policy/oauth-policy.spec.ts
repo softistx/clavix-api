@@ -41,6 +41,7 @@ const as = async (
         clientName: null,
         bound: null,
         jkt: null,
+        authorizationDetails: [],
       }),
       access,
       adminEvents: adminEventRecorder,

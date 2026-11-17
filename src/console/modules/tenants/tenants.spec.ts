@@ -43,6 +43,7 @@ const as = (userId: string, query: string) =>
         clientName: null,
         bound: null,
         jkt: null,
+        authorizationDetails: [],
       }),
     },
   })

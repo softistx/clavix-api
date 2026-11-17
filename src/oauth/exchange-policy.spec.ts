@@ -23,10 +23,12 @@ const call = (
       clientId: over.subjectClient ?? "web",
       scopes: ["read"],
       resource: "https://source.example/api",
+      authorizationDetails: [],
     },
     actor: null,
     scopes: ["read"],
     resource: over.resource ?? TARGET,
+    authorizationDetails: [],
   });
   return { answer, asked };
 };

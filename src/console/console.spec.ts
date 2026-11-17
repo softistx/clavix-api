@@ -634,6 +634,7 @@ describe("the guard", () => {
           clientName: null,
           bound: null,
           jkt: null,
+          authorizationDetails: [],
         }),
       },
     });
@@ -1043,6 +1044,7 @@ describe("the guards over HTTP", () => {
           clientName: null,
           bound: null,
           jkt: null,
+          authorizationDetails: [],
         }),
       },
     })
