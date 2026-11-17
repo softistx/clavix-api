@@ -375,6 +375,7 @@ describe("the OIDC email_verified claim follows the flag", () => {
   const VERIFIER = "v".repeat(64);
   const keys = createMemorySigningKeys();
   const issuers = createClavixOAuthIssuers({
+    dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,
     signingKeysFor: () => keys,

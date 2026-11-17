@@ -284,8 +284,8 @@ it. Custom domains stay on demand.
    janus-oauth-mongo 0.14 needs `db:sync` again: the clients validator refuses the new
    `requirePushedAuthorizationRequests` field (code 121) until it runs.
    janus-oauth-mongo 0.15 adds the TTL collection `oauthDpopReplay` (DPoP replay cache, RFC 9449):
-   run `db:sync` (`syncMongoOAuthPartitioned`) before the deploy so it exists. DPoP stays off until `dpop` is
-   configured (clavix-api #14).
+   run `db:sync` (`syncMongoOAuthPartitioned`) before the deploy so it exists. DPoP proofs are accepted on every tenant;
+   they are required only where `dpop.required` or a client's `dpopBoundAccessTokens` says so (see the DPoP paragraph below).
    janus-oauth-mongo 0.16 and janus-mongo 0.29 need `db:sync` again before the deploy: the
    new OAuth index, `typeNameKey` on the users and the validator that accepts `nameKey` (a user
    written with a name is refused, code 121, until it runs). Then `db:migrate` runs
@@ -299,6 +299,15 @@ it. Custom domains stay on demand.
    that has none, so tenants that existed keep PAR off whatever the schema default becomes; new tenants
    start with PAR required. Idempotent; it moves neither `version` nor `updatedAt`. The proxy must
    route `/par` to the API (the Caddyfile's `@api` matcher does).
+   DPoP-bound tokens (clavix-api #14): run `db:sync` **before** the deploy, as above, because DPoP is
+   now on for every tenant: the tokens validators must accept `jkt`, the clients validator
+   `dpopBoundAccessTokens`, and `oauthDpopReplay` (the replay cache, in Mongo, not Redis) must exist, or a
+   proof is refused with a 500 (validator code 121 in the logs). No new migration: `2026-11-16-oauth-policy`
+   already wrote `dpop: { required: false }` on every tenant, and new tenants start with it `false`. The
+   nonce secret is derived from `CLAVIX_KEYS_MASTER_KEY` (HKDF, info `dpop-nonce`): nothing to configure,
+   every instance agrees, and rotating the key (a new first key) only makes DPoP clients retry once on
+   `use_dpop_nonce`. Keep the instances' clocks in sync (the replay cache and the proofs' `iat` read them).
+   Turning `dpop.required` on breaks a client that sends no proof: warn its owner first.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

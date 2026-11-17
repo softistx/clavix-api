@@ -45,6 +45,7 @@ const tenants = new TenantsService(mongo.db.tenants, {
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {

@@ -1,3 +1,4 @@
+import { hkdfSync } from "node:crypto";
 import { createTenantKeys, ensureSigningKey } from "@/keys";
 import { createSecretBox } from "@/modules/sign-in-methods/secrets";
 import { mongo } from "./db";
@@ -25,3 +26,19 @@ export const secretBox = createSecretBox(masterKeys);
 export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {
   await ensureSigningKey(signingKeysFor, tenantId);
 };
+
+/**
+ * The secret of the DPoP server nonces (RFC 9449 §8): HKDF-SHA256 of the first
+ * master key, no salt, info `dpop-nonce`, 32 bytes, base64url. The nonces are
+ * stateless HMACs under it, so every instance derives the same one; rotating
+ * the master key (a new first key) only makes clients retry once on
+ * `use_dpop_nonce`.
+ */
+export const dpopNonceSecretOf = (
+  keys: readonly [Uint8Array, ...Uint8Array[]],
+) =>
+  Buffer.from(
+    hkdfSync("sha256", keys[0], new Uint8Array(0), "dpop-nonce", 32),
+  ).toString("base64url");
+
+export const dpopNonceSecret = dpopNonceSecretOf(masterKeys);

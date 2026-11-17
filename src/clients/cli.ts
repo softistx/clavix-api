@@ -12,6 +12,8 @@ export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name
   --grants <a,b>           ${OFFERED_GRANTS.join(",")} (enforced by janus: list refresh_token to let the client refresh; needs authorization_code or the device URN; default: kept, else authorization_code,refresh_token). A client without authorization_code needs no --redirect-uri
   --require-par            make the client push its authorization requests to /par (RFC 9126); kept on a re-run unless --no-require-par
   --no-require-par         stop requiring it of this client
+  --dpop-bound             bind the client's tokens to a DPoP key (RFC 9449): its token requests must carry a proof; kept on a re-run unless --no-dpop-bound
+  --no-dpop-bound          stop requiring it of this client
   --rotate-secret          mint a new secret for an existing confidential client`;
 
 /** The script's flags as a registration input; a `CliInputError` for a bad line. */
@@ -44,6 +46,11 @@ export function parseClientArgs(argv: readonly string[]): RegisterClientInput {
       : values["no-require-par"] === true
         ? { requirePar: false }
         : {}),
+    ...(values["dpop-bound"] === true
+      ? { dpopBound: true }
+      : values["no-dpop-bound"] === true
+        ? { dpopBound: false }
+        : {}),
     ...(values["rotate-secret"] === true ? { rotateSecret: true } : {}),
   };
 }
@@ -62,6 +69,8 @@ function read(argv: readonly string[]) {
       "rotate-secret": { type: "boolean" },
       "require-par": { type: "boolean" },
       "no-require-par": { type: "boolean" },
+      "dpop-bound": { type: "boolean" },
+      "no-dpop-bound": { type: "boolean" },
     },
   });
 }

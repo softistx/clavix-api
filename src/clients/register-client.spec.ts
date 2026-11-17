@@ -42,6 +42,7 @@ const tenants = new TenantsService(mongo.db.tenants, {
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {
@@ -423,6 +424,37 @@ describe("requirePar", () => {
       false,
     );
     expect(parseClientArgs(line).requirePar).toBeUndefined();
+  });
+});
+
+describe("dpopBound", () => {
+  test("is stored, kept on a re-run that says nothing, and cleared by false", async () => {
+    await createTenantParOff(tenants, { slug: "regdpop", name: "Dpop" });
+    const base = {
+      tenant: "regdpop",
+      name: "App",
+      redirectUris: [REDIRECT],
+    };
+    const first = await registerClient(options, { ...base, dpopBound: true });
+    expect(first.dpopBound).toBe(true);
+    const store = await storeOf("regdpop");
+    expect((await store.findClient("app"))?.dpopBoundAccessTokens).toBe(true);
+    expect((await registerClient(options, base)).dpopBound).toBe(true);
+    const cleared = await registerClient(options, {
+      ...base,
+      dpopBound: false,
+    });
+    expect(cleared.dpopBound).toBe(false);
+    expect(
+      (await store.findClient("app"))?.dpopBoundAccessTokens,
+    ).toBeUndefined();
+  });
+
+  test("the flags --dpop-bound and --no-dpop-bound become the input", () => {
+    const line = ["--tenant", "a", "--name", "x", "--redirect-uri", REDIRECT];
+    expect(parseClientArgs([...line, "--dpop-bound"]).dpopBound).toBe(true);
+    expect(parseClientArgs([...line, "--no-dpop-bound"]).dpopBound).toBe(false);
+    expect(parseClientArgs(line).dpopBound).toBeUndefined();
   });
 });
 

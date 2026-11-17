@@ -41,6 +41,7 @@ const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth({
 
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {

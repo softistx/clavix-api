@@ -12,7 +12,7 @@ type OAuthPolicy {
   tenantId: ID!
   "Pushed authorization requests (RFC 9126): `/authorize` refuses a request that was not pushed to `/par`, whatever the client."
   par: OAuthRequirement!
-  "DPoP-bound tokens (RFC 9449). Stored now; enforced from the DPoP slice."
+  "DPoP-bound tokens (RFC 9449): every token request needs a DPoP proof, whatever the client. Proofs are single-use and carry a server nonce (`use_dpop_nonce`: the client retries once)."
   dpop: OAuthRequirement!
   version: Int!
 }

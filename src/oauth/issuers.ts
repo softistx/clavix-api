@@ -24,6 +24,11 @@ export interface ClavixOAuthOptions {
   /** The database of the janus OAuth collections (`syncMongoOAuthPartitioned`). */
   db: Db;
   signingKeysFor: SigningKeysFor;
+  /**
+   * The secret of the DPoP server nonces (`dpopNonceSecretOf`, `src/config/keys.ts`):
+   * the same on every instance, never empty.
+   */
+  dpopNonceSecret: string;
   authFor: AuthFor;
   /** The claims of a tenant's users, for the id_token and userinfo. */
   claimsFor: ClaimsFor;
@@ -94,6 +99,7 @@ export function createClavixOAuthIssuers(
   const build = buildIssuer({
     db,
     signingKeysFor,
+    dpopNonceSecret: options.dpopNonceSecret,
     authFor,
     oidc,
     clock,

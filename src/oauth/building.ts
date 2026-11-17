@@ -1,6 +1,9 @@
 import type { Clock } from "@softistx/janus";
 import type { SigningKeyStore } from "@softistx/janus-oauth";
-import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import {
+  createMongoDPoPReplayCache,
+  createMongoOAuth,
+} from "@softistx/janus-oauth-mongo";
 import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
@@ -14,6 +17,7 @@ export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
 export interface BuildDeps {
   db: Db;
   signingKeysFor: SigningKeysFor;
+  dpopNonceSecret: string;
   authFor: AuthFor;
   oidc: ReturnType<typeof createOidcProvider>;
   clock?: Clock | undefined;
@@ -26,7 +30,15 @@ export interface BuildDeps {
  * the tenant's partition (ADR-0006).
  */
 export const buildIssuer =
-  ({ db, signingKeysFor, authFor, oidc, clock, rolesFor }: BuildDeps) =>
+  ({
+    db,
+    signingKeysFor,
+    dpopNonceSecret,
+    authFor,
+    oidc,
+    clock,
+    rolesFor,
+  }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
     const keys: SigningKeyStore = signingKeysFor(tenant.tenantId);
     const userinfo = userinfoOf(tenant.issuer);
@@ -45,6 +57,19 @@ export const buildIssuer =
       deviceAuthorization: { verificationUri: `${tenant.issuer}/device` },
       // RFC 9126: `/par` is always served; `required` makes every client push.
       pushedAuthorizationRequests: { required: tenant.oauth.par.required },
+      // RFC 9449: proofs are single-use (the Mongo replay cache is shared by
+      // every instance) and carry a server nonce; `required` makes every
+      // client of the tenant send one. A client may also require it alone
+      // (`dpopBoundAccessTokens`).
+      dpop: {
+        algorithms: ["ES256", "EdDSA"] as const,
+        required: tenant.oauth.dpop.required,
+        replay: createMongoDPoPReplayCache(
+          db,
+          clock === undefined ? {} : { clock },
+        ),
+        nonce: { secret: dpopNonceSecret },
+      },
       lifetimes,
       accessTokens: {
         format: "jwt" as const,

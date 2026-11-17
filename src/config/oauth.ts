@@ -1,7 +1,7 @@
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, ResourcesFor, RolesFor } from "@/oauth/ports";
 import { withTenantState } from "@/oauth/tenant-state";
-import { signingKeysFor } from "./keys";
+import { dpopNonceSecret, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
 import { rolesFor as storedRolesFor } from "./roles";
@@ -25,6 +25,7 @@ export const createIssuers = (
       resolver: tenantResolver,
       db: oauthDb,
       signingKeysFor,
+      dpopNonceSecret,
       authFor,
       claimsFor,
       resourcesFor,

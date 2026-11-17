@@ -9,10 +9,43 @@ import type {
 } from "./context";
 import type { Exclusive } from "./exclusive";
 
-/** Verifies the request's bearer token: its principal, or `null`. A store outage rejects. */
+/**
+ * A refused `DPoP` request: the challenge to answer (RFC 9449 §7.1), with the
+ * current nonce when the proof lacked it (`use_dpop_nonce`).
+ */
+export interface ConsoleDPoPRefusal {
+  refused: {
+    error: string;
+    description?: string | undefined;
+    nonce?: string | undefined;
+  };
+}
+
+/**
+ * Verifies the request's `Bearer` or `DPoP` token: its principal, the DPoP
+ * refusal to challenge with, or `null` (any other refusal). A store outage rejects.
+ */
 export type ConsoleAuthenticate = (
   request: Request,
-) => Promise<OAuthPrincipal | null>;
+) => Promise<OAuthPrincipal | ConsoleDPoPRefusal | null>;
+
+/** The `WWW-Authenticate` of a refused DPoP request, and its nonce header. */
+function dpopChallenge({ refused }: ConsoleDPoPRefusal): HeadersInit {
+  const parts = [
+    'realm="clavix-console"',
+    `error="${refused.error}"`,
+    ...(refused.description === undefined
+      ? []
+      : [
+          `error_description="${refused.description.replace(/[\\"]/g, "\\$&")}"`,
+        ]),
+    'algs="ES256 EdDSA"',
+  ];
+  return {
+    "www-authenticate": `DPoP ${parts.join(", ")}`,
+    ...(refused.nonce === undefined ? {} : { "dpop-nonce": refused.nonce }),
+  };
+}
 
 export interface ConsoleDeps {
   authenticate: ConsoleAuthenticate;
@@ -80,12 +113,23 @@ export function useConsole({
     }) {
       // Called server to server: no CORS, so a preflight (no credential) is refused too.
       // Outside `useSameOriginJson` on purpose: a bearer header is no ambient credential.
-      let principal: OAuthPrincipal | null;
+      let principal: OAuthPrincipal | ConsoleDPoPRefusal | null;
       try {
         principal = await authenticate(request);
       } catch (error) {
         console.error("console: token verification failed", error);
         endResponse(refusal(503, "SERVICE_UNAVAILABLE", "Try again later"));
+        return;
+      }
+      if (principal !== null && "refused" in principal) {
+        endResponse(
+          refusal(
+            401,
+            "UNAUTHENTICATED",
+            "A valid console token is required",
+            dpopChallenge(principal),
+          ),
+        );
         return;
       }
       if (principal === null) {

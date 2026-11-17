@@ -44,6 +44,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     email_verified: true,
   });
   const issuers = createClavixOAuthIssuers({
+    dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,
     signingKeysFor,
@@ -65,6 +66,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     path: string,
     body: Record<string, string>,
     authorization?: string,
+    headers: Record<string, string> = {},
   ) =>
     issuers.handle(
       new Request(url(slug, path), {
@@ -72,6 +74,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
         headers: {
           "content-type": "application/x-www-form-urlencoded",
           ...(authorization === undefined ? {} : { authorization }),
+          ...headers,
         },
         body: new URLSearchParams(body),
       }),
@@ -117,8 +120,11 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     return { tenantId: id };
   }
 
-  /** authorize, approve as `userId`, code exchange. No `resource`: the issuer's userinfo. */
-  async function login(
+  /**
+   * authorize, then approve as `userId`: the code, not yet exchanged (a spec
+   * that drives the token request itself, DPoP proofs for instance).
+   */
+  async function authorizeCode(
     slug: string,
     scope: string,
     options: {
@@ -156,18 +162,31 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
       consent.searchParams.get("request_id") ?? "",
       { scopes: scope.split(" "), authTime: new Date() },
     );
-    return post(
-      slug,
-      "/token",
-      {
+    return {
+      client,
+      /** The `/token` body of the code exchange. */
+      body: {
         grant_type: "authorization_code",
         code: new URL(redirectTo).searchParams.get("code") ?? "",
         redirect_uri: REDIRECT,
         code_verifier: VERIFIER,
         ...(resource === undefined ? {} : { resource }),
       },
-      basic(client.id, client.secret),
-    );
+    };
+  }
+
+  /** authorize, approve as `userId`, code exchange. No `resource`: the issuer's userinfo. */
+  async function login(
+    slug: string,
+    scope: string,
+    options: {
+      resource?: string;
+      userId?: string;
+      client?: { id: string; secret: string };
+    } = {},
+  ) {
+    const { client, body } = await authorizeCode(slug, scope, options);
+    return post(slug, "/token", body, basic(client.id, client.secret));
   }
 
   const tokensOf = async (
@@ -188,5 +207,16 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     };
   };
 
-  return { issuers, setUp, login, tokensOf, get, post, url, basic, clients };
+  return {
+    issuers,
+    setUp,
+    authorizeCode,
+    login,
+    tokensOf,
+    get,
+    post,
+    url,
+    basic,
+    clients,
+  };
 }

@@ -11,7 +11,14 @@ nxgt-janus release says which.
   [#13](https://github.com/softistx/clavix-api/issues/13)) — `/par` on every tenant host; a tenant
   can require it of every client (on for new tenants, off for existing ones) and a client can
   require it for itself, both from the console and the script; `/par` is routed and refused for a
-  suspended tenant. DPoP-bound tokens follow in their own slice.
+  suspended tenant.
+
+- **DPoP-bound tokens** (in progress, M3 slice A2,
+  [#14](https://github.com/softistx/clavix-api/issues/14)) — every tenant host accepts DPoP proofs
+  (single-use, with a server nonce): access tokens, and a public client's refresh tokens, are bound to
+  the client's key; a tenant can require DPoP of every client (off by default) and a client can require
+  it for itself, from the console and the script; userinfo, introspection and the console API take a
+  `DPoP` token.
 
 - **Device authorization grant** (in progress, M3 slice A3,
   [#15](https://github.com/softistx/clavix-api/issues/15)) — `/device_authorization` on every tenant
@@ -46,7 +53,6 @@ nxgt-janus release says which.
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 **Advanced protocols**
-- DPoP-bound tokens.
 - Device authorization and its verification page; token exchange.
 - Rich authorization requests and their consent.
 - MCP and agents: dynamic registration policy, RFC 9728, consent per agent.

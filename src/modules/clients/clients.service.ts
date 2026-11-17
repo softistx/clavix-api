@@ -54,6 +54,7 @@ function sameClient(
     type: "public" | "confidential";
     redirectUris: readonly string[];
     requirePar?: boolean | undefined;
+    dpopBound?: boolean | undefined;
     grants?: readonly string[] | undefined;
   },
 ) {
@@ -67,6 +68,8 @@ function sameClient(
     stored.type === input.type &&
     (input.requirePar === undefined ||
       input.requirePar === stored.requirePushedAuthorizationRequests) &&
+    (input.dpopBound === undefined ||
+      input.dpopBound === stored.dpopBoundAccessTokens) &&
     stored.redirectUris.length === wanted.size &&
     stored.redirectUris.every((uri) => wanted.has(uri))
   );
@@ -172,6 +175,7 @@ export class ClientsService {
       redirectUris: readonly string[];
       clientId?: string | undefined;
       requirePar?: boolean | undefined;
+      dpopBound?: boolean | undefined;
       /** Default: `authorization_code` and `refresh_token`. */
       grants?: readonly string[] | undefined;
     },
@@ -200,6 +204,7 @@ export class ClientsService {
       ...(input.requirePar === undefined
         ? {}
         : { requirePar: input.requirePar }),
+      ...(input.dpopBound === undefined ? {} : { dpopBound: input.dpopBound }),
       ...(input.grants === undefined ? {} : { grants: input.grants }),
     });
     return {
@@ -216,6 +221,7 @@ export class ClientsService {
       name?: string | undefined;
       redirectUris?: readonly string[] | undefined;
       requirePar?: boolean | undefined;
+      dpopBound?: boolean | undefined;
       grants?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
@@ -228,6 +234,7 @@ export class ClientsService {
       clientId,
       requirePar:
         input.requirePar ?? current.requirePushedAuthorizationRequests,
+      dpopBound: input.dpopBound ?? current.dpopBoundAccessTokens,
       // Kept as recorded unless the call changes them.
       grants: input.grants ?? current.grantTypes,
     });

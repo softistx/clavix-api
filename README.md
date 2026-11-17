@@ -10,7 +10,7 @@ Today it serves:
 - on `POST /graphql`, `GET /healthz`, `GET /readyz` and `health { status version }`, the e-mail code sign-in, the
   passkey sign-in and registration, and the consent API of the hosted pages;
 - on `POST /console/graphql`, the console API (`me`, tenants with plans, quotas, usage, suspension and
-  trash, the admins of a tenant, a tenant's clients, resources, scopes and branding), behind a bearer token;
+  trash, the admins of a tenant, a tenant's clients, resources, scopes and branding), behind a bearer or DPoP token;
 - scripts that create tenants, OAuth clients and API resources. The trash is emptied after 30 days by a
   daily scheduled purge (see "Tenants, plans and usage"); the console's refusals are in `docs/troubleshooting.md`.
 
@@ -154,7 +154,8 @@ Clavix adds no `jose`.
 
 `POST /console/graphql` is the console's own GraphQL API (SDL in `src/console`). It reads no
 cookie and resolves no tenant from the host: the credential is an access token of the `clavix`
-tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`.
+tenant whose audience is `https://console.<CLAVIX_DOMAIN>/api`, sent as `Authorization: Bearer`, or as `Authorization: DPoP` with a proof for the console URL (see
+"DPoP-bound tokens").
 No token, or a forged, expired or other-audience one, is a 401; the store down is a 503. It
 exposes `me { user platformRole memberships { tenant { slug } role } }`, a tenant's clients,
 resources and scopes, the admins of a tenant (below), the branding fields (see "Branding") and a
@@ -520,7 +521,7 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
 - **Per tenant** (`oauthPolicy`, `updateOAuthPolicy`; `view` / `edit` on the tenant): `par.required`
   makes every client push; an `/authorize` without a `request_uri` is refused `invalid_request`. A new
   tenant starts with it **on**; a tenant that existed before it (migration `2026-11-16-oauth-policy`)
-  stays **off** until an admin turns it on. `dpop.required` is stored for the DPoP slice and not enforced yet.
+  stays **off** until an admin turns it on. `dpop.required` is the same switch for DPoP (below).
   Each change is the admin event `oauthPolicy.update` and bumps the tenant's `version`; a no-op writes nothing.
 - **Per client** (`requirePushedAuthorizationRequests` on `Client`, `CreateClientInput` and
   `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant
@@ -537,6 +538,50 @@ mutation ($t: ID!) {
     par {
       required
     }
+    dpop {
+      required
+    }
+  }
+}
+```
+
+## DPoP-bound tokens
+
+Every tenant host accepts DPoP at `/token` and `/par` (RFC 9449, `@softistx/janus-oauth`): a client that sends a `DPoP` proof
+with its token request gets `token_type: "DPoP"` and an access token bound to its key (`cnf.jkt` in
+the JWT); a public client's refresh token is bound to the key too, so refreshing needs a proof from the
+same key. One that sends none still gets a `Bearer` token, unless DPoP is required. A public client whose `grantTypes` omit `refresh_token` gets a bound access token and no refresh token; a
+refresh token issued before DPoP was on stays unbound, so the client signs in again to get a bound one.
+Discovery
+advertises `dpop_signing_alg_values_supported` (`ES256`, `EdDSA`).
+- **Proofs are single-use and carry a server nonce**: the replay cache is `oauthDpopReplay` in Mongo
+  (shared by every instance) and the nonces are stateless HMACs under a secret derived from
+  `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, info `dpop-nonce`; nothing to configure). A client's first
+  request gets `400 use_dpop_nonce` with a `DPoP-Nonce` header: it signs a new proof naming that nonce
+  and retries once. The code is not spent by the refused request.
+- **The proof's `htu` is the public URL** (`https://<slug>.<CLAVIX_DOMAIN>/token`, the issuer's), never
+  the address behind the proxy.
+- **Per tenant** (`oauthPolicy.dpop.required`, `updateOAuthPolicy`): every token request of every
+  client needs a proof, else `invalid_dpop_proof`. Off for every tenant, new ones included, until an
+  admin turns it on. Tokens issued before it stay valid until they lapse. The `clavix` platform tenant
+  refuses it (409 `PLATFORM_TENANT_PROTECTED`).
+- **Per client** (`dpopBoundAccessTokens` on `Client`, `CreateClientInput` and `UpdateClientInput`, or
+  `clients:create --dpop-bound` / `--no-dpop-bound`): only that client must send a proof. Kept on a
+  re-run unless the flag is given.
+- **Resources**: `/userinfo` and `/introspect` take a bound token as `Authorization: DPoP <token>` with a
+  proof (`ath` is the token's hash); a bound token sent as `Bearer` is refused, and introspection reports
+  `token_type: "DPoP"` and `cnf.jkt`. The console API (`/console/graphql`) takes `Authorization: DPoP`
+  too: a refused request answers `WWW-Authenticate: DPoP …` and, when the proof lacked the nonce,
+  `DPoP-Nonce`; its proof's `htu` is `https://console.<CLAVIX_DOMAIN>/console/graphql`.
+
+```sh
+bun run clients:create --tenant acme --name "Back office" --confidential \
+  --redirect-uri https://office.example.com/callback --dpop-bound
+```
+
+```graphql
+mutation ($t: ID!) {
+  updateOAuthPolicy(tenantId: $t, input: { dpop: { required: true } }) {
     dpop {
       required
     }

@@ -343,7 +343,7 @@ resends the invitation. Do not set `signUp` on the tenant by hand.
 
 ### `401 UNAUTHENTICATED: A valid console token is required`
 
-The request has no bearer token, or it is forged, expired, revoked or for another audience. Ask
+The request has no bearer token (or, for a DPoP token, no valid proof: see "DPoP refusals"), or it is forged, expired, revoked or for another audience. Ask
 the `clavix` tenant's issuer for a token with `resource=https://console.<CLAVIX_DOMAIN>/api`.
 
 ### `503 SERVICE_UNAVAILABLE: Try again later`
@@ -535,6 +535,42 @@ attempts were made). Read `oauthPolicy` and send the change again.
 
 **`TENANT_SUSPENDED` (403)** on `/par`: the tenant is suspended or in the trash, like `/authorize`
 and `/token`. `resumeTenant` or `restoreTenant` lifts it.
+
+## DPoP refusals (`/token`, `/par`, `/userinfo`, the console)
+
+**`use_dpop_nonce` (400 at `/token`, 401 with `WWW-Authenticate: DPoP` at a resource)**: expected on a
+client's first request. The `DPoP-Nonce` header carries the nonce: sign a new proof (new `jti`) with
+`nonce` set and retry once. The code or the refresh token is not spent by the refused request. A client
+that does not retry never gets a token.
+
+**`invalid_dpop_proof`: `htu does not match`**: the proof names another URL than the public one. At the
+token endpoint it is `https://<slug>.<CLAVIX_DOMAIN>/token` (the issuer's), never the address behind the
+proxy; for the console it is `https://console.<CLAVIX_DOMAIN>/console/graphql`. `htm` must match the method too.
+
+**`invalid_dpop_proof`: `the proof was already used`**: a proof is single-use. Sign a new one with a
+fresh `jti` for each request, including the retry after `use_dpop_nonce`.
+
+**`invalid_dpop_proof`: `this server requires DPoP-bound access tokens: send a DPoP proof` / `this client
+requires ...`**: the tenant (`oauthPolicy.dpop.required`) or the client (`dpopBoundAccessTokens`)
+requires proofs and the request had none. Send a `DPoP` header, or turn it off with `updateOAuthPolicy`
+(`dpop: { required: false }`), `updateClient` (`dpopBoundAccessTokens: false`) or
+`clients:create --no-dpop-bound`.
+
+**`invalid_dpop_proof`: `the proof algorithm is not allowed`**: Clavix accepts `ES256` and `EdDSA` only.
+
+**`invalid_grant` on a refresh with no proof, `invalid_dpop_proof` with another key**: a public client's
+refresh token is bound to the key of its code exchange: refresh with a proof from that same key.
+
+**`invalid_token` with `WWW-Authenticate: DPoP` at `/userinfo` or the console**: a bound token was sent
+as `Bearer`, or an unbound one as `DPoP`, or the proof's key is not the token's. Send
+`Authorization: DPoP <token>` with a proof whose `ath` is the token's SHA-256 (base64url).
+
+**A 500 on a token request after the deploy, `Document failed validation` (code 121) in the logs**: `db:sync`
+was not run: the tokens validators do not know `jkt` yet, or `oauthDpopReplay` does not exist
+(operations, "Deploying").
+
+**`PLATFORM_TENANT_PROTECTED` (409) on `updateOAuthPolicy`** with `dpop: { required: true }` on `clavix`:
+the console's own client sends no proof yet. See `/par` above.
 
 ## Device authorization refusals
 
