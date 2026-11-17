@@ -98,7 +98,7 @@ input CreateClientInput {
   redirectUris: [String!]
   """
   The grants the client may use. Default: `AUTHORIZATION_CODE` and `REFRESH_TOKEN`.
-  A list needs `AUTHORIZATION_CODE` or `DEVICE_CODE`; add `REFRESH_TOKEN` for a
+  A list needs `AUTHORIZATION_CODE`, `DEVICE_CODE` or `TOKEN_EXCHANGE`; add `REFRESH_TOKEN` for a
   client that refreshes. Without `AUTHORIZATION_CODE` the client needs no redirect URI.
   """
   grantTypes: [ClientGrantType!]
@@ -152,6 +152,6 @@ type Mutation {
     id: ID!
     input: ClientTokenExchangeInput!
   ): Client!
-  "Deletes the client its token exchange rules, and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
+  "Deletes the client and its token exchange rules, and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
   deleteClient(tenantId: ID!, id: ID!): Boolean!
 }

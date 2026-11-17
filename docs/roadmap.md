@@ -7,27 +7,23 @@ nxgt-janus release says which.
 
 ## Now
 
-- **Pushed authorization requests** (in progress, M3 slice A1,
-  [#13](https://github.com/softistx/clavix-api/issues/13)) — `/par` on every tenant host; a tenant
+- **Pushed authorization requests** (API shipped; console UI in progress, [#13](https://github.com/softistx/clavix-api/issues/13), clavix-ui#224) — `/par` on every tenant host; a tenant
   can require it of every client (on for new tenants, off for existing ones) and a client can
   require it for itself, both from the console and the script; `/par` is routed and refused for a
   suspended tenant.
 
-- **DPoP-bound tokens** (in progress, M3 slice A2,
-  [#14](https://github.com/softistx/clavix-api/issues/14)) — every tenant host accepts DPoP proofs
+- **DPoP-bound tokens** (API shipped; console UI in progress, [#14](https://github.com/softistx/clavix-api/issues/14), clavix-ui#224) — every tenant host accepts DPoP proofs
   (single-use, with a server nonce): access tokens, and a public client's refresh tokens, are bound to
   the client's key; a tenant can require DPoP of every client (off by default) and a client can require
   it for itself, from the console and the script; userinfo, introspection and the console API take a
   `DPoP` token.
 
-- **Device authorization grant** (in progress, M3 slice A3,
-  [#15](https://github.com/softistx/clavix-api/issues/15)) — `/device_authorization` on every tenant
+- **Device authorization grant** (API shipped; console UI in progress, [#15](https://github.com/softistx/clavix-api/issues/15), clavix-ui#224) — `/device_authorization` on every tenant
   host for a client that lists the device grant (no redirect URI needed); the hosted verification
   page shows the client, its host and the tenant's scope texts, and approving needs a fresh session;
   guessing user codes is throttled.
 
-- **Token exchange** (in progress, M3 slice A4,
-  [#16](https://github.com/softistx/clavix-api/issues/16)) — a confidential client that lists the
+- **Token exchange** (API shipped; console UI in progress, [#16](https://github.com/softistx/clavix-api/issues/16), clavix-ui#224) — a confidential client that lists the
   exchange grant trades a user's token for one on another of the tenant's APIs (RFC 8693, delegation
   with `act`, scopes only narrow, no refresh token), under per-client rules set from the console.
 

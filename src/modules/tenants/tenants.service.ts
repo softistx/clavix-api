@@ -158,27 +158,11 @@ export class TenantsService {
    * expected; on a lost race the tenant is read again (three attempts, then
    * the `OptimisticLockError` is thrown).
    */
-  async updateSignIn(
+  updateSignIn(
     id: IdOf<typeof tenants> | string,
     change: (tenant: Tenant) => Tenant["signIn"] | null,
   ): Promise<Tenant> {
-    for (let attempt = 1; ; attempt++) {
-      const tenant = await this.collection.getById(id);
-      const signIn = change(tenant);
-      if (signIn === null) return tenant;
-      try {
-        const updated = await this.collection.update(tenant._id, {
-          signIn,
-          version: tenant.version,
-        });
-        await this.changed(updated);
-        return updated;
-      } catch (error) {
-        if (!(error instanceof OptimisticLockError) || attempt === 3) {
-          throw error;
-        }
-      }
-    }
+    return this.updatePolicy(id, "signIn", change);
   }
 
   /**
@@ -187,17 +171,25 @@ export class TenantsService {
    * bump, so no rebuild); three attempts on a lost race, then the
    * `OptimisticLockError` is thrown.
    */
-  async updateOAuth(
+  updateOAuth(
     id: IdOf<typeof tenants> | string,
     change: (tenant: Tenant) => Tenant["oauth"] | null,
   ): Promise<Tenant> {
+    return this.updatePolicy(id, "oauth", change);
+  }
+
+  private async updatePolicy<K extends "signIn" | "oauth">(
+    id: IdOf<typeof tenants> | string,
+    key: K,
+    change: (tenant: Tenant) => Tenant[K] | null,
+  ): Promise<Tenant> {
     for (let attempt = 1; ; attempt++) {
       const tenant = await this.collection.getById(id);
-      const oauth = change(tenant);
-      if (oauth === null) return tenant;
+      const next = change(tenant);
+      if (next === null) return tenant;
       try {
         const updated = await this.collection.update(tenant._id, {
-          oauth,
+          [key]: next,
           version: tenant.version,
         });
         await this.changed(updated);

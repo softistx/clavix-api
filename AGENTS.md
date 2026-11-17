@@ -558,7 +558,7 @@ in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through t
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
-`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is stored on the client (`grantTypes`, shown by the console) and enforced by janus-oauth 0.13, which takes an explicit list as written: the script refuses all but code and refresh, and a list must name `authorization_code` (`refresh_token` alone is refused), plus `refresh_token` for a client that refreshes. The migration `2026-11-15-client-grants` (`db:migrate`) repairs stored lists written before 0.13. A client keeps its type: re-running a
+`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is stored on the client (`grantTypes`, shown by the console) and enforced by janus-oauth 0.13, which takes an explicit list as written: the script offers four grants (code, refresh, device, token exchange), and a list must name one of `authorization_code`, the device URN or the token-exchange URN (`refresh_token` alone is refused), plus `refresh_token` for a client that refreshes. The migration `2026-11-15-client-grants` (`db:migrate`) repairs stored lists written before 0.13. A client keeps its type: re-running a
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 

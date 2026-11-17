@@ -21,7 +21,7 @@ export interface ClientsServiceOptions {
   /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
   db: Db;
   /** The clients' per-client rules, removed with the client. */
-  policies?: ClientPoliciesService;
+  policies: ClientPoliciesService;
   now?: () => Date;
 }
 
@@ -251,14 +251,14 @@ export class ClientsService {
   /** The client's token exchange rules (RFC 8693); `null` when it has none. */
   async tokenExchange(tenant: CliTenant, clientId: string) {
     return (
-      (await this.options.policies?.tokenExchange(tenant._id, clientId)) ?? null
+      (await this.options.policies.tokenExchange(tenant._id, clientId)) ?? null
     );
   }
 
   /** The token exchange rules of these clients, by client id (one read). */
   async tokenExchangeOf(tenant: CliTenant, clientIds: readonly string[]) {
     return (
-      (await this.options.policies?.tokenExchangeOf(tenant._id, clientIds)) ??
+      (await this.options.policies.tokenExchangeOf(tenant._id, clientIds)) ??
       new Map<string, TokenExchangeRules>()
     );
   }
@@ -280,9 +280,6 @@ export class ClientsService {
     resourceUris: readonly string[],
   ): Promise<TokenExchangeRules> {
     const policies = this.options.policies;
-    if (policies === undefined) {
-      throw new Error("ClientsService has no client policies store");
-    }
     const client = await this.require(tenant, clientId);
     if (client.type !== "confidential") {
       throw new CatalogError(
@@ -381,7 +378,7 @@ export class ClientsService {
       now: (this.options.now ?? (() => new Date()))(),
     });
     // The client's rules (`clientPolicies`) go with it, on a repeat too.
-    await this.options.policies?.deleteForClient(tenant._id, clientId);
+    await this.options.policies.deleteForClient(tenant._id, clientId);
     return { removed, unmanaged: false };
   }
 }

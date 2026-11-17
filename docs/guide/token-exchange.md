@@ -12,9 +12,9 @@ bun run clients:create --tenant acme --name "Agent" --confidential --grants urn:
 From the console: `createClient(input: { name, type: CONFIDENTIAL, grantTypes: [TOKEN_EXCHANGE] })`, then
 
 ```graphql
-mutation {
+mutation ($tenantId: ID!) {
   setClientTokenExchange(
-    tenantId: "acme"
+    tenantId: $tenantId
     id: "agent"
     input: {
       targetResources: ["https://api.acme.example"]
@@ -55,3 +55,18 @@ subject's grant (revoked grant, deleted subject client). The mode is always dele
 | `unauthorized_client` | the client does not list the grant, or is public                                  |
 | `access_denied`       | no rules, `resource` not in `targetResources`, or the subject's client not listed |
 | `invalid_grant`       | the subject token is unknown, expired, revoked or another tenant's                |
+
+## DPoP
+
+The proof of the exchange request binds the new token to its key: the answer has `token_type: DPoP`. A DPoP-bound
+subject token needs a proof of its own key, else `invalid_grant`, so a service cannot exchange a token bound to
+another party's key. An exchanging client with `dpopBoundAccessTokens`, or a tenant that requires DPoP, must send a
+proof with the request.
+
+## Defaults
+
+- No rules means `access_denied`: a client with the grant but no `setClientTokenExchange` exchanges nothing.
+- `subjectClients` defaults to `[]` and `anySubjectClient` to `false`, and the call needs one of the two (the
+  clients listed, or `anySubjectClient: true`, never both).
+- An exchanged token cannot be exchanged again (`invalid_grant`): the service exchanges the user's original token
+  each time.

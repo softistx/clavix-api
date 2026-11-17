@@ -603,12 +603,12 @@ Discovery advertises `device_authorization_endpoint`.
   served by every tenant and gated only by the client's grant types (no tenant setting).
 - **A device-only client has no redirect URI.** `--redirect-uri` and `redirectUris` are required only when the
   client lists `authorization_code` (the default grants, or an explicit `--grants authorization_code,urn:ietf:params:oauth:grant-type:device_code`).
-  A client's grants must include `authorization_code` or `device_code`.
+  A client's grants must include `authorization_code`, the device URN or the token-exchange URN.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
   (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes). The viewer must be signed in
-  to that tenant, with a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
-  pending). A code of another tenant is `NOT_FOUND`.
+  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
+  pending); refusing does not. A code of another tenant is `NOT_FOUND`.
 - **The device polls** with the janus answers: `authorization_pending`, `slow_down` (poll less often, the interval
   grows by 5 s), `access_denied`, `expired_token` (the code lived 10 minutes) and `invalid_grant`. A successful
   poll returns the access token, the `id_token` when `openid` was approved, and a refresh token when granted.
