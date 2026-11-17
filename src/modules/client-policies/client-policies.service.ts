@@ -74,4 +74,33 @@ export class ClientPoliciesService {
   async deleteForClient(tenantId: ObjectId, clientId: string) {
     return (await this.scoped(tenantId).hardDeleteMany({ clientId })) > 0;
   }
+
+  /**
+   * Drops a deleted resource's URI from every rule of the tenant that targets
+   * it, so a resource re-created under the same URI does not revive the rule.
+   * Returns how many rules changed.
+   */
+  async removeTarget(tenantId: ObjectId, uri: string): Promise<number> {
+    return this.scoped(tenantId).updateMany(
+      { "tokenExchange.targetResources": uri },
+      { $pull: { "tokenExchange.targetResources": uri } },
+    );
+  }
+
+  /**
+   * Drops a deleted client's id from every rule of the tenant that lists it as
+   * a subject. A rule of `"any"` is a string and is left alone. Returns how
+   * many rules changed.
+   */
+  async removeSubjectClient(
+    tenantId: ObjectId,
+    clientId: string,
+  ): Promise<number> {
+    return this.scoped(tenantId).updateMany(
+      {
+        "tokenExchange.subjectClients": { $type: "array", $eq: clientId },
+      },
+      { $pull: { "tokenExchange.subjectClients": clientId } },
+    );
+  }
 }

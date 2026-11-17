@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { clientPoliciesService } from "@/config/client-policies";
 import { catalog } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
@@ -143,6 +144,8 @@ export const resources: Resolvers = {
             tenant._id,
             found._id,
           );
+          // The exchange rules that target it go before it too, for the same reason.
+          await clientPoliciesService.removeTarget(tenant._id, found.uri);
           // Recorded now: were the resource delete to fail, a retry finds no
           // role left and could not record them.
           for (const role of roles) {
