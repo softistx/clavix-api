@@ -244,6 +244,24 @@ describe("the device verification page's data", () => {
     );
     expect(codeOf(result)).toBe("NOT_FOUND");
   });
+
+  test("a suspended tenant's page is TENANT_SUSPENDED, and works again once reactivated (#228)", async () => {
+    const globex = await mongo.db.tenants.findFirst({ slug: "dglobex" });
+    if (globex === undefined) throw new Error("no tenant");
+    const { user_code } = await deviceCodes("dglobex");
+    await tenantsService.suspend(globex._id);
+    try {
+      const { result } = await gql(
+        "dglobex",
+        REQUEST,
+        { code: user_code },
+        cookieOf("dglobex"),
+      );
+      expect(codeOf(result)).toBe("TENANT_SUSPENDED");
+    } finally {
+      await tenantsService.reactivate(globex._id);
+    }
+  });
 });
 
 describe("approve and deny", () => {

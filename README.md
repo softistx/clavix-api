@@ -604,6 +604,7 @@ Discovery advertises `device_authorization_endpoint`.
   served by every tenant and gated only by the client's grant types (no tenant setting).
 - **A device-only client has no redirect URI.** `--redirect-uri` and `redirectUris` are required only when the
   client lists `authorization_code` (the default grants, or an explicit `--grants authorization_code,urn:ietf:params:oauth:grant-type:device_code`).
+  A re-run without `--grants` judges the client's stored grants, so a device-only client needs no URI then either.
   A client's grants must include `authorization_code`, the device URN or the token-exchange URN.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse

@@ -129,11 +129,6 @@ function validate(input: RegisterClientInput): {
     );
   }
   const redirectUris = [...new Set(input.redirectUris)];
-  if (redirectUris.length === 0 && usesRedirect(input.grants)) {
-    throw new CliInputError(
-      "a client needs at least one redirect URI (a device-only or token-exchange-only client, --grants without authorization_code, needs none)",
-    );
-  }
   for (const uri of redirectUris) {
     const problem = redirectUriProblem(uri);
     if (problem !== null) {
@@ -191,6 +186,17 @@ export async function registerClient(
   const existing = await store.findClient(clientId);
   if (existing !== null && existing.source !== "registered") {
     throw new CliInputError(`"${clientId}" is not a registered client`);
+  }
+
+  // Judged on the grants the client will have: the input's, else the stored
+  // ones (a re-run of a device-only client without --grants keeps them).
+  if (
+    redirectUris.length === 0 &&
+    usesRedirect(grantTypes ?? existing?.grantTypes)
+  ) {
+    throw new CliInputError(
+      "a client needs at least one redirect URI (a device-only or token-exchange-only client, --grants without authorization_code, needs none)",
+    );
   }
 
   const confidential = type === "confidential";

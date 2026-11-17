@@ -600,7 +600,7 @@ device grant. It is never implied: `clients:create --grants urn:ietf:params:oaut
 user refused; stop. **`invalid_grant`**: the `device_code` is unknown, already spent or another client's.
 
 **`a client needs at least one redirect URI`** on `clients:create` or `createClient`: the client uses
-`authorization_code` (the default). A device-only client lists `--grants urn:ietf:params:oauth:grant-type:device_code` and needs none.
+`authorization_code` (the default). A device-only client lists `--grants urn:ietf:params:oauth:grant-type:device_code` and needs none. A re-run of an existing device-only client without `--grants` keeps its stored grants and needs none either.
 
 **`NOT_FOUND` on `oauthDeviceRequest`, `approveOAuthDeviceRequest` or `denyOAuthDeviceRequest`**: the user code is
 unknown, expired, already decided, or belongs to another tenant (open the page on the tenant host that gave the
