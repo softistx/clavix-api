@@ -278,7 +278,7 @@ describe("registerClient", () => {
     ]);
   });
 
-  test("a device-only client needs no redirect URI and keeps its grants on a re-run", async () => {
+  test("a device-only client needs no redirect URI and is idempotent on a re-run that repeats --grants", async () => {
     const store = await storeOf("regalpha");
     await registerClient(options, {
       tenant: "regalpha",
@@ -293,10 +293,19 @@ describe("registerClient", () => {
       tenant: "regalpha",
       name: "Set top box",
       redirectUris: [],
+      grants: [DEVICE_GRANT],
     });
     expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
       DEVICE_GRANT,
     ]);
+    // Without --grants the client is taken as a redirect one, which needs a URI.
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Set top box",
+        redirectUris: [],
+      }),
+    ).rejects.toBeInstanceOf(CliInputError);
     // With a refresh token, in the offered order.
     await registerClient(options, {
       tenant: "regalpha",
