@@ -221,8 +221,7 @@ Nothing maps an old janus id to the new `sub`, which is why a mapping column is 
   API (or by script).
 - **Social federation** (Google, GitHub, upstream OIDC; planned): the
   tenant offers passkey and e-mail code only.
-- Also later: MFA and step-up, PAR and DPoP, device code and token exchange,
-  permissions and access rules.
+- Also later: MFA and step-up, permissions and access rules.
 
 ## Gaps
 

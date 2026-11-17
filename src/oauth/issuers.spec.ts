@@ -12,6 +12,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../test/tenant-par-off";
 import { createClavixOAuthIssuers } from "./issuers";
 import type { AuthFor, SigningKeysFor } from "./ports";
 import { resolveIssuer } from "./resolution";
@@ -64,6 +65,7 @@ const resourcesFor = () => ({
   [NO_SCOPE_RESOURCE]: { scopes: [] },
 });
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor,
@@ -147,7 +149,7 @@ interface Tokens {
 const clients: Record<string, string> = {};
 
 async function setUp(slug: string) {
-  await tenants.create({ slug, name: slug });
+  await createTenantParOff(tenants, { slug, name: slug });
   const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);
   if (tenant === null) throw new Error("tenant not resolved");
   const store = signingKeysFor(tenant.tenantId);
@@ -376,7 +378,7 @@ describe("unknown and suspended hosts", () => {
   });
 
   test("a suspended tenant keeps its discovery (tokens already issued live to expiry)", async () => {
-    await tenants.create({ slug: "paused", name: "Paused" });
+    await createTenantParOff(tenants, { slug: "paused", name: "Paused" });
     const path = "/.well-known/oauth-authorization-server";
     expect((await get("paused", path)).status).toBe(200);
     const tenant = await resolver.resolveHost(`paused.${DOMAIN}`);
@@ -456,7 +458,7 @@ describe("tenant isolation", () => {
 
 describe("a tenant without a signing key yet", () => {
   test("the token endpoint fails cleanly, spending no code", async () => {
-    await tenants.create({ slug: "nokey", name: "No key" });
+    await createTenantParOff(tenants, { slug: "nokey", name: "No key" });
     const server = await serverOf("nokey");
     const { client } = await server.createClient({
       name: "App",

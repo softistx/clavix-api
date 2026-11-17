@@ -14,6 +14,7 @@ import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 import { registerResource, storedResourcesFor } from "./register-resource";
 
 // /introspect answers for tokens whose `aud` is a resource registered through
@@ -44,6 +45,7 @@ const tenants = new TenantsService(mongo.db.tenants, {
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {
@@ -138,7 +140,7 @@ const introspect = (slug: string, token: string, as = slug) =>
 
 beforeAll(async () => {
   for (const slug of ["introalpha", "introbeta"]) {
-    await tenants.create({ slug, name: slug });
+    await createTenantParOff(tenants, { slug, name: slug });
     const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);
     const store = createMemorySigningKeys();
     keys.set(tenant?.tenantId ?? "", store);

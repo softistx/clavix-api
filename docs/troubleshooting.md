@@ -343,7 +343,7 @@ resends the invitation. Do not set `signUp` on the tenant by hand.
 
 ### `401 UNAUTHENTICATED: A valid console token is required`
 
-The request has no bearer token, or it is forged, expired, revoked or for another audience. Ask
+The request has no bearer token (or, for a DPoP token, no valid proof: see "DPoP refusals"), or it is forged, expired, revoked or for another audience. Ask
 the `clavix` tenant's issuer for a token with `resource=https://console.<CLAVIX_DOMAIN>/api`.
 
 ### `503 SERVICE_UNAVAILABLE: Try again later`
@@ -478,7 +478,9 @@ which names the tenant and the cause.
 one in the trash.
 
 **`PLATFORM_TENANT_PROTECTED` (409)**: `suspendTenant` or `deleteTenant` on the `clavix` tenant, which
-runs the console itself.
+runs the console itself. `updateOAuthPolicy` on that tenant gives it too when `par.required` or
+`dpop.required` becomes `true`: the console signs in through the tenant itself, whose clients do not
+push their requests. Turning a requirement off is accepted.
 
 **`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
 (`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
@@ -489,6 +491,130 @@ Monthly active users never block: `usage` only reports `exceeded`.
 `restoreTenant` lifts it at once (the tenant's slug host, its verified custom hosts and a lapsed primary host are dropped from the cache). Tokens already issued still work until they expire.
 
 It is also the answer of `acceptInvitation` on a suspended tenant's own host: an end-user invitation cannot be accepted, and so cannot sign the new user in, until `resumeTenant`; the invitation is not spent (`invitationPreview` is not refused). An admin invitation is accepted on the `clavix` tenant, which cannot be suspended: for it a suspended managed tenant gives `INVITATION_INVALID` instead. Every console write of a tenant admin (see above, `createClient`, `updateRole`, ...) gives `TENANT_SUSPENDED` too, replays included.
+
+## `invalid_request: pushed authorization request required` on `/authorize`
+
+A client redirected to its `redirect_uri` with `error=invalid_request` and
+`error_description=pushed authorization request required: push the request to the
+pushed authorization request endpoint first`.
+
+**Why**: the tenant (`oauthPolicy.par.required`) or the client
+(`requirePushedAuthorizationRequests`) requires pushed authorization requests,
+and `/authorize` was called with the parameters in the query instead of a
+`request_uri`. New tenants require it; tenants that existed before the policy
+do not.
+
+**Fix**: push first, then authorize with the returned `request_uri` (one use,
+60 seconds; reusing it gives `invalid_request_uri`).
+
+```sh
+curl -u "$CLIENT_ID:$CLIENT_SECRET" -d "response_type=code&redirect_uri=$URI&scope=openid&code_challenge=$C&code_challenge_method=S256" https://<tenant-host>/par
+# then: /authorize?client_id=$CLIENT_ID&request_uri=<request_uri>
+```
+
+To turn it off: `updateOAuthPolicy` with `par: { required: false }` for the
+tenant, `updateClient` with `requirePushedAuthorizationRequests: false`, or
+`clients:create --no-require-par` for a script-made client. The `clavix`
+platform tenant refuses `par.required: true` (`PLATFORM_TENANT_PROTECTED`, 409).
+A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED` like `/authorize`.
+
+## `/par` refusals (pushed authorization requests)
+
+**`invalid_request_uri` on `/authorize`**: the `request_uri` was already used or is older than 60
+seconds. It is one-use. Push the request again (`POST /par`) and authorize with the new `request_uri`.
+
+**`invalid_request`: `request_uri must not be sent to the pushed authorization request endpoint`**:
+the body of `POST /par` carries a `request_uri`. Send the authorization parameters themselves
+(`response_type`, `redirect_uri`, `scope`, PKCE), not a reference.
+
+**`invalid_request`: `client_id is required with request_uri`**: `/authorize?request_uri=...` without
+`client_id`. Add the `client_id` of the client that pushed.
+
+**`CONFLICT` (409) on `updateOAuthPolicy`**: the policy changed at the same time as the write (three
+attempts were made). Read `oauthPolicy` and send the change again.
+
+**`TENANT_SUSPENDED` (403)** on `/par`: the tenant is suspended or in the trash, like `/authorize`
+and `/token`. `resumeTenant` or `restoreTenant` lifts it.
+
+## DPoP refusals (`/token`, `/par`, `/userinfo`, the console)
+
+**`use_dpop_nonce` (400 at `/token`, 401 with `WWW-Authenticate: DPoP` at a resource)**: expected on a
+client's first request. The `DPoP-Nonce` header carries the nonce: sign a new proof (new `jti`) with
+`nonce` set and retry once. The code or the refresh token is not spent by the refused request. A client
+that does not retry never gets a token.
+
+**`invalid_dpop_proof`: `htu does not match`**: the proof names another URL than the public one. At the
+token endpoint it is `https://<slug>.<CLAVIX_DOMAIN>/token` (the issuer's), never the address behind the
+proxy; for the console it is `https://console.<CLAVIX_DOMAIN>/console/graphql`. `htm` must match the method too.
+
+**`invalid_dpop_proof`: `the proof was already used`**: a proof is single-use. Sign a new one with a
+fresh `jti` for each request, including the retry after `use_dpop_nonce`.
+
+**`invalid_dpop_proof`: `this server requires DPoP-bound access tokens: send a DPoP proof` / `this client
+requires ...`**: the tenant (`oauthPolicy.dpop.required`) or the client (`dpopBoundAccessTokens`)
+requires proofs and the request had none. Send a `DPoP` header, or turn it off with `updateOAuthPolicy`
+(`dpop: { required: false }`), `updateClient` (`dpopBoundAccessTokens: false`) or
+`clients:create --no-dpop-bound`.
+
+**`invalid_dpop_proof`: `the proof algorithm is not allowed`**: Clavix accepts `ES256` and `EdDSA` only.
+
+**`invalid_grant` on a refresh with no proof, `invalid_dpop_proof` with another key**: a public client's
+refresh token is bound to the key of its code exchange: refresh with a proof from that same key.
+
+**`invalid_token` with `WWW-Authenticate: DPoP` at `/userinfo` or the console**: a bound token was sent
+as `Bearer`, or an unbound one as `DPoP`, or the proof's key is not the token's. Send
+`Authorization: DPoP <token>` with a proof whose `ath` is the token's SHA-256 (base64url).
+
+**A 500 on a token request after the deploy, `Document failed validation` (code 121) in the logs**: `db:sync`
+was not run: the tokens validators do not know `jkt` yet, or `oauthDpopReplay` does not exist
+(operations, "Deploying").
+
+**`PLATFORM_TENANT_PROTECTED` (409) on `updateOAuthPolicy`** with `dpop: { required: true }` on `clavix`:
+the console's own client does not yet push (PAR) or send proofs (DPoP). See `/par` above.
+
+## Token exchange refusals
+
+**`unauthorized_client` on the exchange**: the client does not list the grant, or is public. It needs `--confidential
+--grants urn:ietf:params:oauth:grant-type:token-exchange` (or `grantTypes: [TOKEN_EXCHANGE]`) and a secret.
+
+**`access_denied`**: the client has no rules (`setClientTokenExchange`), the `resource` is not in `targetResources`,
+or the subject token's client is not in `subjectClients` (and `anySubjectClient` is off). Read the rules with
+`Client.tokenExchange`.
+
+**`invalid_grant`**: the subject token is unknown, expired, revoked, or another tenant's. A token exchanged earlier
+dies with the subject's grant.
+
+**`BAD_USER_INPUT` on `setClientTokenExchange`**: both or neither of `subjectClients` and `anySubjectClient`, more
+than 20 targets or 50 clients, a target that is not a resource of the tenant, or a public client.
+
+## Device authorization refusals
+
+**`unauthorized_client` on `/device_authorization` or on the device `/token`**: the client does not list the
+device grant. It is never implied: `clients:create --grants urn:ietf:params:oauth:grant-type:device_code` (re-run, it keeps the name and URIs) or
+`updateClient(input: { grantTypes: [DEVICE_CODE] })`.
+
+**`slow_down`**: the device polled before its `interval` elapsed. Add 5 seconds to the interval and keep it.
+
+**`expired_token`**: the code lived 10 minutes without a decision. Ask for new codes. **`access_denied`**: the
+user refused; stop. **`invalid_grant`**: the `device_code` is unknown, already spent or another client's.
+
+**`a client needs at least one redirect URI`** on `clients:create` or `createClient`: the client uses
+`authorization_code` (the default). A device-only client lists `--grants urn:ietf:params:oauth:grant-type:device_code` and needs none.
+
+**`NOT_FOUND` on `oauthDeviceRequest`, `approveOAuthDeviceRequest` or `denyOAuthDeviceRequest`**: the user code is
+unknown, expired, already decided, or belongs to another tenant (open the page on the tenant host that gave the
+code), or an approved scope was not asked by the device.
+
+**`DEVICE_CODE_THROTTLED` (429)**: too many code lookups by this user, address or tenant. Wait the `Retry-After`
+seconds; operators tune `CLAVIX_DEVICE_*`. Every lookup counts, hit or miss.
+
+**`STEP_UP_REQUIRED`** on approve: the session is older than 5 minutes. Sign in again; the request is
+still pending. Reading and denying a request do not ask for a fresh session.
+
+**`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
+
+**`404` on `/device_authorization` from outside**: the reverse proxy does not route the path to the API; the
+`@api` matcher of `deploy/Caddyfile` must list it.
 
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
 

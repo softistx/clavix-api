@@ -4,6 +4,8 @@ import type { OAuthIssuers } from "@softistx/janus-oauth";
 // path): the authorization server's own, never the GraphQL or console routes.
 export const OAUTH_PATHS = [
   "/authorize",
+  "/par",
+  "/device_authorization",
   "/token",
   "/revoke",
   "/.well-known/oauth-authorization-server",

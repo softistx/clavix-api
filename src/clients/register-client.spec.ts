@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   createMemorySigningKeys,
+  DEVICE_GRANT,
   hashOAuthSecret,
   rotateSigningKeys,
   type SigningKeyStore,
   s256Challenge,
+  TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import {
@@ -20,6 +22,7 @@ import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../test/tenant-par-off";
 import { parseClientArgs } from "./cli";
 import { clientIdOf, registerClient } from "./register-client";
 
@@ -40,6 +43,7 @@ const tenants = new TenantsService(mongo.db.tenants, {
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {
@@ -81,7 +85,7 @@ const authorize = async (slug: string, clientId: string) =>
 
 beforeAll(async () => {
   for (const slug of ["regalpha", "regbeta", "regpaused"]) {
-    await tenants.create({ slug, name: slug });
+    await createTenantParOff(tenants, { slug, name: slug });
   }
   for (const slug of ["regalpha", "regbeta"]) {
     const tenant = await resolver.resolveHost(`${slug}.${DOMAIN}`);
@@ -276,6 +280,94 @@ describe("registerClient", () => {
     ]);
   });
 
+  test("a device-only client needs no redirect URI and is idempotent on a re-run that repeats --grants", async () => {
+    const store = await storeOf("regalpha");
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+      grants: [DEVICE_GRANT],
+    });
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      DEVICE_GRANT,
+    ]);
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+      grants: [DEVICE_GRANT],
+    });
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      DEVICE_GRANT,
+    ]);
+    // Without --grants the client is taken as a redirect one, which needs a URI.
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Set top box",
+        redirectUris: [],
+      }),
+    ).rejects.toBeInstanceOf(CliInputError);
+    // With a refresh token, in the offered order.
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+      grants: ["refresh_token", DEVICE_GRANT],
+    });
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      "refresh_token",
+      DEVICE_GRANT,
+    ]);
+  });
+
+  test("a token-exchange client is confidential, needs no redirect URI, and a public one is refused", async () => {
+    const store = await storeOf("regalpha");
+    const registered = await registerClient(options, {
+      tenant: "regalpha",
+      name: "Reports service",
+      redirectUris: [],
+      type: "confidential",
+      grants: [TOKEN_EXCHANGE_GRANT],
+    });
+    expect(registered.clientSecret).not.toBeNull();
+    expect((await store.findClient("reports-service"))?.grantTypes).toEqual([
+      TOKEN_EXCHANGE_GRANT,
+    ]);
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Public exchanger",
+        redirectUris: [],
+        grants: [TOKEN_EXCHANGE_GRANT],
+      }),
+    ).rejects.toThrow("confidential client");
+    expect(await store.findClient("public-exchanger")).toBeNull();
+    // A re-run that repeats --grants keeps the grant and the secret.
+    const again = await registerClient(options, {
+      tenant: "regalpha",
+      name: "Reports service",
+      redirectUris: [],
+      type: "confidential",
+      grants: [TOKEN_EXCHANGE_GRANT],
+    });
+    expect(again.clientSecret).toBeNull();
+    expect((await store.findClient("reports-service"))?.grantTypes).toEqual([
+      TOKEN_EXCHANGE_GRANT,
+    ]);
+  });
+
+  test("a client that uses the redirect still needs one, even beside the device grant", async () => {
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Both",
+        redirectUris: [],
+        grants: ["authorization_code", DEVICE_GRANT],
+      }),
+    ).rejects.toBeInstanceOf(CliInputError);
+  });
+
   test("bad input is refused before anything is written", async () => {
     const base = { tenant: "regalpha", name: "Bad", redirectUris: [REDIRECT] };
     for (const input of [
@@ -334,6 +426,72 @@ describe("isolation between tenants", () => {
     expect(
       (await (await storeOf("regbeta")).findClient("shared-id"))?.redirectUris,
     ).toEqual(["https://beta.example/cb"]);
+  });
+});
+
+describe("requirePar", () => {
+  test("is stored, kept on a re-run that says nothing, and cleared by false", async () => {
+    await createTenantParOff(tenants, { slug: "regpar", name: "Par" });
+    const base = {
+      tenant: "regpar",
+      name: "App",
+      redirectUris: [REDIRECT],
+    };
+    const first = await registerClient(options, { ...base, requirePar: true });
+    expect(first.requirePar).toBe(true);
+    const store = await storeOf("regpar");
+    expect(
+      (await store.findClient("app"))?.requirePushedAuthorizationRequests,
+    ).toBe(true);
+    expect((await registerClient(options, base)).requirePar).toBe(true);
+    const cleared = await registerClient(options, {
+      ...base,
+      requirePar: false,
+    });
+    expect(cleared.requirePar).toBe(false);
+    expect(
+      (await store.findClient("app"))?.requirePushedAuthorizationRequests,
+    ).toBeUndefined();
+  });
+
+  test("the flags --require-par and --no-require-par become the input", () => {
+    const line = ["--tenant", "a", "--name", "x", "--redirect-uri", REDIRECT];
+    expect(parseClientArgs([...line, "--require-par"]).requirePar).toBe(true);
+    expect(parseClientArgs([...line, "--no-require-par"]).requirePar).toBe(
+      false,
+    );
+    expect(parseClientArgs(line).requirePar).toBeUndefined();
+  });
+});
+
+describe("dpopBound", () => {
+  test("is stored, kept on a re-run that says nothing, and cleared by false", async () => {
+    await createTenantParOff(tenants, { slug: "regdpop", name: "Dpop" });
+    const base = {
+      tenant: "regdpop",
+      name: "App",
+      redirectUris: [REDIRECT],
+    };
+    const first = await registerClient(options, { ...base, dpopBound: true });
+    expect(first.dpopBound).toBe(true);
+    const store = await storeOf("regdpop");
+    expect((await store.findClient("app"))?.dpopBoundAccessTokens).toBe(true);
+    expect((await registerClient(options, base)).dpopBound).toBe(true);
+    const cleared = await registerClient(options, {
+      ...base,
+      dpopBound: false,
+    });
+    expect(cleared.dpopBound).toBe(false);
+    expect(
+      (await store.findClient("app"))?.dpopBoundAccessTokens,
+    ).toBeUndefined();
+  });
+
+  test("the flags --dpop-bound and --no-dpop-bound become the input", () => {
+    const line = ["--tenant", "a", "--name", "x", "--redirect-uri", REDIRECT];
+    expect(parseClientArgs([...line, "--dpop-bound"]).dpopBound).toBe(true);
+    expect(parseClientArgs([...line, "--no-dpop-bound"]).dpopBound).toBe(false);
+    expect(parseClientArgs(line).dpopBound).toBeUndefined();
   });
 });
 

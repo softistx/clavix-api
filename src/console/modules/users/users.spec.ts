@@ -31,6 +31,7 @@ const origin = {
 } as const;
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {

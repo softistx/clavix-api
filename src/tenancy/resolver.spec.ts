@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
 import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
@@ -37,6 +38,7 @@ const acme: TenantRecord = {
   status: "active",
   version: 3,
   signIn: signInPolicySchema.parse(undefined),
+  oauth: oauthPolicySchema.parse(undefined),
 };
 
 describe("resolveHost", () => {
@@ -54,6 +56,7 @@ describe("resolveHost", () => {
       partition: acme._id.toHexString(),
       version: 3,
       signIn: acme.signIn,
+      oauth: acme.oauth,
     });
   });
 

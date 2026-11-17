@@ -122,6 +122,24 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Device code lookups (the verification page's `oauthDeviceRequest`,
+  // `approveOAuthDeviceRequest` and `denyOAuthDeviceRequest`, signed in): per
+  // user, then per client address and tenant, and per tenant. Every lookup
+  // counts, hit or miss; a person needs two per approval. Redis only, as above.
+  CLAVIX_DEVICE_USER_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_DEVICE_USER_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(600),
+  CLAVIX_DEVICE_IP_LIMIT: z.coerce.number().int().min(1).default(30),
+  CLAVIX_DEVICE_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_DEVICE_TENANT_LIMIT: z.coerce.number().int().min(1).default(300),
+  CLAVIX_DEVICE_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
   // custom domains, A4): the shared secret of that URL, at least 32 characters.
   // Unset, the endpoint does not exist. The route is internal: never expose

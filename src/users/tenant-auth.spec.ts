@@ -14,6 +14,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { createTenantParOff } from "../../test/tenant-par-off";
 import { originOf, rpIdOf } from "./rp";
 import { createTenantAuth } from "./tenant-auth";
 import { buildTenantJanus, SESSION_COOKIE } from "./tenant-janus";
@@ -40,6 +41,7 @@ const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth({
 
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {
@@ -86,7 +88,7 @@ const sessions: Record<string, Awaited<ReturnType<typeof signedIn>>> = {};
 
 beforeAll(async () => {
   for (const slug of ["acme", "globex"]) {
-    await tenants.create({ slug, name: slug });
+    await createTenantParOff(tenants, { slug, name: slug });
     await rotateSigningKeys(
       keys.get((await tenantOf(slug)).tenantId) ?? createMemorySigningKeys(),
       {

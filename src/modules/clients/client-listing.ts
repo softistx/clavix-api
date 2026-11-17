@@ -4,7 +4,7 @@ import type {
   OAuthPage,
   OAuthPageOptions,
 } from "@softistx/janus-oauth";
-import { OFFERED_GRANTS } from "@/clients/register-client";
+import { DEFAULT_GRANTS } from "@/clients/register-client";
 
 /** A client as the console shows it: a janus record without its secret hash. */
 export interface ClientView {
@@ -12,9 +12,13 @@ export interface ClientView {
   name: string;
   type: "public" | "confidential";
   redirectUris: readonly string[];
-  /** As recorded on the client (both when nothing is); the token endpoint does not enforce it. */
+  /** As recorded on the client (`authorization_code` and `refresh_token` when nothing is), enforced by janus. */
   grantTypes: readonly OAuthClientGrantType[];
   createdAt: Date;
+  /** Whether the client must push its authorization requests to `/par` (RFC 9126). */
+  requirePushedAuthorizationRequests: boolean;
+  /** Whether the client's token requests must carry a DPoP proof (RFC 9449). */
+  dpopBoundAccessTokens: boolean;
 }
 
 // A listing reads the store page by page and keeps what matches; it stops
@@ -34,8 +38,11 @@ export const viewOf = (record: OAuthClientRecord): ClientView => ({
   name: record.name,
   type: record.secretHash === undefined ? "public" : "confidential",
   redirectUris: record.redirectUris,
-  grantTypes: record.grantTypes ?? OFFERED_GRANTS,
+  grantTypes: record.grantTypes ?? DEFAULT_GRANTS,
   createdAt: record.createdAt,
+  requirePushedAuthorizationRequests:
+    record.requirePushedAuthorizationRequests === true,
+  dpopBoundAccessTokens: record.dpopBoundAccessTokens === true,
 });
 
 /** What a listing keeps: a registered client matching `q` (part of its name or id, any case). */

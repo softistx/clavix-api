@@ -15,8 +15,8 @@ and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/of
 | `mongo` | `mongo:8`                             | `api`, `backup`, `restore` | `--replSet rs0`, key file, users, optional TLS   |
 | `redis` | `redis:7-alpine`                      | `api`                      | password, append-only file                       |
 
-Caddy sends the authorization server, the GraphQL APIs, JWKS, userinfo, the logo
-and `/healthz` to the API, and everything else to the UI. The tenant is chosen
+Caddy sends the authorization server (`/authorize`, `/token`, `/par`, `/device_authorization`, ...), the GraphQL APIs, JWKS, userinfo, the logo
+and `/healthz` to the API (a proxy of your own must route `/device_authorization` too), and everything else to the UI. The tenant is chosen
 by the `Host` header, which Caddy passes untouched.
 
 ## Health
@@ -128,6 +128,10 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                            |
 | `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                           |
 | `NPM_REGISTRY_TOKEN`                                                     | compose build               | read token of `npm.softistx.com`, a build secret of the backup tools image (it bundles `@softistx/s3`); export it in the shell that runs `docker compose build` |
+
+The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVICE_IP_LIMIT`,
+`CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
+Redis; with Redis down the lookups go through unthrottled and a line is logged.
 
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
@@ -280,14 +284,33 @@ it. Custom domains stay on demand.
    janus-oauth-mongo 0.14 needs `db:sync` again: the clients validator refuses the new
    `requirePushedAuthorizationRequests` field (code 121) until it runs.
    janus-oauth-mongo 0.15 adds the TTL collection `oauthDpopReplay` (DPoP replay cache, RFC 9449):
-   run `db:sync` (`syncMongoOAuthPartitioned`) before the deploy so it exists. DPoP stays off until `dpop` is
-   configured (clavix-api #14).
+   run `db:sync` (`syncMongoOAuthPartitioned`) before the deploy so it exists. DPoP proofs are accepted on every tenant;
+   they are required only where `dpop.required` or a client's `dpopBoundAccessTokens` says so (see the DPoP paragraph below).
    janus-oauth-mongo 0.16 and janus-mongo 0.29 need `db:sync` again before the deploy: the
    new OAuth index, `typeNameKey` on the users and the validator that accepts `nameKey` (a user
    written with a name is refused, code 121, until it runs). Then `db:migrate` runs
    `2026-11-16-name-keys`, which writes `nameKey` (the folded display name) on the users written
    before janus 0.66, so the console's `userLookup` finds them by name; idempotent, it moves
    neither `version` nor `updatedAt`.
+   Pushed authorization requests (clavix-api #13): run `db:sync` **before** `db:migrate` and before the
+   deploy (the PAR validators, the replay collection and the clients validator that accepts
+   `requirePushedAuthorizationRequests`). `db:migrate` then runs `2026-11-16-oauth-policy`, which writes
+   an explicit `oauth: { par: { required: false }, dpop: { required: false } }` on every tenant
+   that has none, so tenants that existed keep PAR off whatever the schema default becomes; new tenants
+   start with PAR required. Idempotent; it moves neither `version` nor `updatedAt`. The proxy must
+   route `/par` to the API (the Caddyfile's `@api` matcher does).
+   DPoP-bound tokens (clavix-api #14): run `db:sync` **before** the deploy, as above, because DPoP is
+   now on for every tenant: the tokens validators must accept `jkt`, the clients validator
+   `dpopBoundAccessTokens`, and `oauthDpopReplay` (the replay cache, in Mongo, not Redis) must exist, or a
+   proof is refused with a 500 (validator code 121 in the logs). No new migration: `2026-11-16-oauth-policy`
+   already wrote `dpop: { required: false }` on every tenant, and new tenants start with it `false`. The
+   nonce secret is derived from `CLAVIX_KEYS_MASTER_KEY` (HKDF, info `dpop-nonce`): nothing to configure,
+   every instance agrees, and rotating the key (a new first key) only makes DPoP clients retry once on
+   `use_dpop_nonce`. Keep the instances' clocks in sync (the replay cache and the proofs' `iat` read them).
+   Turning `dpop.required` on breaks a client that sends no proof: warn its owner first.
+   Token exchange (clavix-api #16): run `db:sync` before the deploy so the `clientPolicies` collection and its
+   unique index (`tenantId`, `clientId`) exist. No migration and no backfill: a client with no rules is refused
+   (`access_denied`), which is today's behaviour.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
 

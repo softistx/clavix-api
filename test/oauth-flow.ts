@@ -6,12 +6,14 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { registerClient } from "@/clients/register-client";
+import { exchangeRulesFor } from "@/config/client-policies";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
+import { createTenantParOff } from "./tenant-par-off";
 
 export const DOMAIN = (await import("@/config/env")).env.CLAVIX_DOMAIN;
 export const REDIRECT = "https://app.example/callback";
@@ -43,12 +45,14 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     email_verified: true,
   });
   const issuers = createClavixOAuthIssuers({
+    dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,
     signingKeysFor,
     authFor,
     claimsFor,
     resourcesFor,
+    exchangeRulesFor,
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
   });
   const url = (slug: string, path: string) =>
@@ -64,6 +68,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     path: string,
     body: Record<string, string>,
     authorization?: string,
+    headers: Record<string, string> = {},
   ) =>
     issuers.handle(
       new Request(url(slug, path), {
@@ -71,6 +76,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
         headers: {
           "content-type": "application/x-www-form-urlencoded",
           ...(authorization === undefined ? {} : { authorization }),
+          ...headers,
         },
         body: new URLSearchParams(body),
       }),
@@ -80,8 +86,18 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
   const clients: Record<string, { id: string; secret: string }> = {};
 
   /** A tenant with a signing key, a confidential client `backend` and these resources (each with a `read` scope). */
-  async function setUp(slug: string, resourceUris: readonly string[] = []) {
-    const { id } = await tenantsService.create({ slug, name: slug });
+  async function setUp(
+    slug: string,
+    resourceUris: readonly string[] = [],
+    options: { par?: boolean } = {},
+  ) {
+    // A new tenant requires pushed authorization requests (M3): the specs that
+    // authorize directly turn it off, the PAR specs keep it.
+    const input = { slug, name: slug };
+    const { id } =
+      options.par === true
+        ? await tenantsService.create(input)
+        : await createTenantParOff(tenantsService, input);
     const tenant = await tenantResolver.resolveHost(`${slug}.${DOMAIN}`);
     if (tenant === null) throw new Error("tenant not resolved");
     await rotateSigningKeys(signingKeysFor(tenant.tenantId), {
@@ -106,8 +122,11 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     return { tenantId: id };
   }
 
-  /** authorize, approve as `userId`, code exchange. No `resource`: the issuer's userinfo. */
-  async function login(
+  /**
+   * authorize, then approve as `userId`: the code, not yet exchanged (a spec
+   * that drives the token request itself, DPoP proofs for instance).
+   */
+  async function authorizeCode(
     slug: string,
     scope: string,
     options: {
@@ -145,18 +164,31 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
       consent.searchParams.get("request_id") ?? "",
       { scopes: scope.split(" "), authTime: new Date() },
     );
-    return post(
-      slug,
-      "/token",
-      {
+    return {
+      client,
+      /** The `/token` body of the code exchange. */
+      body: {
         grant_type: "authorization_code",
         code: new URL(redirectTo).searchParams.get("code") ?? "",
         redirect_uri: REDIRECT,
         code_verifier: VERIFIER,
         ...(resource === undefined ? {} : { resource }),
       },
-      basic(client.id, client.secret),
-    );
+    };
+  }
+
+  /** authorize, approve as `userId`, code exchange. No `resource`: the issuer's userinfo. */
+  async function login(
+    slug: string,
+    scope: string,
+    options: {
+      resource?: string;
+      userId?: string;
+      client?: { id: string; secret: string };
+    } = {},
+  ) {
+    const { client, body } = await authorizeCode(slug, scope, options);
+    return post(slug, "/token", body, basic(client.id, client.secret));
   }
 
   const tokensOf = async (
@@ -177,5 +209,16 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     };
   };
 
-  return { issuers, setUp, login, tokensOf, get, post, url, basic, clients };
+  return {
+    issuers,
+    setUp,
+    authorizeCode,
+    login,
+    tokensOf,
+    get,
+    post,
+    url,
+    basic,
+    clients,
+  };
 }

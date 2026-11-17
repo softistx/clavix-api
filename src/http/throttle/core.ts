@@ -32,7 +32,7 @@ export const ipAndTenantLimits = (name: string, config: LimitConfig) => ({
   }),
 });
 
-interface Bound<P> {
+export interface Bound<P> {
   consume(
     params: P,
     cost?: number,
@@ -43,6 +43,10 @@ interface Bound<P> {
 export interface BoundLimits {
   ip: Bound<{ tenantId: string; ip: string }>;
   tenant: Bound<{ tenantId: string }>;
+}
+
+export interface UserBoundLimits extends BoundLimits {
+  user: Bound<{ tenantId: string; userId: string }>;
 }
 
 export interface Throttle {
@@ -133,4 +137,51 @@ export interface UserThrottle {
     userId: string;
     ip: string | undefined;
   }): Promise<void>;
+}
+
+export interface UserLimitConfig extends LimitConfig {
+  /** Requests one signed-in user may make, per `userWindowSeconds`. */
+  userLimit: number;
+  userWindowSeconds: number;
+}
+
+/**
+ * The three limits of a signed-in operation: per user (the key starts with the
+ * tenant's id, as the pair's do), then the shared address and tenant pair.
+ */
+export const userAndTenantLimits = (name: string, config: UserLimitConfig) => ({
+  ...ipAndTenantLimits(name, config),
+  user: defineRateLimit({
+    name: `${name}-user`,
+    key: (who: { tenantId: string; userId: string }) =>
+      `${who.tenantId}/${who.userId}`,
+    limit: config.userLimit,
+    per: config.userWindowSeconds * 1000,
+  }),
+});
+
+/**
+ * The user first (a refused user spends no address or tenant budget), then the
+ * address and the tenant over `createThrottle`. Redis down or slow: the
+ * request goes through, logged with `skipped`.
+ */
+export function createUserThrottle(
+  limits: UserBoundLimits,
+  refuse: (result: LimitResult) => Error,
+  skipped: string,
+  log: (message: string) => void = (message) => console.warn(message),
+): UserThrottle {
+  const shared = createThrottle(limits, refuse, skipped, log);
+  return {
+    async check({ tenantId, userId, ip }) {
+      const byUser = await consumeOrSkip(
+        limits.user,
+        { tenantId, userId },
+        skipped,
+        log,
+      );
+      if (byUser !== undefined && !byUser.allowed) throw refuse(byUser);
+      await shared.check({ tenantId, ip });
+    },
+  };
 }

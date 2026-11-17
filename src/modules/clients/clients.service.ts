@@ -3,6 +3,8 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import { CliInputError, type CliTenant } from "@/cli/errors";
 import { clientIdOf, registerClient } from "@/clients/register-client";
+import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
+import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
 import {
@@ -18,6 +20,8 @@ export type { ClientView } from "./client-listing";
 export interface ClientsServiceOptions {
   /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
   db: Db;
+  /** The clients' per-client rules, removed with the client. */
+  policies: ClientPoliciesService;
   now?: () => Date;
 }
 
@@ -26,6 +30,9 @@ const slugOnly = (tenant: CliTenant) => tenant.slug;
 const MAX_NAME = 100;
 const MAX_REDIRECT_URIS = 20;
 const MAX_QUERY = 100;
+const MAX_TARGETS = 20;
+const MAX_SUBJECT_CLIENTS = 50;
+const SUBJECT_ID = /^[a-z0-9-]{1,64}$/;
 const MAX_CURSOR = 200;
 
 function checkSizes(input: {
@@ -53,12 +60,23 @@ function sameClient(
     name: string;
     type: "public" | "confidential";
     redirectUris: readonly string[];
+    requirePar?: boolean | undefined;
+    dpopBound?: boolean | undefined;
+    grants?: readonly string[] | undefined;
   },
 ) {
   const wanted = new Set(input.redirectUris);
+  const wantedGrants = new Set(input.grants);
   return (
+    (input.grants === undefined ||
+      (stored.grantTypes.length === wantedGrants.size &&
+        stored.grantTypes.every((grant) => wantedGrants.has(grant)))) &&
     stored.name === input.name.trim() &&
     stored.type === input.type &&
+    (input.requirePar === undefined ||
+      input.requirePar === stored.requirePushedAuthorizationRequests) &&
+    (input.dpopBound === undefined ||
+      input.dpopBound === stored.dpopBoundAccessTokens) &&
     stored.redirectUris.length === wanted.size &&
     stored.redirectUris.every((uri) => wanted.has(uri))
   );
@@ -163,6 +181,10 @@ export class ClientsService {
       type: "public" | "confidential";
       redirectUris: readonly string[];
       clientId?: string | undefined;
+      requirePar?: boolean | undefined;
+      dpopBound?: boolean | undefined;
+      /** Default: `authorization_code` and `refresh_token`. */
+      grants?: readonly string[] | undefined;
     },
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
     checkSizes(input);
@@ -186,6 +208,11 @@ export class ClientsService {
       redirectUris: input.redirectUris,
       type: input.type,
       clientId,
+      ...(input.requirePar === undefined
+        ? {}
+        : { requirePar: input.requirePar }),
+      ...(input.dpopBound === undefined ? {} : { dpopBound: input.dpopBound }),
+      ...(input.grants === undefined ? {} : { grants: input.grants }),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -193,13 +220,16 @@ export class ClientsService {
     };
   }
 
-  /** Replaces the name and/or the redirect URIs; the type and the secret stay. */
+  /** Replaces the name, the redirect URIs and/or the grants; the type and the secret stay. */
   async update(
     tenant: CliTenant,
     clientId: string,
     input: {
       name?: string | undefined;
       redirectUris?: readonly string[] | undefined;
+      requirePar?: boolean | undefined;
+      dpopBound?: boolean | undefined;
+      grants?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
     checkSizes(input);
@@ -209,8 +239,92 @@ export class ClientsService {
       redirectUris: input.redirectUris ?? current.redirectUris,
       type: current.type,
       clientId,
+      requirePar:
+        input.requirePar ?? current.requirePushedAuthorizationRequests,
+      dpopBound: input.dpopBound ?? current.dpopBoundAccessTokens,
+      // Kept as recorded unless the call changes them.
+      grants: input.grants ?? current.grantTypes,
     });
     return this.require(tenant, clientId);
+  }
+
+  /** The client's token exchange rules (RFC 8693); `null` when it has none. */
+  async tokenExchange(tenant: CliTenant, clientId: string) {
+    return (
+      (await this.options.policies.tokenExchange(tenant._id, clientId)) ?? null
+    );
+  }
+
+  /** The token exchange rules of these clients, by client id (one read). */
+  async tokenExchangeOf(tenant: CliTenant, clientIds: readonly string[]) {
+    return (
+      (await this.options.policies.tokenExchangeOf(tenant._id, clientIds)) ??
+      new Map<string, TokenExchangeRules>()
+    );
+  }
+
+  /**
+   * Replaces the client's token exchange rules. The client is a confidential
+   * one of the tenant, each target one of the tenant's resources
+   * (`resourceUris`), and the subject clients are `"any"` or a list of
+   * client ids (checked for shape only: a client may be created later).
+   * Delegation is the only mode.
+   */
+  async setTokenExchange(
+    tenant: CliTenant,
+    clientId: string,
+    input: {
+      targetResources: readonly string[];
+      subjectClients: readonly string[] | "any";
+    },
+    resourceUris: readonly string[],
+  ): Promise<TokenExchangeRules> {
+    const policies = this.options.policies;
+    const client = await this.require(tenant, clientId);
+    if (client.type !== "confidential") {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        "Only a confidential client can exchange tokens",
+      );
+    }
+    const targets = [...new Set(input.targetResources)];
+    if (targets.length > MAX_TARGETS) {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        `a client exchanges for at most ${MAX_TARGETS} resources`,
+      );
+    }
+    const unknown = targets.find((uri) => !resourceUris.includes(uri));
+    if (unknown !== undefined) {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        `"${unknown}" is not a resource of this tenant`,
+      );
+    }
+    const subjects =
+      input.subjectClients === "any"
+        ? "any"
+        : [...new Set(input.subjectClients)];
+    if (subjects !== "any") {
+      if (subjects.length > MAX_SUBJECT_CLIENTS) {
+        throw new CatalogError(
+          "BAD_USER_INPUT",
+          `a client exchanges the tokens of at most ${MAX_SUBJECT_CLIENTS} clients`,
+        );
+      }
+      const bad = subjects.find((id) => !SUBJECT_ID.test(id));
+      if (bad !== undefined) {
+        throw new CatalogError(
+          "BAD_USER_INPUT",
+          `"${bad}" is not a client id (a-z, 0-9 and "-")`,
+        );
+      }
+    }
+    return policies.setTokenExchange(tenant._id, clientId, {
+      targetResources: targets,
+      subjectClients: subjects,
+      mode: "delegation",
+    });
   }
 
   /** Mints a new secret (the old one stops working); shown here once. */
@@ -230,6 +344,7 @@ export class ClientsService {
       redirectUris: current.redirectUris,
       type: "confidential",
       clientId,
+      grants: current.grantTypes,
       rotateSecret: true,
     });
     if (registered.clientSecret === null) {
@@ -262,6 +377,8 @@ export class ClientsService {
     const removed = await deleteClient(store, clientId, {
       now: (this.options.now ?? (() => new Date()))(),
     });
+    // The client's rules (`clientPolicies`) go with it, on a repeat too.
+    await this.options.policies.deleteForClient(tenant._id, clientId);
     return { removed, unmanaged: false };
   }
 }

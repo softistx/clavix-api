@@ -12,6 +12,7 @@ import { buildIssuer, userinfoOf } from "./building";
 import type {
   AuthFor,
   ClaimsFor,
+  ExchangeRulesFor,
   ResourcesFor,
   RolesFor,
   SigningKeysFor,
@@ -24,6 +25,11 @@ export interface ClavixOAuthOptions {
   /** The database of the janus OAuth collections (`syncMongoOAuthPartitioned`). */
   db: Db;
   signingKeysFor: SigningKeysFor;
+  /**
+   * The secret of the DPoP server nonces (`dpopNonceSecretOf`, `src/config/keys.ts`):
+   * the same on every instance, never empty.
+   */
+  dpopNonceSecret: string;
   authFor: AuthFor;
   /** The claims of a tenant's users, for the id_token and userinfo. */
   claimsFor: ClaimsFor;
@@ -41,6 +47,11 @@ export interface ClavixOAuthOptions {
    * (tenant-wide plus the roles of the token's resource). Absent: no claim.
    */
   rolesFor?: RolesFor;
+  /**
+   * The token exchange rules of a tenant's clients (`clientPolicies`). Absent:
+   * no client may exchange tokens.
+   */
+  exchangeRulesFor?: ExchangeRulesFor;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -94,10 +105,12 @@ export function createClavixOAuthIssuers(
   const build = buildIssuer({
     db,
     signingKeysFor,
+    dpopNonceSecret: options.dpopNonceSecret,
     authFor,
     oidc,
     clock,
     rolesFor: options.rolesFor,
+    exchangeRulesFor: options.exchangeRulesFor,
   });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),
