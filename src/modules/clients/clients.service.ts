@@ -5,6 +5,7 @@ import { CliInputError, type CliTenant } from "@/cli/errors";
 import { clientIdOf, registerClient } from "@/clients/register-client";
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
+import { validateTokenExchange } from "@/modules/client-policies/validate";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
 import {
@@ -30,9 +31,6 @@ const slugOnly = (tenant: CliTenant) => tenant.slug;
 const MAX_NAME = 100;
 const MAX_REDIRECT_URIS = 20;
 const MAX_QUERY = 100;
-const MAX_TARGETS = 20;
-const MAX_SUBJECT_CLIENTS = 50;
-const SUBJECT_ID = /^[a-z0-9-]{1,64}$/;
 const MAX_CURSOR = 200;
 
 function checkSizes(input: {
@@ -287,39 +285,7 @@ export class ClientsService {
         "Only a confidential client can exchange tokens",
       );
     }
-    const targets = [...new Set(input.targetResources)];
-    if (targets.length > MAX_TARGETS) {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        `a client exchanges for at most ${MAX_TARGETS} resources`,
-      );
-    }
-    const unknown = targets.find((uri) => !resourceUris.includes(uri));
-    if (unknown !== undefined) {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        `"${unknown}" is not a resource of this tenant`,
-      );
-    }
-    const subjects =
-      input.subjectClients === "any"
-        ? "any"
-        : [...new Set(input.subjectClients)];
-    if (subjects !== "any") {
-      if (subjects.length > MAX_SUBJECT_CLIENTS) {
-        throw new CatalogError(
-          "BAD_USER_INPUT",
-          `a client exchanges the tokens of at most ${MAX_SUBJECT_CLIENTS} clients`,
-        );
-      }
-      const bad = subjects.find((id) => !SUBJECT_ID.test(id));
-      if (bad !== undefined) {
-        throw new CatalogError(
-          "BAD_USER_INPUT",
-          `"${bad}" is not a client id (a-z, 0-9 and "-")`,
-        );
-      }
-    }
+    const { targets, subjects } = validateTokenExchange(input, resourceUris);
     return policies.setTokenExchange(tenant._id, clientId, {
       targetResources: targets,
       subjectClients: subjects,
