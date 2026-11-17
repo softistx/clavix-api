@@ -547,6 +547,46 @@ describe("the console's bearer token", () => {
     expect(await userless(request)).toBeNull();
   });
 
+  const stubbed = (extra: Record<string, unknown>) =>
+    createConsoleAuthenticator({
+      audience: AUDIENCE,
+      publicUrl: PUBLIC_URL,
+      serverOfClavix: async () =>
+        ({
+          authenticateRequest: async () => ({
+            ok: {
+              clientId: CONSOLE_CLIENT_ID,
+              userId: "u1",
+              grantId: "g",
+              scopes: ["console"],
+              clientName: null,
+              bound: null,
+              jkt: null,
+              ...extra,
+            },
+          }),
+        }) as never,
+    });
+  const stubRequest = (scheme: string) =>
+    new Request("http://localhost/", {
+      headers: { authorization: `${scheme} x` },
+    });
+
+  test("an exchanged (delegated) token is refused, bound or not", async () => {
+    const actor = { clientId: "other-client" };
+    expect(await stubbed({ actor })(stubRequest("Bearer"))).toBeNull();
+    expect(
+      await stubbed({ actor, bound: "dpop", jkt: "k" })(stubRequest("DPoP")),
+    ).toBeNull();
+  });
+
+  test("a token with no actor is accepted, bound or not", async () => {
+    expect(await stubbed({})(stubRequest("Bearer"))).not.toBeNull();
+    expect(
+      await stubbed({ bound: "dpop", jkt: "k" })(stubRequest("DPoP")),
+    ).not.toBeNull();
+  });
+
   test("a cookie alone authenticates nothing", async () => {
     const response = await app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
