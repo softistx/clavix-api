@@ -1,9 +1,7 @@
 import {
-  DEVICE_GRANT,
   hashOAuthSecret,
   mintOAuthSecret,
   type OAuthClientRecord,
-  redirectUriProblem,
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
@@ -15,32 +13,16 @@ import {
   UnknownTenantError,
 } from "@/cli/errors";
 import { partitionOf } from "@/modules/tenants/identity";
+import { DEFAULT_GRANTS, usesRedirect } from "./grants";
+import { validate } from "./validate";
 
-/**
- * The grant types Clavix offers. A client's `grantTypes` is enforced by janus-oauth on
- * `/authorize`, the code exchange, the refresh grant and the device grant
- * (`unauthorized_client`), and an explicit list is taken as written: a client
- * that refreshes lists `refresh_token` beside `authorization_code` or the
- * device URN. A list needs `authorization_code` or the device grant
- * (`refresh_token` alone is refused by janus). The device grant is never
- * implied: a client opts in. The token exchange grant (RFC 8693) is the same,
- * for a confidential client only, and it also needs the client's rules
- * (`clientPolicies`): with none, every exchange is refused.
- */
-export const OFFERED_GRANTS = [
-  "authorization_code",
-  "refresh_token",
-  DEVICE_GRANT,
-  TOKEN_EXCHANGE_GRANT,
-] as const;
-export type OfferedGrant = (typeof OFFERED_GRANTS)[number];
-
-/** What a client with no recorded `grantTypes` may use (janus's default). */
-export const DEFAULT_GRANTS = ["authorization_code", "refresh_token"] as const;
-
-/** Whether a client with these grants goes through a browser redirect (it needs a redirect URI). */
-export const usesRedirect = (grants: readonly string[] | undefined) =>
-  grants === undefined || grants.includes("authorization_code");
+export {
+  DEFAULT_GRANTS,
+  OFFERED_GRANTS,
+  type OfferedGrant,
+  usesRedirect,
+} from "./grants";
+export { clientIdOf } from "./validate";
 
 export interface RegisterClientInput {
   /** The tenant's slug. */
@@ -102,64 +84,22 @@ export interface RegisterClientOptions {
   now?: () => Date;
 }
 
-const ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-
-/** The default client id of a name: lowercase `a-z0-9-`. */
-export const clientIdOf = (name: string): string =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64)
-    .replace(/-+$/g, "");
-
-function validate(input: RegisterClientInput): {
-  name: string;
-  clientId: string;
-  redirectUris: string[];
-  grantTypes: OfferedGrant[] | undefined;
-} {
-  const name = input.name.trim();
-  if (name === "") throw new CliInputError("a client needs a name");
-  const clientId = input.clientId ?? clientIdOf(name);
-  if (!ID_PATTERN.test(clientId)) {
-    throw new CliInputError(
-      `client id "${clientId}" must be 1-64 characters of a-z, 0-9 and "-", not starting or ending with "-"`,
-    );
-  }
-  const redirectUris = [...new Set(input.redirectUris)];
-  for (const uri of redirectUris) {
-    const problem = redirectUriProblem(uri);
-    if (problem !== null) {
-      throw new CliInputError(`redirect URI "${uri}": ${problem}`);
-    }
-  }
-  if (input.grants?.length === 0) {
-    throw new CliInputError("--grants needs at least one grant type");
-  }
-  for (const grant of input.grants ?? []) {
-    if (!(OFFERED_GRANTS as readonly string[]).includes(grant)) {
-      throw new CliInputError(
-        `grant "${grant}" is not offered: Clavix offers ${OFFERED_GRANTS.join(", ")}`,
-      );
-    }
-  }
-  if (
-    input.grants !== undefined &&
-    !input.grants.includes("authorization_code") &&
-    !input.grants.includes(DEVICE_GRANT) &&
-    !input.grants.includes(TOKEN_EXCHANGE_GRANT)
-  ) {
-    throw new CliInputError(
-      `--grants must include authorization_code, ${DEVICE_GRANT} or ${TOKEN_EXCHANGE_GRANT}: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)`,
-    );
-  }
-  const grantTypes =
-    input.grants === undefined
-      ? undefined
-      : OFFERED_GRANTS.filter((grant) => input.grants?.includes(grant));
-  return { name, clientId, redirectUris, grantTypes };
+/**
+ * A confidential client's secret: kept (its stored hash) unless rotated or
+ * new, else minted now and returned once (`clientSecret`).
+ */
+function secretOf(
+  confidential: boolean,
+  existingHash: string | undefined,
+  rotate: boolean,
+): { clientSecret: string | null; secretHash: string | undefined } {
+  const keptHash = rotate ? undefined : existingHash;
+  const clientSecret =
+    confidential && keptHash === undefined ? mintOAuthSecret() : null;
+  const secretHash =
+    keptHash ??
+    (clientSecret === null ? undefined : hashOAuthSecret(clientSecret));
+  return { clientSecret, secretHash };
 }
 
 /**
@@ -225,14 +165,11 @@ export async function registerClient(
       `--rotate-secret needs a confidential client: "${clientId}" is public and has no secret`,
     );
   }
-  // A confidential client's secret: kept (its stored hash) unless rotated or
-  // new, else minted now and returned once.
-  const keptHash = input.rotateSecret === true ? undefined : existingHash;
-  const clientSecret =
-    confidential && keptHash === undefined ? mintOAuthSecret() : null;
-  const secretHash =
-    keptHash ??
-    (clientSecret === null ? undefined : hashOAuthSecret(clientSecret));
+  const { clientSecret, secretHash } = secretOf(
+    confidential,
+    existingHash,
+    input.rotateSecret === true,
+  );
   const requirePar =
     input.requirePar ?? existing?.requirePushedAuthorizationRequests === true;
   const dpopBound = input.dpopBound ?? existing?.dpopBoundAccessTokens === true;
