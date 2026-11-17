@@ -5,8 +5,8 @@ import { mongo } from "@/config/db";
 import { dpopNonceSecretOf } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { createFlow, REDIRECT } from "~/oauth-flow";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
+import { createFlow, REDIRECT } from "~/oauth-flow";
 
 const API = "https://api.dp-open.example/v1";
 const flow = createFlow();
