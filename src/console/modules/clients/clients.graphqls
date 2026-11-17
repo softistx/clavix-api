@@ -33,6 +33,13 @@ type Client {
   this: every client pushes.
   """
   requirePushedAuthorizationRequests: Boolean!
+  """
+  Whether the client's token requests must carry a DPoP proof (RFC 9449): its
+  access tokens are bound to its key, and a public client's refresh token too.
+  A tenant that requires DPoP of everyone (`oauthPolicy.dpop.required`)
+  overrides this: every client sends a proof.
+  """
+  dpopBoundAccessTokens: Boolean!
 }
 
 """
@@ -74,6 +81,8 @@ input CreateClientInput {
   clientId: String
   "Make the client push its authorization requests. Default false."
   requirePushedAuthorizationRequests: Boolean
+  "Bind the client's tokens to a DPoP key. Default false."
+  dpopBoundAccessTokens: Boolean
 }
 
 "Fields left out stay as they are. The type and the secret never change here."
@@ -83,6 +92,7 @@ input UpdateClientInput {
   "Replaces the grants (same rules as on creation)."
   grantTypes: [ClientGrantType!]
   requirePushedAuthorizationRequests: Boolean
+  dpopBoundAccessTokens: Boolean
 }
 
 type Query {

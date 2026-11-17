@@ -33,6 +33,7 @@ const origin = {
 } as const;
 const keys = createMemorySigningKeys();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
   signingKeysFor: () => keys,

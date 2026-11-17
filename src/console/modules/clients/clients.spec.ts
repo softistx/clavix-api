@@ -23,7 +23,7 @@ let tenantA = "";
 let tenantB = "";
 
 const CLIENT =
-  "id name type redirectUris grantTypes createdAt requirePushedAuthorizationRequests";
+  "id name type redirectUris grantTypes createdAt requirePushedAuthorizationRequests dpopBoundAccessTokens";
 const CREATE = `mutation($tenantId: ID!, $input: CreateClientInput!) {
   createClient(tenantId: $tenantId, input: $input) { client { ${CLIENT} } clientSecret }
 }`;
@@ -327,6 +327,44 @@ describe("clients and client", () => {
     const plain = await create(admin, tenantA, { name: "Plain app" });
     expect(plain.data?.["createClient"]).toMatchObject({
       client: { requirePushedAuthorizationRequests: false },
+    });
+  });
+
+  test("a client's DPoP binding is set at creation, changed by an update and kept by a rename", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Bound app",
+      dpopBoundAccessTokens: true,
+    });
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: { id: "bound-app", dpopBoundAccessTokens: true },
+    });
+    expect(
+      (await (await storeOf(tenantA)).findClient("bound-app"))
+        ?.dpopBoundAccessTokens,
+    ).toBe(true);
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "bound-app",
+      input: { name: "Bound" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      dpopBoundAccessTokens: true,
+    });
+    const off = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "bound-app",
+      input: { dpopBoundAccessTokens: false },
+    });
+    expect(off.data?.["updateClient"]).toMatchObject({
+      dpopBoundAccessTokens: false,
+    });
+    expect(
+      (await (await storeOf(tenantA)).findClient("bound-app"))
+        ?.dpopBoundAccessTokens,
+    ).toBeUndefined();
+    const plain = await create(admin, tenantA, { name: "Unbound app" });
+    expect(plain.data?.["createClient"]).toMatchObject({
+      client: { dpopBoundAccessTokens: false },
     });
   });
 

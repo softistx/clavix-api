@@ -67,6 +67,12 @@ export interface RegisterClientInput {
    * already records, else `false`.
    */
   requirePar?: boolean;
+  /**
+   * Bind this client's tokens to a DPoP key (RFC 9449): its token requests must
+   * carry a proof, whatever the tenant requires. Default: what the client
+   * already records, else `false`.
+   */
+  dpopBound?: boolean;
 }
 
 export interface RegisteredClient {
@@ -81,6 +87,8 @@ export interface RegisteredClient {
   clientSecret: string | null;
   /** Whether the client must push its authorization requests. */
   requirePar: boolean;
+  /** Whether the client's token requests must carry a DPoP proof. */
+  dpopBound: boolean;
 }
 
 export interface RegisterClientOptions {
@@ -207,6 +215,7 @@ export async function registerClient(
     (clientSecret === null ? undefined : hashOAuthSecret(clientSecret));
   const requirePar =
     input.requirePar ?? existing?.requirePushedAuthorizationRequests === true;
+  const dpopBound = input.dpopBound ?? existing?.dpopBoundAccessTokens === true;
   const record: OAuthClientRecord = {
     id: clientId,
     name,
@@ -216,6 +225,7 @@ export async function registerClient(
     expiresAt: null,
     grantTypes: grantTypes ?? existing?.grantTypes ?? [...DEFAULT_GRANTS],
     ...(requirePar ? { requirePushedAuthorizationRequests: true } : {}),
+    ...(dpopBound ? { dpopBoundAccessTokens: true } : {}),
     ...(confidential && secretHash !== undefined
       ? {
           tokenEndpointAuthMethod: "client_secret_basic" as const,
@@ -233,5 +243,6 @@ export async function registerClient(
     type,
     clientSecret,
     requirePar,
+    dpopBound,
   };
 }

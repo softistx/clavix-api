@@ -65,6 +65,7 @@ const resourcesFor = () => ({
   [NO_SCOPE_RESOURCE]: { scopes: [] },
 });
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
   signingKeysFor,

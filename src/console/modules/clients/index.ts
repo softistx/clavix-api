@@ -60,6 +60,7 @@ const shape = (client: {
   grantTypes: readonly string[];
   createdAt: Date;
   requirePushedAuthorizationRequests: boolean;
+  dpopBoundAccessTokens: boolean;
 }) => ({
   id: client.clientId,
   name: client.name,
@@ -71,6 +72,7 @@ const shape = (client: {
   ),
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
+  dpopBoundAccessTokens: client.dpopBoundAccessTokens,
 });
 
 /** The wire grants of the enum list a call sent; `undefined` when it sent none (keep or default). */
@@ -143,6 +145,7 @@ export const clients: Resolvers = {
         clientId: input.clientId ?? undefined,
         grants: grantsOf(input.grantTypes),
         requirePar: input.requirePushedAuthorizationRequests ?? undefined,
+        dpopBound: input.dpopBoundAccessTokens ?? undefined,
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
@@ -174,6 +177,7 @@ export const clients: Resolvers = {
             redirectUris: input.redirectUris ?? undefined,
             grants: grantsOf(input.grantTypes),
             requirePar: input.requirePushedAuthorizationRequests ?? undefined,
+            dpopBound: input.dpopBoundAccessTokens ?? undefined,
           });
         }),
       );

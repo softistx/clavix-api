@@ -26,12 +26,14 @@ import { issuerOf, partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { tenants } from "@/modules/tenants/tenants.model";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
 import {
   CONSOLE_CLIENT_ID,
   CONSOLE_PATH,
   consoleAudience,
+  consoleOrigin,
   consoleRedirectUri,
 } from "./identity";
 import { createConsoleSchema } from "./schema";
@@ -42,6 +44,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const AUDIENCE = consoleAudience(origin);
+const PUBLIC_URL = `${consoleOrigin(origin)}${CONSOLE_PATH}`;
 const OTHER = "https://other.test/api";
 // The console client is the migration's: its seed resets it to this URI.
 const REDIRECT = consoleRedirectUri(origin);
@@ -52,6 +55,7 @@ const FOREIGN = { id: "spec-foreign", secret: "" };
 const clock = fixedClock(new Date());
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
   signingKeysFor: (tenantId) => {
@@ -76,6 +80,7 @@ const app = createApp({
     ...deps,
     authenticate: createConsoleAuthenticator({
       audience: AUDIENCE,
+      publicUrl: PUBLIC_URL,
       serverOfClavix,
     }),
   },
@@ -124,6 +129,7 @@ async function tokenFor(
   resource: string,
   scope: string,
   client: { id: string; secret: string } = CLIENT,
+  dpop?: DpopKey,
 ): Promise<string> {
   const server = await serverOfClavix();
   if (server === null) throw new Error("no clavix server");
@@ -150,21 +156,33 @@ async function tokenFor(
   const { redirectTo } = await server.approve({ id: userId }, requestId, {
     scopes: scope.split(" "),
   });
-  const exchanged = await issuers.handle(
-    new Request(`${issuer}/token`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        authorization: `Basic ${btoa(`${client.id}:${client.secret}`)}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: new URL(redirectTo).searchParams.get("code") ?? "",
-        redirect_uri: REDIRECT,
-        code_verifier: VERIFIER,
-        resource,
+  const tokenUrl = `${issuer}/token`;
+  const form = new URLSearchParams({
+    grant_type: "authorization_code",
+    code: new URL(redirectTo).searchParams.get("code") ?? "",
+    redirect_uri: REDIRECT,
+    code_verifier: VERIFIER,
+    resource,
+  });
+  // A DPoP token needs the server's nonce: the first proof is refused with it.
+  const exchanged = await withNonce(async (nonce) =>
+    issuers.handle(
+      new Request(tokenUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          authorization: `Basic ${btoa(`${client.id}:${client.secret}`)}`,
+          ...(dpop === undefined
+            ? {}
+            : {
+                dpop: await dpop.proof("POST", tokenUrl, {
+                  ...(nonce === undefined ? {} : { nonce }),
+                }),
+              }),
+        },
+        body: form,
       }),
-    }),
+    ),
   );
   const body = (await exchanged.json()) as { access_token?: string };
   if (body.access_token === undefined) {
@@ -257,6 +275,116 @@ afterAll(async () => {
   await oauthDb.collection("relations").deleteMany({});
 });
 
+describe("the console's DPoP token", () => {
+  const callDpop = (token: string, scheme: string, proof?: string) =>
+    app.request(`http://localhost${CONSOLE_PATH}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `${scheme} ${token}`,
+        ...(proof === undefined ? {} : { dpop: proof }),
+      },
+      body: JSON.stringify({ query: ME }),
+    });
+  // The proof names the console's public URL, not the forwarded `http://localhost`.
+  const signed = (key: DpopKey, token: string, nonce?: string) =>
+    key.proof("POST", PUBLIC_URL, {
+      accessToken: token,
+      ...(nonce === undefined ? {} : { nonce }),
+    });
+
+  test("a DPoP token with its proof reaches `me`, after one nonce retry", async () => {
+    const key = await createDpopKey();
+    const token = await tokenFor(
+      ada,
+      AUDIENCE,
+      "console openid email",
+      CLIENT,
+      key,
+    );
+    const asked = await callDpop(token, "DPoP", await signed(key, token));
+    expect(asked.status).toBe(401);
+    expect(asked.headers.get("www-authenticate")).toContain(
+      'DPoP realm="clavix-console", error="use_dpop_nonce"',
+    );
+    const nonce = asked.headers.get("dpop-nonce") ?? "";
+    expect(nonce).not.toBe("");
+    const response = await callDpop(
+      token,
+      "DPoP",
+      await signed(key, token, nonce),
+    );
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as GqlResult;
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.["me"]).toMatchObject({ user: { id: ada } });
+  });
+
+  test("a bound token sent as Bearer is refused", async () => {
+    const key = await createDpopKey();
+    const token = await tokenFor(
+      ada,
+      AUDIENCE,
+      "console openid email",
+      CLIENT,
+      key,
+    );
+    const response = await callDpop(token, "Bearer");
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain("DPoP");
+  });
+
+  test("a DPoP token with no proof, or another key's, is refused", async () => {
+    const key = await createDpopKey();
+    const token = await tokenFor(
+      ada,
+      AUDIENCE,
+      "console openid email",
+      CLIENT,
+      key,
+    );
+    const none = await callDpop(token, "DPoP");
+    expect(none.status).toBe(401);
+    expect(none.headers.get("www-authenticate")).toContain(
+      "invalid_dpop_proof",
+    );
+    const asked = await callDpop(token, "DPoP", await signed(key, token));
+    const nonce = asked.headers.get("dpop-nonce") ?? "";
+    const other = await createDpopKey();
+    const stolen = await callDpop(
+      token,
+      "DPoP",
+      await signed(other, token, nonce),
+    );
+    expect(stolen.status).toBe(401);
+  });
+
+  test("a proof for the forwarded URL instead of the public one is refused", async () => {
+    const key = await createDpopKey();
+    const token = await tokenFor(
+      ada,
+      AUDIENCE,
+      "console openid email",
+      CLIENT,
+      key,
+    );
+    const asked = await callDpop(token, "DPoP", await signed(key, token));
+    const nonce = asked.headers.get("dpop-nonce") ?? "";
+    const response = await callDpop(
+      token,
+      "DPoP",
+      await key.proof("POST", `http://localhost${CONSOLE_PATH}`, {
+        accessToken: token,
+        nonce,
+      }),
+    );
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(
+      "htu does not match",
+    );
+  });
+});
+
 describe("the console's bearer token", () => {
   test("a request with no token is a 401, with a challenge", async () => {
     const response = await call(ME);
@@ -342,15 +470,18 @@ describe("the console's bearer token", () => {
   test("a principal with no user is refused", async () => {
     const userless = createConsoleAuthenticator({
       audience: AUDIENCE,
+      publicUrl: PUBLIC_URL,
       serverOfClavix: async () =>
         ({
-          authenticate: async () => ({
-            clientId: CONSOLE_CLIENT_ID,
-            grantId: "g",
-            scopes: ["console"],
-            clientName: null,
-            bound: null,
-            jkt: null,
+          authenticateRequest: async () => ({
+            ok: {
+              clientId: CONSOLE_CLIENT_ID,
+              grantId: "g",
+              scopes: ["console"],
+              clientName: null,
+              bound: null,
+              jkt: null,
+            },
           }),
         }) as never,
     });

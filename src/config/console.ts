@@ -1,5 +1,9 @@
 import { createConsoleAuthenticator } from "@/console/auth";
-import { consoleAudience } from "@/console/identity";
+import {
+  CONSOLE_PATH,
+  consoleAudience,
+  consoleOrigin,
+} from "@/console/identity";
 import { createJanusAdmins } from "@/console/modules/admins/janus-admins";
 import { createJanusUsers } from "@/console/modules/users/janus-users";
 import type { ConsoleDeps } from "@/console/plugin";
@@ -45,6 +49,7 @@ export function createConsoleDeps(
   return {
     authenticate: createConsoleAuthenticator({
       audience: consoleResource,
+      publicUrl: `${consoleOrigin(origin)}${CONSOLE_PATH}`,
       serverOfClavix: async () => {
         const tenant = await clavixTenant();
         return tenant === null
