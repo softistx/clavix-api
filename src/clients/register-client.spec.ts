@@ -300,11 +300,21 @@ describe("registerClient", () => {
     expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
       DEVICE_GRANT,
     ]);
-    // Without --grants the client is taken as a redirect one, which needs a URI.
+    // Without --grants a re-run keeps the stored grants, so it needs no URI (#228).
+    const rerun = await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+    });
+    expect(rerun.created).toBe(false);
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      DEVICE_GRANT,
+    ]);
+    // A new client without --grants is a redirect one, which needs a URI.
     await expect(
       registerClient(options, {
         tenant: "regalpha",
-        name: "Set top box",
+        name: "Another box",
         redirectUris: [],
       }),
     ).rejects.toBeInstanceOf(CliInputError);
