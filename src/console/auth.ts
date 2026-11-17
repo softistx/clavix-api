@@ -21,7 +21,8 @@ const presents = (request: Request) => {
  * accepted: janus-oauth's `authenticateRequest` checks a bound token's proof
  * (method, URL, `ath`, replay, nonce) against `publicUrl`, the URL the client
  * called, never the one the proxy forwards to (the proof's `htu` is the public
- * one). A bound token sent as Bearer is refused, and a refused DPoP request
+ * one). A token exchanged for an actor (`act` claim) is refused with a plain
+ * 401, whatever its scheme. A bound token sent as Bearer is refused, and a refused DPoP request
  * answers its challenge (`use_dpop_nonce` carries the nonce to retry with).
  */
 export function createConsoleAuthenticator({
@@ -59,6 +60,10 @@ export function createConsoleAuthenticator({
     if (typeof principal.userId !== "string" || principal.userId === "") {
       return null;
     }
+    // A delegated (RFC 8693 exchanged) token carries an actor: someone acts for
+    // the operator. The console takes the operator's own token only, so a
+    // token handed to another party (or a service) never reaches it.
+    if (principal.actor !== undefined) return null;
     // The `console` scope is the gate: an `openid`-only token is not a console one.
     return principal.scopes.includes("console") === true ? principal : null;
   };
