@@ -11,4 +11,6 @@ export interface ThrottleContext {
   readonly passkeyThrottle: Throttle | undefined;
   /** The signed-in `requestEmailVerification`: per user, client address and tenant. */
   readonly verifyThrottle: UserThrottle | undefined;
+  /** The signed-in device verification lookups: per user, client address and tenant. */
+  readonly deviceThrottle: UserThrottle | undefined;
 }

@@ -8,6 +8,8 @@ enum ClientType {
 enum ClientGrantType {
   AUTHORIZATION_CODE
   REFRESH_TOKEN
+  "The device authorization grant (RFC 8628, `urn:ietf:params:oauth:grant-type:device_code`), for a CLI or a TV. Never implied: a client opts in."
+  DEVICE_CODE
 }
 
 "An OAuth client of a tenant."
@@ -16,11 +18,12 @@ type Client {
   id: ID!
   name: String!
   type: ClientType!
-  "Exact-match redirect URIs."
+  "Exact-match redirect URIs. Empty for a device-only client (no `AUTHORIZATION_CODE`)."
   redirectUris: [String!]!
   """
-  The grant types the client may use, enforced by the token endpoint
-  (`unauthorized_client` for another). Both when the client records none.
+  The grant types the client may use, enforced by the token and device
+  authorization endpoints (`unauthorized_client` for another).
+  `AUTHORIZATION_CODE` and `REFRESH_TOKEN` when the client records none.
   """
   grantTypes: [ClientGrantType!]!
   createdAt: DateTime!
@@ -59,7 +62,14 @@ type RotatedClientSecret {
 input CreateClientInput {
   name: String!
   type: ClientType!
-  redirectUris: [String!]!
+  "At least one unless the client has no `AUTHORIZATION_CODE` grant (a device-only client needs none). Default: none."
+  redirectUris: [String!]
+  """
+  The grants the client may use. Default: `AUTHORIZATION_CODE` and `REFRESH_TOKEN`.
+  A list needs `AUTHORIZATION_CODE` or `DEVICE_CODE`; add `REFRESH_TOKEN` for a
+  client that refreshes. Without `AUTHORIZATION_CODE` the client needs no redirect URI.
+  """
+  grantTypes: [ClientGrantType!]
   "The client_id (a-z, 0-9, `-`); default: the name. Creating an existing id is a CONFLICT, unless the call repeats it (same name, type and redirect URIs)."
   clientId: String
   "Make the client push its authorization requests. Default false."
@@ -70,6 +80,8 @@ input CreateClientInput {
 input UpdateClientInput {
   name: String
   redirectUris: [String!]
+  "Replaces the grants (same rules as on creation)."
+  grantTypes: [ClientGrantType!]
   requirePushedAuthorizationRequests: Boolean
 }
 

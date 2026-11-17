@@ -6,6 +6,10 @@ import {
   type VerificationLimitConfig,
   verificationLimits,
 } from "@/modules/auth/verification-throttle";
+import {
+  type DeviceLimitConfig,
+  deviceLimits,
+} from "@/modules/consent/device-throttle";
 import { domainRecheck } from "@/modules/domains/recheck.queue";
 import { tlsAskLimit } from "@/modules/domains/tls-limit";
 import {
@@ -46,6 +50,14 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_VERIFY_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_VERIFY_TENANT_WINDOW_SECONDS,
   },
+  device: DeviceLimitConfig = {
+    userLimit: env.CLAVIX_DEVICE_USER_LIMIT,
+    userWindowSeconds: env.CLAVIX_DEVICE_USER_WINDOW_SECONDS,
+    ipLimit: env.CLAVIX_DEVICE_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_DEVICE_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_DEVICE_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_DEVICE_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -61,6 +73,7 @@ export async function openAppRedis(
         ...signInLimits(limits),
         ...passkeyLimits(passkeys),
         ...verificationLimits(verification),
+        ...deviceLimits(device),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

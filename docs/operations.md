@@ -15,8 +15,8 @@ and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/of
 | `mongo` | `mongo:8`                             | `api`, `backup`, `restore` | `--replSet rs0`, key file, users, optional TLS   |
 | `redis` | `redis:7-alpine`                      | `api`                      | password, append-only file                       |
 
-Caddy sends the authorization server, the GraphQL APIs, JWKS, userinfo, the logo
-and `/healthz` to the API, and everything else to the UI. The tenant is chosen
+Caddy sends the authorization server (`/authorize`, `/token`, `/par`, `/device_authorization`, ...), the GraphQL APIs, JWKS, userinfo, the logo
+and `/healthz` to the API (a proxy of your own must route `/device_authorization` too), and everything else to the UI. The tenant is chosen
 by the `Host` header, which Caddy passes untouched.
 
 ## Health
@@ -128,6 +128,10 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                            |
 | `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                           |
 | `NPM_REGISTRY_TOKEN`                                                     | compose build               | read token of `npm.softistx.com`, a build secret of the backup tools image (it bundles `@softistx/s3`); export it in the shell that runs `docker compose build` |
+
+The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVICE_IP_LIMIT`,
+`CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
+Redis; with Redis down the lookups go through unthrottled and a line is logged.
 
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is

@@ -239,10 +239,15 @@ describe("withTenantState", () => {
   });
 
   test.each(["suspended", "deleted"] as const)(
-    "a %s tenant's /authorize, /par and /token are 403 TENANT_SUSPENDED, the other endpoints answer",
+    "a %s tenant's /authorize, /par, /device_authorization and /token are 403 TENANT_SUSPENDED, the other endpoints answer",
     async (status) => {
       const { call, seen, active } = wrap(status);
-      for (const path of ["/authorize", "/par", "/token"]) {
+      for (const path of [
+        "/authorize",
+        "/par",
+        "/device_authorization",
+        "/token",
+      ]) {
         const response = await call(path);
         expect(response.status).toBe(403);
         expect(await response.json()).toMatchObject({

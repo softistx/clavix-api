@@ -255,6 +255,46 @@ describe("clients and client", () => {
     });
   });
 
+  test("a device-code client is created without redirect URIs, and its grants are changed by an update", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Smart TV",
+      redirectUris: undefined,
+      grantTypes: ["DEVICE_CODE"],
+    });
+    expect(created.errors).toBeUndefined();
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: {
+        id: "smart-tv",
+        redirectUris: [],
+        grantTypes: ["DEVICE_CODE"],
+      },
+    });
+    const added = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "smart-tv",
+      input: { grantTypes: ["DEVICE_CODE", "REFRESH_TOKEN"] },
+    });
+    expect(added.data?.["updateClient"]).toMatchObject({
+      grantTypes: ["REFRESH_TOKEN", "DEVICE_CODE"],
+    });
+    // A rename keeps them.
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "smart-tv",
+      input: { name: "TV" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      grantTypes: ["REFRESH_TOKEN", "DEVICE_CODE"],
+    });
+    // A redirect-based client still needs a redirect URI.
+    const bare = await create(admin, tenantA, {
+      name: "No redirect",
+      redirectUris: [],
+    });
+    expect(bare.errors).toBeDefined();
+    await admin(DELETE, { tenantId: tenantA, id: "smart-tv" });
+  });
+
   test("a client's PAR requirement is set at creation, changed by an update and kept by a rename", async () => {
     const created = await create(admin, tenantA, {
       name: "Pushing app",

@@ -536,6 +536,35 @@ attempts were made). Read `oauthPolicy` and send the change again.
 **`TENANT_SUSPENDED` (403)** on `/par`: the tenant is suspended or in the trash, like `/authorize`
 and `/token`. `resumeTenant` or `restoreTenant` lifts it.
 
+## Device authorization refusals
+
+**`unauthorized_client` on `/device_authorization` or on the device `/token`**: the client does not list the
+device grant. It is never implied: `clients:create --grants device_code` (re-run, it keeps the name and URIs) or
+`updateClient(input: { grantTypes: [DEVICE_CODE] })`.
+
+**`slow_down`**: the device polled before its `interval` elapsed. Add 5 seconds to the interval and keep it.
+
+**`expired_token`**: the code lived 10 minutes without a decision. Ask for new codes. **`access_denied`**: the
+user refused; stop. **`invalid_grant`**: the `device_code` is unknown, already spent or another client's.
+
+**`a client needs at least one redirect URI`** on `clients:create` or `createClient`: the client uses
+`authorization_code` (the default). A device-only client lists `--grants device_code` and needs none.
+
+**`NOT_FOUND` on `oauthDeviceRequest`, `approveOAuthDeviceRequest` or `denyOAuthDeviceRequest`**: the user code is
+unknown, expired, already decided, or belongs to another tenant (open the page on the tenant host that gave the
+code), or an approved scope was not asked by the device.
+
+**`DEVICE_CODE_THROTTLED` (429)**: too many code lookups by this user, address or tenant. Wait the `Retry-After`
+seconds; operators tune `CLAVIX_DEVICE_*`. Every lookup counts, hit or miss.
+
+**`STEP_UP_REQUIRED`** on approve: the session is older than 5 minutes. Sign in again; the request is
+still pending. Reading and denying a request do not ask for a fresh session.
+
+**`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
+
+**`404` on `/device_authorization` from outside**: the reverse proxy does not route the path to the API; the
+`@api` matcher of `deploy/Caddyfile` must list it.
+
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
 
 ### `CONFLICT` (409) `A role named "<name>" already exists here`

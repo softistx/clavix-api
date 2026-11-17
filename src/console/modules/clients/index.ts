@@ -1,4 +1,5 @@
 import { denial } from "@softistx/janus-graphql";
+import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { clientsService } from "@/config/clients";
 import { tenantAdmin } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
@@ -42,6 +43,13 @@ const TYPE = { public: "PUBLIC", confidential: "CONFIDENTIAL" } as const;
 const GRANT = {
   authorization_code: "AUTHORIZATION_CODE",
   refresh_token: "REFRESH_TOKEN",
+  [DEVICE_GRANT]: "DEVICE_CODE",
+} as const;
+
+const WIRE_GRANT = {
+  AUTHORIZATION_CODE: "authorization_code",
+  REFRESH_TOKEN: "refresh_token",
+  DEVICE_CODE: DEVICE_GRANT,
 } as const;
 
 const shape = (client: {
@@ -57,13 +65,18 @@ const shape = (client: {
   name: client.name,
   type: TYPE[client.type],
   redirectUris: [...client.redirectUris],
-  // The device grant (RFC 8628) is not exposed in the console until its own slice.
+  // A grant the console does not expose yet (token exchange) is left out.
   grantTypes: client.grantTypes.flatMap((grant) =>
     Object.hasOwn(GRANT, grant) ? [GRANT[grant as keyof typeof GRANT]] : [],
   ),
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
 });
+
+/** The wire grants of the enum list a call sent; `undefined` when it sent none (keep or default). */
+const grantsOf = (
+  grants: readonly (keyof typeof WIRE_GRANT)[] | null | undefined,
+) => grants?.map((grant) => WIRE_GRANT[grant]);
 
 const MAX_PAGE = 100;
 
@@ -126,8 +139,9 @@ export const clients: Resolvers = {
       const wanted = {
         name: input.name,
         type: input.type === "CONFIDENTIAL" ? "confidential" : "public",
-        redirectUris: input.redirectUris,
+        redirectUris: input.redirectUris ?? [],
         clientId: input.clientId ?? undefined,
+        grants: grantsOf(input.grantTypes),
         requirePar: input.requirePushedAuthorizationRequests ?? undefined,
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
@@ -158,6 +172,7 @@ export const clients: Resolvers = {
           return clientsService.update(tenant, id, {
             name: input.name ?? undefined,
             redirectUris: input.redirectUris ?? undefined,
+            grants: grantsOf(input.grantTypes),
             requirePar: input.requirePushedAuthorizationRequests ?? undefined,
           });
         }),

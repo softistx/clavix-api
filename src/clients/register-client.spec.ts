@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   createMemorySigningKeys,
+  DEVICE_GRANT,
   hashOAuthSecret,
   rotateSigningKeys,
   type SigningKeyStore,
@@ -275,6 +276,49 @@ describe("registerClient", () => {
       "authorization_code",
       "refresh_token",
     ]);
+  });
+
+  test("a device-only client needs no redirect URI and keeps its grants on a re-run", async () => {
+    const store = await storeOf("regalpha");
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+      grants: [DEVICE_GRANT],
+    });
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      DEVICE_GRANT,
+    ]);
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+    });
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      DEVICE_GRANT,
+    ]);
+    // With a refresh token, in the offered order.
+    await registerClient(options, {
+      tenant: "regalpha",
+      name: "Set top box",
+      redirectUris: [],
+      grants: ["refresh_token", DEVICE_GRANT],
+    });
+    expect((await store.findClient("set-top-box"))?.grantTypes).toEqual([
+      "refresh_token",
+      DEVICE_GRANT,
+    ]);
+  });
+
+  test("a client that uses the redirect still needs one, even beside the device grant", async () => {
+    await expect(
+      registerClient(options, {
+        tenant: "regalpha",
+        name: "Both",
+        redirectUris: [],
+        grants: ["authorization_code", DEVICE_GRANT],
+      }),
+    ).rejects.toBeInstanceOf(CliInputError);
   });
 
   test("bad input is refused before anything is written", async () => {
