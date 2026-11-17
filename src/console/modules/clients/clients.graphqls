@@ -10,6 +10,29 @@ enum ClientGrantType {
   REFRESH_TOKEN
   "The device authorization grant (RFC 8628, `urn:ietf:params:oauth:grant-type:device_code`), for a CLI or a TV. Never implied: a client opts in."
   DEVICE_CODE
+  "The token exchange grant (RFC 8693, `urn:ietf:params:oauth:grant-type:token-exchange`), for a confidential back end. Never implied, and refused until `setClientTokenExchange` sets the client's rules."
+  TOKEN_EXCHANGE
+}
+
+"How an exchanged token names the client acting for the user."
+enum TokenExchangeMode {
+  "The exchanged token is the user's, issued to the client, and carries `act` (the client acts for the user). The only mode."
+  DELEGATION
+}
+
+"""
+What a client may do with the token exchange grant. Default-deny: a client with
+no rules cannot exchange. The exchanged token's scopes only narrow the subject
+token's, it has no refresh token, and it never outlives the subject token.
+"""
+type ClientTokenExchange {
+  "URIs of the tenant's resources the exchanged token may be issued for."
+  targetResources: [String!]!
+  "Ids of the clients whose tokens may be exchanged. Empty with `anySubjectClient`."
+  subjectClients: [String!]!
+  "Whether a token of any client of the tenant may be exchanged."
+  anySubjectClient: Boolean!
+  mode: TokenExchangeMode!
 }
 
 "An OAuth client of a tenant."
@@ -40,6 +63,8 @@ type Client {
   overrides this: every client sends a proof.
   """
   dpopBoundAccessTokens: Boolean!
+  "The token exchange rules; `null` while none is set (the client cannot exchange)."
+  tokenExchange: ClientTokenExchange
 }
 
 """
@@ -95,6 +120,16 @@ input UpdateClientInput {
   dpopBoundAccessTokens: Boolean
 }
 
+"The rules of `setClientTokenExchange`: they replace the client's current ones."
+input ClientTokenExchangeInput {
+  "Resource URIs of the tenant. Empty: the client can exchange for none."
+  targetResources: [String!]!
+  "The ids of the clients whose tokens may be exchanged (at most 50). Leave empty with `anySubjectClient`."
+  subjectClients: [String!] = []
+  "Any client of the tenant's tokens may be exchanged. Default false."
+  anySubjectClient: Boolean = false
+}
+
 type Query {
   "The tenant's clients in id order (`q` matches part of the name or id, whatever the case). Needs `view` on the tenant."
   clients(tenantId: ID!, q: String, after: String, first: Int = 25): ClientPage!
@@ -106,6 +141,17 @@ type Mutation {
   createClient(tenantId: ID!, input: CreateClientInput!): CreatedClient!
   updateClient(tenantId: ID!, id: ID!, input: UpdateClientInput!): Client!
   rotateClientSecret(tenantId: ID!, id: ID!): RotatedClientSecret!
-  "Deletes the client and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
+  """
+  Replaces the client's token exchange rules. Needs `edit`. The client must be a
+  confidential one (BAD_USER_INPUT otherwise) and each target a resource of the
+  tenant (BAD_USER_INPUT). The client also lists `TOKEN_EXCHANGE` in its grants
+  for the rules to apply.
+  """
+  setClientTokenExchange(
+    tenantId: ID!
+    id: ID!
+    input: ClientTokenExchangeInput!
+  ): Client!
+  "Deletes the client its token exchange rules, and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
   deleteClient(tenantId: ID!, id: ID!): Boolean!
 }

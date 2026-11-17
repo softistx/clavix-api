@@ -570,12 +570,27 @@ was not run: the tokens validators do not know `jkt` yet, or `oauthDpopReplay` d
 (operations, "Deploying").
 
 **`PLATFORM_TENANT_PROTECTED` (409) on `updateOAuthPolicy`** with `dpop: { required: true }` on `clavix`:
-the console's own client sends no proof yet. See `/par` above.
+the console's own client does not yet push (PAR) or send proofs (DPoP). See `/par` above.
+
+## Token exchange refusals
+
+**`unauthorized_client` on the exchange**: the client does not list the grant, or is public. It needs `--confidential
+--grants urn:ietf:params:oauth:grant-type:token-exchange` (or `grantTypes: [TOKEN_EXCHANGE]`) and a secret.
+
+**`access_denied`**: the client has no rules (`setClientTokenExchange`), the `resource` is not in `targetResources`,
+or the subject token's client is not in `subjectClients` (and `anySubjectClient` is off). Read the rules with
+`Client.tokenExchange`.
+
+**`invalid_grant`**: the subject token is unknown, expired, revoked, or another tenant's. A token exchanged earlier
+dies with the subject's grant.
+
+**`BAD_USER_INPUT` on `setClientTokenExchange`**: both or neither of `subjectClients` and `anySubjectClient`, more
+than 20 targets or 50 clients, a target that is not a resource of the tenant, or a public client.
 
 ## Device authorization refusals
 
 **`unauthorized_client` on `/device_authorization` or on the device `/token`**: the client does not list the
-device grant. It is never implied: `clients:create --grants device_code` (re-run, it keeps the name and URIs) or
+device grant. It is never implied: `clients:create --grants urn:ietf:params:oauth:grant-type:device_code` (re-run, it keeps the name and URIs) or
 `updateClient(input: { grantTypes: [DEVICE_CODE] })`.
 
 **`slow_down`**: the device polled before its `interval` elapsed. Add 5 seconds to the interval and keep it.
@@ -584,7 +599,7 @@ device grant. It is never implied: `clients:create --grants device_code` (re-run
 user refused; stop. **`invalid_grant`**: the `device_code` is unknown, already spent or another client's.
 
 **`a client needs at least one redirect URI`** on `clients:create` or `createClient`: the client uses
-`authorization_code` (the default). A device-only client lists `--grants device_code` and needs none.
+`authorization_code` (the default). A device-only client lists `--grants urn:ietf:params:oauth:grant-type:device_code` and needs none.
 
 **`NOT_FOUND` on `oauthDeviceRequest`, `approveOAuthDeviceRequest` or `denyOAuthDeviceRequest`**: the user code is
 unknown, expired, already decided, or belongs to another tenant (open the page on the tenant host that gave the

@@ -56,3 +56,20 @@ export type ClaimsFor = (
 export type RolesFor = (
   tenant: ResolvedTenant,
 ) => (userId: string, audience: string | null) => Promise<string[]>;
+
+/** What a client may do with the token exchange grant (RFC 8693), from its `clientPolicies` rules. */
+export interface ExchangeRules {
+  /** URIs of the resources an exchanged token may be issued for. */
+  targetResources: readonly string[];
+  /** The clients whose tokens may be exchanged, or `"any"`. */
+  subjectClients: readonly string[] | "any";
+}
+
+/**
+ * The token exchange rules of a tenant's client, `null` when it has none: the
+ * exchange is then refused (default-deny). Asked on every exchange, from the
+ * tenant's own scope, so another tenant's rules are never read.
+ */
+export type ExchangeRulesFor = (
+  tenant: ResolvedTenant,
+) => (clientId: string) => Promise<ExchangeRules | null>;

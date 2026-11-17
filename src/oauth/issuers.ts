@@ -12,6 +12,7 @@ import { buildIssuer, userinfoOf } from "./building";
 import type {
   AuthFor,
   ClaimsFor,
+  ExchangeRulesFor,
   ResourcesFor,
   RolesFor,
   SigningKeysFor,
@@ -46,6 +47,11 @@ export interface ClavixOAuthOptions {
    * (tenant-wide plus the roles of the token's resource). Absent: no claim.
    */
   rolesFor?: RolesFor;
+  /**
+   * The token exchange rules of a tenant's clients (`clientPolicies`). Absent:
+   * no client may exchange tokens.
+   */
+  exchangeRulesFor?: ExchangeRulesFor;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -104,6 +110,7 @@ export function createClavixOAuthIssuers(
     oidc,
     clock,
     rolesFor: options.rolesFor,
+    exchangeRulesFor: options.exchangeRulesFor,
   });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),

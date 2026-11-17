@@ -319,18 +319,19 @@ mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another ten
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 
-| Field                                                | What it does                                                                                                                                                                                                                                                                                                   |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                  |
-| `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                                                                                                                          |
-| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]`, and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
-| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                          |
-| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                |
-| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                                                                                                                               |
-| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                      |
-| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                       |
-| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                            |
-| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                                                                                                                                                                                                                                                        |
+| Field                                                | What it does                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                                                            |
+| `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                                                                                                                                                                    |
+| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
+| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
+| `setClientTokenExchange(tenantId, id, input)`        | replaces the client's token exchange rules (`targetResources`, `subjectClients` or `anySubjectClient`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                              |
+| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
+| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                                                                                                                                                                         |
+| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                                                                |
+| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
+| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
+| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
 
 ```graphql
 mutation {
@@ -392,7 +393,7 @@ mutation {
   `q`, a page may hold fewer than `first` items (even none) and still give a `nextCursor`: follow
   it until it is `null`.
 - **`grantTypes`** on a client is what was recorded when it was registered (`authorization_code` and
-  `refresh_token` by default, or the script's `--grants` or the console's `grantTypes`, which may add `DEVICE_CODE`), and the token endpoint enforces it: a client that does not
+  `refresh_token` by default, or the script's `--grants` or the console's `grantTypes`, which may add `DEVICE_CODE` or `TOKEN_EXCHANGE`), and the token endpoint enforces it: a client that does not
   list a grant gets `unauthorized_client` on it. A list that omits `refresh_token` cannot refresh.
 - **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
   opened are revoked.
@@ -527,7 +528,7 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
   `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant
   that does not require it of everyone.
 - **The platform tenant (`clavix`)** refuses `par.required` and `dpop.required` (409
-  `PLATFORM_TENANT_PROTECTED`) until the console's own client pushes.
+  `PLATFORM_TENANT_PROTECTED`) until the console's own client pushes (PAR) / sends proofs (DPoP).
 - A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED`, like `/authorize`. Turning the requirement on breaks
   a client that does not push: warn its owner first.
 
@@ -564,7 +565,7 @@ advertises `dpop_signing_alg_values_supported` (`ES256`, `EdDSA`).
 - **Per tenant** (`oauthPolicy.dpop.required`, `updateOAuthPolicy`): every token request of every
   client needs a proof, else `invalid_dpop_proof`. Off for every tenant, new ones included, until an
   admin turns it on. Tokens issued before it stay valid until they lapse. The `clavix` platform tenant
-  refuses it (409 `PLATFORM_TENANT_PROTECTED`).
+  refuses it (409 `PLATFORM_TENANT_PROTECTED`) until the console's own client sends proofs (DPoP).
 - **Per client** (`dpopBoundAccessTokens` on `Client`, `CreateClientInput` and `UpdateClientInput`, or
   `clients:create --dpop-bound` / `--no-dpop-bound`): only that client must send a proof. Kept on a
   re-run unless the flag is given.
@@ -596,12 +597,12 @@ browser or keyboard (a TV, a CLI, a device): the client gets a `device_code`, a 
 `verification_uri` (`https://<tenant host>/device`), shows the code, and polls `/token` with
 `grant_type=urn:ietf:params:oauth:grant-type:device_code` while the user decides on another device.
 Discovery advertises `device_authorization_endpoint`.
-- **A client opts in.** The grant is never implied: the client must list it (`clients:create --grants device_code`, or
+- **A client opts in.** The grant is never implied: the client must list it (`clients:create --grants urn:ietf:params:oauth:grant-type:device_code`, or
   `grantTypes: [DEVICE_CODE]` on `CreateClientInput` / `UpdateClientInput`). Any other client gets
   `unauthorized_client` on `/device_authorization`. Add `REFRESH_TOKEN` to get a refresh token. The grant is
   served by every tenant and gated only by the client's grant types (no tenant setting).
 - **A device-only client has no redirect URI.** `--redirect-uri` and `redirectUris` are required only when the
-  client lists `authorization_code` (the default grants, or an explicit `--grants authorization_code,device_code`).
+  client lists `authorization_code` (the default grants, or an explicit `--grants authorization_code,urn:ietf:params:oauth:grant-type:device_code`).
   A client's grants must include `authorization_code` or `device_code`.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
@@ -621,8 +622,31 @@ Discovery advertises `device_authorization_endpoint`.
   host) and what; never approve a code someone else read to you. See `docs/guide/device-authorization.md`.
 
 ```sh
-bun run clients:create --tenant acme --name "Living room TV" --grants device_code
+bun run clients:create --tenant acme --name "Living room TV" --grants urn:ietf:params:oauth:grant-type:device_code
 ```
+
+## Token exchange (RFC 8693)
+
+A confidential client (a service, an agent) trades a user's access token for another one, `POST /token` with
+`grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (`@softistx/janus-oauth`), on every tenant host.
+- **Opt-in twice.** The client lists the grant (`clients:create --confidential --grants urn:ietf:params:oauth:grant-type:token-exchange`, or
+  `grantTypes: [TOKEN_EXCHANGE]`) and the tenant's operator gives it rules (`setClientTokenExchange`). Without the
+  grant: `unauthorized_client`. Without rules, or a request they do not allow: `access_denied`. A public client is
+  refused at registration and at `/token`. It needs no redirect URI.
+- **Rules** (collection `clientPolicies`, tenant-owned, one document per client, run `bun run db:sync`):
+  `targetResources` (at most 20 resource URIs of the tenant; the requested `resource` must be listed) and
+  `subjectClients` (at most 50 client ids whose tokens may be exchanged) or `anySubjectClient`. The mode is always
+  `delegation`.
+- **The result** is a delegation: scopes only narrow, there is no refresh token, the token carries `act`
+  (`{ sub, client_id }` of the caller, also in introspection), and it lives under the subject's grant: revoking the
+  grant or deleting the subject client kills it. Another tenant's token is `invalid_grant`.
+- **Deleting the client** deletes its rules; deleting the tenant purges them.
+
+```sh
+bun run clients:create --tenant acme --name "Agent" --confidential --grants urn:ietf:params:oauth:grant-type:token-exchange
+```
+
+See `docs/guide/token-exchange.md`.
 
 ## Branding
 
@@ -754,16 +778,16 @@ bun run clients:create --tenant acme --name "Web app" \
   --redirect-uri https://app.example.com/callback          # a public client, PKCE only
 ```
 
-| Flag                   | Meaning                                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                                                      |
-| `--name <name>`        | required                                                                                                                        |
-| `--redirect-uri <uri>` | repeatable; required unless the client is device-only; exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed) |
-| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                                                         |
-| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                                       |
-| `--grants <a,b>`       | `authorization_code`, `refresh_token`, `device_code`; default `authorization_code,refresh_token` (see below)                    |
-| `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it)                      |
-| `--rotate-secret`      | a new secret for an existing confidential client                                                                                |
+| Flag                   | Meaning                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                                                                                                                       |
+| `--name <name>`        | required                                                                                                                                                                                         |
+| `--redirect-uri <uri>` | repeatable; required unless the client lists no `authorization_code` (device or token exchange only); exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed)                   |
+| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                                                                                                                          |
+| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                                                                                                        |
+| `--grants <a,b>`       | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code`, `urn:ietf:params:oauth:grant-type:token-exchange`; default `authorization_code,refresh_token` (see below) |
+| `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it)                                                                                       |
+| `--rotate-secret`      | a new secret for an existing confidential client                                                                                                                                                 |
 - **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client
   and creates nothing new. The output (JSON) says `created: true | false`.
 - **A confidential client's secret is printed once**, in `clientSecret`; janus keeps only its
@@ -775,11 +799,11 @@ bun run clients:create --tenant acme --name "Web app" \
   usage; bad input prints the message and the usage and exits 1.
 - **Grants**: `--grants` is stored on the client and shown by the console (`grantTypes`), and janus-oauth
   enforces it (`unauthorized_client` on `/authorize`, the code exchange, the refresh grant,
-  `/device_authorization` and the device `/token`). An absent list means authorization code and
-  refresh. An explicit list is taken as written: it must name `authorization_code` or `device_code`,
+  `/device_authorization`, the device `/token` and the token exchange). An absent list means authorization code and
+  refresh. An explicit list is taken as written: it must name `authorization_code` or the device or token-exchange URN,
   and `refresh_token` for a client that refreshes (`--grants authorization_code` alone cannot
   refresh; `refresh_token` alone is refused). A client without `authorization_code` needs no redirect
-  URI. Any other grant (token exchange, client credentials) is refused.
+  URI. The token-exchange URN needs `--confidential`. Any other grant (client credentials) is refused.
 
 ## OpenID Connect
 

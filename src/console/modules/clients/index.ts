@@ -1,9 +1,11 @@
 import { denial } from "@softistx/janus-graphql";
-import { DEVICE_GRANT } from "@softistx/janus-oauth";
+import { DEVICE_GRANT, TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
 import { clientsService } from "@/config/clients";
+import { catalog } from "@/config/resources";
 import { tenantAdmin } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { CatalogError } from "@/modules/resources/catalog.errors";
 import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
@@ -21,6 +23,7 @@ export const clientsGuards: Guards = {
   "Mutation.createClient": edit,
   "Mutation.updateClient": edit,
   "Mutation.rotateClientSecret": edit,
+  "Mutation.setClientTokenExchange": edit,
   "Mutation.deleteClient": edit,
 };
 
@@ -28,6 +31,7 @@ export const clientsAudits: Audits = {
   "Mutation.createClient": "client.create",
   "Mutation.updateClient": "client.update",
   "Mutation.rotateClientSecret": "client.rotateSecret",
+  "Mutation.setClientTokenExchange": "client.tokenExchange.set",
   "Mutation.deleteClient": "client.delete",
 };
 
@@ -44,35 +48,53 @@ const GRANT = {
   authorization_code: "AUTHORIZATION_CODE",
   refresh_token: "REFRESH_TOKEN",
   [DEVICE_GRANT]: "DEVICE_CODE",
+  [TOKEN_EXCHANGE_GRANT]: "TOKEN_EXCHANGE",
 } as const;
 
 const WIRE_GRANT = {
   AUTHORIZATION_CODE: "authorization_code",
   REFRESH_TOKEN: "refresh_token",
   DEVICE_CODE: DEVICE_GRANT,
+  TOKEN_EXCHANGE: TOKEN_EXCHANGE_GRANT,
 } as const;
 
-const shape = (client: {
-  clientId: string;
-  name: string;
-  type: "public" | "confidential";
-  redirectUris: readonly string[];
-  grantTypes: readonly string[];
-  createdAt: Date;
-  requirePushedAuthorizationRequests: boolean;
-  dpopBoundAccessTokens: boolean;
-}) => ({
+type Rules = Awaited<ReturnType<typeof clientsService.tokenExchange>>;
+
+const exchangeShape = (rules: Rules | undefined) =>
+  rules === null || rules === undefined
+    ? null
+    : {
+        targetResources: [...rules.targetResources],
+        subjectClients:
+          rules.subjectClients === "any" ? [] : [...rules.subjectClients],
+        anySubjectClient: rules.subjectClients === "any",
+        mode: "DELEGATION" as const,
+      };
+
+const shape = (
+  client: {
+    clientId: string;
+    name: string;
+    type: "public" | "confidential";
+    redirectUris: readonly string[];
+    grantTypes: readonly string[];
+    createdAt: Date;
+    requirePushedAuthorizationRequests: boolean;
+    dpopBoundAccessTokens: boolean;
+  },
+  rules?: Rules,
+) => ({
   id: client.clientId,
   name: client.name,
   type: TYPE[client.type],
   redirectUris: [...client.redirectUris],
-  // A grant the console does not expose yet (token exchange) is left out.
   grantTypes: client.grantTypes.flatMap((grant) =>
     Object.hasOwn(GRANT, grant) ? [GRANT[grant as keyof typeof GRANT]] : [],
   ),
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
   dpopBoundAccessTokens: client.dpopBoundAccessTokens,
+  tokenExchange: exchangeShape(rules),
 });
 
 /** The wire grants of the enum list a call sent; `undefined` when it sent none (keep or default). */
@@ -118,18 +140,22 @@ export const clients: Resolvers = {
           clientsService.count(tenant, { q: q ?? undefined }),
         ]),
       );
+      const rules = await clientsService.tokenExchangeOf(
+        tenant,
+        page.items.map((item) => item.clientId),
+      );
       return {
-        items: page.items.map(shape),
+        items: page.items.map((item) => shape(item, rules.get(item.clientId))),
         nextCursor: page.nextCursor,
         totalCount,
       };
     },
     client: async (_, { tenantId, id }, ctx) => {
-      const found = await clientsService.find(
-        await catalogTenant(ctx, tenantId),
-        id,
-      );
-      return found === null ? null : shape(found);
+      const tenant = await catalogTenant(ctx, tenantId);
+      const found = await clientsService.find(tenant, id);
+      return found === null
+        ? null
+        : shape(found, await clientsService.tokenExchange(tenant, id));
     },
   },
   Mutation: {
@@ -182,7 +208,45 @@ export const clients: Resolvers = {
         }),
       );
       await ctx.audit("client.update", target(tenant, updated.clientId));
-      return shape(updated);
+      return shape(updated, await clientsService.tokenExchange(tenant, id));
+    },
+    setClientTokenExchange: async (_, { tenantId, id, input }, ctx) => {
+      const tenant = await catalogTenant(ctx, tenantId);
+      const listed = input.subjectClients?.length ?? 0;
+      if (input.anySubjectClient === true ? listed > 0 : listed === 0) {
+        await refusing(async () => {
+          throw new CatalogError(
+            "BAD_USER_INPUT",
+            input.anySubjectClient === true
+              ? "Give subjectClients or anySubjectClient, not both"
+              : "Give the clients whose tokens may be exchanged, or anySubjectClient",
+          );
+        });
+      }
+      // Under the tenant's client lock: a delete in between would leave rules
+      // of a client that is gone.
+      const rules = await ctx.exclusive(clientsKey(tenant), () =>
+        refusing(async () => {
+          keepConsoleClient(tenant, id);
+          const resources = await catalog.listResources(tenant._id);
+          return clientsService.setTokenExchange(
+            tenant,
+            id,
+            {
+              targetResources: input.targetResources,
+              subjectClients:
+                input.anySubjectClient === true
+                  ? "any"
+                  : (input.subjectClients ?? []),
+            },
+            resources.map((resource) => resource.uri),
+          );
+        }),
+      );
+      await ctx.audit("client.tokenExchange.set", target(tenant, id));
+      const client = await clientsService.find(tenant, id);
+      if (client === null) throw denial("NOT_FOUND", "No such client");
+      return shape(client, rules);
     },
     rotateClientSecret: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -197,7 +261,10 @@ export const clients: Resolvers = {
         target(tenant, rotated.client.clientId),
       );
       return {
-        client: shape(rotated.client),
+        client: shape(
+          rotated.client,
+          await clientsService.tokenExchange(tenant, id),
+        ),
         clientSecret: rotated.clientSecret,
       };
     },

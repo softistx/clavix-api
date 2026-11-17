@@ -6,6 +6,7 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { registerClient } from "@/clients/register-client";
+import { exchangeRulesFor } from "@/config/client-policies";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesFor } from "@/config/resources";
@@ -51,6 +52,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     authFor,
     claimsFor,
     resourcesFor,
+    exchangeRulesFor,
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
   });
   const url = (slug: string, path: string) =>

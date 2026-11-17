@@ -26,6 +26,11 @@ nxgt-janus release says which.
   page shows the client, its host and the tenant's scope texts, and approving needs a fresh session;
   guessing user codes is throttled.
 
+- **Token exchange** (in progress, M3 slice A4,
+  [#16](https://github.com/softistx/clavix-api/issues/16)) — a confidential client that lists the
+  exchange grant trades a user's token for one on another of the tenant's APIs (RFC 8693, delegation
+  with `act`, scopes only narrow, no refresh token), under per-client rules set from the console.
+
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with
@@ -53,7 +58,6 @@ nxgt-janus release says which.
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 **Advanced protocols**
-- Device authorization and its verification page; token exchange.
 - Rich authorization requests and their consent.
 - MCP and agents: dynamic registration policy, RFC 9728, consent per agent.
 

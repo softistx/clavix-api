@@ -8,7 +8,12 @@ import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
 import { lifetimes } from "./lifetimes";
-import type { AuthFor, RolesFor, SigningKeysFor } from "./ports";
+import type {
+  AuthFor,
+  ExchangeRulesFor,
+  RolesFor,
+  SigningKeysFor,
+} from "./ports";
 import type { Keyed } from "./resolution";
 
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
@@ -22,6 +27,8 @@ export interface BuildDeps {
   oidc: ReturnType<typeof createOidcProvider>;
   clock?: Clock | undefined;
   rolesFor?: RolesFor | undefined;
+  /** Absent: no client may exchange tokens. */
+  exchangeRulesFor?: ExchangeRulesFor | undefined;
 }
 
 /**
@@ -38,6 +45,7 @@ export const buildIssuer =
     oidc,
     clock,
     rolesFor,
+    exchangeRulesFor,
   }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
     const keys: SigningKeyStore = signingKeysFor(tenant.tenantId);
@@ -69,6 +77,33 @@ export const buildIssuer =
           clock === undefined ? {} : { clock },
         ),
         nonce: { secret: dpopNonceSecret },
+      },
+      // RFC 8693: served by every tenant, gated per client by its grants (the
+      // exchange URN is never implied) and by its rules in `clientPolicies`.
+      // Default-deny, delegation only: a client with no rules, a subject
+      // token of a client it does not list or a target it does not list is
+      // `access_denied`. janus only lets the scopes narrow.
+      tokenExchange: {
+        policy: async ({
+          clientId,
+          subject,
+          resource,
+        }: {
+          clientId: string;
+          subject: { clientId: string };
+          resource: string;
+        }) => {
+          const rules = await exchangeRulesFor?.(tenant)(clientId);
+          if (rules === undefined || rules === null) return null;
+          if (!rules.targetResources.includes(resource)) return null;
+          if (
+            rules.subjectClients !== "any" &&
+            !rules.subjectClients.includes(subject.clientId)
+          ) {
+            return null;
+          }
+          return { mode: "delegation" as const };
+        },
       },
       lifetimes,
       accessTokens: {
