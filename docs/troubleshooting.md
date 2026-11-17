@@ -343,7 +343,7 @@ resends the invitation. Do not set `signUp` on the tenant by hand.
 
 ### `401 UNAUTHENTICATED: A valid console token is required`
 
-The request has no bearer token (or, for a DPoP token, no valid proof: see "DPoP refusals"), or it is forged, expired, revoked or for another audience. Ask
+The request has no bearer token (or, for a DPoP token, no valid proof: see "DPoP refusals"), or it is forged, expired, revoked, for another audience, or a delegated token (RFC 8693 exchange, one that carries an `act` claim): the console takes an operator's own token only. Ask
 the `clavix` tenant's issuer for a token with `resource=https://console.<CLAVIX_DOMAIN>/api`.
 
 ### `503 SERVICE_UNAVAILABLE: Try again later`
