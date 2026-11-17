@@ -527,8 +527,9 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
 - **Per client** (`requirePushedAuthorizationRequests` on `Client`, `CreateClientInput` and
   `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant
   that does not require it of everyone.
-- **The platform tenant (`clavix`)** refuses `par.required` and `dpop.required` (409
-  `PLATFORM_TENANT_PROTECTED`) until the console's own client pushes (PAR) / sends proofs (DPoP).
+- **The platform tenant (`clavix`)** requires PAR and DPoP like any tenant: migration
+  `2026-11-17-console-par-dpop` turns both on for it and for the `console` client. Deploy the console
+  (clavix-ui) first or together, since it pushes (PAR) and proves (DPoP, ES256) from then on.
 - A suspended tenant's `/par` answers 403 `TENANT_SUSPENDED`, like `/authorize`. Turning the requirement on breaks
   a client that does not push: warn its owner first.
 
@@ -565,7 +566,7 @@ advertises `dpop_signing_alg_values_supported` (`ES256`, `EdDSA`).
 - **Per tenant** (`oauthPolicy.dpop.required`, `updateOAuthPolicy`): every token request of every
   client needs a proof, else `invalid_dpop_proof`. Off for every tenant, new ones included, until an
   admin turns it on. Tokens issued before it stay valid until they lapse. The `clavix` platform tenant
-  refuses it (409 `PLATFORM_TENANT_PROTECTED`) until the console's own client sends proofs (DPoP).
+  requires it (migration `2026-11-17-console-par-dpop`): the console API then takes only DPoP-bound tokens.
 - **Per client** (`dpopBoundAccessTokens` on `Client`, `CreateClientInput` and `UpdateClientInput`, or
   `clients:create --dpop-bound` / `--no-dpop-bound`): only that client must send a proof. Kept on a
   re-run unless the flag is given.

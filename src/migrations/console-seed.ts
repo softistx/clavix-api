@@ -22,7 +22,7 @@ import {
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { tenants } from "@/modules/tenants/tenants.model";
 
-const NAME = "Clavix console";
+export const NAME = "Clavix console";
 
 /**
  * Seeds what the console signs in with, in the `clavix` tenant: the console

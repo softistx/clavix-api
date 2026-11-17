@@ -275,6 +275,62 @@ afterAll(async () => {
   await oauthDb.collection("relations").deleteMany({});
 });
 
+describe("the clavix tenant requires DPoP", () => {
+  const setRequired = async (required: boolean) => {
+    await oauthDb.collection("tenants").updateOne(
+      { slug: PLATFORM_TENANT_SLUG },
+      {
+        $set: { "oauth.dpop.required": required },
+        $inc: { version: 1 },
+      },
+    );
+  };
+  const callAs = (scheme: string, token: string, proof?: string) =>
+    app.request(`http://localhost${CONSOLE_PATH}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `${scheme} ${token}`,
+        ...(proof === undefined ? {} : { dpop: proof }),
+      },
+      body: JSON.stringify({ query: ME }),
+    });
+
+  test("a token request with no proof is refused; a proved token reaches `me` and the same token as Bearer is refused", async () => {
+    await setRequired(true);
+    try {
+      await expect(
+        tokenFor(ada, AUDIENCE, "console openid email"),
+      ).rejects.toThrow();
+      const key = await createDpopKey();
+      const token = await tokenFor(
+        ada,
+        AUDIENCE,
+        "console openid email",
+        CLIENT,
+        key,
+      );
+      expect((await callAs("Bearer", token)).status).toBe(401);
+      const asked = await callAs(
+        "DPoP",
+        token,
+        await key.proof("POST", PUBLIC_URL, { accessToken: token }),
+      );
+      const nonce = asked.headers.get("dpop-nonce") ?? "";
+      const response = await callAs(
+        "DPoP",
+        token,
+        await key.proof("POST", PUBLIC_URL, { accessToken: token, nonce }),
+      );
+      expect(response.status).toBe(200);
+      const result = (await response.json()) as GqlResult;
+      expect(result.data?.["me"]).toMatchObject({ user: { id: ada } });
+    } finally {
+      await setRequired(false);
+    }
+  });
+});
+
 describe("the console's DPoP token", () => {
   const callDpop = (token: string, scheme: string, proof?: string) =>
     app.request(`http://localhost${CONSOLE_PATH}`, {

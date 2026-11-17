@@ -53,6 +53,10 @@ nxgt-janus release says which.
 
 ## Shipped
 
+- **PAR and DPoP required on the platform tenant** ([#233](https://github.com/softistx/clavix-api/issues/233)) — the `clavix`
+  tenant and its `console` client require PAR and DPoP (migration `2026-11-17-console-par-dpop`), the 409 guard on
+  `updateOAuthPolicy` is lifted. The console (clavix-ui#228) signs in with PAR and DPoP ES256: deploy it first or together.
+
 - **Pushed authorization requests** ([#13](https://github.com/softistx/clavix-api/issues/13)) — `/par` on every tenant host; a tenant
   can require it of every client (on for new tenants, off for existing ones) and a client can
   require it for itself, both from the console and the script; `/par` is routed and refused for a
