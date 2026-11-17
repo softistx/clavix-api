@@ -1,13 +1,12 @@
-import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
-import { CliInputError, type CliTenant } from "@/cli/errors";
-import { clientIdOf, registerClient } from "@/clients/register-client";
+import type { CliTenant } from "@/cli/errors";
+import { clientIdOf, type registerClient } from "@/clients/register-client";
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
-import { validateTokenExchange } from "@/modules/client-policies/validate";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
+import { deleteClientAndRules } from "./client-deletion";
 import {
   type ClientView,
   capability,
@@ -15,6 +14,13 @@ import {
   listClientViews,
   viewOf,
 } from "./client-listing";
+import { registerForTenant } from "./client-register";
+import { checkQuery, checkSizes, MAX_CURSOR, sameClient } from "./client-rules";
+import {
+  clientTokenExchange,
+  setClientTokenExchange,
+  tokenExchangesOf,
+} from "./client-token-exchange";
 
 export type { ClientView } from "./client-listing";
 
@@ -26,67 +32,13 @@ export interface ClientsServiceOptions {
   now?: () => Date;
 }
 
-const slugOnly = (tenant: CliTenant) => tenant.slug;
-
-const MAX_NAME = 100;
-const MAX_REDIRECT_URIS = 20;
-const MAX_QUERY = 100;
-const MAX_CURSOR = 200;
-
-function checkSizes(input: {
-  name?: string | undefined;
-  redirectUris?: readonly string[] | undefined;
-}) {
-  if ((input.name?.length ?? 0) > MAX_NAME) {
-    throw new CatalogError(
-      "BAD_USER_INPUT",
-      `a client's name has at most ${MAX_NAME} characters`,
-    );
-  }
-  if ((input.redirectUris?.length ?? 0) > MAX_REDIRECT_URIS) {
-    throw new CatalogError(
-      "BAD_USER_INPUT",
-      `a client has at most ${MAX_REDIRECT_URIS} redirect URIs`,
-    );
-  }
-}
-
-/** The stored client has the input's name, type and redirect URIs. */
-function sameClient(
-  stored: ClientView,
-  input: {
-    name: string;
-    type: "public" | "confidential";
-    redirectUris: readonly string[];
-    requirePar?: boolean | undefined;
-    dpopBound?: boolean | undefined;
-    grants?: readonly string[] | undefined;
-  },
-) {
-  const wanted = new Set(input.redirectUris);
-  const wantedGrants = new Set(input.grants);
-  return (
-    (input.grants === undefined ||
-      (stored.grantTypes.length === wantedGrants.size &&
-        stored.grantTypes.every((grant) => wantedGrants.has(grant)))) &&
-    stored.name === input.name.trim() &&
-    stored.type === input.type &&
-    (input.requirePar === undefined ||
-      input.requirePar === stored.requirePushedAuthorizationRequests) &&
-    (input.dpopBound === undefined ||
-      input.dpopBound === stored.dpopBoundAccessTokens) &&
-    stored.redirectUris.length === wanted.size &&
-    stored.redirectUris.every((uri) => wanted.has(uri))
-  );
-}
-
 /**
  * A tenant's OAuth clients for the console. The janus store is the truth (one
  * partition per tenant, so another tenant's client is "not found") and lists
  * them (`listClients`); a record is mapped to a `ClientView`, so its
- * `secretHash` never leaves this class. Creating reuses `registerClient`, so a console client follows the same rules
- * as one made by script. Deleting revokes the client's grants and tokens and
- * is idempotent.
+ * `secretHash` never leaves this class. Creating reuses `registerClient`, so
+ * a console client follows the same rules as one made by script. Deleting
+ * revokes the client's grants and tokens and is idempotent.
  */
 export class ClientsService {
   constructor(private readonly options: ClientsServiceOptions) {}
@@ -101,26 +53,14 @@ export class ClientsService {
     tenant: CliTenant,
     input: Omit<Parameters<typeof registerClient>[1], "tenant">,
   ) {
-    return registerClient(
-      {
-        db: this.options.db,
-        findTenant: async (slug) => (slug === tenant.slug ? tenant : undefined),
-        ...(this.options.now === undefined ? {} : { now: this.options.now }),
-      },
-      { ...input, tenant: slugOnly(tenant) },
-    ).catch((error) => {
-      if (error instanceof CliInputError) {
-        throw new CatalogError("BAD_USER_INPUT", error.message);
-      }
-      throw error;
-    });
+    return registerForTenant(this.options.db, this.options.now, tenant, input);
   }
 
   async list(
     tenant: CliTenant,
     options: { after?: string | null; limit: number; q?: string | undefined },
   ) {
-    this.checkQuery(options.q);
+    checkQuery(options.q);
     if ((options.after?.length ?? 0) > MAX_CURSOR) {
       throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
     }
@@ -132,20 +72,11 @@ export class ClientsService {
 
   /** How many clients of the tenant match `q`, whatever the page. */
   async count(tenant: CliTenant, options: { q?: string | undefined } = {}) {
-    this.checkQuery(options.q);
+    checkQuery(options.q);
     return countClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
       options,
     );
-  }
-
-  private checkQuery(q: string | undefined) {
-    if ((q?.length ?? 0) > MAX_QUERY) {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        `a search has at most ${MAX_QUERY} characters`,
-      );
-    }
   }
 
   async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {
@@ -247,27 +178,16 @@ export class ClientsService {
   }
 
   /** The client's token exchange rules (RFC 8693); `null` when it has none. */
-  async tokenExchange(tenant: CliTenant, clientId: string) {
-    return (
-      (await this.options.policies.tokenExchange(tenant._id, clientId)) ?? null
-    );
+  tokenExchange(tenant: CliTenant, clientId: string) {
+    return clientTokenExchange(this.options.policies, tenant, clientId);
   }
 
   /** The token exchange rules of these clients, by client id (one read). */
-  async tokenExchangeOf(tenant: CliTenant, clientIds: readonly string[]) {
-    return (
-      (await this.options.policies.tokenExchangeOf(tenant._id, clientIds)) ??
-      new Map<string, TokenExchangeRules>()
-    );
+  tokenExchangeOf(tenant: CliTenant, clientIds: readonly string[]) {
+    return tokenExchangesOf(this.options.policies, tenant, clientIds);
   }
 
-  /**
-   * Replaces the client's token exchange rules. The client is a confidential
-   * one of the tenant, each target one of the tenant's resources
-   * (`resourceUris`), and the subject clients are `"any"` or a list of
-   * client ids (checked for shape only: a client may be created later).
-   * Delegation is the only mode.
-   */
+  /** Replaces the client's token exchange rules; see `setClientTokenExchange`. */
   async setTokenExchange(
     tenant: CliTenant,
     clientId: string,
@@ -277,20 +197,13 @@ export class ClientsService {
     },
     resourceUris: readonly string[],
   ): Promise<TokenExchangeRules> {
-    const policies = this.options.policies;
-    const client = await this.require(tenant, clientId);
-    if (client.type !== "confidential") {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        "Only a confidential client can exchange tokens",
-      );
-    }
-    const { targets, subjects } = validateTokenExchange(input, resourceUris);
-    return policies.setTokenExchange(tenant._id, clientId, {
-      targetResources: targets,
-      subjectClients: subjects,
-      mode: "delegation",
-    });
+    return setClientTokenExchange(
+      this.options.policies,
+      tenant,
+      await this.require(tenant, clientId),
+      input,
+      resourceUris,
+    );
   }
 
   /** Mints a new secret (the old one stops working); shown here once. */
@@ -322,31 +235,16 @@ export class ClientsService {
     };
   }
 
-  /**
-   * Deletes the client. `unmanaged` is a record this service does not manage (not
-   * registered through the console or the script): it is left alone, and the
-   * caller has nothing to record. `removed` is `false` when it was not there.
-   * One read decides both, so the answer cannot disagree with what was done.
-   * The client goes first (nothing new can be granted to it), then its
-   * standing grants and their tokens are revoked: on a repeat too, so a run
-   * that stopped between the two is finished.
-   */
-  async delete(
+  delete(
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ removed: boolean; unmanaged: boolean }> {
-    const store = this.storeOf(tenant);
-    const record = await store.findClient(clientId);
-    if (record !== null && record.source !== "registered") {
-      return { removed: false, unmanaged: true };
-    }
-    const removed = await deleteClient(store, clientId, {
-      now: (this.options.now ?? (() => new Date()))(),
-    });
-    // The client's rules (`clientPolicies`) go with it, on a repeat too.
-    await this.options.policies.deleteForClient(tenant._id, clientId);
-    // And it leaves the other clients' rules that name it as a subject.
-    await this.options.policies.removeSubjectClient(tenant._id, clientId);
-    return { removed, unmanaged: false };
+    return deleteClientAndRules(
+      this.storeOf(tenant),
+      this.options.policies,
+      tenant,
+      clientId,
+      (this.options.now ?? (() => new Date()))(),
+    );
   }
 }

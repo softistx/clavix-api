@@ -232,11 +232,11 @@ The device grant's code lookups (the verification page's `oauthDeviceRequest`, `
 `denyOAuthDeviceRequest`) are limited in Redis by three buckets. Each bucket starts full at its limit and refills
 evenly over its window, so a burst up to the limit is allowed at once, then the rate of the window.
 
-| Variable (`CLAVIX_DEVICE_…`)                                         | Default   | Counts lookups per                    |
-| -------------------------------------------------------------------- | --------- | ------------------------------------- |
-| `USER_LIMIT` / `USER_WINDOW_SECONDS`                                 | 20 / 600  | signed-in user                        |
-| `IP_LIMIT` / `IP_WINDOW_SECONDS`                                     | 30 / 600  | client address and tenant             |
-| `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS`                             | 300 / 3600 | tenant                               |
+| Variable (`CLAVIX_DEVICE_…`)             | Default    | Counts lookups per        |
+| ---------------------------------------- | ---------- | ------------------------- |
+| `USER_LIMIT` / `USER_WINDOW_SECONDS`     | 20 / 600   | signed-in user            |
+| `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 30 / 600   | client address and tenant |
+| `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS` | 300 / 3600 | tenant                    |
 
 Each value is an integer of at least 1 (`src/config/env.ts`). A lookup counts whether or not the code exists: the
 throttle runs before the store is read. Past a limit, the lookup fails with `DEVICE_CODE_THROTTLED` (HTTP 429,
