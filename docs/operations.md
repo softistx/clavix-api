@@ -226,6 +226,37 @@ it is not in the process list), the healthcheck authenticates with
 `REDISCLI_AUTH`, and the api's `REDIS_URL` is `redis://:<REDIS_PASSWORD>@redis:6379`.
 Redis is on the private network only; use a hex password (it sits in a URL).
 
+## Device flow throttle
+
+The device grant's code lookups (the verification page's `oauthDeviceRequest`, `approveOAuthDeviceRequest` and
+`denyOAuthDeviceRequest`) are limited in Redis by three buckets. Each bucket starts full at its limit and refills
+evenly over its window, so a burst up to the limit is allowed at once, then the rate of the window.
+
+| Variable (`CLAVIX_DEVICE_…`)                                         | Default   | Counts lookups per                    |
+| -------------------------------------------------------------------- | --------- | ------------------------------------- |
+| `USER_LIMIT` / `USER_WINDOW_SECONDS`                                 | 20 / 600  | signed-in user                        |
+| `IP_LIMIT` / `IP_WINDOW_SECONDS`                                     | 30 / 600  | client address and tenant             |
+| `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS`                             | 300 / 3600 | tenant                               |
+
+Each value is an integer of at least 1 (`src/config/env.ts`). A lookup counts whether or not the code exists: the
+throttle runs before the store is read. Past a limit, the lookup fails with `DEVICE_CODE_THROTTLED` (HTTP 429,
+`Retry-After`).
+
+**Sizing.** An approval makes two lookups: one to read the request and one to approve it. The tenant bucket of
+300 per hour therefore allows about 150 approvals an hour, and only if nothing else spends it. A denial counts as a
+lookup too, and so does every mistyped code. The user and address buckets bind first for one person or one office:
+20 lookups per 10 minutes is 10 approvals per user, and 30 per 10 minutes per address is 15 approvals per office
+address. A tenant that approves more than about 150 requests an hour needs a higher `CLAVIX_DEVICE_TENANT_LIMIT`
+(and, for shared addresses, `CLAVIX_DEVICE_IP_LIMIT`).
+
+**Redis down or slow.** The throttle fails open: the lookups go through unthrottled, and each skipped limit is
+logged (`redis unavailable: device code limits skipped`). Each Redis call waits at most 250 ms. Without Redis
+configured there is no device throttle at all. The fix is Redis, not the limits.
+
+**Raising a limit.** Set the variable in `deploy/.env` (it is read by `api` only), then restart the api so it reads
+the value: `dc up -d api`. Keep the window and the limit in proportion: doubling the tenant limit doubles the
+approvals an hour allowed.
+
 ## TLS
 
 Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the
