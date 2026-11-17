@@ -1242,3 +1242,67 @@ describe("a repeat after a failed record", () => {
     );
   });
 });
+
+describe("deleting a subject client prunes the rules that name it", () => {
+  test("only in its own tenant; 'any' rules and other subjects stay", async () => {
+    const a = await mongo.db.tenants.findById(tenantA);
+    const b = await mongo.db.tenants.findById(tenantB);
+    if (a === undefined || b === undefined) throw new Error("no tenant");
+    expect(
+      (await create(admin, tenantA, { name: "Gone", clientId: "gone-subject" }))
+        .errors,
+    ).toBeUndefined();
+    const rule = (subjectClients: string[] | "any") => ({
+      targetResources: [API_URI],
+      subjectClients,
+      mode: "delegation" as const,
+    });
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "holder-one",
+      rule(["gone-subject", "kept-subject"]),
+    );
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "holder-any",
+      rule("any"),
+    );
+    await clientPoliciesService.setTokenExchange(
+      b._id,
+      "holder-one",
+      rule(["gone-subject"]),
+    );
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "gone-subject" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(true);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "holder-one"))
+        ?.subjectClients,
+    ).toEqual(["kept-subject"]);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "holder-any"))
+        ?.subjectClients,
+    ).toBe("any");
+    expect(
+      (await clientPoliciesService.tokenExchange(b._id, "holder-one"))
+        ?.subjectClients,
+    ).toEqual(["gone-subject"]);
+    // A repeat finishes a half run: a rule re-added meanwhile is pruned again.
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "holder-one",
+      rule(["gone-subject"]),
+    );
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "gone-subject" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(false);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "holder-one"))
+        ?.subjectClients,
+    ).toEqual([]);
+  });
+});

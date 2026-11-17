@@ -379,6 +379,8 @@ export class ClientsService {
     });
     // The client's rules (`clientPolicies`) go with it, on a repeat too.
     await this.options.policies.deleteForClient(tenant._id, clientId);
+    // And it leaves the other clients' rules that name it as a subject.
+    await this.options.policies.removeSubjectClient(tenant._id, clientId);
     return { removed, unmanaged: false };
   }
 }

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { access, linkTenantToPlatform } from "@/config/access";
+import { clientPoliciesService } from "@/config/client-policies";
 import { consoleResource } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -518,6 +519,48 @@ describe("deleting", () => {
     const again = await admin(DELETE, { tenantId: tenantA, id: api });
     expect(again.errors).toBeUndefined();
     expect(again.data?.["deleteResource"]).toBe(false);
+  });
+
+  test("deleteResource prunes the exchange rules that target it, in its tenant only", async () => {
+    const other = "https://billing.res-a.example/";
+    const rules = (targetResources: string[]) => ({
+      targetResources,
+      subjectClients: "any" as const,
+      mode: "delegation" as const,
+    });
+    const a = await mongo.db.tenants.findById(tenantA);
+    const b = await mongo.db.tenants.findById(tenantB);
+    if (a === undefined || b === undefined) throw new Error("no tenant");
+    const gone = "https://gone.res-a.example/";
+    const made = one(
+      await admin(CREATE, { tenantId: tenantA, input: { uri: gone } }),
+      "createResource",
+    );
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "x-a",
+      rules([gone, other]),
+    );
+    await clientPoliciesService.setTokenExchange(b._id, "x-b", rules([gone]));
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: made.id })).data?.[
+        "deleteResource"
+      ],
+    ).toBe(true);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "x-a"))
+        ?.targetResources,
+    ).toEqual([other]);
+    expect(
+      (await clientPoliciesService.tokenExchange(b._id, "x-b"))
+        ?.targetResources,
+    ).toEqual([gone]);
+    // A repeat is a no-op, and the rule of the other tenant is still there.
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: made.id })).data?.[
+        "deleteResource"
+      ],
+    ).toBe(false);
   });
 });
 
