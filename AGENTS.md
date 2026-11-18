@@ -409,11 +409,11 @@ does two things, and nothing else touches the collection:
   `platformAdminEvents` (operators). The full IP stays in `authEvents` only (D15). Retention
   (`modules/audit/retention.ts`, queue `audit-retention`, 04:17 UTC, `config/audit-retention.ts`) cuts by the
   tenant's current plan (`Plan.auditRetentionDays`) as `system:audit:retention`, with no event per deletion.
-- **Export (M4 E2, D17)**: `GET /console/audit/export` (`src/console/audit-export/`, `serveAuditExport`, mounted
+- **Export (M4 E2, D17)**: `GET /console/audit/export` (`src/console/audit-export/`: `export.ts` handler, `params.ts`, `columns.ts`, `body.ts`, `serveAuditExport`, mounted
   by `createApp` beside `/console/graphql`, in the Caddyfile `@api` matcher) authenticates like the GraphQL API
   (`authenticated` in `plugin.ts`, the DPoP proof's `htu` being the export path), then a verified e-mail, `view`
   for `log=admin`, `edit` for `log=auth`. The range is cut to the plan's retention, at most 100 000 rows
-  (`ConsoleDeps.auditExport` overrides it in a spec), streamed with `reader.stream` / `authEventsService.stream`
+  (`ConsoleDeps.auditExport` overrides it in a spec; `exceeds` reads at most one row past the limit, no full count), a per-tenant budget (`throttle.ts`, limit `auditExport`, `CLAVIX_EXPORT_TENANT_*`, 429; Redis only, down: allowed and logged), streamed with `reader.stream` / `authEventsService.stream`
   (`modules/audit/stream.ts`, 500 rows per batch, one row per pull). `auditLog.export` is recorded, awaited,
   before the first byte. CSV cells go through `csvCell` (formula guard). `ConsoleDirectory.tenantsByIds` carries the `plan`.
 - `adminEvents` is a platform collection: its `tenantId` says which tenant an event is about, so it

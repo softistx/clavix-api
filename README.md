@@ -96,6 +96,7 @@ one needs on top:
 | `CLAVIX_REGISTER_TENANT_LIMIT` / `CLAVIX_REGISTER_TENANT_WINDOW_SECONDS` | `/register` calls per tenant: 500 per 3600 s                                                                                                                                                                                                   |
 | `CLAVIX_METADATA_IP_LIMIT` / `CLAVIX_METADATA_IP_WINDOW_SECONDS`         | metadata-document fetches (`/authorize`, `/par`) per client address and tenant: 30 per 60 s                                                                                                                                                    |
 | `CLAVIX_METADATA_TENANT_LIMIT` / `CLAVIX_METADATA_TENANT_WINDOW_SECONDS` | metadata-document fetches per tenant: 300 per 60 s                                                                                                                                                                                             |
+| `CLAVIX_EXPORT_TENANT_LIMIT` / `CLAVIX_EXPORT_TENANT_WINDOW_SECONDS` | audit exports (`/console/audit/export`) started per tenant: 10 per 3600 s (429 with `Retry-After`; Redis only) |
 | `CLAVIX_TLS_ASK_SECRET`                                                  | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
 | `CLAVIX_TLS_ASK_LIMIT`                                                   | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
 | `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
@@ -493,11 +494,11 @@ streams a tenant's console activity (`log=admin`, a tenant viewer or more) or si
 admin or more: it holds addresses) as CSV (default) or NDJSON, with the console's own authentication
 (`Authorization: Bearer` or `DPoP`, verified e-mail). `from` and `to` are ISO 8601 dates; the range is cut
 to the tenant's retention. An export holds at most 100,000 rows, the newest: `x-clavix-export-truncated:
-true` says it was cut, `x-clavix-export-from` the range's start and `x-clavix-export-rows` the row count.
+true` says it was cut, `x-clavix-export-from` the range's start. A tenant may start 10 exports an hour (`CLAVIX_EXPORT_TENANT_LIMIT`; 429 with `Retry-After`).
 The body is read from the store a batch at a time, so memory stays flat. In CSV a cell that starts with
 `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` so a spreadsheet reads it as text.
 Each export records the console activity `auditLog.export` (target: the log) before the first byte; a
-refused one records nothing. A body that ends early (the store failed mid-stream) is incomplete: retry; `x-clavix-export-rows` is the count when the export started, so approximate. Columns carry ids (`actor`, `userId`), not names.
+refused one records nothing. A body that ends early (the store failed mid-stream) is incomplete: retry. Columns carry ids (`actor`, `userId`), not names.
 
 Retention follows the tenant's plan (`Plan.auditRetentionDays`: free 30 days, pro 90, enterprise 365;
 the platform's own events 400). The daily job `audit.retention` (queue `audit-retention`, 04:17 UTC, needs

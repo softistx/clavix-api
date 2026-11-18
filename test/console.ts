@@ -79,7 +79,11 @@ export const codeOf = (result: ConsoleResult) =>
  */
 export function exportAs(
   userId: string,
-  auditExport?: { maxRows?: number; now?: () => Date },
+  auditExport?: {
+    maxRows?: number;
+    now?: () => Date;
+    throttle?: (tenantId: string) => Promise<number | null>;
+  },
 ) {
   const app = createApp({
     console: {

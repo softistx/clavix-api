@@ -164,9 +164,29 @@ describe("range and limit", () => {
       format: "ndjson",
     });
     expect(response.headers.get("x-clavix-export-truncated")).toBe("true");
-    expect(response.headers.get("x-clavix-export-rows")).toBe("3");
     const rows = lines(await response.text());
     expect(rows).toHaveLength(3);
+  });
+
+  test("a tenant over its export budget is a 429 with Retry-After, and records nothing", async () => {
+    let spent = 0;
+    const throttled = exportAs("exp-admin", {
+      throttle: async () => (++spent > 1 ? 42 : null),
+    });
+    expect((await throttled({ tenantId: tenantA, log: "admin" })).status).toBe(
+      200,
+    );
+    const before = await mongo.db.adminEvents.raw.countDocuments({
+      action: "auditLog.export",
+    });
+    const refused = await throttled({ tenantId: tenantA, log: "admin" });
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).toBe("42");
+    expect(
+      await mongo.db.adminEvents.raw.countDocuments({
+        action: "auditLog.export",
+      }),
+    ).toBe(before);
   });
 
   test("more rows than one batch stream whole", async () => {

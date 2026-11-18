@@ -68,9 +68,19 @@ export class AdminEventReader {
     return { items: found.items, nextCursor: found.nextCursor, totalCount };
   }
 
-  /** How many events match, for an export to say it was cut. */
-  count(scope: AdminEventScope, filter: AdminEventFilter): Promise<number> {
-    return this.collection.count(whereOf(scope, filter));
+  /** Whether more than `limit` events match (reads at most `limit + 1` index entries, never a full count). */
+  async exceeds(
+    scope: AdminEventScope,
+    filter: AdminEventFilter,
+    limit: number,
+  ): Promise<boolean> {
+    const more = await this.collection.findMany({
+      filter: whereOf(scope, filter),
+      sort: { at: -1 },
+      skip: limit,
+      limit: 1,
+    });
+    return more.length > 0;
   }
 
   /** The matching events newest first, at most `limit`, read a batch at a time (an export). */

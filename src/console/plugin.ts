@@ -1,6 +1,7 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
+import type { ExportThrottle } from "./audit-export/throttle";
 import type {
   ConsoleActivity,
   ConsoleAdmins,
@@ -62,7 +63,12 @@ export interface ConsoleDeps {
   /** The readers of the activity logs. */
   activity: ConsoleActivity;
   /** The audit export's limits; the real ones (100 000 rows, the clock) by default. */
-  auditExport?: { maxRows?: number; now?: () => Date };
+  auditExport?: {
+    maxRows?: number;
+    now?: () => Date;
+    /** Per-tenant export budget; none without Redis. */
+    throttle?: ExportThrottle;
+  };
 }
 
 export const refusal = (
