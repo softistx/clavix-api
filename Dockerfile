@@ -31,6 +31,7 @@ COPY --from=build --chown=bun:bun /app/src ./src
 COPY --from=prod --chown=bun:bun /app/node_modules ./node_modules
 USER bun
 EXPOSE 3000
-HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=3 \
-  CMD ["bun", "-e", "const r = await fetch(`http://127.0.0.1:${process.env.PORT ?? 3000}/healthz`); process.exit(r.ok ? 0 : 1)"]
+# Bash only (no Bun process per check): one HTTP/1.0 request on /healthz, every 30 s.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --start-interval=3s --retries=3 \
+  CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/${PORT:-3000} && printf 'GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
 CMD ["bun", "dist/server.js"]

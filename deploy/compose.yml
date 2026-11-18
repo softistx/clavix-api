@@ -4,6 +4,9 @@
 #   cp deploy/.env.example deploy/.env   # then fill it; it is never committed
 #   docker compose -f deploy/compose.yml --env-file deploy/.env up -d
 #
+# Every service has CPU and memory limits (deploy.resources.limits), sized to
+# its use with headroom, so one service can never starve the host.
+#
 # See docs/operations.md. Images are never built by CI here: build and tag them
 # yourself (`docker build -t "$CLAVIX_API_IMAGE" .`).
 
@@ -47,6 +50,9 @@ services:
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
     stop_grace_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
 
   ui:
     <<: *restart
@@ -66,6 +72,9 @@ services:
     expose: ["3001"]
     depends_on:
       api: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
 
   mongo:
     <<: *restart
@@ -85,12 +94,18 @@ services:
       - ./mongo/healthcheck.sh:/mongo/healthcheck.sh:ro
       - ./mongo/init-app-user.js:/docker-entrypoint-initdb.d/init-app-user.js:ro
       - ${MONGO_TLS_DIR:-./tls}/server:/etc/mongo-tls:ro
+    # Light check (a file and a TCP connection, no mongosh): deploy/mongo/healthcheck.sh.
     healthcheck:
-      test: ["CMD", "sh", "/mongo/healthcheck.sh"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      test: ["CMD", "bash", "/mongo/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    # The WiredTiger cache is capped at 0.25 GB in entrypoint.sh, inside this limit.
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
 
   redis:
     <<: *restart
@@ -99,7 +114,7 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+      - exec redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"
     expose: ["6379"]
     volumes:
       - redis-data:/data
@@ -108,9 +123,14 @@ services:
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 30s
       timeout: 3s
-      retries: 5
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256M }
 
   caddy:
     <<: *restart
@@ -130,6 +150,9 @@ services:
     depends_on:
       - api
       - ui
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
 
   # `docker compose --profile tools run --rm backup` / `restore <file>`:
   # mongodump and mongorestore against the mongo service (docs/operations.md).
@@ -141,6 +164,9 @@ services:
       secrets: [npm_registry_token]
     entrypoint: ["bun"]
     command: ["/scripts/mongo-backup.js", "/backups"]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
     # Not root: the archives belong to the host user that owns BACKUP_DIR
     # (BACKUP_UID / BACKUP_GID, default 1000:1000; `export BACKUP_UID=$(id -u)
     # BACKUP_GID=$(id -g)` for any other). Create the folder first, as that user.
@@ -164,6 +190,9 @@ services:
       dockerfile: deploy/tools.Dockerfile
       secrets: [npm_registry_token]
     entrypoint: ["bun", "/scripts/mongo-restore.js"]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
     environment:
       MONGO_URI: *mongo-uri
       CONFIRM: ${CONFIRM:-}
