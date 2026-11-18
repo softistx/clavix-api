@@ -6,6 +6,11 @@ import type { OAuthHandle } from "@/oauth/routes";
 import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import {
+  type DetailTexts,
+  type DetailTextsFor,
+  detailsOf,
+} from "./detail-labels";
+import {
   localeOf,
   type ScopeTexts,
   type ScopeTextsFor,
@@ -20,17 +25,24 @@ export const consentTypeDefs = oauthTypeDefs;
 const SERVERS = "oauthServers" as const;
 type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
 const TEXTS = "scopeTextsFor" as const;
+const DETAIL_TEXTS = "detailTextsFor" as const;
 type WithServers = {
   [SERVERS]?: ServerSource;
   [TEXTS]?: ScopeTextsFor;
+  [DETAIL_TEXTS]?: DetailTextsFor;
 };
 
 /**
  * Puts the app's OAuth servers on the GraphQL context (`createApp({ oauth })`),
- * and the reader of the tenants' scope texts, which the consent page shows
- * instead of the bare scope names.
+ * and the readers of the tenants' scope texts, which the consent page shows
+ * instead of the bare scope names, and of their detail type texts, which it
+ * shows as the request's `details`.
  */
-export const oauthContext = (oauth: ServerSource, texts?: ScopeTextsFor) => ({
+export const oauthContext = (
+  oauth: ServerSource,
+  texts?: ScopeTextsFor,
+  detailTexts?: DetailTextsFor,
+) => ({
   onContextBuilding: ({
     extendContext,
   }: {
@@ -39,21 +51,41 @@ export const oauthContext = (oauth: ServerSource, texts?: ScopeTextsFor) => ({
     extendContext({
       [SERVERS]: oauth,
       ...(texts === undefined ? {} : { [TEXTS]: texts }),
+      ...(detailTexts === undefined ? {} : { [DETAIL_TEXTS]: detailTexts }),
     }),
 });
 
-// One read of the tenant's texts per request, shared by the scopes of a page.
-const readTexts = new WeakMap<Request, Promise<ScopeTexts>>();
-function textsOf(ctx: WithServers & { request?: Request }) {
-  const { request } = ctx;
-  const read = ctx[TEXTS];
-  if (request === undefined || read === undefined) return undefined;
-  let texts = readTexts.get(request);
-  if (texts === undefined) {
-    texts = read(request);
-    readTexts.set(request, texts);
-  }
-  return texts;
+// One read of the tenant's texts per request, shared by the fields of a page.
+function perRequest<T>() {
+  const reads = new WeakMap<Request, Promise<T>>();
+  return (
+    request: Request | undefined,
+    read: ((r: Request) => Promise<T>) | undefined,
+  ) => {
+    if (request === undefined || read === undefined) return undefined;
+    let texts = reads.get(request);
+    if (texts === undefined) {
+      texts = read(request);
+      reads.set(request, texts);
+    }
+    return texts;
+  };
+}
+const readTexts = perRequest<ScopeTexts>();
+const readDetailTexts = perRequest<DetailTexts>();
+const textsOf = (ctx: WithServers & { request?: Request }) =>
+  readTexts(ctx.request, ctx[TEXTS]);
+
+// The details of a pending request or device request, in words (D5).
+async function detailed(
+  parent: { authorizationDetails?: string | null },
+  _: unknown,
+  ctx: WithServers & { request?: Request },
+) {
+  if (parent.authorizationDetails == null) return [];
+  const texts = (await readDetailTexts(ctx.request, ctx[DETAIL_TEXTS])) ?? [];
+  const locale = localeOf(ctx.request?.headers.get("accept-language") ?? null);
+  return detailsOf(parent.authorizationDetails, texts, locale);
 }
 
 interface Labelled {
@@ -126,7 +158,7 @@ export const consentResolvers: IResolvers = {
   // in the viewer's language (`Accept-Language`); janus's own (the scope's
   // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one
   // static map, not per tenant, resource and language, hence these two fields.
-  OAuthRequest: { scopes: labelled },
-  OAuthDeviceRequest: { scopes: labelled },
+  OAuthRequest: { scopes: labelled, details: detailed },
+  OAuthDeviceRequest: { scopes: labelled, details: detailed },
   OAuthConnectedApp: { scopes: labelled },
 };

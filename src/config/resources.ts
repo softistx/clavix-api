@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import type { DetailTextsFor } from "@/modules/consent/detail-labels";
 import type { ScopeTextsFor } from "@/modules/consent/scope-labels";
 import { Catalog } from "@/modules/resources/catalog";
 import {
@@ -78,6 +79,20 @@ export const scopeTextsFor: ScopeTextsFor = async (request) => {
       ? []
       : [{ name: scope.name, resource, description: scope.description }];
   });
+};
+
+/** The tenant's detail type texts the consent page shows, for the request's host. */
+export const detailTextsFor: DetailTextsFor = async (request) => {
+  const tenant = await tenantResolver.resolveRequest(request);
+  if (tenant === null) return [];
+  const types = await catalog.listDetailTypes(new ObjectId(tenant.tenantId));
+  return types.map(({ type, name, description, fields, actions }) => ({
+    type,
+    name,
+    description,
+    fields,
+    actions,
+  }));
 };
 
 /** What a client's detail type opt-in reads: the tenant's stored types and its consent readiness. */

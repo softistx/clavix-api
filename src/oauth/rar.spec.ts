@@ -1,0 +1,542 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  createMemorySigningKeys,
+  DEVICE_GRANT,
+  rotateSigningKeys,
+  type SigningKeyStore,
+  s256Challenge,
+  TOKEN_EXCHANGE_GRANT,
+} from "@softistx/janus-oauth";
+import { decodeJwt } from "jose";
+import { createApp } from "@/app";
+import { registerClient } from "@/clients/register-client";
+import {
+  clientPoliciesService,
+  exchangeRulesFor,
+} from "@/config/client-policies";
+import { mongo } from "@/config/db";
+import { env } from "@/config/env";
+import { oauthDb } from "@/config/oauth-db";
+import {
+  catalog,
+  registerStoredResource,
+  resourcesFor,
+} from "@/config/resources";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { authFor, claimsFor, janusIssuers } from "@/config/users";
+import { mongoClientDetailTypes } from "@/modules/resources/detail-types";
+import { issuerOf } from "@/modules/tenants/identity";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createTenantParOff } from "../../test/tenant-par-off";
+
+// M3b R4, end to end: authorization details (RFC 9396) from PAR to the
+// tokens, through the hosted consent API (`oauthRequest.details`).
+const SLUG = "rar";
+const PAY = "https://pay.rar.example/api";
+const OTHER = "https://other.rar.example/api";
+const REDIRECT = "https://app.example/callback";
+const VERIFIER = "v".repeat(64);
+const origin = {
+  scheme: env.CLAVIX_PUBLIC_SCHEME,
+  domain: env.CLAVIX_DOMAIN,
+  port: env.CLAVIX_PUBLIC_PORT,
+} as const;
+const keys = new Map<string, SigningKeyStore>();
+const signingKeysFor = (tenantId: string) => {
+  let store = keys.get(tenantId);
+  if (store === undefined) {
+    store = createMemorySigningKeys();
+    keys.set(tenantId, store);
+  }
+  return store;
+};
+const issuers = createClavixOAuthIssuers({
+  dpopNonceSecret: "spec-dpop-nonce-secret",
+  resolver: tenantResolver,
+  db: oauthDb,
+  signingKeysFor,
+  authFor,
+  claimsFor,
+  resourcesFor,
+  exchangeRulesFor,
+});
+const app = createApp({ oauth: issuers });
+const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
+const ready = mongoClientDetailTypes(mongo.db.detailTypes, () => true);
+const text = (fr: string, en: string) => ({ fr, en });
+
+const url = (path = "/") => `${issuerOf(SLUG, origin)}${path}`;
+const basic = (id: string, secret: string) =>
+  `Basic ${btoa(`${id}:${secret}`)}`;
+const secrets: Record<string, string> = {};
+let cookie = "";
+
+interface GqlResult {
+  data?: Record<string, unknown> | null;
+  errors?: { message: string; extensions?: { code?: string } }[];
+}
+const gql = async (
+  query: string,
+  variables: Record<string, unknown>,
+  language?: string,
+): Promise<GqlResult> => {
+  const response = await app.request(url("/graphql"), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+      ...(language === undefined ? {} : { "accept-language": language }),
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  return (await response.json()) as GqlResult;
+};
+
+// One field of a result's data, known to be there.
+const field = <T>(result: GqlResult, name: string): T => {
+  const value = result.data?.[name];
+  if (value === undefined || value === null) throw new Error(`no ${name}`);
+  return value as T;
+};
+
+const DETAILS = `details { type title description rows { label value } }`;
+const REQUEST = `query($id: ID!) { oauthRequest(id: $id) { authorizationDetails ${DETAILS} } }`;
+const APPROVE = `mutation($id: ID!) { approveOAuthRequest(id: $id) { redirectTo } }`;
+const DEVICE = `query($c: String!) { oauthDeviceRequest(userCode: $c) { authorizationDetails ${DETAILS} } }`;
+const APPROVE_DEVICE = `mutation($c: String!) { approveOAuthDeviceRequest(userCode: $c) }`;
+
+const transfer = (amount: number, extra: Record<string, unknown> = {}) => ({
+  type: "payment",
+  actions: ["initiate"],
+  amount,
+  currency: "EUR",
+  urgent: true,
+  memo: "Rent",
+  ...extra,
+});
+
+const post = (
+  path: string,
+  body: Record<string, string>,
+  client: string,
+  headers: Record<string, string> = {},
+) =>
+  issuers.handle(
+    new Request(url(path), {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: basic(client, secrets[client] ?? ""),
+        ...headers,
+      },
+      body: new URLSearchParams(body),
+    }),
+  );
+const json = async <T = Record<string, unknown>>(response: Response) =>
+  (await response.json()) as T;
+
+async function pushed(
+  details: unknown,
+  options: { client?: string; scope?: string; resource?: string } = {},
+) {
+  const { client = "payer", scope = "read", resource = PAY } = options;
+  const response = await post(
+    "/par",
+    {
+      response_type: "code",
+      client_id: client,
+      redirect_uri: REDIRECT,
+      code_challenge: await s256Challenge(VERIFIER),
+      code_challenge_method: "S256",
+      scope,
+      resource,
+      state: "xyz",
+      ...(details === null
+        ? {}
+        : { authorization_details: JSON.stringify(details) }),
+    },
+    client,
+  );
+  expect(response.status).toBe(201);
+  const { request_uri } = await json<{ request_uri: string }>(response);
+  const authorize = await issuers.handle(
+    new Request(
+      url(
+        `/authorize?${new URLSearchParams({ client_id: client, request_uri })}`,
+      ),
+    ),
+  );
+  expect(authorize.status).toBe(302);
+  const location = new URL(authorize.headers.get("location") ?? "", url());
+  return location.searchParams.get("request_id") ?? "";
+}
+
+async function approve(id: string) {
+  const approved = await gql(APPROVE, { id });
+  expect(approved.errors).toBeUndefined();
+  return field<{ redirectTo: string }>(approved, "approveOAuthRequest")
+    .redirectTo;
+}
+
+const codeToken = (redirectTo: string, client = "payer") =>
+  post(
+    "/token",
+    {
+      grant_type: "authorization_code",
+      code: new URL(redirectTo).searchParams.get("code") ?? "",
+      redirect_uri: REDIRECT,
+      code_verifier: VERIFIER,
+      resource: PAY,
+    },
+    client,
+  );
+
+interface Tokens {
+  access_token: string;
+  refresh_token?: string;
+  authorization_details?: Record<string, unknown>[];
+}
+/** PAR with these details, consent, approval, code exchange. */
+async function consented(details: unknown, scope = "read") {
+  const response = await codeToken(
+    await approve(await pushed(details, { scope })),
+  );
+  expect(response.status).toBe(200);
+  return json<Tokens>(response);
+}
+
+const introspect = async (token: string) =>
+  json(await post("/introspect", { token }, "payer"));
+
+beforeAll(async () => {
+  await createTenantParOff(tenantsService, { slug: SLUG, name: SLUG });
+  const tenant = await findTenant(SLUG);
+  const resolved = await tenantResolver.resolveHost(new URL(url()).host);
+  if (tenant === undefined || resolved === null) throw new Error("no tenant");
+  await rotateSigningKeys(signingKeysFor(resolved.tenantId), {
+    now: new Date(),
+    lead: "1h",
+    retireAfter: "2h",
+  });
+  for (const uri of [PAY, OTHER]) {
+    await registerStoredResource({ tenant: SLUG, uri, scopes: ["read"] });
+  }
+  const pay = await mongo.db.resources.findFirst({
+    uri: PAY,
+    tenantId: tenant._id,
+  });
+  if (pay === undefined) throw new Error("no resource");
+  await catalog.createDetailType(tenant._id, pay._id.toHexString(), {
+    type: "payment",
+    name: text("Paiement", "Payment"),
+    description: text("Initier des virements", "Start transfers"),
+    actions: [
+      { value: "initiate", label: text("Initier", "Initiate") },
+      { value: "cancel", label: text("Annuler", "Cancel") },
+    ],
+    fields: [
+      { key: "amount", kind: "number", label: text("Montant", "Amount") },
+      {
+        key: "currency",
+        kind: "enum",
+        label: text("Devise", "Currency"),
+        values: [{ value: "EUR", label: text("Euro", "Euro") }],
+      },
+      { key: "urgent", kind: "boolean", label: text("Urgent", "Urgent") },
+      { key: "memo", kind: "string", label: text("Motif", "Memo") },
+    ],
+  });
+  const register = async (
+    clientId: string,
+    input: Partial<Parameters<typeof registerClient>[1]>,
+  ) => {
+    const done = await registerClient(
+      { db: oauthDb, findTenant, detailTypes: ready },
+      {
+        tenant: SLUG,
+        name: clientId,
+        clientId,
+        redirectUris: [],
+        type: "confidential",
+        requirePar: true,
+        ...input,
+      },
+    );
+    secrets[clientId] = done.clientSecret ?? "";
+  };
+  await register("payer", {
+    redirectUris: [REDIRECT],
+    detailTypes: ["payment"],
+  });
+  await register("tv", { grants: [DEVICE_GRANT], detailTypes: ["payment"] });
+  await register("svc", { grants: [TOKEN_EXCHANGE_GRANT] });
+  await clientPoliciesService.setTokenExchange(tenant._id, "svc", {
+    targetResources: [PAY, OTHER],
+    subjectClients: ["payer"],
+    mode: "delegation",
+  });
+  const auth = await janusIssuers.forRequest(new Request(url()));
+  if (auth === null) throw new Error("no janus");
+  const user = await auth.create({ email: "ada@example.test" });
+  const session = await auth.signInProven(user);
+  if (session.status !== "signedIn") throw new Error("no session");
+  cookie = `${SESSION_COOKIE}=${session.token}`;
+});
+
+afterAll(async () => {
+  await mongo.db.tenants.raw.deleteMany({
+    slug: { $ne: PLATFORM_TENANT_SLUG },
+  });
+  await oauthDb.collection("partitionedUsers").deleteMany({});
+  await oauthDb.collection("partitionedSessions").deleteMany({});
+});
+
+describe("authorization details through consent", () => {
+  test("PAR with details, consent view, approval: the token answer, the JWT and introspection carry them", async () => {
+    const asked = [transfer(10), transfer(20, { memo: "Deposit" })];
+    const id = await pushed(asked);
+    const view = await gql(REQUEST, { id });
+    expect(view.errors).toBeUndefined();
+    const request = view.data?.["oauthRequest"] as {
+      authorizationDetails: string;
+      details: unknown[];
+    };
+    // Every detail reaches the hosted API, in words, none raw.
+    expect(request.details).toHaveLength(2);
+    expect(JSON.parse(request.authorizationDetails)).toHaveLength(2);
+
+    const tokens = await json<Tokens>(await codeToken(await approve(id)));
+    expect(tokens.authorization_details).toEqual(asked);
+    expect(decodeJwt(tokens.access_token)["authorization_details"]).toEqual(
+      asked,
+    );
+    const active = await introspect(tokens.access_token);
+    expect(active["active"]).toBe(true);
+    expect(active["authorization_details"]).toEqual(asked);
+  });
+
+  test("a request without details has an empty list", async () => {
+    const id = await pushed(null);
+    const view = await gql(REQUEST, { id });
+    expect(view.errors).toBeUndefined();
+    expect(view.data?.["oauthRequest"]).toMatchObject({
+      authorizationDetails: null,
+      details: [],
+    });
+  });
+
+  test("the labels follow the viewer's language, then the other one", async () => {
+    const id = await pushed([transfer(1500.5)]);
+    const detailsIn = async (language?: string) => {
+      const view = await gql(REQUEST, { id }, language);
+      expect(view.errors).toBeUndefined();
+      return field<{ details: unknown[] }>(view, "oauthRequest").details;
+    };
+    expect(await detailsIn("fr-CA,en;q=0.8")).toEqual([
+      {
+        type: "payment",
+        title: "Paiement",
+        description: "Initier des virements",
+        rows: [
+          { label: "Actions", value: "Initier" },
+          { label: "Montant", value: "1 500,5" },
+          { label: "Devise", value: "Euro" },
+          { label: "Urgent", value: "Oui" },
+          { label: "Motif", value: "Rent" },
+        ],
+      },
+    ]);
+    expect(await detailsIn("en-US")).toEqual([
+      {
+        type: "payment",
+        title: "Payment",
+        description: "Start transfers",
+        rows: [
+          { label: "Actions", value: "Initiate" },
+          { label: "Amount", value: "1,500.5" },
+          { label: "Currency", value: "Euro" },
+          { label: "Urgent", value: "Yes" },
+          { label: "Memo", value: "Rent" },
+        ],
+      },
+    ]);
+  });
+
+  test("a type the tenant wrote no French for shows its English words", async () => {
+    const tenant = await findTenant(SLUG);
+    if (tenant === undefined) throw new Error("no tenant");
+    const resource = await mongo.db.resources.findFirst({
+      uri: PAY,
+      tenantId: tenant._id,
+    });
+    if (resource === undefined) throw new Error("none");
+    await catalog.createDetailType(tenant._id, resource._id.toHexString(), {
+      type: "ledger",
+      name: text("", "Ledger"),
+      fields: [{ key: "account", kind: "string", label: text("", "Account") }],
+    });
+    await registerClient(
+      { db: oauthDb, findTenant, detailTypes: ready },
+      {
+        tenant: SLUG,
+        name: "payer",
+        clientId: "payer",
+        redirectUris: [REDIRECT],
+        type: "confidential",
+        requirePar: true,
+        detailTypes: ["payment", "ledger"],
+      },
+    );
+    const id = await pushed([{ type: "ledger", account: "A-1" }]);
+    const view = await gql(REQUEST, { id }, "fr");
+    expect(field<{ details: unknown[] }>(view, "oauthRequest").details).toEqual(
+      [
+        {
+          type: "ledger",
+          title: "Ledger",
+          description: "",
+          rows: [{ label: "Account", value: "A-1" }],
+        },
+      ],
+    );
+  });
+});
+
+describe("what happens to the details after consent", () => {
+  test("a refresh narrows them, never widens", async () => {
+    const first = transfer(10);
+    const second = transfer(20, { memo: "Deposit" });
+    const tokens = await consented([first, second], "read");
+    const refreshed = await post(
+      "/token",
+      {
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token ?? "",
+        resource: PAY,
+        authorization_details: JSON.stringify([first]),
+      },
+      "payer",
+    );
+    expect(refreshed.status).toBe(200);
+    const narrowed = await json<Tokens>(refreshed);
+    expect(narrowed.authorization_details).toEqual([first]);
+    expect(decodeJwt(narrowed.access_token)["authorization_details"]).toEqual([
+      first,
+    ]);
+
+    // The grant keeps what the user allowed: a detail they never saw is refused.
+    const widened = await post(
+      "/token",
+      {
+        grant_type: "refresh_token",
+        refresh_token: narrowed.refresh_token ?? "",
+        resource: PAY,
+        authorization_details: JSON.stringify([transfer(99)]),
+      },
+      "payer",
+    );
+    expect(widened.status).toBe(400);
+    expect((await json<{ error: string }>(widened)).error).toBe(
+      "invalid_authorization_details",
+    );
+  });
+
+  test("a re-consent that leaves a detail out revokes the grant's tokens, one that asks for none revokes nothing", async () => {
+    const kept = transfer(10);
+    const before = await consented([kept, transfer(20, { memo: "Deposit" })]);
+    expect((await introspect(before.access_token))["active"]).toBe(true);
+    // No detail: the standing grant stays (janus-oauth, "Consent").
+    const plain = await consented(null);
+    expect(plain.authorization_details).toBeUndefined();
+    expect((await introspect(before.access_token))["active"]).toBe(true);
+    // The grant's details are replaced; leaving one out revokes its tokens.
+    const after = await consented([kept]);
+    expect(after.authorization_details).toEqual([kept]);
+    expect((await introspect(before.access_token))["active"]).toBe(false);
+    expect((await introspect(after.access_token))["active"]).toBe(true);
+  });
+
+  test("a token exchange inherits the details on the same resource and drops them on another", async () => {
+    const asked = [transfer(10)];
+    const { access_token } = await consented(asked);
+    const exchange = (resource: string) =>
+      post(
+        "/token",
+        {
+          grant_type: TOKEN_EXCHANGE_GRANT,
+          subject_token: access_token,
+          subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          resource,
+        },
+        "svc",
+      );
+    const same = await exchange(PAY);
+    expect(same.status).toBe(200);
+    expect(
+      decodeJwt((await json<Tokens>(same)).access_token)[
+        "authorization_details"
+      ],
+    ).toEqual(asked);
+    const other = await exchange(OTHER);
+    expect(other.status).toBe(200);
+    expect(
+      decodeJwt((await json<Tokens>(other)).access_token)[
+        "authorization_details"
+      ],
+    ).toBeUndefined();
+  });
+});
+
+describe("the device flow", () => {
+  test("the verification page shows the details, approval allows all, the token carries them", async () => {
+    const asked = [transfer(10)];
+    const response = await post(
+      "/device_authorization",
+      {
+        client_id: "tv",
+        scope: "read",
+        resource: PAY,
+        authorization_details: JSON.stringify(asked),
+      },
+      "tv",
+    );
+    expect(response.status).toBe(200);
+    const codes = await json<{ device_code: string; user_code: string }>(
+      response,
+    );
+    const view = await gql(DEVICE, { c: codes.user_code }, "fr");
+    expect(view.errors).toBeUndefined();
+    const shown = field<{ details: unknown[] }>(
+      view,
+      "oauthDeviceRequest",
+    ).details;
+    expect(shown).toMatchObject([
+      {
+        type: "payment",
+        title: "Paiement",
+        description: "Initier des virements",
+      },
+    ]);
+    expect(shown).toHaveLength(1);
+
+    const approved = await gql(APPROVE_DEVICE, { c: codes.user_code });
+    expect(approved.errors).toBeUndefined();
+    const tokens = await post(
+      "/token",
+      {
+        grant_type: DEVICE_GRANT,
+        device_code: codes.device_code,
+        client_id: "tv",
+      },
+      "tv",
+    );
+    expect(tokens.status).toBe(200);
+    const body = await json<Tokens>(tokens);
+    expect(body.authorization_details).toEqual(asked);
+    expect(decodeJwt(body.access_token)["authorization_details"]).toEqual(
+      asked,
+    );
+  });
+});

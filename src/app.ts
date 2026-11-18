@@ -7,7 +7,7 @@ import {
   WEBAUTHN_WELL_KNOWN,
 } from "./config/domains-routes";
 import { readyz } from "./config/ready";
-import { scopeTextsFor } from "./config/resources";
+import { detailTextsFor, scopeTextsFor } from "./config/resources";
 import {
   deviceThrottle,
   passkeyThrottle,
@@ -26,6 +26,7 @@ import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import type { VerificationThrottle } from "./modules/auth/verification-throttle";
 import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
+import type { DetailTextsFor } from "./modules/consent/detail-labels";
 import type { DeviceThrottle } from "./modules/consent/device-throttle";
 import type { ScopeTextsFor } from "./modules/consent/scope-labels";
 import { version } from "./modules/health";
@@ -58,6 +59,8 @@ export function createApp(
     console?: ConsoleDeps & { schema?: typeof consoleSchema };
     // Where the consent page reads the tenants' scope texts; the stored ones by default.
     scopeTexts?: ScopeTextsFor;
+    // The same for the tenants' detail type texts (the request's `details`).
+    detailTexts?: DetailTextsFor;
     // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
     ready?: () => Promise<ReadyReport>;
   } = {},
@@ -103,6 +106,7 @@ export function createApp(
               oauthContext(
                 { serverFor: options.oauth.serverFor },
                 options.scopeTexts ?? scopeTextsFor,
+                options.detailTexts ?? detailTextsFor,
               ),
             ]),
       ],
