@@ -184,7 +184,7 @@ request (a field removed or renamed, an action or enum value gone), so the page 
 all the details or none, so Clavix refuses rather than let the grant carry a detail the user was not shown. The request stays
 pending.
 
-**Fix:** the user denies it (`denyOAuthRequest`, `denyOAuthDeviceRequest`) and the client asks again; the hosted page shows
+**Fix:** the user denies it (`denyOAuthRequest`, `denyOAuthDeviceRequest`) and the client asks again; the hosted page must show
 only Deny while `detailsComplete` is false. To avoid it, do not remove or rename a detail type's fields while requests that use
 it are pending (they last minutes).
 

@@ -123,8 +123,16 @@ const refuseIncomplete = () =>
       oauthError: "invalid_authorization_details",
     },
   });
-const signedIn = async (ctx: unknown) =>
-  (await (ctx as Context).janus.user()) !== null;
+// Signed in and on a live tenant, as janus's own approve checks them first;
+// otherwise the guard stays out of the way and janus answers as it always did.
+async function signedIn(ctx: unknown) {
+  const { janus, tenant } = ctx as Context;
+  if ((await janus.user()) === null) return false;
+  const resolved = await tenant();
+  if (resolved === null) return false;
+  requireLive(resolved);
+  return true;
+}
 
 function guardCode(approve: Resolver): Resolver {
   return async (...args) => {
@@ -161,10 +169,16 @@ function guardDevice(
       if (server !== null && server !== undefined) {
         await beforeLookup(ctx as never);
         counted.add(ctx);
-        const view = await server.deviceRequest(userCode);
-        if (view?.authorizationDetails !== undefined) {
-          const json = JSON.stringify(view.authorizationDetails);
-          if (!(await reviewed(json, ctx)).complete) throw refuseIncomplete();
+        try {
+          const view = await server.deviceRequest(userCode);
+          if (view?.authorizationDetails !== undefined) {
+            const json = JSON.stringify(view.authorizationDetails);
+            if (!(await reviewed(json, ctx)).complete) throw refuseIncomplete();
+          }
+          return await approve(...args);
+        } finally {
+          // The mark covers this one call, never a later lookup of the request.
+          counted.delete(ctx);
         }
       }
     }
