@@ -1,18 +1,27 @@
 import type { AgentPruneEvent } from "./prune-events";
 
-/** An agent that registered itself and has no standing grant after this long is deleted (D10). */
+/** An agent (registered or described by a metadata document) that has no standing grant after this long is deleted (D10). */
 export const AGENT_GRACE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface PruneDeps {
   /** The ids (hex) of the tenants whose agents are pruned. */
   tenantIds(): Promise<string[]>;
-  /** The tenant's dynamically registered agents recorded before `before`. */
+  /** The tenant's agents (any kind) recorded before `before`. */
   candidates(tenantId: string, before: Date): Promise<string[]>;
   /** Whether a user still holds a standing (not revoked) grant of the client. */
   hasStandingGrant(tenantId: string, clientId: string): Promise<boolean>;
-  /** Deletes the client, its grants and tokens, its rules and its agent record. */
-  remove(tenantId: string, clientId: string): Promise<unknown>;
+  /**
+   * Deletes the client, its grants and tokens, its rules and its agent
+   * record; `false` when it was already gone (nothing removed, no event).
+   */
+  remove(tenantId: string, clientId: string): Promise<boolean>;
+  /**
+   * Runs the grant check and the delete of one agent alone for the tenant
+   * (the console's clients lock), so a grant cannot be made between the two.
+   * Without it they run unserialized.
+   */
+  locked?<T>(tenantId: string, work: () => Promise<T>): Promise<T>;
   /** The admin event of one deleted agent. */
   emit(event: AgentPruneEvent): Promise<void>;
   log?: (message: string) => void;
@@ -26,10 +35,11 @@ export interface PruneReport {
 }
 
 /**
- * The daily clean-up (M3, D10): every dynamically registered agent that has
- * no standing grant 7 days after it registered is deleted, with its tokens
- * closed. Agents of a metadata document are not touched (janus caches them and
- * lets them lapse). Each agent is its own step: one that fails is logged and
+ * The daily clean-up (M3, D10): every agent that has
+ * no standing grant 7 days after it was recorded is deleted, with its tokens
+ * closed. A metadata-document agent is one too: it is fetched and recorded
+ * again at its next use, and meanwhile it must not count toward the quota.
+ * The grant check and the delete run under one lock. Each agent is its own step: one that fails is logged and
  * counted, the others go on, and the next run takes it again. Deleting is
  * idempotent, so two instances running the same pass do no harm. A failure to
  * record the admin event is logged, never undoes the deletion.
@@ -52,8 +62,12 @@ export async function pruneAgents(
     }
     for (const clientId of ids) {
       try {
-        if (await deps.hasStandingGrant(tenantId, clientId)) continue;
-        await deps.remove(tenantId, clientId);
+        const run = deps.locked?.bind(deps) ?? ((_t, work) => work());
+        const removed = await run(tenantId, async () => {
+          if (await deps.hasStandingGrant(tenantId, clientId)) return false;
+          return deps.remove(tenantId, clientId);
+        });
+        if (!removed) continue;
         report.pruned += 1;
       } catch (error) {
         report.failed += 1;
