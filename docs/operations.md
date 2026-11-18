@@ -15,6 +15,15 @@ and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/of
 | `mongo` | `mongo:8`                             | `api`, `backup`, `restore` | `--replSet rs0`, key file, users, optional TLS   |
 | `redis` | `redis:7-alpine`                      | `api`                      | password, append-only file                       |
 
+Each service has CPU and memory limits in `deploy/compose.yml`
+(`deploy.resources.limits`): api 1 CPU / 1 GB, ui 0.5 / 512 MB, mongo 1 / 1 GB
+(WiredTiger cache 0.25 GB, set in `deploy/mongo/entrypoint.sh`), redis
+0.25 / 256 MB, caddy 0.5 / 256 MB, backup and restore 0.5 / 512 MB. After a
+deploy, `docker stats --no-stream` shows whether one runs at its limit; raise
+that one only. Healthchecks run every 30 s and start no Bun or `mongosh`
+process: bash requests `/healthz` (api, ui), and mongo checks a file and a TCP
+connection.
+
 Caddy sends the authorization server (`/authorize`, `/token`, `/par`, `/device_authorization`, ...), the GraphQL APIs, JWKS, userinfo, the logo
 and `/healthz` to the API (a proxy of your own must route `/device_authorization` too), and everything else to the UI. The tenant is chosen
 by the `Host` header, which Caddy passes untouched.
@@ -32,7 +41,7 @@ by the `Host` header, which Caddy passes untouched.
 
 ## First boot
 
-1. A host with Docker, DNS `A`/`AAAA` records for `<domain>` and
+1. A host with Docker Engine 25 or later and Compose v2.20 or later (the healthchecks use `start_interval`), DNS `A`/`AAAA` records for `<domain>` and
    `*.<domain>` (so `console.<domain>` and every `<slug>.<domain>` resolve), and
    ports 80 and 443 open.
 2. Build and publish the images yourself. Both repositories build with their
@@ -111,7 +120,7 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `CLAVIX_DOMAIN`                                                          | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                     |
 | `ACME_EMAIL`                                                             | caddy                       | the ACME account address                                                                                                                                        |
 | `REDIS_PASSWORD`                                                         | redis, api                  | the password in `REDIS_URL`                                                                                                                                     |
-| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used by the healthcheck only                                                               |
+| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used only by the mongo container to initiate the replica set at start-up                   |
 | `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                 |
 | `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                             |
 | `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                     |
@@ -183,8 +192,9 @@ authorization on). On the first start of an empty volume the image creates the
 root user from `MONGO_ROOT_USER` / `MONGO_ROOT_PASSWORD`, then
 `deploy/mongo/init-app-user.js` creates the application user in the `clavix`
 database with `readWrite` and `dbAdmin` on it (`db:sync` applies validators and indexes), nothing on any other database. The api, `backup` and `restore`
-connect as that user (`authSource=clavix`); only the healthcheck, which initiates
-the replica set, uses root, and the api container's environment blanks the
+connect as that user (`authSource=clavix`); only the start-up initiator in
+`entrypoint.sh`, which initiates the replica set and marks it ready for the
+light healthcheck (a file and a TCP connection, no `mongosh` per check), uses root, and the api container's environment blanks the
 root and key file variables it would otherwise inherit from `deploy/.env`.
 Use hex passwords (`openssl rand -hex 24`): they are put in a URI unescaped.
 The restore drill (`restore ... clavix-drill`) writes to another database, which
@@ -221,7 +231,7 @@ chmod 644 server/mongo.pem; rm mongo.key mongo.csr mongo.crt ext.cnf
 
 ## Redis
 
-Redis starts with `--requirepass "$REDIS_PASSWORD"` (read from the environment, so
+Redis starts with `--maxmemory 192mb --maxmemory-policy noeviction` (below its 256M limit; it never evicts, since locks, rate limits and queue dedup keys must survive: at 192 MB writes fail, which the API treats as a Redis failure, and `docker stats` shows when to raise the limit) and `--requirepass "$REDIS_PASSWORD"` (read from the environment, so
 it is not in the process list), the healthcheck authenticates with
 `REDISCLI_AUTH`, and the api's `REDIS_URL` is `redis://:<REDIS_PASSWORD>@redis:6379`.
 Redis is on the private network only; use a hex password (it sits in a URL).
@@ -344,6 +354,12 @@ it. Custom domains stay on demand.
    (`access_denied`), which is today's behaviour.
 4. `dc up -d api ui`. The API drains requests in flight on SIGTERM, within compose's 20 s grace period.
 5. Check `/healthz` and `/readyz`, then sign in to the console.
+6. Once the new containers are healthy, free the disk: `docker image prune -f`,
+   `docker image rm` of the `CLAVIX_API_IMAGE` / `CLAVIX_UI_IMAGE` tags older than
+   the one you would roll back to (keep the previous release until this one has
+   proved itself),
+   and `docker builder prune -f --filter until=24h` when images are built on the
+   host. Never `docker system prune -a` or `--volumes`: the volumes hold the data.
 
 Rollback: set the previous tags and `dc up -d api ui`. This rolls back the
 images, not the schema or data: if a migration changed data, restore the backup
