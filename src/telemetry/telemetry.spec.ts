@@ -13,7 +13,6 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { buildTelemetry } from "./build";
 import { parseOtlpHeaders } from "./otlp-headers";
-import { withoutAddresses } from "./scrub";
 
 const EMAIL = "grace@example.test";
 const memory = mailer as MemoryMailer;
@@ -91,6 +90,10 @@ test("a sign-in request is traced with its tenant and no e-mail or address", asy
   const written = JSON.stringify(signals);
   expect(written).not.toContain(EMAIL);
   expect(written).not.toContain("203.0.113.9");
+  // No span or log carries the attribute at all (`clientAddress: false`, D24).
+  expect(signals.some((signal) => "client.address" in signal.attributes)).toBe(
+    false,
+  );
 });
 
 test("probes are not traced and read no tenant", async () => {
@@ -116,22 +119,6 @@ test("with no endpoint set there is no exporter, and requests still answer", asy
   });
   expect(response.status).toBe(200);
   await telemetry.close();
-});
-
-test("withoutAddresses takes client.address off spans and logs, and keeps the rest", async () => {
-  const { signals, exporter } = collector();
-  const resource = { service: "s", attributes: {} };
-  await withoutAddresses(exporter).export(resource, [
-    {
-      type: "log",
-      at: 1,
-      severity: "info",
-      name: "e",
-      source: "t",
-      attributes: { "client.address": "203.0.113.9", kept: 1 },
-    },
-  ]);
-  expect(signals[0]?.attributes).toEqual({ kept: 1 });
 });
 
 test("OTLP headers are key=value pairs, a value may hold =", () => {
