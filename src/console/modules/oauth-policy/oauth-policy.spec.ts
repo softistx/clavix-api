@@ -229,3 +229,146 @@ describe("updateOAuthPolicy", () => {
     });
   });
 });
+
+const AGENT_FIELDS = `tenantId version par { required } dpop { required }
+  agents { dynamic redirectUris metadataDocuments allowHosts } agentsNeedPushOrProof`;
+const AGENTS_POLICY = `query ($t: ID!) { oauthPolicy(tenantId: $t) { ${AGENT_FIELDS} } }`;
+const AGENTS_UPDATE = `mutation ($t: ID!, $i: OAuthPolicyInput!) {
+  updateOAuthPolicy(tenantId: $t, input: $i) { ${AGENT_FIELDS} }
+}`;
+interface AgentPolicy {
+  version: number;
+  agents: {
+    dynamic: string;
+    redirectUris: string[];
+    metadataDocuments: boolean;
+    allowHosts: string[];
+  };
+  agentsNeedPushOrProof: boolean;
+}
+const agentsOf = (result: Result) =>
+  (result.data as unknown as Record<string, AgentPolicy>)[
+    "updateOAuthPolicy"
+  ] as AgentPolicy;
+
+describe("agents policy", () => {
+  test("a tenant starts with agents off and no warning", async () => {
+    const read = await as(VIEWER, AGENTS_POLICY, { t: a });
+    const policy = (read.data as unknown as Record<string, AgentPolicy>)[
+      "oauthPolicy"
+    ] as AgentPolicy;
+    expect(policy.agents).toEqual({
+      dynamic: "OFF",
+      redirectUris: [],
+      metadataDocuments: false,
+      allowHosts: [],
+    });
+    expect(policy.agentsNeedPushOrProof).toBe(false);
+  });
+
+  test("turning agents on while PAR is required flags it, saving is allowed, each write is an event", async () => {
+    const before = await stored(a);
+    const events = (await eventsOf(a)).length;
+    const result = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: {
+        agents: {
+          dynamic: "RESTRICTED",
+          redirectUris: [
+            "https://agent.example/cb",
+            "https://agent.example/cb",
+          ],
+          metadataDocuments: true,
+          allowHosts: ["Docs.Example.com", "docs.example.com"],
+        },
+      },
+    });
+    expect(result.errors).toBeUndefined();
+    const policy = agentsOf(result);
+    expect(policy.agents).toEqual({
+      dynamic: "RESTRICTED",
+      redirectUris: ["https://agent.example/cb"],
+      metadataDocuments: true,
+      allowHosts: ["docs.example.com"],
+    });
+    expect(policy.agentsNeedPushOrProof).toBe(true);
+    expect(policy.version).toBe(before.version + 1);
+    expect((await stored(a)).oauth.agents.dynamic).toBe("restricted");
+    expect((await eventsOf(a)).length).toBe(events + 1);
+  });
+
+  test("the warning follows PAR and DPoP, and a repeat write stores nothing", async () => {
+    const off = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: { par: { required: false } },
+    });
+    expect(agentsOf(off).agentsNeedPushOrProof).toBe(false);
+    const dpop = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: { dpop: { required: true } },
+    });
+    expect(agentsOf(dpop).agentsNeedPushOrProof).toBe(true);
+    const version = (await stored(a)).version;
+    const same = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: { agents: { dynamic: "RESTRICTED", metadataDocuments: true } },
+    });
+    expect(agentsOf(same).version).toBe(version);
+    expect((await stored(a)).version).toBe(version);
+    await as(OWNER, AGENTS_UPDATE, { t: a, i: { dpop: { required: false } } });
+  });
+
+  test("a field left out keeps its value, and OFF with no metadata documents clears the warning", async () => {
+    await as(OWNER, AGENTS_UPDATE, { t: a, i: { par: { required: true } } });
+    const kept = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: { agents: { allowHosts: [] } },
+    });
+    expect(agentsOf(kept).agents.redirectUris).toEqual([
+      "https://agent.example/cb",
+    ]);
+    expect(agentsOf(kept).agents.allowHosts).toEqual([]);
+    const off = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: { agents: { dynamic: "OFF", metadataDocuments: false } },
+    });
+    expect(agentsOf(off).agentsNeedPushOrProof).toBe(false);
+  });
+
+  test("a wildcard host is accepted and lower-cased", async () => {
+    const result = await as(OWNER, AGENTS_UPDATE, {
+      t: a,
+      i: { agents: { allowHosts: ["*.Example.com"] } },
+    });
+    expect(result.errors).toBeUndefined();
+    expect(agentsOf(result).agents.allowHosts).toEqual(["*.example.com"]);
+  });
+
+  test("a bad redirect URI, host or a list over 50 is refused and stores nothing", async () => {
+    const version = (await stored(a)).version;
+    const events = (await eventsOf(a)).length;
+    const bad = [
+      { redirectUris: ["not a uri"] },
+      { redirectUris: ["http://agent.example/cb"] },
+      { allowHosts: ["https://docs.example.com/path"] },
+      { allowHosts: ["bad host"] },
+      { allowHosts: ["*"] },
+      { allowHosts: ["foo.*.com"] },
+      { allowHosts: Array.from({ length: 51 }, (_, i) => `h${i}.example.com`) },
+    ];
+    for (const agents of bad) {
+      const result = await as(OWNER, AGENTS_UPDATE, { t: a, i: { agents } });
+      expect(codeOf(result)).toBe("BAD_USER_INPUT");
+    }
+    expect((await stored(a)).version).toBe(version);
+    expect((await eventsOf(a)).length).toBe(events);
+  });
+
+  test("a viewer cannot change the agents policy", async () => {
+    const result = await as(VIEWER, AGENTS_UPDATE, {
+      t: a,
+      i: { agents: { dynamic: "OPEN" } },
+    });
+    expect(codeOf(result)).toBe("FORBIDDEN");
+  });
+});

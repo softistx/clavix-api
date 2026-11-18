@@ -15,7 +15,16 @@ The tenant's OAuth policy carries `agents`:
 | `allowHosts`        | Hosts a document may be fetched from, besides the MCP clients' own. Exact names or `*.example.com`.                                                                                                                         |
 
 Prefer `restricted`: `open` lets anyone register a client with any callback, and the consent screen is the only gate.
-The console does not expose the policy yet (a later slice). Until then an operator sets it on the tenant document, for example in `mongosh`: `db.tenants.updateOne({ slug: "acme" }, { $set: { "oauth.agents.dynamic": "restricted" }, $inc: { version: 1 } })` (the `version` bump lets the API rebuild the tenant's server once its cached entry expires).
+The console edits it: `oauthPolicy(tenantId) { agents { dynamic redirectUris metadataDocuments allowHosts } agentsNeedPushOrProof }`
+and `updateOAuthPolicy(tenantId, input: { agents: { ... } })` (`edit` on the tenant; a field left out keeps its value;
+`dynamic` is `OFF`, `RESTRICTED` or `OPEN`). The service lower-cases and de-duplicates `allowHosts` (DNS names or
+`*.example.com`, 50 at most), refuses a `redirectUris` entry the OAuth rules refuse (50 at most) with `BAD_USER_INPUT`,
+and stores nothing then. Each change is the admin event `oauthPolicy.update` and bumps the tenant's `version`.
+
+**The warning.** `agentsNeedPushOrProof` is `true` when agents are on (`dynamic` not `OFF`, or `metadataDocuments`) while
+`par.required` or `dpop.required` holds for the whole tenant. Those two switches have no per-client exemption, so an MCP
+client that does not push its requests or prove its tokens is refused. The console should show the warning; saving is
+allowed.
 
 ## The flow
 
@@ -58,3 +67,23 @@ already recorded keeps working).
 
 The quota is checked before a registration or a first use and is best effort under concurrent calls (the throttle bounds the
 overshoot). Deleting a client in the console also removes its agent record, which frees the quota.
+
+## Managing agents in the console
+
+`clients(tenantId, kind: [...])` lists the tenant's clients; `Client.registration` is `CONSOLE` (made in the console or
+by the CLI), `DYNAMIC` (registered at `/register`) or `METADATA` (a Client ID Metadata Document). `kind` is a list
+filter: `kind: [DYNAMIC, METADATA]` is the Agents list, `kind: [CONSOLE]` the others, no `kind` lists all. `totalCount`
+follows the `kind` and `q` filters, whatever the cursor. A metadata-document client is read-only in the console (it is
+described by its document): `client(id)` reads it, an update or a rotation answers `NOT_FOUND`.
+
+`deleteClient` works for every kind. It removes the client, closes its grants and tokens, and removes the agent record
+(the quota is freed). A metadata-document client deleted this way is read and recorded again the next time it is used.
+
+## The daily clean-up
+
+An agent that registered itself and was never authorized is useless but still counts against the `agents` quota. Once a
+day (03:41 UTC, queue `agents-prune`, [operations](../operations.md#agents-clean-up)) every `DYNAMIC` agent registered more
+than 7 days ago that has no standing grant (a grant not revoked) is deleted like `deleteClient` does it, with its tokens
+closed, and recorded as the admin event `agent.prune` by the actor `system:agents:prune` (one per agent, identifiers
+only). Agents of a metadata document are not pruned (they are recorded again when used), and only active tenants are
+visited. A consent granted between the check and the deletion is revoked with the agent (a very small window).
