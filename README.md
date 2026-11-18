@@ -1005,11 +1005,15 @@ query Consent($id: ID!) {
       name
       label
     }
-    details { # the authorization details (RFC 9396) in words: render every block
+    details {
+      # the authorization details (RFC 9396) in words: render every block
       type
       title
       description
-      rows { label value }
+      rows {
+        label
+        value
+      }
     }
   }
   connectedApps {
