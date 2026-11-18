@@ -62,7 +62,11 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(mongo.db.resources, mongo.db.scopes),
+  resourcesFor: storedResourcesFor(
+    mongo.db.resources,
+    mongo.db.scopes,
+    mongo.db.detailTypes,
+  ),
 });
 
 const scopeNamesOf = async (resourceId: unknown) =>
@@ -366,10 +370,12 @@ describe("a registered resource in the issuer", () => {
     const forAlpha = await storedResourcesFor(
       mongo.db.resources,
       mongo.db.scopes,
+      mongo.db.detailTypes,
     )((await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never);
     const forBeta = await storedResourcesFor(
       mongo.db.resources,
       mongo.db.scopes,
+      mongo.db.detailTypes,
     )((await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never);
     expect(alpha?._id.equals(beta?._id as never)).toBe(false);
     expect(Object.keys(forAlpha)).not.toContain(API_B);

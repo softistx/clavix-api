@@ -7,6 +7,7 @@ export { adminEvents } from "../console/admin-events/admin-events.model";
 export { branding } from "./branding/branding.model";
 export { clientPolicies } from "./client-policies/client-policies.model";
 export { domains } from "./domains/domains.model";
+export { detailTypes } from "./resources/detail-types/detail-types.model";
 export { resources } from "./resources/resources.model";
 export { scopes } from "./resources/scopes.model";
 export { roleAssignments, roles } from "./roles/roles.model";

@@ -62,7 +62,11 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(mongo.db.resources, mongo.db.scopes),
+  resourcesFor: storedResourcesFor(
+    mongo.db.resources,
+    mongo.db.scopes,
+    mongo.db.detailTypes,
+  ),
 });
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
