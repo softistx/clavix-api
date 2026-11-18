@@ -5,6 +5,7 @@ import type { Context } from "@/http/context";
 import type { OAuthHandle } from "@/oauth/routes";
 import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { type AgentMarks, type AgentsFor, markOf } from "./agent-marker";
 import {
   type DetailTexts,
   type DetailTextsFor,
@@ -26,22 +27,26 @@ const SERVERS = "oauthServers" as const;
 type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
 const TEXTS = "scopeTextsFor" as const;
 const DETAIL_TEXTS = "detailTextsFor" as const;
+const AGENTS = "agentsFor" as const;
 type WithServers = {
   [SERVERS]?: ServerSource;
   [TEXTS]?: ScopeTextsFor;
   [DETAIL_TEXTS]?: DetailTextsFor;
+  [AGENTS]?: AgentsFor;
 };
 
 /**
  * Puts the app's OAuth servers on the GraphQL context (`createApp({ oauth })`),
  * and the readers of the tenants' scope texts, which the consent page shows
  * instead of the bare scope names, and of their detail type texts, which it
- * shows as the request's `details`.
+ * shows as the request's `details`, and of the tenant's agents, which marks
+ * a client as an agent.
  */
 export const oauthContext = (
   oauth: ServerSource,
   texts?: ScopeTextsFor,
   detailTexts?: DetailTextsFor,
+  agents?: AgentsFor,
 ) => ({
   onContextBuilding: ({
     extendContext,
@@ -52,6 +57,7 @@ export const oauthContext = (
       [SERVERS]: oauth,
       ...(texts === undefined ? {} : { [TEXTS]: texts }),
       ...(detailTexts === undefined ? {} : { [DETAIL_TEXTS]: detailTexts }),
+      ...(agents === undefined ? {} : { [AGENTS]: agents }),
     }),
 });
 
@@ -73,6 +79,7 @@ function perRequest<T>() {
 }
 const readTexts = perRequest<ScopeTexts>();
 const readDetailTexts = perRequest<DetailTexts>();
+const readAgents = perRequest<AgentMarks>();
 const textsOf = (ctx: WithServers & { request?: Request }) =>
   readTexts(ctx.request, ctx[TEXTS]);
 
@@ -87,6 +94,12 @@ async function detailed(
   const locale = localeOf(ctx.request?.headers.get("accept-language") ?? null);
   return detailsOf(parent.authorizationDetails, texts, locale);
 }
+
+// One read of the tenant's agents per request, shared by every client of a page.
+const agentOf = async (
+  parent: { id: string },
+  ctx: WithServers & { request?: Request },
+) => markOf(await readAgents(ctx.request, ctx[AGENTS]), parent.id);
 
 interface Labelled {
   name: string;
@@ -161,4 +174,14 @@ export const consentResolvers: IResolvers = {
   OAuthRequest: { scopes: labelled, details: detailed },
   OAuthDeviceRequest: { scopes: labelled, details: detailed },
   OAuthConnectedApp: { scopes: labelled },
+  // Whether the client is an agent of the tenant, and since when.
+  OAuthClient: {
+    agent: async (parent: { id: string }, _: unknown, ctx: WithServers) =>
+      (await agentOf(parent, ctx)).agent,
+    registeredAt: async (
+      parent: { id: string },
+      _: unknown,
+      ctx: WithServers,
+    ) => (await agentOf(parent, ctx)).registeredAt,
+  },
 };

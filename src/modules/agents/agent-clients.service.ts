@@ -59,6 +59,12 @@ export class AgentClientsService implements AgentClientsPort {
     return new Map(found.map((agent) => [agent.clientId, agent.kind]));
   }
 
+  /** The registration time of each recorded agent of the tenant, by client id. */
+  async registeredAt(tenantId: string): Promise<Map<string, Date>> {
+    const found = await this.scoped(tenantId).findMany({});
+    return new Map(found.map((agent) => [agent.clientId, agent.createdAt]));
+  }
+
   /** The ids of the tenant's dynamically registered agents recorded before `before` (the clean-up job). */
   async registeredBefore(tenantId: string, before: Date): Promise<string[]> {
     const found = await this.scoped(tenantId).findMany({
