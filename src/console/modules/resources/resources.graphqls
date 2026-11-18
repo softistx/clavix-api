@@ -36,16 +36,18 @@ type Resource {
   """
   Where the resource server serves its RFC 9728 protected resource metadata:
   `/.well-known/oauth-protected-resource` plus the URI's path, on the URI's
-  own origin. Clavix hosts no copy.
+  own origin. Clavix hosts no copy. `null` when the tenant's host does not
+  resolve (the document needs its issuer).
   """
-  metadataUrl: String!
+  metadataUrl: String
   """
   The RFC 9728 document (JSON text) the resource server serves at
   `metadataUrl`, as janus's `protectedResource()` answers it: the resource,
   this tenant's issuer, the resource's scopes and, when the tenant requires
-  DPoP, its algorithms. Authorization detail types are not in it yet.
+  DPoP, its algorithms. Authorization detail types are not in it yet. `null`
+  when the tenant's host does not resolve.
   """
-  protectedResourceMetadata: String!
+  protectedResourceMetadata: String
   createdAt: DateTime!
 }
 

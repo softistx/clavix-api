@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { protectedResource } from "@softistx/janus-oauth";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
-import { tenantsService } from "@/config/tenancy";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { consoleAs } from "~/console";
@@ -129,5 +129,36 @@ describe("Resource.protectedResourceMetadata", () => {
     const off = JSON.parse((await read()).protectedResourceMetadata);
     expect(off.dpop_signing_alg_values_supported).toBeUndefined();
     expect(off.dpop_bound_access_tokens_required).toBeUndefined();
+  });
+
+  test("the host is resolved once per request, and an unresolved one gives null documents, not an error", async () => {
+    const second = await admin(CREATE, {
+      t: tenant,
+      i: { uri: "https://api2.prm.example/mcp" },
+    });
+    expect(second.errors).toBeUndefined();
+    const spy = spyOn(tenantResolver, "resolveHost");
+    try {
+      await admin(LIST, { t: tenant });
+      const hosts = spy.mock.calls.filter(([host]) => host.startsWith("prm."));
+      expect(hosts).toHaveLength(1);
+      spy.mockResolvedValue(null);
+      const listed = await admin(LIST, { t: tenant });
+      expect(listed.errors).toBeUndefined();
+      const rows = listed.data?.["resources"] as {
+        id: string;
+        metadataUrl: string | null;
+        protectedResourceMetadata: string | null;
+      }[];
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.metadataUrl).toBeNull();
+        expect(row.protectedResourceMetadata).toBeNull();
+      }
+      const one = await admin(GET, { t: tenant, id: resourceId });
+      expect(one.errors).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

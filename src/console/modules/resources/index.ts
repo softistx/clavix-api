@@ -142,7 +142,7 @@ const resourceShape = (
   resource: StoredResourceDoc,
   scopes: StoredScopeDoc[],
   types: StoredDetailTypeDoc[],
-  document: { metadataUrl: string; metadata: string },
+  document: ProtectedResourceDocument | null,
 ) => ({
   id: resource._id.toHexString(),
   uri: resource.uri,
@@ -153,30 +153,34 @@ const resourceShape = (
   detailTypes: types
     .filter((doc) => doc.resourceId.equals(resource._id))
     .map(detailTypeShape),
-  metadataUrl: document.metadataUrl,
-  protectedResourceMetadata: document.metadata,
+  metadataUrl: document?.metadataUrl ?? null,
+  protectedResourceMetadata: document?.metadata ?? null,
   createdAt: resource.createdAt,
 });
 
-// The RFC 9728 document of a resource: the tenant's issuer (its primary host
-// when it has one) and DPoP policy come from the resolved tenant.
-const documentOf = async (
-  slug: string,
-  resource: StoredResourceDoc,
-  scopes: StoredScopeDoc[],
-) => {
-  const tenant = await tenantResolver.resolveHost(
-    hostOf(slug, env.CLAVIX_DOMAIN),
-  );
-  if (tenant === null) throw new Error(`tenant ${slug} does not resolve`);
-  return protectedResourceDocument({
-    uri: resource.uri,
-    issuer: tenant.issuer,
-    scopes: scopes
-      .filter((scope) => scope.resourceId?.equals(resource._id))
-      .map((scope) => scope.name),
-    dpopRequired: tenant.oauth.dpop.required,
-  });
+type ProtectedResourceDocument = Awaited<
+  ReturnType<typeof protectedResourceDocument>
+>;
+
+// The RFC 9728 documents of a tenant's resources: the tenant's issuer (its
+// primary host when it has one) and DPoP policy come from the resolved
+// tenant, read once per request however many resources it shows. A host that
+// does not resolve gives `null` documents, never an error.
+const documentsOf = (slug: string) => {
+  let tenant: ReturnType<typeof tenantResolver.resolveHost> | undefined;
+  return async (resource: StoredResourceDoc, scopes: StoredScopeDoc[]) => {
+    tenant ??= tenantResolver.resolveHost(hostOf(slug, env.CLAVIX_DOMAIN));
+    const resolved = await tenant;
+    if (resolved === null) return null;
+    return protectedResourceDocument({
+      uri: resource.uri,
+      issuer: resolved.issuer,
+      scopes: scopes
+        .filter((scope) => scope.resourceId?.equals(resource._id))
+        .map((scope) => scope.name),
+      dpopRequired: resolved.oauth.dpop.required,
+    });
+  };
 };
 
 export const resources: Resolvers = {
@@ -188,13 +192,14 @@ export const resources: Resolvers = {
         catalog.listScopes(_id),
         catalog.listDetailTypes(_id),
       ]);
+      const documentOf = documentsOf(slug);
       return Promise.all(
         found.map(async (resource) =>
           resourceShape(
             resource,
             scopes,
             types,
-            await documentOf(slug, resource, scopes),
+            await documentOf(resource, scopes),
           ),
         ),
       );
@@ -208,7 +213,7 @@ export const resources: Resolvers = {
         found,
         scopes,
         await catalog.listDetailTypes(_id, { resourceId: found._id }),
-        await documentOf(slug, found, scopes),
+        await documentsOf(slug)(found, scopes),
       );
     },
     scopes: async (_, { tenantId, resourceId }, ctx) => {
@@ -241,7 +246,7 @@ export const resources: Resolvers = {
         created,
         [],
         [],
-        await documentOf(tenant.slug, created, []),
+        await documentsOf(tenant.slug)(created, []),
       );
     },
     updateResource: async (_, { tenantId, id, input }, ctx) => {
@@ -255,7 +260,7 @@ export const resources: Resolvers = {
         updated,
         scopes,
         await catalog.listDetailTypes(_id, { resourceId: updated._id }),
-        await documentOf(slug, updated, scopes),
+        await documentsOf(slug)(updated, scopes),
       );
     },
     deleteResource: async (_, { tenantId, id }, ctx) => {
