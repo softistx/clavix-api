@@ -105,17 +105,10 @@ const detailsComplete = async (
   ctx: WithServers & { request?: Request },
 ) => (await reviewed(parent.authorizationDetails, ctx)).complete;
 
-// janus counts the device user-code lookups (`beforeUserCodeLookup`); the
-// approve guard below looks the code up first, so it counts it itself and
-// tells janus's hook not to count the same call twice.
-const counted = new WeakSet<object>();
-
 // Approval is all or nothing (D4) and allows only what the page showed: a
 // request whose details cannot be fully described (type deleted, a key the
 // type no longer defines) is refused before janus approves it, as an invalid
-// authorization details input; it stays pending and can be denied. janus-oauth
-// has no hook before an approval, so the guard wraps its two approve resolvers.
-type Resolver = (...args: never[]) => Promise<unknown>;
+// authorization details input; it stays pending and can be denied.
 const refuseIncomplete = () =>
   new GraphQLError("invalid_authorization_details", {
     extensions: {
@@ -123,70 +116,6 @@ const refuseIncomplete = () =>
       oauthError: "invalid_authorization_details",
     },
   });
-// Signed in and on a live tenant, as janus's own approve checks them first;
-// otherwise the guard stays out of the way and janus answers as it always did.
-async function signedIn(ctx: unknown) {
-  const { janus, tenant } = ctx as Context;
-  if ((await janus.user()) === null) return false;
-  const resolved = await tenant();
-  if (resolved === null) return false;
-  requireLive(resolved);
-  return true;
-}
-
-// Temporary, until @softistx/janus-oauth#886
-function guardCode(approve: Resolver): Resolver {
-  return async (...args) => {
-    const [, { id }, ctx] = args as unknown as [
-      unknown,
-      { id: string },
-      WithServers & { request?: Request },
-    ];
-    // Anonymous, or unknown to this tenant: janus answers as it always did.
-    if (ctx.request !== undefined && (await signedIn(ctx))) {
-      const server = await ctx[SERVERS]?.serverFor(ctx.request);
-      const view = await server?.request(id);
-      if (view?.authorizationDetails !== undefined) {
-        const json = JSON.stringify(view.authorizationDetails);
-        if (!(await reviewed(json, ctx)).complete) throw refuseIncomplete();
-      }
-    }
-    return approve(...args);
-  };
-}
-
-// Temporary, until @softistx/janus-oauth#886
-function guardDevice(
-  approve: Resolver,
-  beforeLookup: (ctx: never) => Promise<void>,
-): Resolver {
-  return async (...args) => {
-    const [, { userCode }, ctx] = args as unknown as [
-      unknown,
-      { userCode: string },
-      WithServers & { request?: Request },
-    ];
-    if (ctx.request !== undefined && (await signedIn(ctx))) {
-      const server = await ctx[SERVERS]?.serverFor(ctx.request);
-      if (server !== null && server !== undefined) {
-        await beforeLookup(ctx as never);
-        counted.add(ctx);
-        try {
-          const view = await server.deviceRequest(userCode);
-          if (view?.authorizationDetails !== undefined) {
-            const json = JSON.stringify(view.authorizationDetails);
-            if (!(await reviewed(json, ctx)).complete) throw refuseIncomplete();
-          }
-          return await approve(...args);
-        } finally {
-          // The mark covers this one call, never a later lookup of the request.
-          counted.delete(ctx);
-        }
-      }
-    }
-    return approve(...args);
-  };
-}
 
 // One read of the client's agent mark per request, shared by its fields.
 const agentOf = async (
@@ -239,8 +168,14 @@ const janusResolvers = oauthResolvers({
   // miss: janus calls the hook before it reads the store). The viewer is
   // known to be signed in, and the tenant live, when it runs.
   beforeUserCodeLookup: async (ctx) => {
-    if (counted.delete(ctx)) return;
     await countLookup(ctx as unknown as Context);
+  },
+  // Once per approval, in both flows, after the viewer and session checks.
+  beforeApprove: async ({ request }, ctx) => {
+    if (request.authorizationDetails === undefined) return;
+    const json = JSON.stringify(request.authorizationDetails);
+    const { complete } = await reviewed(json, ctx as WithServers);
+    if (!complete) throw refuseIncomplete();
   },
   oauth: async (ctx) => {
     // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
@@ -267,16 +202,6 @@ const janusResolvers = oauthResolvers({
  */
 export const consentResolvers: IResolvers = {
   ...janusResolvers,
-  Mutation: {
-    ...janusResolvers.Mutation,
-    approveOAuthRequest: guardCode(
-      janusResolvers.Mutation["approveOAuthRequest"] as Resolver,
-    ),
-    approveOAuthDeviceRequest: guardDevice(
-      janusResolvers.Mutation["approveOAuthDeviceRequest"] as Resolver,
-      countLookup as (ctx: never) => Promise<void>,
-    ),
-  },
   // The label of a scope is the tenant's description of it (console, `Scope`),
   // in the viewer's language (`Accept-Language`); janus's own (the scope's
   // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one
