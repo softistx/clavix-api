@@ -32,6 +32,8 @@ export interface ClientView {
   dpopBoundAccessTokens: boolean;
   /** How the client was registered; an agent is `dynamic` or `metadata`. */
   registration: ClientRegistration;
+  /** The authorization detail types (RFC 9396) the client may ask for; empty when it lists none. */
+  authorizationDetailsTypes: readonly string[];
 }
 
 // A listing reads the store page by page and keeps what matches; it stops
@@ -69,6 +71,7 @@ export const viewOf = (
     record.requirePushedAuthorizationRequests === true,
   dpopBoundAccessTokens: record.dpopBoundAccessTokens === true,
   registration: registrationOf(record, agents),
+  authorizationDetailsTypes: record.authorizationDetailsTypes ?? [],
 });
 
 /** Which clients a listing keeps, beyond `q`. */

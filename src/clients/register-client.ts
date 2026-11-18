@@ -1,4 +1,5 @@
 import {
+  DEVICE_GRANT,
   hashOAuthSecret,
   mintOAuthSecret,
   type OAuthClientRecord,
@@ -12,7 +13,9 @@ import {
   SuspendedTenantError,
   UnknownTenantError,
 } from "@/cli/errors";
+import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
 import { partitionOf } from "@/modules/tenants/identity";
+import { detailTypesOf } from "./detail-types";
 import { DEFAULT_GRANTS, usesRedirect } from "./grants";
 import { validate } from "./validate";
 
@@ -59,6 +62,13 @@ export interface RegisterClientInput {
    * already records, else `false`.
    */
   dpopBound?: boolean;
+  /**
+   * The authorization detail types (RFC 9396) the client may ask for: each is a
+   * type of the tenant, and the client must push its requests (`requirePar`).
+   * Replaces the list; `[]` clears it. Default: what the client already
+   * records, else none.
+   */
+  detailTypes?: readonly string[];
 }
 
 export interface RegisteredClient {
@@ -75,6 +85,8 @@ export interface RegisteredClient {
   requirePar: boolean;
   /** Whether the client's token requests must carry a DPoP proof. */
   dpopBound: boolean;
+  /** The detail types the client may ask for. */
+  detailTypes: readonly string[];
 }
 
 export interface RegisterClientOptions {
@@ -82,6 +94,8 @@ export interface RegisterClientOptions {
   db: Db;
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
   now?: () => Date;
+  /** The tenant's detail types; without it a client cannot list any. */
+  detailTypes?: ClientDetailTypes;
 }
 
 /**
@@ -173,6 +187,17 @@ export async function registerClient(
   const requirePar =
     input.requirePar ?? existing?.requirePushedAuthorizationRequests === true;
   const dpopBound = input.dpopBound ?? existing?.dpopBoundAccessTokens === true;
+  const grants = grantTypes ?? existing?.grantTypes ?? [...DEFAULT_GRANTS];
+  const detailTypes = await detailTypesOf(
+    options.detailTypes,
+    tenant,
+    input.detailTypes,
+    existing?.authorizationDetailsTypes ?? [],
+    {
+      requirePar,
+      hasConsent: usesRedirect(grants) || grants.includes(DEVICE_GRANT),
+    },
+  );
   const record: OAuthClientRecord = {
     id: clientId,
     name,
@@ -180,9 +205,12 @@ export async function registerClient(
     source: "registered",
     createdAt: existing?.createdAt ?? (options.now ?? (() => new Date()))(),
     expiresAt: null,
-    grantTypes: grantTypes ?? existing?.grantTypes ?? [...DEFAULT_GRANTS],
+    grantTypes: grants,
     ...(requirePar ? { requirePushedAuthorizationRequests: true } : {}),
     ...(dpopBound ? { dpopBoundAccessTokens: true } : {}),
+    ...(detailTypes.length > 0
+      ? { authorizationDetailsTypes: detailTypes }
+      : {}),
     ...(confidential && secretHash !== undefined
       ? {
           tokenEndpointAuthMethod: "client_secret_basic" as const,
@@ -201,5 +229,6 @@ export async function registerClient(
     clientSecret,
     requirePar,
     dpopBound,
+    detailTypes,
   };
 }

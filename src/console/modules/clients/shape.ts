@@ -69,6 +69,7 @@ export const shape = (
     requirePushedAuthorizationRequests: boolean;
     dpopBoundAccessTokens: boolean;
     registration: "console" | "dynamic" | "metadata";
+    authorizationDetailsTypes: readonly string[];
   },
   rules?: Rules,
 ) => ({
@@ -82,6 +83,7 @@ export const shape = (
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
   dpopBoundAccessTokens: client.dpopBoundAccessTokens,
+  authorizationDetailsTypes: [...client.authorizationDetailsTypes],
   tokenExchange: exchangeShape(rules),
   registration: REGISTRATION[client.registration],
 });

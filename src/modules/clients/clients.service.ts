@@ -6,6 +6,7 @@ import type { AgentClientsService } from "@/modules/agents/agent-clients.service
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
 import { CatalogError } from "@/modules/resources/catalog.errors";
+import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
 import { partitionOf } from "@/modules/tenants/identity";
 import { deleteClientAndRules } from "./client-deletion";
 import {
@@ -36,6 +37,8 @@ export interface ClientsServiceOptions {
    * client stops being one (it frees the `agents` quota).
    */
   agents?: Pick<AgentClientsService, "kinds" | "remove">;
+  /** The tenants' detail types a client may list (R3); without it none can be listed. */
+  detailTypes?: ClientDetailTypes;
   now?: () => Date;
 }
 
@@ -60,7 +63,15 @@ export class ClientsService {
     tenant: CliTenant,
     input: Omit<Parameters<typeof registerClient>[1], "tenant">,
   ) {
-    return registerForTenant(this.options.db, this.options.now, tenant, input);
+    return registerForTenant(
+      {
+        db: this.options.db,
+        now: this.options.now,
+        detailTypes: this.options.detailTypes,
+      },
+      tenant,
+      input,
+    );
   }
 
   /** The tenant's agents by client id (none without the agents store). */
@@ -152,6 +163,8 @@ export class ClientsService {
       clientId?: string | undefined;
       requirePar?: boolean | undefined;
       dpopBound?: boolean | undefined;
+      /** The detail types the client may ask for (each a tenant type; needs `requirePar`). Default: none. */
+      detailTypes?: readonly string[] | undefined;
       /** Default: `authorization_code` and `refresh_token`. */
       grants?: readonly string[] | undefined;
     },
@@ -182,6 +195,9 @@ export class ClientsService {
         : { requirePar: input.requirePar }),
       ...(input.dpopBound === undefined ? {} : { dpopBound: input.dpopBound }),
       ...(input.grants === undefined ? {} : { grants: input.grants }),
+      ...(input.detailTypes === undefined
+        ? {}
+        : { detailTypes: input.detailTypes }),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -189,7 +205,7 @@ export class ClientsService {
     };
   }
 
-  /** Replaces the name, the redirect URIs and/or the grants; the type and the secret stay. */
+  /** Replaces the name, the redirect URIs, the grants and/or the detail types; the type and the secret stay. */
   async update(
     tenant: CliTenant,
     clientId: string,
@@ -198,6 +214,7 @@ export class ClientsService {
       redirectUris?: readonly string[] | undefined;
       requirePar?: boolean | undefined;
       dpopBound?: boolean | undefined;
+      detailTypes?: readonly string[] | undefined;
       grants?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
@@ -213,6 +230,10 @@ export class ClientsService {
       dpopBound: input.dpopBound ?? current.dpopBoundAccessTokens,
       // Kept as recorded unless the call changes them.
       grants: input.grants ?? current.grantTypes,
+      // Left out, `registerClient` keeps the stored list (a stale type stays).
+      ...(input.detailTypes === undefined
+        ? {}
+        : { detailTypes: input.detailTypes }),
     });
     return this.require(tenant, clientId);
   }
