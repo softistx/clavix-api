@@ -38,6 +38,7 @@ export class OAuthPolicyService {
           dpop: {
             required: input.dpop?.required ?? tenant.oauth.dpop.required,
           },
+          agents: tenant.oauth.agents,
         };
         if (
           next.par.required === tenant.oauth.par.required &&

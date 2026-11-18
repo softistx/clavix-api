@@ -38,7 +38,7 @@ const consoleClient = async () => {
 describe(id, () => {
   test("requires PAR and DPoP on the clavix tenant and its console client, once", async () => {
     const before = await platform();
-    expect(before?.oauth).toEqual({
+    expect(before?.oauth).toMatchObject({
       par: { required: false },
       dpop: { required: false },
     });
@@ -47,7 +47,7 @@ describe(id, () => {
 
     expect(await requireParAndDpopOnConsole(db)).toBe(true);
     const after = await platform();
-    expect(after?.oauth).toEqual({
+    expect(after?.oauth).toMatchObject({
       par: { required: true },
       dpop: { required: true },
     });
@@ -85,7 +85,7 @@ describe(id, () => {
     ).toEqual({ par: { required: false }, dpop: { required: false } });
     expect((await platform())?.oauth.par.required).toBe(true);
     await relaxParAndDpopOnConsole(db);
-    expect((await platform())?.oauth).toEqual({
+    expect((await platform())?.oauth).toMatchObject({
       par: { required: false },
       dpop: { required: false },
     });

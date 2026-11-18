@@ -4,8 +4,8 @@ import { z } from "zod";
 export const PLAN_IDS = ["free", "pro", "enterprise"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
-/** What a quota may be put on. `mau` is soft, `clients` and `domains` are hard. */
-export const QUOTA_KEYS = ["mau", "clients", "domains"] as const;
+/** What a quota may be put on. `mau` is soft, `clients`, `domains` and `agents` are hard. */
+export const QUOTA_KEYS = ["mau", "clients", "domains", "agents"] as const;
 export type QuotaKey = (typeof QUOTA_KEYS)[number];
 
 /** A limit per quota; `null` means no limit. */
@@ -19,7 +19,12 @@ export const planFields = {
   plan: z.enum(PLAN_IDS).default("free"),
   // The quotas set for this tenant alone; a missing key follows the plan.
   quotaOverrides: z
-    .object({ mau: override, clients: override, domains: override })
+    .object({
+      mau: override,
+      clients: override,
+      domains: override,
+      agents: override,
+    })
     .default({}),
 };
 
@@ -32,12 +37,20 @@ export interface Plan {
 }
 
 export const PLANS: readonly Plan[] = [
-  { id: "free", name: "Free", quotas: { mau: 1_000, clients: 3, domains: 1 } },
-  { id: "pro", name: "Pro", quotas: { mau: 10_000, clients: 20, domains: 5 } },
+  {
+    id: "free",
+    name: "Free",
+    quotas: { mau: 1_000, clients: 3, domains: 1, agents: 100 },
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    quotas: { mau: 10_000, clients: 20, domains: 5, agents: 1_000 },
+  },
   {
     id: "enterprise",
     name: "Enterprise",
-    quotas: { mau: null, clients: null, domains: null },
+    quotas: { mau: null, clients: null, domains: null, agents: null },
   },
 ];
 
@@ -52,6 +65,7 @@ export const overridesOf = (overrides: QuotaOverrides): Quotas => ({
   mau: overrides.mau ?? null,
   clients: overrides.clients ?? null,
   domains: overrides.domains ?? null,
+  agents: overrides.agents ?? null,
 });
 
 /** What applies to a tenant: its plan's quotas with its overrides on top. */
@@ -64,5 +78,6 @@ export function effectiveQuotas(tenant: {
     mau: tenant.quotaOverrides.mau ?? quotas.mau,
     clients: tenant.quotaOverrides.clients ?? quotas.clients,
     domains: tenant.quotaOverrides.domains ?? quotas.domains,
+    agents: tenant.quotaOverrides.agents ?? quotas.agents,
   };
 }

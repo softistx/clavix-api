@@ -26,11 +26,18 @@ describe("resolvedTenant", () => {
     expect(resolvedTenant.parse(entry).oauth).toEqual({
       par: { required: false },
       dpop: { required: false },
+      agents: {
+        dynamic: "off",
+        redirectUris: [],
+        metadataDocuments: false,
+        allowHosts: [],
+      },
     });
+    expect(resolvedTenant.parse(entry).oauth.agents.dynamic).toBe("off");
     expect(
       resolvedTenant.parse({ ...entry, oauth: { par: { required: true } } })
         .oauth,
-    ).toEqual({ par: { required: true }, dpop: { required: false } });
+    ).toMatchObject({ par: { required: true }, dpop: { required: false } });
   });
 
   test("an entry cached before custom domains (no slugIssuer) is refused, so the cache reads it as a miss", () => {

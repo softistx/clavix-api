@@ -17,6 +17,7 @@ import type {
   RolesFor,
   SigningKeysFor,
 } from "./ports";
+import type { MetadataTransport } from "./registration";
 import { type Keyed, resolveIssuer } from "./resolution";
 
 export interface ClavixOAuthOptions {
@@ -52,6 +53,8 @@ export interface ClavixOAuthOptions {
    * no client may exchange tokens.
    */
   exchangeRulesFor?: ExchangeRulesFor;
+  /** The transport of the Client ID Metadata Documents fetch; for specs. Default: janus's own. */
+  metadataTransport?: MetadataTransport;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -111,6 +114,7 @@ export function createClavixOAuthIssuers(
     clock,
     rolesFor: options.rolesFor,
     exchangeRulesFor: options.exchangeRulesFor,
+    metadataTransport: options.metadataTransport,
   });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),

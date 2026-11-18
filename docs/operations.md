@@ -257,6 +257,43 @@ configured there is no device throttle at all. The fix is Redis, not the limits.
 the value: `dc up -d api`. Keep the window and the limit in proportion: doubling the tenant limit doubles the
 approvals an hour allowed.
 
+## Agent registration throttle
+
+A tenant that turns agents on (`agents.dynamic` `restricted` or `open`, [MCP guide](guide/mcp.md)) serves an anonymous
+`POST /register`. Each call stores a client, so it is limited in Redis by two buckets (same GCRA buckets as the device
+throttle: full at the limit, refilling evenly over the window).
+
+| Variable (`CLAVIX_REGISTER_…`)           | Default    | Counts calls per          |
+| ---------------------------------------- | ---------- | ------------------------- |
+| `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 20 / 3600  | client address and tenant |
+| `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS` | 500 / 3600 | tenant                    |
+
+Past a limit `/register` answers 429 `temporarily_unavailable` with `Retry-After`. The address is checked first, so a
+refused address spends no tenant budget. A tenant with policy off answers 400 before any bucket is spent.
+
+**Sizing.** 20 per hour per address fits one person connecting a few MCP clients; an office behind one address that
+onboards many agents at once needs a higher `CLAVIX_REGISTER_IP_LIMIT`. The `agents` quota (free 100, pro 1000,
+enterprise unlimited, overridable per tenant) bounds what is stored whatever the throttle lets through; the tenant
+bucket only bounds the rate. **Redis down or slow:** the throttle fails open and logs it; the quota still holds.
+Without Redis there is no `/register` throttle.
+
+**Before the deploy.** Run `db:sync` first: it creates the `agentClients` collection and its indexes, and the tenants
+validator that knows `oauth.agents` and the `agents` quota override. The Caddyfile `@api` matcher gains `/register`;
+reload Caddy with the new file, or the path never reaches the api.
+
+**Metadata documents.** Fetching a Client ID Metadata Document is an outbound request on `/authorize` and `/par`,
+limited by its own pair of buckets (tenants with `metadataDocuments` on only). Only the MCP hosts and the tenant's
+`allowHosts` are fetched.
+
+| Variable (`CLAVIX_METADATA_…`)           | Default  | Counts requests per       |
+| ---------------------------------------- | -------- | ------------------------- |
+| `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 30 / 60  | client address and tenant |
+| `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS` | 300 / 60 | tenant                    |
+
+Past a limit the request answers 429 `temporarily_unavailable` with `Retry-After`; nothing is fetched. A client not
+recorded yet is also refused with 403 `access_denied` when the tenant is at its `agents` quota. Redis down: fails
+open and logs; without Redis there is no limit.
+
 ## TLS
 
 Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the

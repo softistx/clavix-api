@@ -1,0 +1,59 @@
+import {
+  MCP_CLIENT_REDIRECT_URIS,
+  MCP_METADATA_DOCUMENT_HOSTS,
+  type OAuthMetadataDocumentOptions,
+  type OAuthRegistration,
+  redirectUriProblem,
+} from "@softistx/janus-oauth";
+import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
+
+/**
+ * The transport of the Client ID Metadata Documents fetch. Production uses
+ * janus's own (the global `fetch` and the system resolver); a spec injects
+ * both so that none touches the network.
+ */
+export type MetadataTransport = Pick<
+  OAuthMetadataDocumentOptions,
+  "fetch" | "resolve"
+>;
+
+const unique = (list: readonly string[]) => [...new Set(list)];
+
+/**
+ * janus's `registration` for a tenant's agents policy (M3, D7 and D8).
+ * `restricted` is the MCP clients' redirect URIs plus the tenant's own list;
+ * `open` any valid redirect URI. Documents are fetched only from the MCP hosts
+ * plus the tenant's `allowHosts`, never from any host. A redirect URI of the
+ * list that janus's rules refuse is left out (it would be a `TypeError` that
+ * takes the tenant's whole OAuth server down).
+ */
+export function registrationOf(
+  agents: AgentsPolicy,
+  transport: MetadataTransport = {},
+): OAuthRegistration {
+  const dynamic =
+    agents.dynamic === "off"
+      ? ("off" as const)
+      : agents.dynamic === "open"
+        ? ("open" as const)
+        : {
+            redirectUris: unique([
+              ...MCP_CLIENT_REDIRECT_URIS,
+              ...agents.redirectUris.filter(
+                (uri) => redirectUriProblem(uri) === null,
+              ),
+            ]),
+          };
+  return {
+    dynamic,
+    metadataDocuments: agents.metadataDocuments
+      ? {
+          allowHosts: unique([
+            ...MCP_METADATA_DOCUMENT_HOSTS,
+            ...agents.allowHosts,
+          ]),
+          ...transport,
+        }
+      : false,
+  };
+}

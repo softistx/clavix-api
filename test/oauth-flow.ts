@@ -6,6 +6,7 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { registerClient } from "@/clients/register-client";
+import { withAgentRegistration } from "@/config/agents-registration";
 import { exchangeRulesFor } from "@/config/client-policies";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
@@ -13,6 +14,11 @@ import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
+import type {
+  MetadataThrottle,
+  RegisterThrottle,
+} from "@/oauth/register-throttle";
+import type { MetadataTransport } from "@/oauth/registration";
 import { createTenantParOff } from "./tenant-par-off";
 
 export const DOMAIN = (await import("@/config/env")).env.CLAVIX_DOMAIN;
@@ -26,7 +32,17 @@ const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
  * the user's e-mail. For the specs that read what a token carries or whether
  * it still works.
  */
-export function createFlow(options: { rolesFor?: RolesFor } = {}) {
+export function createFlow(
+  options: {
+    rolesFor?: RolesFor;
+    /** What the `/register` route throttles with (none by default). */
+    registerThrottle?: RegisterThrottle;
+    /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
+    metadataThrottle?: MetadataThrottle;
+    /** Fetches and resolves metadata documents (the specs' stand-in for the network). */
+    metadataTransport?: MetadataTransport;
+  } = {},
+) {
   const keys = new Map<string, SigningKeyStore>();
   const signingKeysFor = (tenantId: string) => {
     let store = keys.get(tenantId);
@@ -44,7 +60,7 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     email: `${subject.id}@end.test`,
     email_verified: true,
   });
-  const issuers = createClavixOAuthIssuers({
+  const base = createClavixOAuthIssuers({
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,
@@ -54,7 +70,15 @@ export function createFlow(options: { rolesFor?: RolesFor } = {}) {
     resourcesFor,
     exchangeRulesFor,
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
+    ...(options.metadataTransport === undefined
+      ? {}
+      : { metadataTransport: options.metadataTransport }),
   });
+  const issuers = withAgentRegistration(
+    base,
+    options.registerThrottle ?? undefined,
+    options.metadataThrottle ?? undefined,
+  );
   const url = (slug: string, path: string) =>
     `https://${slug}.${DOMAIN}${path}`;
   const get = (slug: string, path: string, authorization?: string) =>

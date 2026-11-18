@@ -29,6 +29,8 @@ export interface ClientsServiceOptions {
   db: Db;
   /** The clients' per-client rules, removed with the client. */
   policies: ClientPoliciesService;
+  /** The tenant's agents: a deleted client stops being one (it frees the `agents` quota). */
+  agents?: { remove(tenantId: string, clientId: string): Promise<void> };
   now?: () => Date;
 }
 
@@ -235,16 +237,21 @@ export class ClientsService {
     };
   }
 
-  delete(
+  async delete(
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ removed: boolean; unmanaged: boolean }> {
-    return deleteClientAndRules(
+    const result = await deleteClientAndRules(
       this.storeOf(tenant),
       this.options.policies,
       tenant,
       clientId,
       (this.options.now ?? (() => new Date()))(),
     );
+    // On a repeat too: a run that stopped between the two is finished.
+    if (!result.unmanaged) {
+      await this.options.agents?.remove(tenant._id.toHexString(), clientId);
+    }
+    return result;
   }
 }

@@ -24,6 +24,8 @@ export interface UsageSources {
   clients(tenantId: string): Promise<number>;
   /** The tenant's custom domains now. */
   domains(tenantId: string): Promise<number>;
+  /** The tenant's agents now (dynamically registered and metadata-document clients). */
+  agents(tenantId: string): Promise<number>;
 }
 
 export interface UsageMeter {
@@ -38,6 +40,7 @@ export interface UsageReport {
   mau: UsageMeter;
   clients: UsageMeter;
   domains: UsageMeter;
+  agents: UsageMeter;
 }
 
 const meter = (used: number, quota: number | null): UsageMeter => ({
@@ -90,10 +93,11 @@ export class UsageService {
   ): Promise<UsageReport> {
     const tenantId = tenant._id.toHexString();
     const quotas = effectiveQuotas(tenant);
-    const [mau, clients, domains] = await Promise.all([
+    const [mau, clients, domains, agents] = await Promise.all([
       this.activeUsers(tenantId, month),
       this.sources.clients(tenantId),
       this.sources.domains(tenantId),
+      this.sources.agents(tenantId),
     ]);
     return {
       tenantId,
@@ -101,10 +105,11 @@ export class UsageService {
       mau: meter(mau, quotas.mau),
       clients: meter(clients, quotas.clients),
       domains: meter(domains, quotas.domains),
+      agents: meter(agents, quotas.agents),
     };
   }
 
-  /** The count of `key` now, for the hard quotas (`clients`, `domains`). */
+  /** The count of `key` now, for the hard quotas (`clients`, `domains`, `agents`). */
   count(tenantId: string, key: Exclude<QuotaKey, "mau">): Promise<number> {
     return this.sources[key](tenantId);
   }

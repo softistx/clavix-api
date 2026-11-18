@@ -140,6 +140,34 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Dynamic client registration (`POST /register`, agents): per client address
+  // and tenant, and per tenant. Every call stores a client for anyone who asks,
+  // so the address budget is small (janus: 5 an hour open, 20 with a list).
+  // Redis only, as above.
+  CLAVIX_REGISTER_IP_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_REGISTER_IP_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  CLAVIX_REGISTER_TENANT_LIMIT: z.coerce.number().int().min(1).default(500),
+  CLAVIX_REGISTER_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // Client ID Metadata Document fetches (`/authorize`, `/par` with a URL
+  // `client_id`, agents): each is an outbound request an anonymous caller
+  // chose. Per client address and tenant, and per tenant; janus advises about
+  // 30 a minute per address. Redis only, as above.
+  CLAVIX_METADATA_IP_LIMIT: z.coerce.number().int().min(1).default(30),
+  CLAVIX_METADATA_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
+  CLAVIX_METADATA_TENANT_LIMIT: z.coerce.number().int().min(1).default(300),
+  CLAVIX_METADATA_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(60),
   // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
   // custom domains, A4): the shared secret of that URL, at least 32 characters.
   // Unset, the endpoint does not exist. The route is internal: never expose
