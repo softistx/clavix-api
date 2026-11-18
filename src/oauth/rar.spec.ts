@@ -630,6 +630,28 @@ describe("details the page cannot fully describe", () => {
     await dropGift("gift-ok");
   });
 
+  test("a selection of details is refused in both flows (D4: all or nothing), the request stays pending", async () => {
+    await createGift("gift-sel");
+    const id = await pushed([gifted("gift-sel")], { client: "gifter" });
+    const codes = await deviceCode([gifted("gift-sel")]);
+    const selection = JSON.stringify([gifted("gift-sel")]);
+    const refused = await gql(
+      `mutation($id: ID!, $d: String) { approveOAuthRequest(id: $id, authorizationDetails: $d) { redirectTo } }`,
+      { id, d: selection },
+    );
+    expect(codeOf(refused)).toBe("BAD_USER_INPUT");
+    expect(refused.errors?.[0]?.message).toBe("invalid_authorization_details");
+    const device = await gql(
+      `mutation($c: String!, $d: String) { approveOAuthDeviceRequest(userCode: $c, authorizationDetails: $d) }`,
+      { c: codes.user_code, d: selection },
+    );
+    expect(codeOf(device)).toBe("BAD_USER_INPUT");
+    expect(device.errors?.[0]?.message).toBe("invalid_authorization_details");
+    // Still pending: approving without a selection works.
+    expect((await gql(APPROVE, { id })).errors).toBeUndefined();
+    await dropGift("gift-sel");
+  });
+
   test("a field removed between the PAR and the consent: not complete, approval refused, request still pending", async () => {
     const tenantId = await createGift("gift-edit");
     const id = await pushed([gifted("gift-edit")], { client: "gifter" });
