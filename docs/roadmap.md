@@ -25,8 +25,9 @@ nxgt-janus release says which.
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
 - **MCP clients and agents** (in progress) — a tenant can opt in to dynamic registration (`/register`, RFC 7591) and
-  Client ID Metadata Documents, with a throttle and an `agents` quota ([guide](guide/mcp.md)). Console exposure of the
-  policy, RFC 9728 resources and consent per agent follow.
+  Client ID Metadata Documents, with a throttle and an `agents` quota ([guide](guide/mcp.md)). The console edits the policy
+  (with a warning when PAR or DPoP is required of the whole tenant), lists agents beside the other clients, deletes them,
+  and a daily job prunes the dynamic agents nobody authorized in 7 days. RFC 9728 resources and consent per agent follow.
 
 ## Next
 

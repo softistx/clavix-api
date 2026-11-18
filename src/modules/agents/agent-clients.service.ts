@@ -42,6 +42,32 @@ export class AgentClientsService implements AgentClientsPort {
     return (await this.scoped(tenantId).findFirst({ clientId })) !== undefined;
   }
 
+  /**
+   * The kind of each recorded agent of the tenant, by client id: all of them,
+   * or only the `clientIds` given. A client that is no agent is absent.
+   */
+  async kinds(
+    tenantId: string,
+    clientIds?: readonly string[],
+  ): Promise<Map<string, AgentKind>> {
+    if (clientIds?.length === 0) return new Map();
+    const found = await this.scoped(tenantId).findMany(
+      clientIds === undefined
+        ? {}
+        : { filter: { clientId: { $in: [...clientIds] } } },
+    );
+    return new Map(found.map((agent) => [agent.clientId, agent.kind]));
+  }
+
+  /** The ids of the tenant's dynamically registered agents recorded before `before` (the clean-up job). */
+  async registeredBefore(tenantId: string, before: Date): Promise<string[]> {
+    const found = await this.scoped(tenantId).findMany({
+      filter: { kind: "dynamic", createdAt: { $lt: before } },
+      sort: { createdAt: 1 },
+    });
+    return found.map((agent) => agent.clientId);
+  }
+
   async remove(tenantId: string, clientId: string): Promise<void> {
     const found = await this.scoped(tenantId).findFirst({ clientId });
     if (found !== undefined) await this.scoped(tenantId).delete(found._id);

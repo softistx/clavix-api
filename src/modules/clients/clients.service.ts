@@ -2,12 +2,14 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import type { CliTenant } from "@/cli/errors";
 import { clientIdOf, type registerClient } from "@/clients/register-client";
+import type { AgentClientsService } from "@/modules/agents/agent-clients.service";
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { partitionOf } from "@/modules/tenants/identity";
 import { deleteClientAndRules } from "./client-deletion";
 import {
+  type ClientRegistration,
   type ClientView,
   capability,
   countClientViews,
@@ -29,8 +31,11 @@ export interface ClientsServiceOptions {
   db: Db;
   /** The clients' per-client rules, removed with the client. */
   policies: ClientPoliciesService;
-  /** The tenant's agents: a deleted client stops being one (it frees the `agents` quota). */
-  agents?: { remove(tenantId: string, clientId: string): Promise<void> };
+  /**
+   * The tenant's agents: they are told apart in the listing, and a deleted
+   * client stops being one (it frees the `agents` quota).
+   */
+  agents?: Pick<AgentClientsService, "kinds" | "remove">;
   now?: () => Date;
 }
 
@@ -58,9 +63,26 @@ export class ClientsService {
     return registerForTenant(this.options.db, this.options.now, tenant, input);
   }
 
+  /** The tenant's agents by client id (none without the agents store). */
+  private async agentsOf(tenant: CliTenant, clientIds?: readonly string[]) {
+    return (
+      (await this.options.agents?.kinds(tenant._id.toHexString(), clientIds)) ??
+      new Map()
+    );
+  }
+
+  /**
+   * One page of the tenant's clients. `kinds` keeps only those registrations
+   * (`console`, `dynamic`, `metadata`); none: every one, the agents included.
+   */
   async list(
     tenant: CliTenant,
-    options: { after?: string | null; limit: number; q?: string | undefined },
+    options: {
+      after?: string | null;
+      limit: number;
+      q?: string | undefined;
+      kinds?: readonly ClientRegistration[] | undefined;
+    },
   ) {
     checkQuery(options.q);
     if ((options.after?.length ?? 0) > MAX_CURSOR) {
@@ -68,23 +90,39 @@ export class ClientsService {
     }
     return listClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
-      options,
+      { ...options, agents: await this.agentsOf(tenant) },
     );
   }
 
-  /** How many clients of the tenant match `q`, whatever the page. */
-  async count(tenant: CliTenant, options: { q?: string | undefined } = {}) {
+  /** How many clients of the tenant match `q` and `kinds`, whatever the page. */
+  async count(
+    tenant: CliTenant,
+    options: {
+      q?: string | undefined;
+      kinds?: readonly ClientRegistration[] | undefined;
+    } = {},
+  ) {
     checkQuery(options.q);
     return countClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
-      options,
+      { ...options, agents: await this.agentsOf(tenant) },
     );
   }
 
-  async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {
+  /**
+   * A registered client; `null` for an unknown one. A client a metadata
+   * document describes is returned only with `agents: true` (the read-only
+   * view of the console): the writes never see it.
+   */
+  async find(
+    tenant: CliTenant,
+    clientId: string,
+    options: { agents?: boolean } = {},
+  ): Promise<ClientView | null> {
     const record = await this.storeOf(tenant).findClient(clientId);
-    if (record === null || record.source !== "registered") return null;
-    return viewOf(record);
+    if (record === null) return null;
+    if (record.source !== "registered" && options.agents !== true) return null;
+    return viewOf(record, await this.agentsOf(tenant, [clientId]));
   }
 
   private async require(tenant: CliTenant, clientId: string) {
@@ -241,16 +279,21 @@ export class ClientsService {
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ removed: boolean; unmanaged: boolean }> {
+    const tenantId = tenant._id.toHexString();
+    // A client the agents store knows is deleted like any other, a metadata
+    // one included (it is fetched again, and recorded again, at its next use).
+    const agent = (await this.agentsOf(tenant, [clientId])).has(clientId);
     const result = await deleteClientAndRules(
       this.storeOf(tenant),
       this.options.policies,
       tenant,
       clientId,
       (this.options.now ?? (() => new Date()))(),
+      agent,
     );
     // On a repeat too: a run that stopped between the two is finished.
     if (!result.unmanaged) {
-      await this.options.agents?.remove(tenant._id.toHexString(), clientId);
+      await this.options.agents?.remove(tenantId, clientId);
     }
     return result;
   }
