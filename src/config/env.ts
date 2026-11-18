@@ -168,6 +168,12 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(60),
+  // The tenants whose clients may list authorization detail types (RFC 9396) on
+  // a code flow: slugs separated by commas, or `*` for every tenant. Janus
+  // approves every detail it validated and the consent page that shows them is
+  // not built yet, so until it is no code client of another tenant may opt in.
+  // Temporary, removed with the consent page (M3b V4). Default: none.
+  CLAVIX_RAR_CONSENT_READY: z.string().default(""),
   // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
   // custom domains, A4): the shared secret of that URL, at least 32 characters.
   // Unset, the endpoint does not exist. The route is internal: never expose

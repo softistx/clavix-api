@@ -100,6 +100,7 @@ export const clients: Resolvers = {
         grants: grantsOf(input.grantTypes),
         requirePar: input.requirePushedAuthorizationRequests ?? undefined,
         dpopBound: input.dpopBoundAccessTokens ?? undefined,
+        detailTypes: input.authorizationDetailsTypes ?? undefined,
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
@@ -132,6 +133,7 @@ export const clients: Resolvers = {
             grants: grantsOf(input.grantTypes),
             requirePar: input.requirePushedAuthorizationRequests ?? undefined,
             dpopBound: input.dpopBoundAccessTokens ?? undefined,
+            detailTypes: input.authorizationDetailsTypes ?? undefined,
           });
         }),
       );

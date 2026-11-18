@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { CliInputError, type CliTenant } from "@/cli/errors";
 import { registerClient } from "@/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
+import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
 
 /**
  * Registers (or re-registers) a client of one tenant through the script's
@@ -9,16 +10,22 @@ import { CatalogError } from "@/modules/resources/catalog.errors";
  * input becomes a `BAD_USER_INPUT` catalog error.
  */
 export function registerForTenant(
-  db: Db,
-  now: (() => Date) | undefined,
+  options: {
+    db: Db;
+    now: (() => Date) | undefined;
+    detailTypes: ClientDetailTypes | undefined;
+  },
   tenant: CliTenant,
   input: Omit<Parameters<typeof registerClient>[1], "tenant">,
 ) {
   return registerClient(
     {
-      db,
+      db: options.db,
       findTenant: async (slug) => (slug === tenant.slug ? tenant : undefined),
-      ...(now === undefined ? {} : { now }),
+      ...(options.now === undefined ? {} : { now: options.now }),
+      ...(options.detailTypes === undefined
+        ? {}
+        : { detailTypes: options.detailTypes }),
     },
     { ...input, tenant: tenant.slug },
   ).catch((error) => {

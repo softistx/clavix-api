@@ -63,6 +63,11 @@ type Client {
   overrides this: every client sends a proof.
   """
   dpopBoundAccessTokens: Boolean!
+  """
+  The authorization detail types (RFC 9396, `Resource.detailTypes`) the client
+  may ask for; empty when it lists none. Never implied.
+  """
+  authorizationDetailsTypes: [String!]!
   "The token exchange rules; `null` while none is set (the client cannot exchange)."
   tokenExchange: ClientTokenExchange
 }
@@ -108,6 +113,13 @@ input CreateClientInput {
   requirePushedAuthorizationRequests: Boolean
   "Bind the client's tokens to a DPoP key. Default false."
   dpopBoundAccessTokens: Boolean
+  """
+  The detail types the client may ask for: the names of the tenant's types.
+  BAD_USER_INPUT for an unknown type, without `requirePushedAuthorizationRequests`
+  (details in a URL are not protected), or on a client that uses `/authorize` of a
+  tenant whose consent page does not show details yet. Default: none.
+  """
+  authorizationDetailsTypes: [String!]
 }
 
 "Fields left out stay as they are. The type and the secret never change here."
@@ -118,6 +130,8 @@ input UpdateClientInput {
   grantTypes: [ClientGrantType!]
   requirePushedAuthorizationRequests: Boolean
   dpopBoundAccessTokens: Boolean
+  "Replaces the detail types (same rules as on creation); `[]` clears them, left out keeps them."
+  authorizationDetailsTypes: [String!]
 }
 
 "The rules of `setClientTokenExchange`: they replace the client's current ones."

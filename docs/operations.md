@@ -366,6 +366,10 @@ it. Custom domains stay on demand.
    and requests. Skipped, a request that carries details is refused by the validators (code 121,
    `STORE_FAILED`) and the first type a tenant defines fails to save. No migration: a tenant with no
    type behaves as before.
+   Clients opt in (R3): `CLAVIX_RAR_CONSENT_READY` (slugs, or `*`; default none) lets a client that uses `/authorize`
+   list detail types on those tenants; set it only once the hosted consent page shows details. Without it only a
+   device-only or token-exchange client can list a type. No migration; `db:sync` first, as above (the clients validator
+   accepts `authorizationDetailsTypes`).
    Pushed authorization requests (clavix-api #13): run `db:sync` **before** `db:migrate` and before the
    deploy (the PAR validators, the replay collection and the clients validator that accepts
    `requirePushedAuthorizationRequests`). `db:migrate` then runs `2026-11-16-oauth-policy`, which writes

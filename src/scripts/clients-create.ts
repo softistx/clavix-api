@@ -5,6 +5,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
+import { clientDetailTypes } from "@/config/resources";
 import { tenantBySlug } from "@/config/tenancy";
 import { issuerOf } from "@/modules/tenants/identity";
 
@@ -22,7 +23,7 @@ if (args.includes("--help") || args.includes("-h")) {
 }
 try {
   const result = await registerClient(
-    { db: oauthDb, findTenant: tenantBySlug },
+    { db: oauthDb, findTenant: tenantBySlug, detailTypes: clientDetailTypes },
     parseClientArgs(args),
   );
   console.log(
