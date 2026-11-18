@@ -1,9 +1,11 @@
 import { adminInvitationHooks } from "@/console/modules/admins/accept";
 import { userKey } from "@/console/modules/user-key";
+import { janusListener } from "@/events/janus-listener";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
+import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { secretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
@@ -32,6 +34,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     resolver: tenantResolver,
     db: oauthDb,
     secrets: secretBox,
+    events: (tenant) => janusListener(tenant.tenantId, eventBus),
     invitationHooks: (tenant) =>
       tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks(tenant) : undefined,
   },

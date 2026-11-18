@@ -1,6 +1,8 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { YogaInitialContext } from "graphql-yoga";
+import type { AuthEventsService } from "@/modules/audit/auth-events.service";
 import type { Access } from "./access";
+import type { AdminEventReader } from "./admin-events/reader";
 import type { Audit } from "./audit";
 import type { Exclusive } from "./exclusive";
 import type { Permission, Role } from "./model";
@@ -215,6 +217,14 @@ export interface ConsoleExtras {
   readonly users: ConsoleUsers;
   /** One at a time per key (a tenant's memberships). */
   readonly exclusive: Exclusive;
+  /** The readers of the two logs (D12): the console's activity and the tenants' sign-ins. */
+  readonly activity: ConsoleActivity;
+}
+
+/** What the audit module reads: both logs, through their own services. */
+export interface ConsoleActivity {
+  readonly admin: AdminEventReader;
+  readonly auth: AuthEventsService;
 }
 
 /** A console resolver's context. The generated `Resolvers` takes it (codegen.console.ts). */

@@ -3,6 +3,7 @@ import type { Resolvers } from "@/generated/console/resolvers";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
 import { admins, adminsAudits, adminsGuards } from "./admins";
+import { audit, auditAudits, auditGuards } from "./audit";
 import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
 import { domains, domainsAudits, domainsGuards } from "./domains";
@@ -28,6 +29,7 @@ import { sessions, sessionsAudits, sessionsGuards } from "./users/sessions";
 // denied (guard.ts); a mutation with no audit action fails audit.spec.ts.
 export const resolvers: Resolvers = mergeResolvers([
   me,
+  audit,
   admins,
   branding,
   signInMethods,
@@ -42,6 +44,7 @@ export const resolvers: Resolvers = mergeResolvers([
 ]);
 export const guards: Guards = {
   ...meGuards,
+  ...auditGuards,
   ...adminsGuards,
   ...brandingGuards,
   ...clientsGuards,
@@ -55,6 +58,7 @@ export const guards: Guards = {
   ...sessionsGuards,
 };
 export const audits: Audits = {
+  ...auditAudits,
   ...adminsAudits,
   ...brandingAudits,
   ...clientsAudits,

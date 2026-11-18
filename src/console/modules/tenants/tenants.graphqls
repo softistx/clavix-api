@@ -29,6 +29,8 @@ type Plan {
   id: ID!
   name: String!
   quotas: Quotas!
+  "How many days the tenant's sign-in log and console activity are kept: 30 on free, 90 on pro, 365 on enterprise."
+  auditRetentionDays: Int!
 }
 
 extend type Tenant {

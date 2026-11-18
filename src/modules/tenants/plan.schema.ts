@@ -34,23 +34,31 @@ export interface Plan {
   id: PlanId;
   name: string;
   quotas: Quotas;
+  /** How long a tenant's sign-in log and console activity are kept (D16). */
+  auditRetentionDays: number;
 }
+
+/** How long the platform's own events (`tenantId: null`) are kept (D16). */
+export const PLATFORM_RETENTION_DAYS = 400;
 
 export const PLANS: readonly Plan[] = [
   {
     id: "free",
     name: "Free",
     quotas: { mau: 1_000, clients: 3, domains: 1, agents: 100 },
+    auditRetentionDays: 30,
   },
   {
     id: "pro",
     name: "Pro",
     quotas: { mau: 10_000, clients: 20, domains: 5, agents: 1_000 },
+    auditRetentionDays: 90,
   },
   {
     id: "enterprise",
     name: "Enterprise",
     quotas: { mau: null, clients: null, domains: null, agents: null },
+    auditRetentionDays: 365,
   },
 ];
 

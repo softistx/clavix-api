@@ -10,7 +10,8 @@ import type { ConsoleDeps } from "@/console/plugin";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
-import { adminEventRecorder } from "./admin-events";
+import { adminEventReader, adminEventRecorder } from "./admin-events";
+import { authEventsService } from "./audit";
 import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
@@ -76,6 +77,7 @@ export function createConsoleDeps(
     }),
     exclusive,
     adminEvents: adminEventRecorder,
+    activity: { admin: adminEventReader, auth: authEventsService },
     directory: {
       findUser: async (id) => {
         const tenant = await clavixTenant();

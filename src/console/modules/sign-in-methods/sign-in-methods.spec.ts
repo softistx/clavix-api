@@ -4,7 +4,8 @@ import type { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
-import { adminEventRecorder } from "@/config/admin-events";
+import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
+import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -67,6 +68,7 @@ const as = async (
       }),
       access,
       adminEvents: adminEventRecorder,
+      activity: { admin: adminEventReader, auth: authEventsService },
       admins: {} as ConsoleAdmins,
       users: {} as ConsoleUsers,
       exclusive: createExclusive(),

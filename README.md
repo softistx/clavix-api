@@ -462,8 +462,33 @@ Every console mutation records what it did in the `adminEvents` collection (ADR-
 (the token's user), the action (`tenant.create`), the tenant it was about (`null` for the platform),
 the target's type and id, the time and the id of the request. Events are only ever added, and they
 hold identifiers alone: never a secret, a token or the old and new values of a field. `bun run
-db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
-reads it yet: the viewer and the export come with M4.
+db:sync` creates the collection and its two indexes (by tenant and by actor, newest first).
+
+The console reads it with `adminEvents(tenantId, filter, first, after)` (a tenant viewer or more;
+filter `from`, `to`, `action`, `actor`) and, for operators, `platformAdminEvents` across every tenant
+and the platform's own. Both answer `{ items, nextCursor, totalCount }`, newest first (`first`
+defaults to 25, at most 100), with each actor resolved to a name and an e-mail address in one batch.
+
+### Sign-in events
+
+What a tenant's users do to their own access is written to its own `authEvents` collection
+(tenant-owned, closed schema): `session.signIn` (by `emailCode`, `magicLink`, `passkey` or `social`,
+a refusal with its reason code) and `session.signOut` from the hosted sign-in, and the second-factor and
+passkey changes janus reports (`secondFactor.*`, `recoveryCode*`, `passkey.*`); `stepUp.confirm` is
+reserved for the step-up. Per-token events are not recorded. Each event holds the type, the time, the
+outcome, the actor, the user or client, the full address, a browser family (never the whole
+User-Agent) and the request id. The address is kept for the retention period only and never goes into a
+webhook or telemetry. A failed write is logged and counted, and never fails the sign-in.
+
+`authEvents(tenantId, filter: { from, to, types, userId, clientId, outcome }, first, after)` reads it
+(a tenant admin or more: a viewer reads the console activity only), with `totalCount`. A `types`
+entry outside the closed list is `BAD_USER_INPUT`.
+
+Retention follows the tenant's plan (`Plan.auditRetentionDays`: free 30 days, pro 90, enterprise 365;
+the platform's own events 400). The daily job `audit.retention` (queue `audit-retention`, 04:17 UTC, needs
+`REDIS_URL`) deletes by the plan the tenant has that day, in batches, as `system:audit:retention`, and
+writes no event per deletion. A purged tenant's `authEvents` go with the purge; its console activity stays
+until its retention ends.
 
 A mutation declares its action beside its module's guards (the declaration is spread into `audits`
 in `src/console/modules/index.ts`) and records it once its change is stored; AGENTS.md "Admin

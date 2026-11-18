@@ -1,0 +1,145 @@
+"What kind of party did something."
+enum AuditActorKind {
+  user
+  client
+  system
+}
+
+"""
+Who did it, resolved to a name and an e-mail address when the party is a user
+who still exists; `name` and `email` are `null` otherwise (gone, a client, the
+system, or a failed sign-in that named nobody).
+"""
+type AuditActor {
+  kind: AuditActorKind!
+  id: String!
+  name: String
+  email: EmailAddress
+}
+
+"What an admin event was done to: a kind and an id, never a value."
+type AuditTarget {
+  type: String!
+  id: String!
+}
+
+"What a console admin did (ADR-0037): one recorded action."
+type AdminEvent {
+  id: ID!
+  "The action, `<noun>.<verb>`."
+  action: String!
+  actor: AuditActor!
+  target: AuditTarget!
+  "The tenant it was about; `null` for an action on the platform itself."
+  tenantId: ID
+  at: DateTime!
+  requestId: String!
+}
+
+"A page of admin events, newest first; `nextCursor` is `null` on the last."
+type AdminEventPage {
+  items: [AdminEvent!]!
+  nextCursor: String
+  "How many events match the filter in all, not the page's size."
+  totalCount: Int!
+}
+
+"Every field narrows the events and they combine with AND."
+input AdminEventFilter {
+  from: DateTime
+  to: DateTime
+  "One action, exactly (`user.invite`)."
+  action: String
+  "The id of the admin who did it."
+  actor: String
+}
+
+enum AuthOutcome {
+  success
+  failure
+}
+
+"How a user proved who they are."
+enum AuthMethod {
+  emailCode
+  magicLink
+  passkey
+  social
+  totp
+  recoveryCode
+}
+
+"""
+What a tenant's users did to their own access (D12): a sign-in or sign-out, a
+second factor or passkey change, a step-up. The full address is kept for the
+tenant's retention period only.
+"""
+type AuthEvent {
+  id: ID!
+  "`<noun>.<verb>`, one of the closed list (`session.signIn`, `passkey.added`, …)."
+  type: String!
+  at: DateTime!
+  outcome: AuthOutcome!
+  "Why a failure failed: a code, never a message."
+  reason: String
+  method: AuthMethod
+  actor: AuditActor!
+  userId: String
+  clientId: String
+  "The client address, in full; `null` when the source has none."
+  ip: String
+  "The browser or tool family (`Firefox`), never the whole User-Agent."
+  userAgent: String
+  requestId: String!
+}
+
+"A page of a tenant's sign-in events, newest first; `nextCursor` is `null` on the last."
+type AuthEventPage {
+  items: [AuthEvent!]!
+  nextCursor: String
+  "How many events match the filter in all, not the page's size."
+  totalCount: Int!
+}
+
+"Every field narrows the events and they combine with AND."
+input AuthEventFilter {
+  from: DateTime
+  to: DateTime
+  "Event types to keep; each must be one of the closed list, else a `BAD_USER_INPUT`."
+  types: [String!]
+  userId: String
+  clientId: String
+  outcome: AuthOutcome
+}
+
+extend type Query {
+  """
+  What the console did on a tenant (tenant viewer), newest first. `first`
+  defaults to 25, at most 100.
+  """
+  adminEvents(
+    tenantId: ID!
+    filter: AdminEventFilter
+    first: Int
+    after: String
+  ): AdminEventPage!
+  """
+  What a tenant's users did to their own access (tenant admin), newest first.
+  `first` defaults to 25, at most 100.
+  """
+  authEvents(
+    tenantId: ID!
+    filter: AuthEventFilter
+    first: Int
+    after: String
+  ): AuthEventPage!
+  """
+  The console's activity on every tenant and on the platform itself
+  (operator), newest first. `first` defaults to 25, at most 100.
+  """
+  platformAdminEvents(
+    filter: AdminEventFilter
+    first: Int
+    after: String
+  ): AdminEventPage!
+}

@@ -1,5 +1,6 @@
 import { createApp } from "./app";
 import { createAgentsPrune } from "./config/agents-prune";
+import { createAuditRetention } from "./config/audit-retention";
 import { createConsoleDeps } from "./config/console";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
@@ -11,6 +12,7 @@ import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
 import { startKeyRotation } from "./keys";
 import { startAgentsPrune } from "./modules/agents/prune-worker";
+import { startAuditRetention } from "./modules/audit/retention-worker";
 import { drain } from "./modules/auth/outbox";
 import { startDomainRecheck } from "./modules/domains/recheck-worker";
 import { startTenantPurge } from "./modules/tenants/purge-worker";
@@ -45,6 +47,9 @@ startDomainRecheck(
 // Daily, the agents that registered themselves and still have no grant after
 // 7 days are deleted (D10).
 startAgentsPrune(createAgentsPrune(), redis?.queues.agentsPrune);
+// Daily, the sign-in log and the console activity are cut at each tenant's
+// plan retention, the platform's own events at 400 days (D16).
+startAuditRetention(createAuditRetention(), redis?.queues.auditRetention);
 const app = createApp({
   oauth,
   console: consoleDeps,
