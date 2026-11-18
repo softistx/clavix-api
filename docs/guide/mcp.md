@@ -77,8 +77,9 @@ overshoot). Deleting a client in the console also removes its agent record, whic
 `clients(tenantId, kind: [...])` lists the tenant's clients; `Client.registration` is `CONSOLE` (made in the console or
 by the CLI), `DYNAMIC` (registered at `/register`) or `METADATA` (a Client ID Metadata Document). `kind` is a list
 filter: `kind: [DYNAMIC, METADATA]` is the Agents list, `kind: [CONSOLE]` the others, no `kind` lists all. `totalCount`
-follows the `kind` and `q` filters, whatever the cursor. A metadata-document client is read-only in the console (it is
-described by its document): `client(id)` reads it, an update or a rotation answers `NOT_FOUND`.
+follows the `kind` and `q` filters, whatever the cursor. An agent, `DYNAMIC` or `METADATA`, is read-only in the console
+(a metadata one is described by its document): `client(id)` reads it, while `updateClient`, `rotateClientSecret` and
+`setClientTokenExchange` answer `NOT_FOUND`.
 
 `deleteClient` works for every kind. It removes the client, closes its grants and tokens, and removes the agent record
 (the quota is freed). A metadata-document client deleted this way is read and recorded again the next time it is used.
