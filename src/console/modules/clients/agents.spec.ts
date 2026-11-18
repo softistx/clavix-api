@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { registerClient } from "@/clients/register-client";
 import { access } from "@/config/access";
@@ -250,7 +250,7 @@ describe("a dynamic agent is read-only", () => {
       admin(EXCHANGE, {
         tenantId: tenantA,
         id,
-        input: { targetResources: [], subjectClients: [] },
+        input: { targetResources: [], subjectAgents: true },
       }),
     ];
     for (const result of await Promise.all(calls)) {
