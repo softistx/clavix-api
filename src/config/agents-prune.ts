@@ -1,11 +1,13 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
+import { clientsKey } from "@/console/modules/clients/shape";
 import { type PruneReport, pruneAgents } from "@/modules/agents/prune";
 import { agentPruneEventInput } from "@/modules/agents/prune-events";
 import { partitionOf } from "@/modules/tenants/identity";
 import { adminEventRecorder } from "./admin-events";
 import { agentClientsService } from "./agent-clients";
 import { clientsService } from "./clients";
+import { exclusive } from "./exclusive";
 import { oauthDb } from "./oauth-db";
 import { tenantsService } from "./tenancy";
 
@@ -45,11 +47,16 @@ export const createAgentsPrune =
         candidates: (tenantId, before) =>
           agentClientsService.registeredBefore(tenantId, before),
         hasStandingGrant,
-        remove: (tenantId, clientId) =>
-          clientsService.delete(
-            { _id: new ObjectId(tenantId), slug: "", status: "active" },
-            clientId,
-          ),
+        // The console's clients lock: a grant cannot slip in between the check and the delete.
+        locked: (tenantId, work) =>
+          exclusive(clientsKey({ _id: new ObjectId(tenantId) }), work),
+        remove: async (tenantId, clientId) =>
+          (
+            await clientsService.delete(
+              { _id: new ObjectId(tenantId), slug: "", status: "active" },
+              clientId,
+            )
+          ).removed,
         emit: (event) => adminEventRecorder.record(agentPruneEventInput(event)),
       },
       now(),

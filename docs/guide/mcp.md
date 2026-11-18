@@ -124,8 +124,8 @@ To serve it, the resource server uses the same call: `protectedResource({ resour
 ## The daily clean-up
 
 An agent that registered itself and was never authorized is useless but still counts against the `agents` quota. Once a
-day (03:41 UTC, queue `agents-prune`, [operations](../operations.md#agents-clean-up)) every `DYNAMIC` agent registered more
+day (03:41 UTC, queue `agents-prune`, needs `REDIS_URL`, [operations](../operations.md#agents-clean-up)) every agent (`DYNAMIC` or `METADATA`) recorded more
 than 7 days ago that has no standing grant (a grant not revoked) is deleted like `deleteClient` does it, with its tokens
 closed, and recorded as the admin event `agent.prune` by the actor `system:agents:prune` (one per agent, identifiers
-only). Agents of a metadata document are not pruned (they are recorded again when used), and only active tenants are
-visited. A consent granted between the check and the deletion is revoked with the agent (a very small window).
+only). A metadata-document agent is pruned too (it is fetched and recorded again when used). Only active tenants are
+visited, and the grant check and the deletion run under the tenant's clients lock, so a consent cannot slip in between.

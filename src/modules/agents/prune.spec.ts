@@ -20,7 +20,10 @@ function deps(over: Partial<PruneDeps> = {}) {
       return ["a", "b"];
     },
     hasStandingGrant: async () => false,
-    remove: async (t, c) => void state.removed.push(`${t}/${c}`),
+    remove: async (t, c) => {
+      state.removed.push(`${t}/${c}`);
+      return true;
+    },
     emit: async (e) => void state.events.push(`${e.tenantId}/${e.clientId}`),
     log: (m) => state.logs.push(m),
     ...over,
@@ -56,12 +59,52 @@ describe("pruneAgents", () => {
       remove: async (_t, c) => {
         if (c === "a") throw new Error("boom");
         state.removed.push(c);
+        return true;
       },
     });
     expect(await pruneAgents(full, NOW)).toEqual({ pruned: 1, failed: 1 });
     expect(state.removed).toEqual(["b"]);
     expect(state.events).toEqual(["t1/b"]);
     expect(state.logs[0]).toContain("could not prune a");
+  });
+
+  test("an agent that was already gone is no pruning and no event", async () => {
+    const { full, state } = deps({ remove: async (_t, c) => c === "b" });
+    expect(await pruneAgents(full, NOW)).toEqual({ pruned: 1, failed: 0 });
+    expect(state.events).toEqual(["t1/b"]);
+  });
+
+  test("the grant check and the delete run inside the tenant's lock, one agent at a time", async () => {
+    const steps: string[] = [];
+    const { full } = deps({
+      locked: async (tenantId, work) => {
+        steps.push(`lock ${tenantId}`);
+        try {
+          return await work();
+        } finally {
+          steps.push("unlock");
+        }
+      },
+      hasStandingGrant: async (_t, c) => {
+        steps.push(`grant ${c}`);
+        return false;
+      },
+      remove: async (_t, c) => {
+        steps.push(`remove ${c}`);
+        return true;
+      },
+    });
+    await pruneAgents(full, NOW);
+    expect(steps).toEqual([
+      "lock t1",
+      "grant a",
+      "remove a",
+      "unlock",
+      "lock t1",
+      "grant b",
+      "remove b",
+      "unlock",
+    ]);
   });
 
   test("a failing tenant listing does not stop the other tenants", async () => {

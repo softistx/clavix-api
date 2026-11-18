@@ -74,10 +74,10 @@ export class AgentClientsService implements AgentClientsPort {
     return new Map(found.map((agent) => [agent.clientId, agent.createdAt]));
   }
 
-  /** The ids of the tenant's dynamically registered agents recorded before `before` (the clean-up job). */
+  /** The ids of the tenant's agents, of every kind, recorded before `before` (the clean-up job). */
   async registeredBefore(tenantId: string, before: Date): Promise<string[]> {
     const found = await this.scoped(tenantId).findMany({
-      filter: { kind: "dynamic", createdAt: { $lt: before } },
+      filter: { createdAt: { $lt: before } },
       sort: { createdAt: 1 },
     });
     return found.map((agent) => agent.clientId);

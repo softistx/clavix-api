@@ -171,7 +171,10 @@ const janusResolvers = oauthResolvers({
     await countLookup(ctx as unknown as Context);
   },
   // Once per approval, in both flows, after the viewer and session checks.
-  beforeApprove: async ({ request }, ctx) => {
+  // The selection check comes first: it needs no read.
+  beforeApprove: async ({ request, authorizationDetails: selection }, ctx) => {
+    // All or nothing (D4): a selection of details is refused, in both flows.
+    if (selection !== undefined) throw refuseIncomplete();
     if (request.authorizationDetails === undefined) return;
     const json = JSON.stringify(request.authorizationDetails);
     const { complete } = await reviewed(json, ctx as WithServers);

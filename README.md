@@ -533,7 +533,7 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
   `agents` (dynamic registration of MCP clients and agents, off by default: `dynamic` `OFF|RESTRICTED|OPEN`,
   `redirectUris`, `metadataDocuments`, `allowHosts`) is on the same policy; `agentsNeedPushOrProof` is `true` when agents are on
   while `par` or `dpop` is required of the whole tenant (a warning, saving is allowed). A bad redirect URI or host is
-  `BAD_USER_INPUT`. See [docs/guide/mcp.md](docs/guide/mcp.md). Agents do not count in `clients` (the `agents` quota does).
+  `BAD_USER_INPUT`. See [docs/guide/mcp.md](docs/guide/mcp.md). Agents do not count in `clients` (the `agents` quota does). A daily clean-up (`agents-prune`, needs `REDIS_URL`: without it nothing runs) deletes agents recorded more than 7 days ago that hold no standing grant, metadata-document agents included.
   Each change is the admin event `oauthPolicy.update` and bumps the tenant's `version`; a no-op writes nothing.
 - **Per client** (`requirePushedAuthorizationRequests` on `Client`, `CreateClientInput` and
   `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant

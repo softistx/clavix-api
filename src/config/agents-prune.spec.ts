@@ -22,7 +22,13 @@ let idB = "";
 const storeOf = (id: string) =>
   createMongoOAuth(oauthDb, { partition: partitionOf(new ObjectId(id)) });
 
-async function agent(slug: string, id: string, name: string, ageDays: number) {
+async function agent(
+  slug: string,
+  id: string,
+  name: string,
+  ageDays: number,
+  kind: "dynamic" | "metadata" = "dynamic",
+) {
   const made = await registerClient(options, {
     tenant: slug,
     name,
@@ -30,7 +36,7 @@ async function agent(slug: string, id: string, name: string, ageDays: number) {
   });
   await agentClientsService.record(id, {
     clientId: made.clientId,
-    kind: "dynamic",
+    kind,
   });
   await mongo.db.agentClients.raw.updateOne(
     { clientId: made.clientId },
@@ -63,6 +69,8 @@ describe("createAgentsPrune over the real stores", () => {
     const used = await agent("prn-a", idA, "Used", 30);
     const revoked = await agent("prn-a", idA, "Revoked", 30);
     const otherTenant = await agent("prn-b", idB, "B old", 30);
+    // A metadata-document agent is pruned under the same rule.
+    const document = await agent("prn-a", idA, "Doc", 9, "metadata");
     const store = storeOf(idA);
     const t = new Date(NOW.getTime());
     const grant = (id: string, clientId: string, revokedAt: Date | null) =>
@@ -94,7 +102,8 @@ describe("createAgentsPrune over the real stores", () => {
     });
 
     const report = await createAgentsPrune(() => NOW)();
-    expect(report).toEqual({ pruned: 3, failed: 0 });
+    expect(report).toEqual({ pruned: 4, failed: 0 });
+    expect(await agentClientsService.has(idA, document)).toBe(false);
 
     expect(await store.findClient(old)).toBeNull();
     expect(await agentClientsService.has(idA, old)).toBe(false);
@@ -113,10 +122,23 @@ describe("createAgentsPrune over the real stores", () => {
       .find({ action: "agent.prune" })
       .toArray();
     expect(events.map((e) => e["target"].id).sort()).toEqual(
-      [old, otherTenant, revoked].sort(),
+      [old, otherTenant, revoked, document].sort(),
     );
     expect(events.every((e) => e["actor"] === "system:agents:prune")).toBe(
       true,
     );
+  });
+
+  test("a second pass finds nothing: no pruning, no event", async () => {
+    const before = await mongo.db.adminEvents.raw.countDocuments({
+      action: "agent.prune",
+    });
+    expect(await createAgentsPrune(() => NOW)()).toEqual({
+      pruned: 0,
+      failed: 0,
+    });
+    expect(
+      await mongo.db.adminEvents.raw.countDocuments({ action: "agent.prune" }),
+    ).toBe(before);
   });
 });

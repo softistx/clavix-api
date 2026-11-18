@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { OAuthError, type OAuthIssuers } from "@softistx/janus-oauth";
+import type { Exclusive } from "@/console/exclusive";
 import type { AgentClientsPort } from "@/modules/agents/agent-clients.service";
-import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
 import { isLive } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
+import {
+  agentsQuotaKey,
+  agentsQuotaRefusal,
+  lockUnavailable,
+} from "./agents-quota";
 import {
   type RegisterThrottle,
   RegisterThrottledError,
@@ -23,6 +28,12 @@ export interface RegisterRouteDeps {
   agents: AgentClientsPort;
   /** The `agents` quota that applies to the tenant (`null`: no limit). */
   agentQuotaOf: (tenantId: string) => Promise<number | null>;
+  /**
+   * Runs the count, the registration and the record of a tenant one at a
+   * time (the console's `exclusive`, Redis-backed in production); without
+   * it, they run unserialized.
+   */
+  exclusive?: Exclusive | undefined;
   log?: (message: string) => void;
 }
 
@@ -43,18 +54,44 @@ export const ipDigestOf = (tenantId: string, ip: string | undefined) =>
  * answers `invalid_client_metadata` for a body that is not an object).
  */
 async function readBody(request: Request): Promise<unknown> {
-  const text = await request.text();
-  if (new TextEncoder().encode(text).length > REGISTER_BODY_LIMIT) {
-    throw new OAuthError(
-      "invalid_client_metadata",
-      "the registration body is too large",
-    );
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (reader !== undefined) {
+    // Never more than the limit in memory, whatever `Content-Length` said.
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > REGISTER_BODY_LIMIT) {
+        await reader.cancel().catch(() => undefined);
+        throw new OAuthError(
+          "invalid_client_metadata",
+          "the registration body is too large",
+        );
+      }
+      chunks.push(value);
+    }
   }
+  const text = new TextDecoder().decode(Buffer.concat(chunks));
   try {
     return JSON.parse(text) as unknown;
   } catch {
     return undefined;
   }
+}
+
+/** A declared `Content-Length` over the limit: 413, before anything is read. */
+function tooLarge(request: Request): Response | null {
+  const declared = Number(request.headers.get("content-length"));
+  if (!(declared > REGISTER_BODY_LIMIT)) return null;
+  return Response.json(
+    {
+      error: "invalid_client_metadata",
+      error_description: "the registration body is too large",
+    },
+    { status: 413, headers: NO_STORE },
+  );
 }
 
 /**
@@ -71,6 +108,7 @@ export function createRegisterRoute({
   throttle,
   agents,
   agentQuotaOf,
+  exclusive = (_key, work) => work(),
   log = (message) => console.warn(message),
 }: RegisterRouteDeps) {
   return async (
@@ -80,6 +118,8 @@ export function createRegisterRoute({
     if (request.method !== "POST") {
       return new Response(null, { status: 405, headers: { allow: "POST" } });
     }
+    const oversized = tooLarge(request);
+    if (oversized !== null) return oversized;
     const tenant = await resolver.resolveRequest(request);
     if (tenant === null) return new Response(null, { status: 404 });
     if (!isLive(tenant)) return suspendedResponse();
@@ -106,34 +146,40 @@ export function createRegisterRoute({
         );
       }
       const body = await readBody(request);
-      try {
-        assertWithinQuota(
-          "agents",
-          await agents.count(tenant.tenantId),
-          await agentQuotaOf(tenant.tenantId),
-        );
-      } catch (error) {
-        if (!(error instanceof QuotaExceededError)) throw error;
-        return Response.json(
-          { error: "access_denied", error_description: error.message },
-          { status: 403, headers: NO_STORE },
-        );
-      }
-      const registered = await server.registerClient(body);
-      try {
-        await agents.record(tenant.tenantId, {
-          clientId: registered.client_id,
-          kind: "dynamic",
-          ipDigest: ipDigestOf(tenant.tenantId, ip),
-        });
-      } catch (error) {
-        // An unrecorded agent would escape the quota and the clean-up job.
-        await server.deleteClient(registered.client_id).catch(() => undefined);
-        throw error;
-      }
-      return Response.json(registered, { status: 201, headers: NO_STORE });
+      // The count, the registration and the record under one lock per
+      // tenant: concurrent registrations cannot all pass a quota of N.
+      return await exclusive(
+        agentsQuotaKey(tenant.tenantId),
+        async (): Promise<Response> => {
+          const over = await agentsQuotaRefusal(
+            { count: (id) => agents.count(id), quotaOf: agentQuotaOf },
+            tenant.tenantId,
+          );
+          if (over !== null) return over;
+          const registered = await server.registerClient(body);
+          try {
+            await agents.record(tenant.tenantId, {
+              clientId: registered.client_id,
+              kind: "dynamic",
+              ipDigest: ipDigestOf(tenant.tenantId, ip),
+            });
+          } catch (error) {
+            // An unrecorded agent would escape the quota and the clean-up job.
+            await server
+              .deleteClient(registered.client_id)
+              .catch(() => undefined);
+            throw error;
+          }
+          return Response.json(registered, {
+            status: 201,
+            headers: NO_STORE,
+          });
+        },
+      );
     } catch (error) {
       if (error instanceof OAuthError) return oauthError(error);
+      const unavailable = lockUnavailable(error);
+      if (unavailable !== null) return unavailable;
       log(
         `register: ${error instanceof Error ? error.message : String(error)}`,
       );

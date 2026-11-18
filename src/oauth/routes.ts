@@ -38,15 +38,13 @@ export function mountOAuth<
   },
 >(app: A, oauth: OAuthHandle): A {
   let mounted = app;
+  // Clavix's own `/register` (quota, throttle, record) when the handle has it;
+  // a bare handle (a stand-in, or janus's own) serves it through `handle`.
+  const { register } = oauth;
   for (const path of OAUTH_PATHS) {
     mounted =
-      path === "/register" && oauth.register !== undefined
-        ? mounted.all(path, ({ request, ip }) =>
-            (oauth.register as NonNullable<OAuthHandle["register"]>)(
-              request,
-              ip,
-            ),
-          )
+      path === "/register" && register !== undefined
+        ? mounted.all(path, ({ request, ip }) => register(request, ip))
         : mounted.all(path, ({ request, ip }) => oauth.handle(request, ip));
   }
   return mounted;
