@@ -7,6 +7,7 @@ import { ObjectId } from "mongodb";
 import type { AuthEvent } from "@/events/types";
 import { userAgentFamily } from "@/events/user-agent";
 import type { AuthEventType, authEvents } from "./auth-events.model";
+import { drain } from "./stream";
 
 export type StoredAuthEvent = ReadDocumentOf<typeof authEvents>;
 
@@ -93,6 +94,28 @@ export class AuthEventsService {
       scope.count(where),
     ]);
     return { items: found.items, nextCursor: found.nextCursor, totalCount };
+  }
+
+  /** How many events match, for an export to say it was cut. */
+  count(tenantId: string, filter: AuthEventFilter): Promise<number> {
+    return this.scoped(tenantId).count(filterOf(filter));
+  }
+
+  /** The matching events newest first, at most `limit`, read a batch at a time (an export). */
+  stream(tenantId: string, filter: AuthEventFilter, limit: number) {
+    const scope = this.scoped(tenantId);
+    const where = filterOf(filter);
+    return drain(
+      (after, size) =>
+        scope.paginateByCursor({
+          filter: where,
+          orderBy: "at",
+          direction: "desc",
+          after,
+          limit: size,
+        }),
+      limit,
+    );
   }
 
   /**

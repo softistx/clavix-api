@@ -28,6 +28,8 @@ export interface ConsoleDPoPRefusal {
  */
 export type ConsoleAuthenticate = (
   request: Request,
+  /** The path the client called when it is not the GraphQL one (a DPoP proof's `htu` names it). */
+  path?: string,
 ) => Promise<OAuthPrincipal | ConsoleDPoPRefusal | null>;
 
 /** The `WWW-Authenticate` of a refused DPoP request, and its nonce header. */
@@ -59,9 +61,11 @@ export interface ConsoleDeps {
   adminEvents: AdminEventRecorder;
   /** The readers of the activity logs. */
   activity: ConsoleActivity;
+  /** The audit export's limits; the real ones (100 000 rows, the clock) by default. */
+  auditExport?: { maxRows?: number; now?: () => Date };
 }
 
-const refusal = (
+export const refusal = (
   status: number,
   code: string,
   message: string,
@@ -78,6 +82,51 @@ const refusal = (
       },
     },
   );
+
+/**
+ * Verifies the request's token: the principal, or the response that refuses it
+ * (no token, a forged, expired or other-audience one: 401 with its challenge;
+ * the store down: 503). Shared by the GraphQL API and the audit export.
+ */
+export async function authenticated(
+  authenticate: ConsoleAuthenticate,
+  request: Request,
+  path?: string,
+): Promise<OAuthPrincipal | Response> {
+  let principal: OAuthPrincipal | ConsoleDPoPRefusal | null;
+  try {
+    principal = await authenticate(request, path);
+  } catch (error) {
+    console.error("console: token verification failed", error);
+    return refusal(503, "SERVICE_UNAVAILABLE", "Try again later");
+  }
+  if (principal !== null && "refused" in principal) {
+    return refusal(
+      401,
+      "UNAUTHENTICATED",
+      "A valid console token is required",
+      dpopChallenge(principal),
+    );
+  }
+  if (principal === null) {
+    const presented =
+      request.headers
+        .get("authorization")
+        ?.toLowerCase()
+        .startsWith("bearer ") === true;
+    return refusal(
+      401,
+      "UNAUTHENTICATED",
+      "A valid console token is required",
+      {
+        "www-authenticate": presented
+          ? 'Bearer realm="clavix-console", error="invalid_token"'
+          : 'Bearer realm="clavix-console"',
+      },
+    );
+  }
+  return principal;
+}
 
 /**
  * The console's Yoga plugin: the bearer token is verified before anything is
@@ -117,38 +166,9 @@ export function useConsole({
     }) {
       // Called server to server: no CORS, so a preflight (no credential) is refused too.
       // Outside `useSameOriginJson` on purpose: a bearer header is no ambient credential.
-      let principal: OAuthPrincipal | ConsoleDPoPRefusal | null;
-      try {
-        principal = await authenticate(request);
-      } catch (error) {
-        console.error("console: token verification failed", error);
-        endResponse(refusal(503, "SERVICE_UNAVAILABLE", "Try again later"));
-        return;
-      }
-      if (principal !== null && "refused" in principal) {
-        endResponse(
-          refusal(
-            401,
-            "UNAUTHENTICATED",
-            "A valid console token is required",
-            dpopChallenge(principal),
-          ),
-        );
-        return;
-      }
-      if (principal === null) {
-        const presented =
-          request.headers
-            .get("authorization")
-            ?.toLowerCase()
-            .startsWith("bearer ") === true;
-        endResponse(
-          refusal(401, "UNAUTHENTICATED", "A valid console token is required", {
-            "www-authenticate": presented
-              ? 'Bearer realm="clavix-console", error="invalid_token"'
-              : 'Bearer realm="clavix-console"',
-          }),
-        );
+      const principal = await authenticated(authenticate, request);
+      if (principal instanceof Response) {
+        endResponse(principal);
         return;
       }
       principals.set(request, principal);

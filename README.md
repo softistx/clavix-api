@@ -486,6 +486,19 @@ webhook or telemetry. A failed write is logged and counted, and never fails the 
 (a tenant admin or more: a viewer reads the console activity only), with `totalCount`. A `types`
 entry outside the closed list is `BAD_USER_INPUT`.
 
+### Export
+
+`GET https://console.<domain>/console/audit/export?tenantId=<id>&log=admin|auth&format=csv|ndjson&from=&to=`
+streams a tenant's console activity (`log=admin`, a tenant viewer or more) or sign-in log (`log=auth`, an
+admin or more: it holds addresses) as CSV (default) or NDJSON, with the console's own authentication
+(`Authorization: Bearer` or `DPoP`, verified e-mail). `from` and `to` are ISO 8601 dates; the range is cut
+to the tenant's retention. An export holds at most 100,000 rows, the newest: `x-clavix-export-truncated:
+true` says it was cut, `x-clavix-export-from` the range's start and `x-clavix-export-rows` the row count.
+The body is read from the store a batch at a time, so memory stays flat. In CSV a cell that starts with
+`=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` so a spreadsheet reads it as text.
+Each export records the console activity `auditLog.export` (target: the log) before the first byte; a
+refused one records nothing. Columns carry ids (`actor`, `userId`), not names.
+
 Retention follows the tenant's plan (`Plan.auditRetentionDays`: free 30 days, pro 90, enterprise 365;
 the platform's own events 400). The daily job `audit.retention` (queue `audit-retention`, 04:17 UTC, needs
 `REDIS_URL`) deletes by the plan the tenant has that day, in batches, as `system:audit:retention`, and

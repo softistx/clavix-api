@@ -3,6 +3,9 @@ import type { PublicOrigin } from "@/modules/tenants/identity";
 /** The console API's path on the Yoga of `src/console`, apart from the hosted pages' `/graphql`. */
 export const CONSOLE_PATH = "/console/graphql";
 
+/** The audit export's path (D17), on the console host beside the GraphQL one. */
+export const CONSOLE_EXPORT_PATH = "/console/audit/export";
+
 /** The id of the console's OAuth client in the `clavix` tenant. */
 export const CONSOLE_CLIENT_ID = "console";
 

@@ -35,14 +35,18 @@ export function createConsoleAuthenticator({
   publicUrl: string;
   serverOfClavix: () => Promise<OAuthServer | null>;
 }): ConsoleAuthenticate {
-  return async (request) => {
+  return async (request, path) => {
     // No credential at all: nothing to look up, no store read.
     if (!presents(request)) return null;
     const server = await serverOfClavix();
     if (server === null)
       throw new Error("the clavix tenant has no OAuth server");
     const result = await server.authenticateRequest(
-      { headers: request.headers, method: request.method, url: publicUrl },
+      {
+        headers: request.headers,
+        method: request.method,
+        url: path === undefined ? publicUrl : new URL(path, publicUrl).href,
+      },
       { resource: audience },
     );
     if ("refused" in result) {

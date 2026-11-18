@@ -72,3 +72,35 @@ export function consoleAs(
 /** The first error's code, `undefined` when the call succeeded. */
 export const codeOf = (result: ConsoleResult) =>
   result.errors?.[0]?.extensions?.code;
+
+/**
+ * `GET /console/audit/export` called as the user `userId` (same stand-in token
+ * as `consoleAs`); `auditExport` overrides the row limit or the clock.
+ */
+export function exportAs(
+  userId: string,
+  auditExport?: { maxRows?: number; now?: () => Date },
+) {
+  const app = createApp({
+    console: {
+      ...deps,
+      directory: { ...deps.directory, emailVerified: async () => true },
+      ...(auditExport === undefined ? {} : { auditExport }),
+      authenticate: async () => ({
+        userId,
+        clientId: "spec",
+        grantId: "spec",
+        scopes: ["console"],
+        clientName: null,
+        bound: null,
+        jkt: null,
+        authorizationDetails: [],
+      }),
+    },
+  });
+  return (params: Record<string, string>, headers: HeadersInit = {}) =>
+    app.request(
+      `http://localhost/console/audit/export?${new URLSearchParams(params)}`,
+      { headers: { authorization: "Bearer spec", ...headers } },
+    );
+}

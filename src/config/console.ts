@@ -110,6 +110,7 @@ export function createConsoleDeps(
           slug: tenant.slug,
           name: tenant.name,
           status: tenant.status,
+          plan: tenant.plan,
         })),
     },
   };

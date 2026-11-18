@@ -18,6 +18,9 @@ nxgt-janus release says which.
   passkey changes are kept in its own log, kept 30, 90 or 365 days by plan; the console reads that
   log (admins) and the console activity (viewers), and operators read every tenant's and the
   platform's ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **Audit export** (M4) — an admin downloads a tenant's sign-in log or console activity as CSV or
+  NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
+  ([#21](https://github.com/softistx/clavix-api/issues/21)).
 
 ## Next
 
