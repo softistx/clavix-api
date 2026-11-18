@@ -1,8 +1,13 @@
 import { isMetadataClientId, type OAuthIssuers } from "@softistx/janus-oauth";
+import type { Exclusive } from "@/console/exclusive";
 import type { AgentClientsPort } from "@/modules/agents/agent-clients.service";
-import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
+import {
+  agentsQuotaKey,
+  agentsQuotaRefusal,
+  lockUnavailable,
+} from "./agents-quota";
 import {
   type MetadataThrottle,
   MetadataThrottledError,
@@ -27,6 +32,8 @@ export interface RegistrationOptions {
   throttle?: MetadataThrottle | undefined;
   /** The `agents` quota that applies to the tenant (`null`: no limit). */
   agentQuotaOf: (tenantId: string) => Promise<number | null>;
+  /** Serializes a tenant's new agents (count, fetch, record); see `agentsQuotaKey`. */
+  exclusive?: Exclusive | undefined;
   log?: (message: string) => void;
 }
 
@@ -66,26 +73,21 @@ export function withRegistration<
     isMetadataClient,
     throttle,
     agentQuotaOf,
+    exclusive = (_key, work) => work(),
     log = console.warn,
   }: RegistrationOptions,
 ): Omit<T, "handle"> & {
   register: RegisterHandler;
   handle: (request: Request, ip?: string | undefined) => Promise<Response>;
 } {
-  /**
-   * Before janus fetches a document: the fetch limits, then the `agents`
-   * quota for a client not recorded yet. A refusal is the response; nothing
-   * is fetched or stored.
-   */
-  const guardMetadata = async (
-    request: Request,
-    clientId: string,
+  /** The fetch limits, before janus fetches a document: a refusal is the response. */
+  const throttleMetadata = async (
+    tenant: ResolvedTenant,
     ip: string | undefined,
   ): Promise<Response | null> => {
-    const tenant = await resolver.resolveRequest(request);
-    if (tenant === null || !tenant.oauth.agents.metadataDocuments) return null;
     try {
       await throttle?.check({ tenantId: tenant.tenantId, ip });
+      return null;
     } catch (error) {
       if (!(error instanceof MetadataThrottledError)) throw error;
       return Response.json(
@@ -99,27 +101,53 @@ export function withRegistration<
         },
       );
     }
-    if (await agents.has(tenant.tenantId, clientId)) return null;
-    try {
-      assertWithinQuota(
-        "agents",
-        await agents.count(tenant.tenantId),
-        await agentQuotaOf(tenant.tenantId),
-      );
-    } catch (error) {
-      if (!(error instanceof QuotaExceededError)) throw error;
-      return Response.json(
-        { error: "access_denied", error_description: error.message },
-        { status: 403, headers: NO_STORE },
-      );
-    }
-    return null;
   };
-  const recordMetadata = async (request: Request, clientId: string) => {
-    const tenant = await resolver.resolveRequest(request);
-    if (tenant === null || !tenant.oauth.agents.metadataDocuments) return;
+  const recordMetadata = async (tenant: ResolvedTenant, clientId: string) => {
     if (!(await isMetadataClient(tenant, clientId))) return;
     await agents.record(tenant.tenantId, { clientId, kind: "metadata" });
+  };
+  /** Records the client; never fails the request: the client is stored, the record is a count. */
+  const recordSafely = (tenant: ResolvedTenant, clientId: string) =>
+    recordMetadata(tenant, clientId).catch((error: unknown) =>
+      log(
+        `register: could not record metadata client ${clientId}: ${String(error)}`,
+      ),
+    );
+  /**
+   * `/authorize` or `/par` of a metadata-document client. A client not yet
+   * recorded is a new agent: the quota check, janus's fetch and the record
+   * run under the tenant's agents lock, so concurrent first uses cannot all
+   * pass a quota of N.
+   */
+  const handleMetadata = async (
+    request: Request,
+    clientId: string,
+    ip: string | undefined,
+  ): Promise<Response> => {
+    const tenant = await resolver.resolveRequest(request);
+    if (tenant === null || !tenant.oauth.agents.metadataDocuments) {
+      return oauth.handle(request);
+    }
+    const throttled = await throttleMetadata(tenant, ip);
+    if (throttled !== null) return throttled;
+    if (await agents.has(tenant.tenantId, clientId)) {
+      const response = await oauth.handle(request);
+      await recordSafely(tenant, clientId);
+      return response;
+    }
+    return exclusive(agentsQuotaKey(tenant.tenantId), async () => {
+      // Recorded by a request that held the lock before this one: not new.
+      const over = (await agents.has(tenant.tenantId, clientId))
+        ? null
+        : await agentsQuotaRefusal(
+            { count: (id) => agents.count(id), quotaOf: agentQuotaOf },
+            tenant.tenantId,
+          );
+      if (over !== null) return over;
+      const response = await oauth.handle(request);
+      await recordSafely(tenant, clientId);
+      return response;
+    });
   };
   return {
     ...oauth,
@@ -130,20 +158,16 @@ export function withRegistration<
       if (path !== "/authorize" && path !== "/par")
         return oauth.handle(request);
       const clientId = await clientIdOf(request);
-      if (clientId !== null && isMetadataClientId(clientId)) {
-        const refused = await guardMetadata(request, clientId, ip);
-        if (refused !== null) return refused;
+      if (clientId === null || !isMetadataClientId(clientId)) {
+        return oauth.handle(request);
       }
-      const response = await oauth.handle(request);
-      if (clientId !== null && isMetadataClientId(clientId)) {
-        // Never fails the request: the client is stored, the record is a count.
-        await recordMetadata(request, clientId).catch((error: unknown) =>
-          log(
-            `register: could not record metadata client ${clientId}: ${String(error)}`,
-          ),
-        );
+      try {
+        return await handleMetadata(request, clientId, ip);
+      } catch (error) {
+        const unavailable = lockUnavailable(error);
+        if (unavailable === null) throw error;
+        return unavailable;
       }
-      return response;
     },
   };
 }

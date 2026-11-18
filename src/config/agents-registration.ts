@@ -6,6 +6,7 @@ import type {
 } from "@/oauth/register-throttle";
 import { withRegistration } from "@/oauth/with-registration";
 import { agentClientsService, isMetadataClient } from "./agent-clients";
+import { exclusive } from "./exclusive";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { metadataThrottle, registerThrottle } from "./throttle";
 import { usageService } from "./usage";
@@ -36,8 +37,10 @@ export function withAgentRegistration<
       throttle,
       agents: agentClientsService,
       agentQuotaOf,
+      exclusive,
     }),
     throttle: fetchThrottle,
     agentQuotaOf,
+    exclusive,
   });
 }

@@ -97,6 +97,8 @@ beforeAll(async () => {
     "ag-throttled",
     "ag-quota",
     "ag-quota-other",
+    "ag-race",
+    "ag-docs-race",
     "ag-suspended",
     "ag-docs",
     "ag-docs-throttled",
@@ -113,6 +115,11 @@ beforeAll(async () => {
   await setAgents("ag-throttled", { dynamic: "open" });
   await setAgents("ag-quota", { dynamic: "open" });
   await setAgents("ag-quota-other", { dynamic: "open" });
+  await setAgents("ag-race", { dynamic: "open" });
+  await setAgents("ag-docs-race", {
+    metadataDocuments: true,
+    allowHosts: ["app.example"],
+  });
   await setAgents("ag-suspended", { dynamic: "open" });
   await setAgents("ag-mcp", { dynamic: "restricted" });
   for (const slug of ["ag-docs", "ag-docs-throttled", "ag-docs-quota"]) {
@@ -281,6 +288,25 @@ describe("agents quota", () => {
     // Another tenant's agents are not counted.
     expect(await countOf("ag-quota-other")).toBe(0);
     expect((await register("ag-quota-other", body)).status).toBe(201);
+  });
+});
+
+describe("agents quota under concurrency", () => {
+  test("at most N of many simultaneous registrations pass a quota of N", async () => {
+    const found = await mongo.db.tenants.findFirst({ slug: "ag-race" });
+    if (found == null) throw new Error("no tenant");
+    await tenantAdmin.setPlan(found._id, {
+      plan: "free",
+      quotaOverrides: { agents: 3 },
+    });
+    const body = { ...metadata, redirect_uris: [CALLBACK] };
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => register("ag-race", body)),
+    );
+    const statuses = results.map((r) => r.status);
+    expect(statuses.filter((s) => s === 201)).toHaveLength(3);
+    expect(statuses.filter((s) => s === 403)).toHaveLength(7);
+    expect(await countOf("ag-race")).toBe(3);
   });
 });
 
@@ -469,6 +495,56 @@ describe("agent records", () => {
   });
 });
 
+describe("the registration body is bounded", () => {
+  const post = (init: RequestInit) =>
+    flow.issuers.register(
+      new Request(flow.url("ag-open", "/register"), {
+        method: "POST",
+        headers: { "content-type": "application/json", ...init.headers },
+        ...init,
+      }),
+      undefined,
+    );
+
+  test("a Content-Length over 16 KiB is 413 before the body is read", async () => {
+    const body = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode("{}"));
+        controller.close();
+      },
+    });
+    const before = await countOf("ag-open");
+    const response = await post({
+      body,
+      duplex: "half",
+      headers: { "content-length": String(17 * 1024) },
+    } as RequestInit);
+    expect(response.status).toBe(413);
+    expect(await countOf("ag-open")).toBe(before);
+  });
+
+  test("with no Content-Length the stream is cut at 16 KiB, never buffered whole", async () => {
+    let sent = 0;
+    const chunk = new Uint8Array(4 * 1024).fill(32);
+    const body = new ReadableStream({
+      pull(controller) {
+        sent += 1;
+        if (sent > 1000) return controller.close();
+        controller.enqueue(chunk);
+      },
+    });
+    const before = await countOf("ag-open");
+    const response = await post({ body, duplex: "half" } as RequestInit);
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toBe(
+      "invalid_client_metadata",
+    );
+    // The cap is 16 KiB: a handful of 4 KiB chunks, not the whole stream.
+    expect(sent).toBeLessThan(20);
+    expect(await countOf("ag-open")).toBe(before);
+  });
+});
+
 describe("metadata documents: abuse limits", () => {
   const authorize = (slug: string) =>
     flow.get(
@@ -550,5 +626,19 @@ describe("metadata documents: abuse limits", () => {
       kind: "metadata",
     });
     expect((await authorize("ag-docs-quota")).status).toBe(302);
+  });
+
+  test("simultaneous first uses of one new client under a quota of 1 all pass and record it once", async () => {
+    const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-race" });
+    if (found == null) throw new Error("no tenant");
+    await tenantAdmin.setPlan(found._id, {
+      plan: "free",
+      quotaOverrides: { agents: 1 },
+    });
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => authorize("ag-docs-race")),
+    );
+    expect(results.map((r) => r.status)).toEqual([302, 302, 302, 302, 302]);
+    expect(await countOf("ag-docs-race", "metadata")).toBe(1);
   });
 });
