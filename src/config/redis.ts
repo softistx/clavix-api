@@ -1,5 +1,9 @@
 import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
+import {
+  type ExportLimitConfig,
+  exportLimits,
+} from "@/console/audit-export/throttle";
 import { keyRotation } from "@/keys/queue";
 import { agentsPrune } from "@/modules/agents/prune.queue";
 import { auditRetention } from "@/modules/audit/retention.queue";
@@ -78,6 +82,10 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_METADATA_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_METADATA_TENANT_WINDOW_SECONDS,
   },
+  auditExport: ExportLimitConfig = {
+    limit: env.CLAVIX_EXPORT_TENANT_LIMIT,
+    windowSeconds: env.CLAVIX_EXPORT_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -102,6 +110,7 @@ export async function openAppRedis(
         ...deviceLimits(device),
         ...registerLimits(register),
         ...metadataLimits(metadata),
+        ...exportLimits(auditExport),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

@@ -1,5 +1,6 @@
 import type { ReadDocumentOf, TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
+import { drain } from "@/modules/audit/stream";
 import type { adminEvents } from "./admin-events.model";
 
 export type StoredAdminEvent = ReadDocumentOf<typeof adminEvents>;
@@ -65,6 +66,37 @@ export class AdminEventReader {
       this.collection.count(where),
     ]);
     return { items: found.items, nextCursor: found.nextCursor, totalCount };
+  }
+
+  /** Whether more than `limit` events match (reads at most `limit + 1` index entries, never a full count). */
+  async exceeds(
+    scope: AdminEventScope,
+    filter: AdminEventFilter,
+    limit: number,
+  ): Promise<boolean> {
+    const more = await this.collection.findMany({
+      filter: whereOf(scope, filter),
+      sort: { at: -1 },
+      skip: limit,
+      limit: 1,
+    });
+    return more.length > 0;
+  }
+
+  /** The matching events newest first, at most `limit`, read a batch at a time (an export). */
+  stream(scope: AdminEventScope, filter: AdminEventFilter, limit: number) {
+    const where = whereOf(scope, filter);
+    return drain(
+      (after, size) =>
+        this.collection.paginateByCursor({
+          filter: where,
+          orderBy: "at",
+          direction: "desc",
+          after,
+          limit: size,
+        }),
+      limit,
+    );
   }
 
   /**

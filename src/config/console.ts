@@ -1,3 +1,4 @@
+import { createExportThrottle } from "@/console/audit-export/throttle";
 import { createConsoleAuthenticator } from "@/console/auth";
 import {
   CONSOLE_PATH,
@@ -15,6 +16,7 @@ import { authEventsService } from "./audit";
 import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
+import { redis } from "./redis";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
@@ -76,6 +78,10 @@ export function createConsoleDeps(
       invitationsOf: (id) => invitationsOf(() => resolveById(id)),
     }),
     exclusive,
+    auditExport:
+      redis === undefined
+        ? {}
+        : { throttle: createExportThrottle(redis.limits.auditExport) },
     adminEvents: adminEventRecorder,
     activity: { admin: adminEventReader, auth: authEventsService },
     directory: {
@@ -110,6 +116,7 @@ export function createConsoleDeps(
           slug: tenant.slug,
           name: tenant.name,
           status: tenant.status,
+          plan: tenant.plan,
         })),
     },
   };

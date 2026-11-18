@@ -16,7 +16,8 @@ import {
   signInThrottle,
   verifyThrottle,
 } from "./config/throttle";
-import { CONSOLE_PATH } from "./console/identity";
+import { serveAuditExport } from "./console/audit-export/export";
+import { CONSOLE_EXPORT_PATH, CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
@@ -130,15 +131,20 @@ export function createApp(
   const consoleOptions = options.console;
   return consoleOptions === undefined
     ? mounted
-    : mounted.plugin((app) =>
-        graphql(app, {
-          schema: consoleOptions.schema ?? consoleSchema,
-          path: CONSOLE_PATH,
-          ide: false,
-          plugins: [useWithoutQuotedValues(), useConsole(consoleOptions)],
-          maskedErrors: janusMasking,
-        }),
-      );
+    : mounted
+        .plugin((app) =>
+          graphql(app, {
+            schema: consoleOptions.schema ?? consoleSchema,
+            path: CONSOLE_PATH,
+            ide: false,
+            plugins: [useWithoutQuotedValues(), useConsole(consoleOptions)],
+            maskedErrors: janusMasking,
+          }),
+        )
+        // The audit export (D17): a stream, so a route beside the GraphQL one.
+        .all(CONSOLE_EXPORT_PATH, ({ request }) =>
+          serveAuditExport(request, consoleOptions),
+        );
 }
 
 // The app the server runs.

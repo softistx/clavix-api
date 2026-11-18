@@ -156,6 +156,13 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Audit exports (GET /console/audit/export): starts per tenant, Redis only.
+  CLAVIX_EXPORT_TENANT_LIMIT: z.coerce.number().int().min(1).default(10),
+  CLAVIX_EXPORT_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Client ID Metadata Document fetches (`/authorize`, `/par` with a URL
   // `client_id`, agents): each is an outbound request an anonymous caller
   // chose. Per client address and tenant, and per tenant; janus advises about

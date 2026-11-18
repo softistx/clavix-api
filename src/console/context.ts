@@ -1,6 +1,7 @@
 import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { YogaInitialContext } from "graphql-yoga";
 import type { AuthEventsService } from "@/modules/audit/auth-events.service";
+import type { PlanId } from "@/modules/tenants/plan.schema";
 import type { Access } from "./access";
 import type { AdminEventReader } from "./admin-events/reader";
 import type { Audit } from "./audit";
@@ -35,6 +36,8 @@ export interface ConsoleDirectory {
       slug: string;
       name: string;
       status: "active" | "suspended";
+      /** The plan, which sets how long the activity logs are kept (D16). */
+      plan: PlanId;
     }[]
   >;
 }

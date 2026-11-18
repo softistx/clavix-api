@@ -7,6 +7,7 @@ import { ObjectId } from "mongodb";
 import type { AuthEvent } from "@/events/types";
 import { userAgentFamily } from "@/events/user-agent";
 import type { AuthEventType, authEvents } from "./auth-events.model";
+import { drain } from "./stream";
 
 export type StoredAuthEvent = ReadDocumentOf<typeof authEvents>;
 
@@ -93,6 +94,38 @@ export class AuthEventsService {
       scope.count(where),
     ]);
     return { items: found.items, nextCursor: found.nextCursor, totalCount };
+  }
+
+  /** Whether more than `limit` events match (reads at most `limit + 1` index entries, never a full count). */
+  async exceeds(
+    tenantId: string,
+    filter: AuthEventFilter,
+    limit: number,
+  ): Promise<boolean> {
+    const more = await this.scoped(tenantId).findMany({
+      filter: filterOf(filter),
+      sort: { at: -1 },
+      skip: limit,
+      limit: 1,
+    });
+    return more.length > 0;
+  }
+
+  /** The matching events newest first, at most `limit`, read a batch at a time (an export). */
+  stream(tenantId: string, filter: AuthEventFilter, limit: number) {
+    const scope = this.scoped(tenantId);
+    const where = filterOf(filter);
+    return drain(
+      (after, size) =>
+        scope.paginateByCursor({
+          filter: where,
+          orderBy: "at",
+          direction: "desc",
+          after,
+          limit: size,
+        }),
+      limit,
+    );
   }
 
   /**
