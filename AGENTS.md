@@ -44,6 +44,18 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
 
+## Telemetry (`src/telemetry/`, `src/config/telemetry.ts`, D24)
+
+`buildTelemetry` makes the app's `@softistx/telemetry` (OTLP/HTTP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, no exporter
+otherwise; `ratioSampler(0.1)` in production), `config/telemetry.ts` installs it, and `createBase` (`http/context.ts`) gives
+`@alxia/telemetry` to `use` first, with `createApp({ telemetry })` to swap it in a spec. A second middleware resolves the tenant
+(the memoised `ctx.tenant()`) and runs the rest under `withAttributes` of `clavix.tenant.id` and `clavix.tenant.plan` (`ResolvedTenant.plan`,
+`telemetry/tenant.ts`); `/healthz`, `/readyz` and `/internal/*` are neither traced nor resolved. `buildTenantJanus` returns
+`instrumentJanus(...)`; the MongoDB command spans (`instrumentDatabase`, `server.ts`) need `monitorCommands`, set in `db.ts` only
+with an endpoint. **Never written:** tokens, codes, secrets, e-mails, logins, IPs: every exporter is wrapped by `withoutAddresses`
+(`telemetry/scrub.ts`, which drops `client.address`; Temporary, until `@alxia/telemetry` can omit it). A new attribute is
+added to `tenantAttributes` or to the span that owns it, never from a request body. Spec: `telemetry/telemetry.spec.ts`.
+
 ## Console pages carry `totalCount: Int!`
 
 Every paged console connection (`TenantUserPage`, `ClientPage`, `RoleMemberPage`, `TenantPage`,
