@@ -1,7 +1,7 @@
 import { defineQueue } from "@softistx/redis";
 import { z } from "zod";
 
-// The clean-up of the expired rolled webhook secrets, daily at 04:17 UTC (a
+// The clean-up of the expired rolled webhook secrets, daily at 04:37 UTC (a
 // `schedules` cron, fired while a worker runs). Idempotent, so every instance
 // may run a worker.
 export const webhookSecretsPrune = defineQueue({

@@ -1,5 +1,5 @@
 import { GraphQLError } from "graphql";
-import type { ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { tenantAdmin } from "@/config/tenancy";
 import { webhookEndpoints as endpoints } from "@/config/webhook-endpoints";
 import { webhookDelivery } from "@/config/webhooks";
@@ -147,15 +147,21 @@ export const webhooks: Resolvers = {
         removed = false;
       }
       // Recorded on a repeat too (it may be the event the first run missed).
-      if (id.length >= 1 && id.length <= 200) {
-        await ctx.audit("webhook.delete", target(tenant._id, id));
+      if (ObjectId.isValid(id)) {
+        await ctx.audit(
+          "webhook.delete",
+          target(tenant._id, new ObjectId(id).toHexString()),
+        );
       }
       return removed;
     },
     rollWebhookSecret: async (_, { tenantId, id, keepPrevious }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const rolled = await refusing(() =>
-        endpoints.roll(tenant._id.toHexString(), id, keepPrevious),
+      // Under the tenant's lock: two rolls would otherwise overwrite each other's secret.
+      const rolled = await ctx.exclusive(webhooksKey(tenant), () =>
+        refusing(() =>
+          endpoints.roll(tenant._id.toHexString(), id, keepPrevious),
+        ),
       );
       await ctx.audit("webhook.rollSecret", target(tenant._id, id));
       return { endpoint: shape(rolled.endpoint), secret: rolled.secret };
