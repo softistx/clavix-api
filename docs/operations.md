@@ -315,6 +315,16 @@ logs say `agents: could not prune <client> of <tenant>` for each failure. Every 
 `agent.prune` (actor `system:agents:prune`); to check the job ran, look for that event or for the absence of old
 `DYNAMIC` agents in `clients(kind: [DYNAMIC])`. Two instances running the same tick do no harm (deleting is idempotent).
 
+## Audit retention
+
+The queue `audit-retention` (daily, 04:17 UTC, 3 attempts) cuts every tenant's sign-in log (`authEvents`) and
+console activity (`adminEvents`) at the retention of its current plan (`Plan.auditRetentionDays`: free 30
+days, pro 90, enterprise 365), and the platform's own events (`tenantId: null`) at 400 days. Tenants in the
+trash or already purged are covered too, so a purged tenant's console activity ends with its retention. It
+needs Redis (`REDIS_URL`): without it nothing runs. A tick that leaves a tenant unfinished fails and the
+queue retries it; the logs say `audit: retention failed for <tenant> (...)`. It deletes in batches of
+1,000 and writes no event per deletion (actor `system:audit:retention`). A plan change applies at the next run.
+
 ## Telemetry
 
 Traces and logs go to an OpenTelemetry collector over OTLP/HTTP, through `@softistx/telemetry` (no OpenTelemetry SDK).

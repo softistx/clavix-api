@@ -68,6 +68,8 @@ const allowed = [
   "src/config/roles.ts",
   "src/config/branding.ts",
   "src/modules/usage/",
+  "src/modules/audit/",
+  "src/config/audit.ts",
   "src/config/usage.ts",
   "src/config/purge.ts",
   "src/modules/client-policies/",

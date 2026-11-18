@@ -17,6 +17,7 @@ import {
   requestMagicLink,
 } from "./magic-link";
 import { requestSignInCode, verifySignInCode } from "./sign-in";
+import { recordingSignIn, recordSignOut } from "./sign-in-events";
 
 // The janus instance and the tenant of the request's host; both are `null`
 // for a host that names no active tenant.
@@ -69,11 +70,13 @@ export const auth: Resolvers = {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
       requireMethod(tenant, "emailCode");
-      const signedIn = await verifySignInCode(
-        auth,
-        challenge,
-        code,
-        deviceOptions(ctx.request),
+      const signedIn = await recordingSignIn(
+        ctx,
+        tenant.tenantId,
+        "emailCode",
+        () =>
+          verifySignInCode(auth, challenge, code, deviceOptions(ctx.request)),
+        (done) => done.user.id,
       );
       await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");
@@ -105,10 +108,12 @@ export const auth: Resolvers = {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
       if (!auth.magicLink.enabled) throw magicLinkDisabled();
-      const signedIn = await confirmMagicLink(
-        auth,
-        token,
-        deviceOptions(ctx.request),
+      const signedIn = await recordingSignIn(
+        ctx,
+        tenant.tenantId,
+        "magicLink",
+        () => confirmMagicLink(auth, token, deviceOptions(ctx.request)),
+        (done) => done.user.id,
       );
       await usageService.recordActive(tenant.tenantId, signedIn.user.id);
       ctx.set.headers.set("cache-control", "no-store");
@@ -148,8 +153,12 @@ export const auth: Resolvers = {
       );
     },
     signOut: async (_, __, ctx) => {
-      const { auth } = await tenantOf(ctx);
+      const { auth, tenant } = await tenantOf(ctx);
+      const current = await auth.authenticate(ctx.request);
       await auth.signOut(ctx.request);
+      if (current !== null) {
+        await recordSignOut(ctx, tenant.tenantId, current.user.id);
+      }
       ctx.set.headers.append("set-cookie", auth.cookie.clear());
       return true;
     },

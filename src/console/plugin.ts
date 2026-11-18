@@ -2,6 +2,7 @@ import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
 import type {
+  ConsoleActivity,
   ConsoleAdmins,
   ConsoleDirectory,
   ConsoleExtras,
@@ -56,6 +57,8 @@ export interface ConsoleDeps {
   exclusive: Exclusive;
   /** Where `ctx.audit` appends its events. */
   adminEvents: AdminEventRecorder;
+  /** The readers of the activity logs. */
+  activity: ConsoleActivity;
 }
 
 const refusal = (
@@ -91,6 +94,7 @@ export function useConsole({
   users,
   exclusive,
   adminEvents,
+  activity,
 }: ConsoleDeps) {
   const principals = new WeakMap<Request, OAuthPrincipal>();
   // Ours, one per HTTP request: a client's `x-request-id` is never believed.
@@ -165,6 +169,7 @@ export function useConsole({
         admins,
         users,
         exclusive,
+        activity,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),
         canPlatform: (permission) =>

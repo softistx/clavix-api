@@ -14,6 +14,11 @@ nxgt-janus release says which.
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
+- **Sign-in events and activity readers** (M4) — a tenant's sign-ins, sign-outs, second-factor and
+  passkey changes are kept in its own log, kept 30, 90 or 365 days by plan; the console reads that
+  log (admins) and the console activity (viewers), and operators read every tenant's and the
+  platform's ([#21](https://github.com/softistx/clavix-api/issues/21)).
+
 ## Next
 
 - **Agent follow-ups** — unused agent registrations no longer fill a tenant's `agents` quota before

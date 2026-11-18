@@ -14,8 +14,7 @@ function scrubbed<T extends Signal>(signal: T): T {
  * The exporter, with the attributes D24 forbids taken off every signal before
  * it leaves the process.
  *
- * Temporary, until alxia's `@alxia/telemetry` can leave `client.address` out
- * of its server span (to be filed): the span records the caller's address, and
+ * Temporary, until @alxia/telemetry#829: the span records the caller's address, and
  * D24 forbids writing IPs.
  */
 export function withoutAddresses(exporter: Exporter): Exporter {

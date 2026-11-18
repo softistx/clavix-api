@@ -1,3 +1,4 @@
+import { AdminEventReader } from "@/console/admin-events/reader";
 import { createAdminEventRecorder } from "@/console/admin-events/recorder";
 import { mongo } from "./db";
 
@@ -6,3 +7,6 @@ import { mongo } from "./db";
 export const adminEventRecorder = createAdminEventRecorder(
   mongo.db.adminEvents,
 );
+
+/** The console's readers of the same collection (the activity log, the retention). */
+export const adminEventReader = new AdminEventReader(mongo.db.adminEvents);

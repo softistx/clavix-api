@@ -9,6 +9,7 @@ import { env } from "@/config/env";
 import { newTenantOAuthPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
 import { dropTenantHosts } from "./hosts";
 import { partitionOf } from "./identity";
+import type { PlanId } from "./plan.schema";
 import { PLATFORM_TENANT_SLUG, slugProblem } from "./slug";
 import {
   InvalidSlugError,
@@ -121,6 +122,18 @@ export class TenantsService {
   async allIds(): Promise<string[]> {
     const all = await this.collection.findMany({ withDeleted: true });
     return all.map((tenant) => partitionOf(tenant._id));
+  }
+
+  /**
+   * Every tenant with its plan, the suspended, the trashed and the purged
+   * included: their logs follow the plan until the retention ends (D16).
+   */
+  async retentionTargets(): Promise<{ id: string; plan: PlanId }[]> {
+    const all = await this.collection.findMany({ withDeleted: true });
+    return all.map((tenant) => ({
+      id: partitionOf(tenant._id),
+      plan: tenant.plan,
+    }));
   }
 
   /** The active tenants with these ids (hex); an unknown, suspended or deleted one is left out. */

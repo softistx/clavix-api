@@ -3,6 +3,7 @@ import {
   janus,
   type SocialConfig,
   type SocialProfile,
+  type UserEventListener,
 } from "@softistx/janus";
 import type { SocialAuth } from "@softistx/janus-graphql";
 import {
@@ -47,6 +48,8 @@ export interface TenantJanusOptions {
   secrets?: SecretBox;
   /** What accepting an invitation of this tenant checks and does; nothing when left out. */
   invitationHooks?: InvitationHooksFor;
+  /** Hears the user events of one tenant's instance (D12); nothing when left out. */
+  events?: (tenant: ResolvedTenant) => UserEventListener;
 }
 
 /** janus's `invitations.beforeAccept` and `onAccepted` of one tenant. */
@@ -72,8 +75,10 @@ function buildJanus(
   tenant: ResolvedTenant,
   social?: SocialConfig,
   hooks?: InvitationHooks,
+  events?: UserEventListener,
 ) {
   return janus({
+    ...(events === undefined ? {} : { events }),
     // janus refuses a social config with no provider: such a tenant gets none.
     ...(social === undefined ? {} : { social }),
     user: userSchema,
@@ -164,10 +169,11 @@ export function buildTenantJanus(
   tenant: ResolvedTenant,
   secrets?: SecretBox,
   hooks?: InvitationHooks,
+  events?: UserEventListener,
 ): TenantJanus {
   // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.
   return instrumentJanus(
-    buildJanus(db, tenant, socialConfigOf(tenant, secrets), hooks),
+    buildJanus(db, tenant, socialConfigOf(tenant, secrets), hooks, events),
   );
 }
 
@@ -193,6 +199,7 @@ export function createTenantJanusIssuers({
   db,
   secrets,
   invitationHooks,
+  events,
 }: TenantJanusOptions) {
   return createJanusIssuers({
     resolve: async (request) => {
@@ -209,6 +216,12 @@ export function createTenantJanusIssuers({
           };
     },
     build: ({ tenant }) =>
-      buildTenantJanus(db, tenant, secrets, invitationHooks?.(tenant)),
+      buildTenantJanus(
+        db,
+        tenant,
+        secrets,
+        invitationHooks?.(tenant),
+        events?.(tenant),
+      ),
   });
 }

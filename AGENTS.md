@@ -398,12 +398,24 @@ does two things, and nothing else touches the collection:
 - **Never a secret**: an event is identifiers only (`target` is `{ type, id }`). The schema is
   closed (`z.strictObject`, no free-form field), so there is no place for a secret, a token or the
   before/after of a value, and none is to be added.
+- **Sign-in events (M4 E1, D12-D18)**: `src/events/` is the event bus (`createEventBus`: every
+  subscriber awaited, a failure reported and swallowed, so an event never fails its caller, D13;
+  `config/events.ts` counts failures in `eventFailures`); `authEvents` (`modules/audit/`, tenant-owned,
+  closed schema, `scopeToTenant` only) is written by the `authRecorder` subscriber. Sources: the hosted
+  sign-in resolvers through `recordingSignIn` / `recordSignOut` (`modules/auth/sign-in-events.ts`: code,
+  magic link, passkey, social), and the per-tenant janus `events` listener (`events/janus-listener.ts`:
+  second factor, recovery codes, passkeys; no address). A new type goes in `AUTH_EVENT_TYPES` (closed).
+  Reads: console `authEvents` (`edit`, an admin: addresses) and `adminEvents` (`view`),
+  `platformAdminEvents` (operators). The full IP stays in `authEvents` only (D15). Retention
+  (`modules/audit/retention.ts`, queue `audit-retention`, 04:17 UTC, `config/audit-retention.ts`) cuts by the
+  tenant's current plan (`Plan.auditRetentionDays`) as `system:audit:retention`, with no event per deletion.
 - `adminEvents` is a platform collection: its `tenantId` says which tenant an event is about, so it
   is listed in `platformCollections` (`src/tenancy/owned.ts`) and left out of the tenant-owned
   guards. It is reached only through `AdminEventRecorder.record` (`src/config/admin-events.ts`); a
   source scan in `src/tenancy/guards.spec.ts` refuses any other access or export. Indexes (`tenantId, at` and `actor, at`,
-  newest first) are the definition's, created by `db:sync`. No reader and no SDL until the viewer
-  (M4). `ConsoleDeps.adminEvents` takes another recorder in a spec.
+  newest first) are the definition's, created by `db:sync`. Read through `AdminEventReader`
+  (`src/console/admin-events/reader.ts`, `ConsoleExtras.activity.admin`: `adminEvents`, `platformAdminEvents`,
+  the retention's `deleteBefore`). `ConsoleDeps.adminEvents` takes another recorder in a spec.
 - The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
   never used.
 
