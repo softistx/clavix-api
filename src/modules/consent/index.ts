@@ -1,7 +1,7 @@
 import type { IResolvers } from "@graphql-tools/utils";
-import { GraphQLError } from "graphql";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
+import { GraphQLError } from "graphql";
 import type { Context } from "@/http/context";
 import type { OAuthHandle } from "@/oauth/routes";
 import { requireLive } from "@/tenancy/live";
