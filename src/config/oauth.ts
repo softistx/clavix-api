@@ -7,6 +7,7 @@ import type {
   RolesFor,
 } from "@/oauth/ports";
 import { withTenantState } from "@/oauth/tenant-state";
+import { withAgentRegistration } from "./agents-registration";
 import { exchangeRulesFor as storedExchangeRulesFor } from "./client-policies";
 import { dpopNonceSecret, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
@@ -29,17 +30,19 @@ export const createIssuers = (
   exchangeRulesFor: ExchangeRulesFor = storedExchangeRulesFor,
 ) =>
   withTenantState(
-    createClavixOAuthIssuers({
-      resolver: tenantResolver,
-      db: oauthDb,
-      signingKeysFor,
-      dpopNonceSecret,
-      authFor,
-      claimsFor,
-      resourcesFor,
-      rolesFor,
-      exchangeRulesFor,
-    }),
+    withAgentRegistration(
+      createClavixOAuthIssuers({
+        resolver: tenantResolver,
+        db: oauthDb,
+        signingKeysFor,
+        dpopNonceSecret,
+        authFor,
+        claimsFor,
+        resourcesFor,
+        rolesFor,
+        exchangeRulesFor,
+      }),
+    ),
     {
       resolver: tenantResolver,
       onActive: (tenantId, userId) =>

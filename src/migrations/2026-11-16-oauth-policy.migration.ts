@@ -20,6 +20,12 @@ export async function migrateOAuthPolicy(db: Db): Promise<number> {
           oauth: {
             par: { required: false },
             dpop: { required: false },
+            agents: {
+              dynamic: "off",
+              redirectUris: [],
+              metadataDocuments: false,
+              allowHosts: [],
+            },
           },
         },
       },

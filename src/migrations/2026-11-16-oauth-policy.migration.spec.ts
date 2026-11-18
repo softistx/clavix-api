@@ -47,6 +47,12 @@ describe(id, () => {
     expect(await oauthOf("old")).toEqual({
       par: { required: false },
       dpop: { required: false },
+      agents: {
+        dynamic: "off",
+        redirectUris: [],
+        metadataDocuments: false,
+        allowHosts: [],
+      },
     });
     expect(await oauthOf("set")).toEqual({
       par: { required: true },

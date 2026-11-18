@@ -14,6 +14,10 @@ nxgt-janus release says which.
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
+- **MCP clients and agents** (in progress) — a tenant can opt in to dynamic registration (`/register`, RFC 7591) and
+  Client ID Metadata Documents, with a throttle and an `agents` quota ([guide](guide/mcp.md)). Console exposure of the
+  policy, RFC 9728 resources and consent per agent follow.
+
 ## Next
 
 - **Access rules** — an application publishes its OpenAPI and SDL from CI
@@ -35,7 +39,6 @@ nxgt-janus release says which.
 
 **Advanced protocols**
 - Rich authorization requests and their consent.
-- MCP and agents: dynamic registration policy, RFC 9728, consent per agent.
 
 **Federation, step-up and events**
 - Enterprise OIDC connections and home-realm discovery.

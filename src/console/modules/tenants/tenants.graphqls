@@ -19,6 +19,8 @@ type Quotas {
   clients: Int
   "Custom domains. Hard: adding one more is QUOTA_EXCEEDED."
   domains: Int
+  "Agents (clients that registered themselves, or that a metadata document describes). Hard: `/register` answers 403 `access_denied` when it is reached."
+  agents: Int
 }
 
 "A plan of the platform: a name and the quotas it grants."
@@ -71,6 +73,8 @@ type Usage {
   mau: UsageMeter!
   clients: UsageMeter!
   domains: UsageMeter!
+  "Agents now, whatever the month. They do not count in `clients`."
+  agents: UsageMeter!
 }
 
 input CreateTenantInput {
@@ -94,6 +98,7 @@ input QuotaOverridesInput {
   mau: Int
   clients: Int
   domains: Int
+  agents: Int
 }
 
 "The plan and the whole set of overrides (a replacement, so repeating a call changes nothing)."

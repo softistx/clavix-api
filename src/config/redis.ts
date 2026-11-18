@@ -18,6 +18,10 @@ import {
 } from "@/modules/passkeys/throttle";
 import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
+import {
+  type RegisterLimitConfig,
+  registerLimits,
+} from "@/oauth/register-throttle";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
@@ -58,6 +62,12 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_DEVICE_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_DEVICE_TENANT_WINDOW_SECONDS,
   },
+  register: RegisterLimitConfig = {
+    ipLimit: env.CLAVIX_REGISTER_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_REGISTER_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_REGISTER_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_REGISTER_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -74,6 +84,7 @@ export async function openAppRedis(
         ...passkeyLimits(passkeys),
         ...verificationLimits(verification),
         ...deviceLimits(device),
+        ...registerLimits(register),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

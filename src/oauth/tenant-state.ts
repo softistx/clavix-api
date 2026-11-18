@@ -8,7 +8,19 @@ const REFUSED_PATHS = new Set([
   "/par",
   "/device_authorization",
   "/token",
+  "/register",
 ]);
+
+/** The 403 a suspended or deleted tenant's session-opening paths answer. */
+export const suspendedResponse = () =>
+  Response.json(
+    {
+      error: "access_denied",
+      error_description: "This service is suspended",
+      code: TENANT_SUSPENDED,
+    },
+    { status: 403, headers: { "cache-control": "no-store" } },
+  );
 
 export interface TenantStateOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
@@ -33,7 +45,7 @@ export function subjectOf(token: unknown): string | undefined {
 }
 
 /**
- * Wraps the issuers' `handle`: `/authorize`, `/par`, `/device_authorization` and `/token` (refresh and device
+ * Wraps the issuers' `handle`: `/authorize`, `/par`, `/device_authorization`, `/register` and `/token` (refresh and device
  * codes included)
  * of a suspended or deleted tenant answer 403 `TENANT_SUSPENDED`; discovery,
  * JWKS, userinfo, introspection and revocation answer as before. A token
@@ -50,14 +62,7 @@ export function withTenantState<T extends Pick<OAuthIssuers, "handle">>(
       if (!REFUSED_PATHS.has(path)) return oauth.handle(request);
       const tenant = await resolver.resolveRequest(request);
       if (tenant !== null && !isLive(tenant)) {
-        return Response.json(
-          {
-            error: "access_denied",
-            error_description: "This service is suspended",
-            code: TENANT_SUSPENDED,
-          },
-          { status: 403, headers: { "cache-control": "no-store" } },
-        );
+        return suspendedResponse();
       }
       const response = await oauth.handle(request);
       if (

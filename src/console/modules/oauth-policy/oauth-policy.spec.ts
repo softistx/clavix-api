@@ -191,7 +191,7 @@ describe("updateOAuthPolicy", () => {
       i: { par: { required: true }, dpop: { required: true } },
     });
     expect(on.errors).toBeUndefined();
-    expect((await stored(id)).oauth).toEqual({
+    expect((await stored(id)).oauth).toMatchObject({
       par: { required: true },
       dpop: { required: true },
     });

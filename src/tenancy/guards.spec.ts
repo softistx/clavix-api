@@ -72,6 +72,8 @@ const allowed = [
   "src/config/purge.ts",
   "src/modules/client-policies/",
   "src/config/client-policies.ts",
+  "src/modules/agents/",
+  "src/config/agent-clients.ts",
 ];
 // Where a platform collection with a `tenantId` (owned.ts) may be reached:
 // `adminEvents` by its recorder and the recorder's wiring, nowhere else.
