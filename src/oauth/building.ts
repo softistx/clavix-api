@@ -6,6 +6,7 @@ import {
 } from "@softistx/janus-oauth-mongo";
 import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
+import { DPOP_ALGORITHMS } from "@/modules/resources/protected-resource-document";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
 import { lifetimes } from "./lifetimes";
 import type {
@@ -82,7 +83,7 @@ export const buildIssuer =
       // client of the tenant send one. A client may also require it alone
       // (`dpopBoundAccessTokens`).
       dpop: {
-        algorithms: ["ES256", "EdDSA"] as const,
+        algorithms: DPOP_ALGORITHMS,
         required: tenant.oauth.dpop.required,
         replay: createMongoDPoPReplayCache(
           db,
