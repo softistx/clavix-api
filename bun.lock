@@ -24,6 +24,8 @@
         "@softistx/janus-passkeys": "^0.3.17",
         "@softistx/janus-social": "^0.5.1",
         "@softistx/janus-telemetry": "^0.19.0",
+        "@softistx/janus-webhooks": "^0.13.0",
+        "@softistx/janus-webhooks-redis": "^0.12.0",
         "@softistx/mail": "^1.6.0",
         "@softistx/mail-smtp": "^1.1.0",
         "@softistx/material-core": "^0.91.0",
@@ -339,6 +341,10 @@
     "@softistx/janus-social": ["@softistx/janus-social@0.5.1", "https://npm.softistx.com/@softistx/janus-social/-/janus-social-0.5.1.tgz", { "dependencies": { "oauth4webapi": "^3.8.8" }, "peerDependencies": { "@softistx/janus": "^0.70.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-FBvjTQY++XdNP3+OGsVTX/A3R3rmA6jOf6wjEaD4ikIFCesdzmn12Wr86zWdN9o56NrLNoQ+YbReHwpDnqcwaA=="],
 
     "@softistx/janus-telemetry": ["@softistx/janus-telemetry@0.19.0", "https://npm.softistx.com/@softistx/janus-telemetry/-/janus-telemetry-0.19.0.tgz", { "peerDependencies": { "@softistx/janus": "^0.70.0", "@softistx/telemetry": ">=0.3.0 <1", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-KPZJmucmkSpVYtVVTiU7HIQJh15iSsNk0cLhZVV/Nc75KPdf2eDRYVQY23OJiAT2balTal0jzyFjkVDN9yoaqQ=="],
+
+    "@softistx/janus-webhooks": ["@softistx/janus-webhooks@0.13.0", "https://npm.softistx.com/@softistx/janus-webhooks/-/janus-webhooks-0.13.0.tgz", { "peerDependencies": { "@softistx/janus": "^0.70.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-9ciPYgEXQ+GHPo5CiNdmxJ75faGeycGKEO1d3UWl1csIykAcFEasXcP+yhLSxl4ZKuooglpYVr9e74HxJTO3cg=="],
+
+    "@softistx/janus-webhooks-redis": ["@softistx/janus-webhooks-redis@0.12.0", "https://npm.softistx.com/@softistx/janus-webhooks-redis/-/janus-webhooks-redis-0.12.0.tgz", { "peerDependencies": { "@softistx/janus": "^0.70.0", "@softistx/janus-webhooks": "^0.13.0", "@softistx/redis": ">=0.14.0 <1", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-Gi1LIZxLZG4xcQjQDAxlfmDVBB1tUXKgaYkNGirx1ffrsOK+8hZpS2BUDi9DHpc8czxPPruNGHmNodtShF8VZQ=="],
 
     "@softistx/mail": ["@softistx/mail@1.6.0", "https://npm.softistx.com/@softistx/mail/-/mail-1.6.0.tgz", { "peerDependencies": { "@opentelemetry/api": "^1.9.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@opentelemetry/api"] }, "sha512-smc3Ku2BDTMFkaLTvVjhI8TxVwHxm1UwfVXJMS8n4N9LtDBgTvtp5KTbknAvIc/ql6Ex3LI18yjhkV2fUcyNZw=="],
 

@@ -6,8 +6,8 @@ import {
 } from "node:crypto";
 import type { SealedSecret } from "./sign-in.schema";
 
-/** The purpose label of the subkey: the master key itself never encrypts a social secret. */
-const LABEL = "social-secrets";
+/** The purpose label of the subkey by default: the master key itself never encrypts a social secret. */
+const SOCIAL_LABEL = "social-secrets";
 const VERSION = 1;
 const TAG_BYTES = 16;
 
@@ -33,11 +33,13 @@ const derive = (masterKey: Uint8Array, info: string, bytes: number) =>
  */
 export function createSecretBox(
   masterKeys: Uint8Array | readonly [Uint8Array, ...Uint8Array[]],
+  /** The purpose of the subkey: another label seals another kind of secret (the webhook secrets), under a key the others cannot open. */
+  label: string = SOCIAL_LABEL,
 ) {
   const ring = masterKeys instanceof Uint8Array ? [masterKeys] : masterKeys;
   const keys = ring.map((masterKey) => {
-    const kid = derive(masterKey, `${LABEL}/kid`, 8).toString("base64url");
-    return { kid, key: derive(masterKey, LABEL, 32) };
+    const kid = derive(masterKey, `${label}/kid`, 8).toString("base64url");
+    return { kid, key: derive(masterKey, label, 32) };
   });
   const [current] = keys;
   if (current === undefined) throw new TypeError("A secret box needs a key");

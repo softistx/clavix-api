@@ -21,6 +21,8 @@ type Quotas {
   domains: Int
   "Agents (clients that registered themselves, or that a metadata document describes). Hard: `/register` answers 403 `access_denied` when it is reached."
   agents: Int
+  "Webhook endpoints. Hard: creating one more is QUOTA_EXCEEDED."
+  webhooks: Int
 }
 
 "A plan of the platform: a name and the quotas it grants."
@@ -77,6 +79,8 @@ type Usage {
   domains: UsageMeter!
   "Agents now, whatever the month. They do not count in `clients`."
   agents: UsageMeter!
+  "Webhook endpoints now, enabled or not."
+  webhooks: UsageMeter!
 }
 
 input CreateTenantInput {
@@ -101,6 +105,7 @@ input QuotaOverridesInput {
   clients: Int
   domains: Int
   agents: Int
+  webhooks: Int
 }
 
 "The plan and the whole set of overrides (a replacement, so repeating a call changes nothing)."

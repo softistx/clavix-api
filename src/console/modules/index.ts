@@ -23,6 +23,7 @@ import {
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 import { users, usersAudits, usersGuards } from "./users";
 import { sessions, sessionsAudits, sessionsGuards } from "./users/sessions";
+import { webhooks, webhooksAudits, webhooksGuards } from "./webhooks";
 
 // One entry per module: its resolvers, the guard of each root field it adds
 // and the audit action of each mutation it adds. A root field with no guard is
@@ -41,6 +42,7 @@ export const resolvers: Resolvers = mergeResolvers([
   tenants,
   users,
   sessions,
+  webhooks,
 ]);
 export const guards: Guards = {
   ...meGuards,
@@ -56,6 +58,7 @@ export const guards: Guards = {
   ...oauthPolicyGuards,
   ...usersGuards,
   ...sessionsGuards,
+  ...webhooksGuards,
 };
 export const audits: Audits = {
   ...auditAudits,
@@ -70,4 +73,5 @@ export const audits: Audits = {
   ...oauthPolicyAudits,
   ...usersAudits,
   ...sessionsAudits,
+  ...webhooksAudits,
 };

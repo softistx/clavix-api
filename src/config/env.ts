@@ -84,6 +84,13 @@ export const env = defineEnv({
     .transform((value) => (value === "" ? undefined : Number(value)))
     .pipe(z.int().min(1).max(65535).optional())
     .optional(),
+  // Webhook endpoints may point at private or loopback addresses (D21), for a
+  // local receiver in development; refused in production, where only public
+  // addresses are reached.
+  CLAVIX_WEBHOOKS_ALLOW_PRIVATE: z
+    .enum(production ? ["false"] : ["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   // Sign-in code requests (`requestSignInCode`), on top of janus's 5 per address
   // per 10 min. Per client address and tenant, and per tenant. They need
   // Redis (REDIS_URL): without it there is no such limit.
