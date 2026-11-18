@@ -21,9 +21,17 @@ type ConsentDetail {
 extend type OAuthRequest {
   "The request's authorization details in words, one block each; empty when it asked for none."
   details: [ConsentDetail!]!
+  """
+  False when a detail cannot be fully described (its type was deleted, or it carries a key, action or value its
+  type no longer defines): the page must not offer approval, only deny, and approval is refused server-side with
+  `invalid_authorization_details`. True when there is nothing to describe.
+  """
+  detailsComplete: Boolean!
 }
 
 extend type OAuthDeviceRequest {
   "The device's authorization details in words, one block each; empty when it asked for none."
   details: [ConsentDetail!]!
+  "As `OAuthRequest.detailsComplete`."
+  detailsComplete: Boolean!
 }

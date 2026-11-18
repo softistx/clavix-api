@@ -37,8 +37,23 @@ export interface ConsentDetail {
   rows: ConsentRow[];
 }
 
-const COMMON: Record<"actions" | "identifier" | "datatypes", Text> = {
+/** The details of a request in words, and whether every one is fully described. */
+export interface ConsentDetails {
+  details: ConsentDetail[];
+  /**
+   * False when a detail cannot be fully described: its type no longer exists,
+   * it carries a key the type no longer defines (or an action or enum value
+   * it no longer lists), or it is not a typed object. Approval is refused then.
+   */
+  complete: boolean;
+}
+
+const COMMON: Record<
+  "actions" | "identifier" | "datatypes" | "locations",
+  Text
+> = {
   actions: { fr: "Actions", en: "Actions" },
+  locations: { fr: "Emplacement", en: "Location" },
   identifier: { fr: "Identifiant", en: "Identifier" },
   datatypes: { fr: "Données", en: "Data" },
 };
@@ -87,6 +102,40 @@ function formatted(
     : scalar(value, locale);
 }
 
+// RFC 9396 members the rows always show, whatever the type.
+const COMMON_KEYS = new Set([
+  "type",
+  "locations",
+  "actions",
+  "identifier",
+  "datatypes",
+]);
+
+// Whether the type's current definition describes every key and value of the detail.
+function isComplete(
+  detail: Record<string, unknown>,
+  text: DetailText | undefined,
+): boolean {
+  if (text === undefined) return false;
+  const keys = new Set(text.fields.map((field) => field.key));
+  if (Object.keys(detail).some((k) => !COMMON_KEYS.has(k) && !keys.has(k)))
+    return false;
+  const actions = detail["actions"];
+  if (
+    Array.isArray(actions) &&
+    actions.some((a) => !text.actions?.some((known) => known.value === a))
+  )
+    return false;
+  return text.fields.every((field) => {
+    const value = detail[field.key];
+    if (field.kind !== "enum" || value === undefined || value === null)
+      return true;
+    return (Array.isArray(value) ? value : [value]).every((item) =>
+      field.values?.some((v) => v.value === item),
+    );
+  });
+}
+
 function describe(
   detail: Record<string, unknown>,
   text: DetailText | undefined,
@@ -94,6 +143,13 @@ function describe(
 ): ConsentDetail {
   const type = String(detail["type"]);
   const rows: ConsentRow[] = [];
+  const locations = detail["locations"];
+  if (Array.isArray(locations) && locations.length > 0) {
+    rows.push({
+      label: pick(COMMON.locations, locale),
+      value: locations.map(String).join(", "),
+    });
+  }
   const actions = detail["actions"];
   if (Array.isArray(actions) && actions.length > 0) {
     rows.push({
@@ -139,33 +195,46 @@ function describe(
 /**
  * The details of a pending request (janus's `authorizationDetails`, a JSON
  * array string) as blocks of label/value rows in the viewer's language (D5):
- * the type's name and description, then its actions, its fields by their
- * labels (an enum by the value's label, a boolean as yes/no, a number in the
- * viewer's format) and the RFC 9396 `identifier` and `datatypes`. A type the
- * tenant no longer stores shows its name and what the common fields hold;
- * a field the definition does not know is never shown, and no raw JSON is.
+ * the type's name and description, then its locations and actions, its fields
+ * by their labels (an enum by the value's label, a boolean as yes/no, a number
+ * in the viewer's format) and the RFC 9396 `identifier` and `datatypes`. No
+ * raw JSON is shown. `complete` is false when a detail cannot be fully
+ * described (a type the tenant no longer stores, a key, action or enum value
+ * its definition no longer has, an entry that is not a typed object): what is
+ * shown is then partial, and approval must be refused (R4, D4).
  */
-export function detailsOf(
+export function reviewDetails(
   authorizationDetails: string | null,
   texts: DetailTexts,
   locale: ConsentLocale,
-): ConsentDetail[] {
-  if (authorizationDetails === null) return [];
+): ConsentDetails {
+  if (authorizationDetails === null) return { details: [], complete: true };
   let parsed: unknown;
   try {
     parsed = JSON.parse(authorizationDetails);
   } catch {
-    return [];
+    return { details: [], complete: false };
   }
-  if (!Array.isArray(parsed)) return [];
-  return parsed
+  if (!Array.isArray(parsed)) return { details: [], complete: false };
+  const typed = parsed
     .filter(isRecord)
-    .filter((detail) => typeof detail["type"] === "string")
-    .map((detail) =>
-      describe(
-        detail,
-        texts.find((text) => text.type === detail["type"]),
-        locale,
-      ),
-    );
+    .filter((detail) => typeof detail["type"] === "string");
+  const matches = typed.map((detail) => ({
+    detail,
+    text: texts.find((text) => text.type === detail["type"]),
+  }));
+  return {
+    details: matches.map(({ detail, text }) => describe(detail, text, locale)),
+    complete:
+      typed.length === parsed.length &&
+      matches.every(({ detail, text }) => isComplete(detail, text)),
+  };
 }
+
+/** The details of a pending request in words (see `reviewDetails`). */
+export const detailsOf = (
+  authorizationDetails: string | null,
+  texts: DetailTexts,
+  locale: ConsentLocale,
+): ConsentDetail[] =>
+  reviewDetails(authorizationDetails, texts, locale).details;

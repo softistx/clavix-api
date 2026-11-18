@@ -171,7 +171,22 @@ the viewer's language) falls back to its name and the other language, and a fiel
 no raw JSON reaches the page. A viewer that sends no `Accept-Language` gets English.
 
 **Fix:** write the type's `name`, `description` and field `label`s in French and English (`updateDetailType`), and keep a type that
-a pending request uses. The page must render every block: approval allows all of them or none.
+a pending request uses. The page must render every block: approval allows all of them or none, and is refused while
+`detailsComplete` is false (see below).
+
+### `BAD_USER_INPUT` "invalid_authorization_details" on `approveOAuthRequest` / `approveOAuthDeviceRequest`
+
+**When:** the user presses Allow on the consent or device page and the mutation answers `BAD_USER_INPUT` (400), message
+`invalid_authorization_details`; the page's request or device request has `detailsComplete: false`.
+
+**Why:** a detail of the request cannot be fully described any more: its type was deleted, or the type changed after the
+request (a field removed or renamed, an action or enum value gone), so the page would show a partial summary. Approval allows
+all the details or none, so Clavix refuses rather than let the grant carry a detail the user was not shown. The request stays
+pending.
+
+**Fix:** the user denies it (`denyOAuthRequest`, `denyOAuthDeviceRequest`) and the client asks again; the hosted page shows
+only Deny while `detailsComplete` is false. To avoid it, do not remove or rename a detail type's fields while requests that use
+it are pending (they last minutes).
 
 ### `DETAIL_TYPE_IN_USE` (409) on `deleteDetailType`
 

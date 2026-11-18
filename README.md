@@ -818,7 +818,11 @@ A type deleted by a race with the save stays on the list but is no longer served
 detail, `{ type, title, description, rows: [{ label, value }] }`, from the tenant's texts in the viewer's language
 (`Accept-Language`: French, else English, else the other language when one is empty; see "Consent"). Approval stays all or nothing:
 `approveOAuthRequest` and `approveOAuthDeviceRequest` are called without an `authorizationDetails` selection, so the user allows every
-detail or denies. The grant keeps them: the token answer, the JWT's `authorization_details` claim and introspection carry them, a refresh can
+detail or denies. **Approval is refused when a detail cannot be fully described** (`detailsComplete`): `oauthRequest.detailsComplete` and
+`oauthDeviceRequest.detailsComplete` are `Boolean!`, false when a detail's type was deleted after the request, or the detail carries a key,
+action or enum value its type no longer defines (what the page could show is then partial). The page must offer only Deny then;
+`approveOAuthRequest` and `approveOAuthDeviceRequest` answer `BAD_USER_INPUT` with the message `invalid_authorization_details`
+(`extensions.oauthError`) and the request stays pending, so it can still be denied. A request with no details is complete. The grant keeps them: the token answer, the JWT's `authorization_details` claim and introspection carry them, a refresh can
 only narrow them, a re-consent that leaves one out revokes the grant's tokens (one that asks for none keeps the standing grant), and a token
 exchange inherits them on the same resource and drops them on another.
 
