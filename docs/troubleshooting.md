@@ -133,7 +133,9 @@ description names the entry and the reason.
 
 A tenant that describes **no** type refuses the parameter altogether with `invalid_request`, not this error.
 **Fix:** read the type in the console (`Resource.detailTypes`) and send exactly its fields; or add the field
-or value with `updateDetailType`; and list the type on the client. Details are best pushed to `/par`.
+or value with `updateDetailType`; and list the type on the client (`authorizationDetailsTypes` in the console,
+`clients:create --detail-types`). Details are best pushed to `/par`. A type that was deleted while a client still listed
+it (a race with the delete) is not served either: remove it from the client's list.
 
 ```graphql
 query {
@@ -171,6 +173,20 @@ The definition breaks a bound: a type name of 1 to 64 letters, digits, `_ . : -`
 16 fields; a field key of 64 characters, not `type`, `locations`, `actions`, `identifier`, `datatypes` or
 `privileges`, and unique; an `enum` with 1 to 50 values; a label over 100 characters or a description over 300; no
 name in either language.
+
+### `BAD_USER_INPUT` (400) on `createClient` / `updateClient` with `authorizationDetailsTypes`
+
+The message says which rule broke, and nothing was written:
+- `unknown detail type "x"`: the name is not a type of this tenant (a type of another tenant is unknown too). List
+  them with `Resource.detailTypes`, or create it first.
+- `a client that lists detail types must require PAR`: set `requirePushedAuthorizationRequests: true` (CLI
+  `--require-par`) in the same call; turning PAR off on a client that lists types is refused likewise.
+- `cannot let a client that uses /authorize or the device grant list detail types yet`: the consent pages (`/authorize` and the
+  device review) do not show details yet, so the tenant must be in `CLAVIX_RAR_CONSENT_READY` (an operator sets it). A
+  token-exchange-only client is exempt.
+- `a client lists at most 50 detail types`.
+
+The CLI prints the same message as `clients:create: …`.
 
 ### `CONFLICT` (409) on `createDetailType`
 

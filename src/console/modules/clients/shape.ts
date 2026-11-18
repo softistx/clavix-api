@@ -50,6 +50,7 @@ export const shape = (
     createdAt: Date;
     requirePushedAuthorizationRequests: boolean;
     dpopBoundAccessTokens: boolean;
+    authorizationDetailsTypes: readonly string[];
   },
   rules?: Rules,
 ) => ({
@@ -63,6 +64,7 @@ export const shape = (
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
   dpopBoundAccessTokens: client.dpopBoundAccessTokens,
+  authorizationDetailsTypes: [...client.authorizationDetailsTypes],
   tokenExchange: exchangeShape(rules),
 });
 

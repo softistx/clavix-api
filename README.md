@@ -91,6 +91,7 @@ one needs on top:
 | `CLAVIX_DEVICE_USER_LIMIT` / `CLAVIX_DEVICE_USER_WINDOW_SECONDS`         | device user-code lookups per signed-in user: 20 per 600 s (see "Device authorization grant")                                                                                                                                                   |
 | `CLAVIX_DEVICE_IP_LIMIT` / `CLAVIX_DEVICE_IP_WINDOW_SECONDS`             | device user-code lookups per client address and tenant: 30 per 600 s                                                                                                                                                                           |
 | `CLAVIX_DEVICE_TENANT_LIMIT` / `CLAVIX_DEVICE_TENANT_WINDOW_SECONDS`     | device user-code lookups per tenant: 300 per 3600 s                                                                                                                                                                                            |
+| `CLAVIX_RAR_CONSENT_READY`                                               | tenants whose code or device clients may list authorization detail types: slugs separated by commas, or `*`; default none (temporary, see "Authorization details")                                                                             |
 | `CLAVIX_REGISTER_IP_LIMIT` / `CLAVIX_REGISTER_IP_WINDOW_SECONDS`         | `/register` calls per client address and tenant: 20 per 3600 s (see "Agent registration throttle" in docs/operations.md)                                                                                                                       |
 | `CLAVIX_REGISTER_TENANT_LIMIT` / `CLAVIX_REGISTER_TENANT_WINDOW_SECONDS` | `/register` calls per tenant: 500 per 3600 s                                                                                                                                                                                                   |
 | `CLAVIX_METADATA_IP_LIMIT` / `CLAVIX_METADATA_IP_WINDOW_SECONDS`         | metadata-document fetches (`/authorize`, `/par`) per client address and tenant: 30 per 60 s                                                                                                                                                    |
@@ -392,7 +393,7 @@ mutation {
   (`Accept-Language`: French, else English), then in the other language, then the scope's name.
 - **A change serves at once**: the scopes a resource offers are read on every OAuth request.
 - **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
-  redirect URIs, a search 100 characters; more is `BAD_USER_INPUT`.
+  redirect URIs and 50 detail types, a search 100 characters; more is `BAD_USER_INPUT`.
 - **The console's own client and resource** (`console` in the `clavix` tenant) cannot be changed
   or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
 - **Listing**: clients come in id order; a client made by `clients:create` is listed too. With
@@ -801,8 +802,19 @@ A type edited by a tenant is served on the next request, with no restart. A reso
 types and no scope (a request then needs a detail). Types are stored per tenant in the `detailTypes`
 collection and removed with the tenant.
 
-A client must list the types it uses (`authorizationDetailsTypes`) and push its requests to `/par`;
-the console and the CLI to manage a client's list follow in the same effort (issue #17).
+**A client opts in.** It lists the types it uses (`authorizationDetailsTypes`), and a type it does not list is
+refused. In the console, `Client.authorizationDetailsTypes`, and `authorizationDetailsTypes` on `CreateClientInput` and
+`UpdateClientInput` (a list replaces, `[]` clears, left out keeps); by script, `clients:create --detail-types a,b`
+(`--detail-types=` clears, no flag keeps). Each name must be a type of the client's own tenant, and the client must
+require PAR (`requirePushedAuthorizationRequests`, `--require-par`), because details in a URL are not protected: turning PAR
+off on a client that lists types is refused too. Any other case is `BAD_USER_INPUT` (400) and nothing is written.
+A type deleted by a race with the save stays on the list but is no longer served: its requests are
+`invalid_authorization_details`.
+
+**Consent gate (temporary).** janus approves every detail it validated, and the hosted consent page that shows them
+in words is not built yet. Until it is, a client that shows a consent page (its grants include `authorization_code`, for `/authorize`, or the device
+grant, for the hosted device review) can list types only on a tenant listed in `CLAVIX_RAR_CONSENT_READY` (slugs
+separated by commas, or `*`; default none). A token-exchange-only client has no consent page and is not held back. The variable goes away with the consent page.
 Details travel in the 4 KiB `/authorize` URL or the 8 KiB `/par` body, so prefer `/par`.
 
 **Managing the types (console API).** `Resource.detailTypes` lists a resource's types;
@@ -847,7 +859,7 @@ mutation {
 ```
 
 **Using a type at `/par`.** A client that lists `payment` pushes the request, then sends the user to
-`/authorize?client_id=…&request_uri=…`. Until the console can set a client's list (#17), the list is set through the janus client store. The example is a confidential client (`-u`); a public one sends `client_id` in the body instead:
+`/authorize?client_id=…&request_uri=…`. The example is a confidential client (`-u`); a public one sends `client_id` in the body instead:
 
 ```sh
 curl -s https://acme.clavix.example/par \
@@ -886,6 +898,7 @@ bun run clients:create --tenant acme --name "Web app" \
 | `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                                                                                                                                                                                                |
 | `--grants <a,b>`       | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code`, `urn:ietf:params:oauth:grant-type:token-exchange`; default `authorization_code,refresh_token` (see below); the token-exchange URN is for a confidential client and needs rules set in the console |
 | `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it)                                                                                                                                                                               |
+| `--detail-types <a,b>` | the authorization detail types the client may ask for (RFC 9396, see "Authorization details"): types of the tenant, and the client needs `--require-par`; an empty value clears them, no flag keeps them                                                                                 |
 | `--dpop-bound`         | the client's tokens are bound to a DPoP key (RFC 9449): its token requests must carry a proof (kept on a re-run; `--no-dpop-bound` clears it)                                                                                                                                            |
 | `--rotate-secret`      | a new secret for an existing confidential client                                                                                                                                                                                                                                         |
 - **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client

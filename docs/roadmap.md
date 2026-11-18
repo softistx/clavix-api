@@ -15,7 +15,8 @@ nxgt-janus release says which.
   that allows it, signs in with code and PKCE, and shows as an unreviewed agent on the consent page;
   admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
   exchange an agent's token. Done so far: the detail types of a resource are stored and served to the
-  token server, and the console API creates, changes and deletes them. Next: clients opt in.
+  token server, and the console API creates, changes and deletes them, and a client lists the types it may ask for (console and
+  `clients:create --detail-types`, PAR required). Next: the hosted consent page shows the details.
 
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled

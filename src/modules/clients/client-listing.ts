@@ -19,6 +19,8 @@ export interface ClientView {
   requirePushedAuthorizationRequests: boolean;
   /** Whether the client's token requests must carry a DPoP proof (RFC 9449). */
   dpopBoundAccessTokens: boolean;
+  /** The authorization detail types (RFC 9396) the client may ask for; empty when it lists none. */
+  authorizationDetailsTypes: readonly string[];
 }
 
 // A listing reads the store page by page and keeps what matches; it stops
@@ -43,6 +45,7 @@ export const viewOf = (record: OAuthClientRecord): ClientView => ({
   requirePushedAuthorizationRequests:
     record.requirePushedAuthorizationRequests === true,
   dpopBoundAccessTokens: record.dpopBoundAccessTokens === true,
+  authorizationDetailsTypes: record.authorizationDetailsTypes ?? [],
 });
 
 /** What a listing keeps: a registered client matching `q` (part of its name or id, any case). */
