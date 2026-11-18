@@ -306,8 +306,8 @@ open and logs; without Redis there is no limit.
 
 ## Agents clean-up
 
-The queue `agents-prune` (daily, 03:41 UTC, 3 attempts) deletes the dynamically registered agents of active tenants
-that registered more than 7 days ago and hold no standing grant ([MCP guide](guide/mcp.md#the-daily-clean-up)). It
+The queue `agents-prune` (daily, 03:41 UTC, 3 attempts) deletes the agents (dynamic and metadata-document) of active tenants
+recorded more than 7 days ago and hold no standing grant ([MCP guide](guide/mcp.md#the-daily-clean-up)). It
 needs Redis (`REDIS_URL`): without it nothing runs, and there is no pass at start. A tick that leaves an agent
 unfinished fails and the queue retries it; each agent is its own step, so one failure does not stop the others. The
 logs say `agents: could not prune <client> of <tenant>` for each failure. Every deletion is the admin event

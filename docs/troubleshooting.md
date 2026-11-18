@@ -730,7 +730,7 @@ still pending. Reading and denying a request do not ask for a fresh session.
 
 **`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet.
 
-**An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` agent that registered more than 7 days ago and was never authorized (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is never pruned.
+**An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` or `METADATA` agent recorded more than 7 days ago that holds no standing grant (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is recorded again at its next use. The job runs only with `REDIS_URL`.
 
 **`updateClient`, `rotateClientSecret` or `setClientTokenExchange` answers `NOT_FOUND` on an agent**: an agent, `DYNAMIC` (it registered itself) or `METADATA` (described by its document), is read-only in the console, whatever its id looks like; only `client`, `clients` and `deleteClient` apply to it. To change one, register a console client instead.
 
