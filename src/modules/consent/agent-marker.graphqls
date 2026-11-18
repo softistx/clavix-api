@@ -1,0 +1,6 @@
+extend type OAuthClient {
+  "Whether the client is one of the tenant's agents (dynamically registered, or described by a metadata document); false for the tenant's own clients."
+  agent: Boolean!
+  "When the agent was registered (ISO 8601); null for a client that is no agent."
+  registeredAt: String
+}

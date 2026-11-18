@@ -1,4 +1,5 @@
 import { graphql } from "@alxia/graphql";
+import { agentsFor } from "./config/agent-clients";
 import { serveLogo } from "./config/branding";
 import {
   serveTlsAsk,
@@ -26,6 +27,7 @@ import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import type { VerificationThrottle } from "./modules/auth/verification-throttle";
 import { LOGO_PATH } from "./modules/branding/logo-route";
 import { oauthContext } from "./modules/consent";
+import type { AgentsFor } from "./modules/consent/agent-marker";
 import type { DetailTextsFor } from "./modules/consent/detail-labels";
 import type { DeviceThrottle } from "./modules/consent/device-throttle";
 import type { ScopeTextsFor } from "./modules/consent/scope-labels";
@@ -61,6 +63,8 @@ export function createApp(
     scopeTexts?: ScopeTextsFor;
     // The same for the tenants' detail type texts (the request's `details`).
     detailTexts?: DetailTextsFor;
+    // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
+    agents?: AgentsFor;
     // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
     ready?: () => Promise<ReadyReport>;
   } = {},
@@ -107,6 +111,7 @@ export function createApp(
                 { serverFor: options.oauth.serverFor },
                 options.scopeTexts ?? scopeTextsFor,
                 options.detailTexts ?? detailTextsFor,
+                options.agents ?? agentsFor,
               ),
             ]),
       ],

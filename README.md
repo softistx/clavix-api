@@ -990,6 +990,8 @@ which calls `POST /graphql` (the same API as the e-mail code sign-in) with the t
 the request host's tenant's, so a request id or a session of another tenant is `NOT_FOUND` /
 `UNAUTHENTICATED`).
 
+**Agents are marked.** Every `OAuthClient` (on `oauthRequest`, `oauthDeviceRequest` and `connectedApps`) has `agent: Boolean!` and `registeredAt: String` (ISO 8601, null for a non-agent): `agent` is true when the client is one of the tenant's agents (registered by `/register` or described by a metadata document, see [MCP clients](docs/guide/mcp.md)), false for the tenant's own clients and for an id that is an agent of another tenant. The tenant's agents are read once per request.
+
 ```graphql
 query Consent($id: ID!) {
   oauthRequest(id: $id) {

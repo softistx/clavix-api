@@ -8,6 +8,7 @@ import {
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
+import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -219,6 +220,57 @@ describe("the consent screen's data", () => {
     // Another tenant never reads acme's texts.
     const other = await labelsOf("globex", "fr");
     expect(other["email"]).not.toBe("Votre adresse e-mail");
+  });
+
+  test("a client is marked an agent only for its own tenant's agents", async () => {
+    const query = `query($id: ID!) { oauthRequest(id: $id) { client { id agent registeredAt } } }`;
+    const markOf = async (slug: string) => {
+      const id = await authorize(slug);
+      const result = await gql(slug, query, { id }, cookieOf(slug));
+      expect(result.errors).toBeUndefined();
+      const request = result.data?.["oauthRequest"] as
+        | { client: unknown }
+        | undefined;
+      return request?.client;
+    };
+    // A console-registered client is no agent.
+    expect(await markOf("acme")).toEqual({
+      id: "backend",
+      agent: false,
+      registeredAt: null,
+    });
+    const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
+    if (acme === undefined) throw new Error("no tenant");
+    try {
+      await agentClientsService.record(acme._id.toHexString(), {
+        clientId: "backend",
+        kind: "dynamic",
+      });
+      const marked = (await markOf("acme")) as {
+        agent: boolean;
+        registeredAt: string;
+      };
+      expect(marked.agent).toBe(true);
+      expect(new Date(marked.registeredAt).getTime()).toBeGreaterThan(0);
+      // The same client id in another tenant is not acme's agent.
+      expect(await markOf("globex")).toMatchObject({ agent: false });
+      // connectedApps carries the marker too.
+      const id = await authorize("acme");
+      const approved = await gql("acme", APPROVE, { id }, cookieOf("acme"));
+      expect(approved.errors).toBeUndefined();
+      const apps = await gql(
+        "acme",
+        "{ connectedApps { client { id agent } } }",
+        {},
+        cookieOf("acme"),
+      );
+      expect(apps.errors).toBeUndefined();
+      expect(apps.data?.["connectedApps"]).toContainEqual({
+        client: { id: "backend", agent: true },
+      });
+    } finally {
+      await mongo.db.agentClients.raw.deleteMany({});
+    }
   });
 
   test("an anonymous viewer is UNAUTHENTICATED", async () => {

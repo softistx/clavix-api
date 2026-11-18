@@ -8,6 +8,7 @@ import {
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
+import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -227,6 +228,40 @@ describe("the device verification page's data", () => {
     expect(typed.scopes.find((s) => s.name === "email")?.label).toBe(
       "Your email address",
     );
+  });
+
+  test("the client is marked an agent when it is one of the tenant's agents", async () => {
+    const acme = await mongo.db.tenants.findFirst({ slug: "dacme" });
+    if (acme === undefined) throw new Error("no tenant");
+    const query = `query($code: String!) { oauthDeviceRequest(userCode: $code) { client { id agent registeredAt } } }`;
+    const markOf = async () => {
+      const { user_code } = await deviceCodes("dacme");
+      const { result } = await gql(
+        "dacme",
+        query,
+        { code: user_code },
+        cookieOf("dacme"),
+      );
+      expect(result.errors).toBeUndefined();
+      const request = result.data?.["oauthDeviceRequest"] as
+        | { client: unknown }
+        | undefined;
+      return request?.client;
+    };
+    expect(await markOf()).toEqual({
+      id: "tv",
+      agent: false,
+      registeredAt: null,
+    });
+    try {
+      await agentClientsService.record(acme._id.toHexString(), {
+        clientId: "tv",
+        kind: "metadata",
+      });
+      expect(await markOf()).toMatchObject({ id: "tv", agent: true });
+    } finally {
+      await mongo.db.agentClients.raw.deleteMany({});
+    }
   });
 
   test("an anonymous viewer is UNAUTHENTICATED", async () => {
