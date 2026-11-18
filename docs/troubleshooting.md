@@ -7,6 +7,7 @@ Find the message you see, then read when it appears, why, and the fix.
 - [`BRANDING_CONTRAST` on `updateBranding`](#branding_contrast-on-updatebranding)
 - [`BAD_USER_INPUT` field `css`: "the theme's CSS is not safe"](#bad_user_input-field-css-the-themes-css-is-not-safe)
 - [`FORBIDDEN` and `NOT_FOUND` on `/graphql`](#forbidden-and-not_found-on-graphql)
+- [`BAD_USER_INPUT` "invalid_authorization_details" on `approveOAuthRequest` / `approveOAuthDeviceRequest`](#bad_user_input-invalid_authorization_details-on-approveoauthrequest--approveoauthdevicerequest)
 
 ## `temporarily_unavailable`: the issuer has no signing key yet
 
