@@ -16,7 +16,8 @@ nxgt-janus release says which.
   admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
   exchange an agent's token. Done so far: an MCP server can exchange an agent's token (`subjectAgents` on its exchange rules); the detail types of a resource are stored and served to the
   token server, and the console API creates, changes and deletes them, and a client lists the types it may ask for (console and
-  `clients:create --detail-types`, PAR required). Next: the hosted consent page shows the details.
+  `clients:create --detail-types`, PAR required), and the consent API shows each detail in words
+  (`oauthRequest.details`, `oauthDeviceRequest.details`). Next: the hosted pages render them, and a connected app lists the details it holds.
 
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled

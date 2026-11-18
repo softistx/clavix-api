@@ -161,6 +161,18 @@ query {
 }
 ```
 
+### `oauthRequest.details` shows the type's name, or fewer rows than the request holds
+
+**When:** the consent API's `details` (and `oauthDeviceRequest.details`) block has the type name as its `title`, an empty
+`description`, or no row for a field the client sent.
+
+**Why:** the blocks are built from the tenant's detail type texts. A type deleted after the request (or never written in
+the viewer's language) falls back to its name and the other language, and a field the type does not define is never shown, since
+no raw JSON reaches the page. A viewer that sends no `Accept-Language` gets English.
+
+**Fix:** write the type's `name`, `description` and field `label`s in French and English (`updateDetailType`), and keep a type that
+a pending request uses. The page must render every block: approval allows all of them or none.
+
 ### `DETAIL_TYPE_IN_USE` (409) on `deleteDetailType`
 
 A client still lists the type in its `authorizationDetailsTypes`. Remove it from those clients first (the message
