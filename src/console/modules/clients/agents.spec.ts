@@ -260,6 +260,24 @@ describe("a dynamic agent is read-only", () => {
       "Self registered",
     );
   });
+
+  test("a metadata-document agent is refused the same three writes", async () => {
+    const id = "https://meta-ro.example/client.json";
+    await metadataAgent(tenantA, id);
+    const calls = [
+      admin(UPDATE, { tenantId: tenantA, id, input: { name: "Renamed" } }),
+      admin(ROTATE, { tenantId: tenantA, id }),
+      admin(EXCHANGE, {
+        tenantId: tenantA,
+        id,
+        input: { targetResources: [], subjectAgents: true },
+      }),
+    ];
+    for (const result of await Promise.all(calls)) {
+      expect(codeOf(result)).toBe("NOT_FOUND");
+    }
+    expect((await storeOf(tenantA).findClient(id))?.name).toBe("Doc agent");
+  });
 });
 
 describe("deleteClient of an agent", () => {
