@@ -33,6 +33,19 @@ type Resource {
   scopes: [Scope!]!
   "The authorization detail types (RFC 9396) it accepts, by name."
   detailTypes: [DetailType!]!
+  """
+  Where the resource server serves its RFC 9728 protected resource metadata:
+  `/.well-known/oauth-protected-resource` plus the URI's path, on the URI's
+  own origin. Clavix hosts no copy.
+  """
+  metadataUrl: String!
+  """
+  The RFC 9728 document (JSON text) the resource server serves at
+  `metadataUrl`, as janus's `protectedResource()` answers it: the resource,
+  this tenant's issuer, the resource's scopes and, when the tenant requires
+  DPoP, its algorithms. Authorization detail types are not in it yet.
+  """
+  protectedResourceMetadata: String!
   createdAt: DateTime!
 }
 

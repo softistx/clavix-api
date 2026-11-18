@@ -16,17 +16,17 @@ Today it serves:
 
 ## Documentation
 
-| Page                                                                                       | What is in it                                          |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| This README                                                                                | run, environment, and each feature below               |
-| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix    |
-| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy |
-| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls      |
-| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers        |
-| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health          |
-| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes         |
-| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                    |
-| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                      |
+| Page                                                                                       | What is in it                                                                 |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| This README                                                                                | run, environment, and each feature below                                      |
+| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                           |
+| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document |
+| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                             |
+| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                               |
+| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health                                 |
+| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes                                |
+| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                                           |
+| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                                             |
 
 ## Run
 
@@ -334,7 +334,7 @@ update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`
 | `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients` or `anySubjectClient`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                              |
 | `rotateClientSecret(tenantId, id)`                         | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
 | `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; an agent (dynamic or metadata document) is deleted too, with its agent record (the `agents` quota is freed); any other record is left untouched (`false`)                                                                                                                                    |
-| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                                                                |
+| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`, `metadataUrl` and `protectedResourceMetadata` (the RFC 9728 document, [guide](docs/guide/mcp.md#the-document-an-mcp-server-serves-rfc-9728))                                                                                                                                                                  |
 | `createResource`, `updateResource`, `deleteResource`       | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
 | `scopes(tenantId, resourceId)`                             | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
 | `createScope`, `updateScope`, `deleteScope`                | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
