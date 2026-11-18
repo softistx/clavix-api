@@ -1,4 +1,3 @@
-import type { OAuthIssuers } from "@softistx/janus-oauth";
 import { isLive, TENANT_SUSPENDED } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 
@@ -51,20 +50,21 @@ export function subjectOf(token: unknown): string | undefined {
  * JWKS, userinfo, introspection and revocation answer as before. A token
  * issued on `/token` counts its user as active this month.
  */
-export function withTenantState<T extends Pick<OAuthIssuers, "handle">>(
-  oauth: T,
-  { resolver, onActive }: TenantStateOptions,
-): T {
+export function withTenantState<
+  T extends {
+    handle: (request: Request, ip?: string | undefined) => Promise<Response>;
+  },
+>(oauth: T, { resolver, onActive }: TenantStateOptions): T {
   return {
     ...oauth,
-    handle: async (request: Request) => {
+    handle: async (request: Request, ip?: string | undefined) => {
       const path = new URL(request.url).pathname;
-      if (!REFUSED_PATHS.has(path)) return oauth.handle(request);
+      if (!REFUSED_PATHS.has(path)) return oauth.handle(request, ip);
       const tenant = await resolver.resolveRequest(request);
       if (tenant !== null && !isLive(tenant)) {
         return suspendedResponse();
       }
-      const response = await oauth.handle(request);
+      const response = await oauth.handle(request, ip);
       if (
         path === "/token" &&
         response.ok &&

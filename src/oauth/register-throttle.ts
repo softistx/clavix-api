@@ -44,3 +44,37 @@ export function createRegisterThrottle(
     log,
   );
 }
+
+export type MetadataLimitConfig = LimitConfig;
+export type MetadataThrottle = Throttle;
+
+/** A metadata document fetch past a limit: 429 with `Retry-After` (seconds). */
+export class MetadataThrottledError extends Error {
+  override name = "MetadataThrottledError";
+  constructor(readonly retryAfter: number) {
+    super("Too many client metadata document fetches");
+  }
+}
+
+// `/authorize` and `/par` with a URL `client_id` make the server fetch that
+// URL (3 s, 5 KB at most): an outbound request an anonymous caller chose.
+export const metadataLimits = (config: MetadataLimitConfig) => {
+  const { ip, tenant } = ipAndTenantLimits("metadata", config);
+  return { metadataIp: ip, metadataTenant: tenant };
+};
+
+/** The address first, then the tenant; Redis down or slow: the request goes through, logged. */
+export function createMetadataThrottle(
+  limits: {
+    metadataIp: BoundLimits["ip"];
+    metadataTenant: BoundLimits["tenant"];
+  },
+  log?: (message: string) => void,
+): MetadataThrottle {
+  return createThrottle(
+    { ip: limits.metadataIp, tenant: limits.metadataTenant },
+    (result) => new MetadataThrottledError(retryAfterSeconds(result)),
+    "metadata fetch limits",
+    log,
+  );
+}

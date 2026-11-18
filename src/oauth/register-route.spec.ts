@@ -10,7 +10,10 @@ import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
 import { partitionOf } from "@/modules/tenants/identity";
 import { createFlow, DOMAIN } from "~/oauth-flow";
 import { createRegisterRoute } from "./register-route";
-import { RegisterThrottledError } from "./register-throttle";
+import {
+  MetadataThrottledError,
+  RegisterThrottledError,
+} from "./register-throttle";
 
 const CALLBACK = "https://app.example/callback";
 const CLAUDE_CALLBACK = "https://claude.ai/api/mcp/auth_callback";
@@ -18,6 +21,9 @@ const DOC_URL = "https://app.example/oauth/client.json";
 const VERIFIER = "a".repeat(64);
 
 let hits = 0;
+let metadataHits = 0;
+let metadataThrottled = false;
+let fetched = 0;
 const flow = createFlow({
   registerThrottle: {
     async check() {
@@ -27,15 +33,24 @@ const flow = createFlow({
       if (hits > 3) throw new RegisterThrottledError(42);
     },
   },
+  metadataThrottle: {
+    async check() {
+      if (!metadataThrottled) return;
+      metadataHits += 1;
+      if (metadataHits > 2) throw new MetadataThrottledError(17);
+    },
+  },
   metadataTransport: {
     resolve: async () => ["93.184.216.34"],
-    fetch: async () =>
-      Response.json({
+    fetch: async () => {
+      fetched += 1;
+      return Response.json({
         client_id: DOC_URL,
         client_name: "Doc agent",
         redirect_uris: [CALLBACK],
         token_endpoint_auth_method: "none",
-      }),
+      });
+    },
   },
 });
 let throttled = false;
@@ -84,6 +99,8 @@ beforeAll(async () => {
     "ag-quota-other",
     "ag-suspended",
     "ag-docs",
+    "ag-docs-throttled",
+    "ag-docs-quota",
     "ag-mcp",
   ]) {
     await flow.setUp(
@@ -98,10 +115,12 @@ beforeAll(async () => {
   await setAgents("ag-quota-other", { dynamic: "open" });
   await setAgents("ag-suspended", { dynamic: "open" });
   await setAgents("ag-mcp", { dynamic: "restricted" });
-  await setAgents("ag-docs", {
-    metadataDocuments: true,
-    allowHosts: ["app.example"],
-  });
+  for (const slug of ["ag-docs", "ag-docs-throttled", "ag-docs-quota"]) {
+    await setAgents(slug, {
+      metadataDocuments: true,
+      allowHosts: ["app.example"],
+    });
+  }
 });
 
 describe("policy off (the default)", () => {
@@ -447,5 +466,89 @@ describe("agent records", () => {
     expect(((await response.json()) as { error: string }).error).toBe(
       "invalid_client_metadata",
     );
+  });
+});
+
+describe("metadata documents: abuse limits", () => {
+  const authorize = (slug: string) =>
+    flow.get(
+      slug,
+      `/authorize?${new URLSearchParams({
+        response_type: "code",
+        client_id: DOC_URL,
+        redirect_uri: CALLBACK,
+        code_challenge: "x".repeat(43),
+        code_challenge_method: "S256",
+        scope: "openid",
+        state: "s",
+      })}`,
+    );
+
+  test("the fetch is throttled: 429 with Retry-After, and no document is fetched past the limit", async () => {
+    metadataThrottled = true;
+    metadataHits = 0;
+    fetched = 0;
+    try {
+      const statuses: number[] = [];
+      let last: Response | undefined;
+      for (let i = 0; i < 4; i++) {
+        last = await authorize("ag-docs-throttled");
+        statuses.push(last.status);
+      }
+      expect(statuses).toEqual([302, 302, 429, 429]);
+      expect(last?.headers.get("retry-after")).toBe("17");
+      expect(
+        ((await (last as Response).json()) as { error: string }).error,
+      ).toBe("temporarily_unavailable");
+      // The cache serves the second request: one fetch, none once throttled.
+      expect(fetched).toBeLessThanOrEqual(2);
+    } finally {
+      metadataThrottled = false;
+    }
+  });
+
+  test("a pushed request is throttled too", async () => {
+    metadataThrottled = true;
+    metadataHits = 10;
+    try {
+      const response = await flow.post("ag-docs-throttled", "/par", {
+        response_type: "code",
+        client_id: DOC_URL,
+        redirect_uri: CALLBACK,
+        code_challenge: "x".repeat(43),
+        code_challenge_method: "S256",
+      });
+      expect(response.status).toBe(429);
+    } finally {
+      metadataThrottled = false;
+    }
+  });
+
+  test("past the agents quota a new metadata client is refused 403 before any fetch, a known one is not", async () => {
+    const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-quota" });
+    const tenant = await tenantResolver.resolveHost(`ag-docs-quota.${DOMAIN}`);
+    if (found == null || tenant === null) throw new Error("no tenant");
+    await tenantAdmin.setPlan(found._id, {
+      plan: "free",
+      quotaOverrides: { agents: 1 },
+    });
+    await agentClientsService.record(tenant.tenantId, {
+      clientId: "someone-else",
+      kind: "dynamic",
+    });
+    fetched = 0;
+    const refused = await authorize("ag-docs-quota");
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: string }).error).toBe(
+      "access_denied",
+    );
+    expect(fetched).toBe(0);
+    expect(await countOf("ag-docs-quota", "metadata")).toBe(0);
+    // A client already recorded keeps working over the quota.
+    await agentClientsService.record(tenant.tenantId, {
+      clientId: DOC_URL,
+      kind: "metadata",
+    });
+    expect((await authorize("ag-docs-quota")).status).toBe(302);
   });
 });

@@ -17,11 +17,12 @@ export const OAUTH_PATHS = [
 ] as const;
 
 /** The slice of `OAuthIssuers` the app mounts. */
-export type OAuthHandle = Pick<OAuthIssuers, "handle"> &
-  Partial<Pick<OAuthIssuers, "serverFor">> & {
-    /** `/register` with the client address, which only the mount knows (`withRegistration`). */
-    register?: (request: Request, ip: string | undefined) => Promise<Response>;
-  };
+export type OAuthHandle = Partial<Pick<OAuthIssuers, "serverFor">> & {
+  /** The endpoints; `ip` is the client address, which only the mount knows (the metadata fetch limits). */
+  handle: (request: Request, ip?: string | undefined) => Promise<Response>;
+  /** `/register` with the client address, which only the mount knows (`withRegistration`). */
+  register?: (request: Request, ip: string | undefined) => Promise<Response>;
+};
 
 /**
  * Mounts the OAuth endpoints on an app: each path hands the plain `Request`
@@ -46,7 +47,7 @@ export function mountOAuth<
               ip,
             ),
           )
-        : mounted.all(path, ({ request }) => oauth.handle(request));
+        : mounted.all(path, ({ request, ip }) => oauth.handle(request, ip));
   }
   return mounted;
 }

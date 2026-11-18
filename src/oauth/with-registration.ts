@@ -1,7 +1,12 @@
 import { isMetadataClientId, type OAuthIssuers } from "@softistx/janus-oauth";
 import type { AgentClientsPort } from "@/modules/agents/agent-clients.service";
+import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
+import {
+  type MetadataThrottle,
+  MetadataThrottledError,
+} from "./register-throttle";
 
 /** The `/register` handler (`createRegisterRoute`). */
 export type RegisterHandler = (
@@ -18,8 +23,14 @@ export interface RegistrationOptions {
     tenant: ResolvedTenant,
     clientId: string,
   ) => Promise<boolean>;
+  /** Limits the document fetch per address and tenant; none without Redis. */
+  throttle?: MetadataThrottle | undefined;
+  /** The `agents` quota that applies to the tenant (`null`: no limit). */
+  agentQuotaOf: (tenantId: string) => Promise<number | null>;
   log?: (message: string) => void;
 }
+
+const NO_STORE = { "cache-control": "no-store" } as const;
 
 /** The `client_id` of an authorization request (query) or a pushed one (form body). */
 async function clientIdOf(request: Request): Promise<string | null> {
@@ -53,9 +64,57 @@ export function withRegistration<
     register,
     agents,
     isMetadataClient,
+    throttle,
+    agentQuotaOf,
     log = console.warn,
   }: RegistrationOptions,
-): T & { register: RegisterHandler } {
+): Omit<T, "handle"> & {
+  register: RegisterHandler;
+  handle: (request: Request, ip?: string | undefined) => Promise<Response>;
+} {
+  /**
+   * Before janus fetches a document: the fetch limits, then the `agents`
+   * quota for a client not recorded yet. A refusal is the response; nothing
+   * is fetched or stored.
+   */
+  const guardMetadata = async (
+    request: Request,
+    clientId: string,
+    ip: string | undefined,
+  ): Promise<Response | null> => {
+    const tenant = await resolver.resolveRequest(request);
+    if (tenant === null || !tenant.oauth.agents.metadataDocuments) return null;
+    try {
+      await throttle?.check({ tenantId: tenant.tenantId, ip });
+    } catch (error) {
+      if (!(error instanceof MetadataThrottledError)) throw error;
+      return Response.json(
+        {
+          error: "temporarily_unavailable",
+          error_description: "Too many client metadata fetches; retry later",
+        },
+        {
+          status: 429,
+          headers: { ...NO_STORE, "retry-after": String(error.retryAfter) },
+        },
+      );
+    }
+    if (await agents.has(tenant.tenantId, clientId)) return null;
+    try {
+      assertWithinQuota(
+        "agents",
+        await agents.count(tenant.tenantId),
+        await agentQuotaOf(tenant.tenantId),
+      );
+    } catch (error) {
+      if (!(error instanceof QuotaExceededError)) throw error;
+      return Response.json(
+        { error: "access_denied", error_description: error.message },
+        { status: 403, headers: NO_STORE },
+      );
+    }
+    return null;
+  };
   const recordMetadata = async (request: Request, clientId: string) => {
     const tenant = await resolver.resolveRequest(request);
     if (tenant === null || !tenant.oauth.agents.metadataDocuments) return;
@@ -65,12 +124,16 @@ export function withRegistration<
   return {
     ...oauth,
     register,
-    handle: async (request: Request) => {
+    handle: async (request: Request, ip?: string | undefined) => {
       const path = new URL(request.url).pathname;
       if (path === "/register") return register(request, undefined);
       if (path !== "/authorize" && path !== "/par")
         return oauth.handle(request);
       const clientId = await clientIdOf(request);
+      if (clientId !== null && isMetadataClientId(clientId)) {
+        const refused = await guardMetadata(request, clientId, ip);
+        if (refused !== null) return refused;
+      }
       const response = await oauth.handle(request);
       if (clientId !== null && isMetadataClientId(clientId)) {
         // Never fails the request: the client is stored, the record is a count.

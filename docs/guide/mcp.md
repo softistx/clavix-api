@@ -51,8 +51,9 @@ curl -s https://acme.clavix.example/register -H 'content-type: application/json'
 
 Every registered client and every metadata-document client that reached `/authorize` is an agent of the tenant
 (`agentClients`). Agents are not counted in the `clients` quota or meter; they have the `agents` quota and meter
-(console `usage`). A metadata-document client is recorded the first time it is used and is not stopped by the quota
-at that point.
+(console `usage`). A metadata-document client is recorded the first time it is used. A tenant at its quota refuses a
+new document client on `/authorize` and `/par` with 403 `access_denied` before the document is fetched (a client
+already recorded keeps working).
 
-The quota is checked before a registration and is best effort under concurrent calls (the throttle bounds the
+The quota is checked before a registration or a first use and is best effort under concurrent calls (the throttle bounds the
 overshoot). Deleting a client in the console also removes its agent record, which frees the quota.

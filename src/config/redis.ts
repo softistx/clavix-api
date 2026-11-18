@@ -19,6 +19,8 @@ import {
 import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
 import {
+  type MetadataLimitConfig,
+  metadataLimits,
   type RegisterLimitConfig,
   registerLimits,
 } from "@/oauth/register-throttle";
@@ -68,6 +70,12 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_REGISTER_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_REGISTER_TENANT_WINDOW_SECONDS,
   },
+  metadata: MetadataLimitConfig = {
+    ipLimit: env.CLAVIX_METADATA_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_METADATA_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_METADATA_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_METADATA_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -85,6 +93,7 @@ export async function openAppRedis(
         ...verificationLimits(verification),
         ...deviceLimits(device),
         ...registerLimits(register),
+        ...metadataLimits(metadata),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

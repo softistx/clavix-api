@@ -281,9 +281,18 @@ Without Redis there is no `/register` throttle.
 validator that knows `oauth.agents` and the `agents` quota override. The Caddyfile `@api` matcher gains `/register`;
 reload Caddy with the new file, or the path never reaches the api.
 
-**Metadata documents.** Fetching a Client ID Metadata Document is an outbound request on `/authorize`; it is not
-throttled by this bucket (janus advises about 30 a minute per address; a front-proxy limit does it). Only the MCP
-hosts and the tenant's `allowHosts` are fetched.
+**Metadata documents.** Fetching a Client ID Metadata Document is an outbound request on `/authorize` and `/par`,
+limited by its own pair of buckets (tenants with `metadataDocuments` on only). Only the MCP hosts and the tenant's
+`allowHosts` are fetched.
+
+| Variable (`CLAVIX_METADATA_…`)           | Default  | Counts requests per       |
+| ---------------------------------------- | -------- | ------------------------- |
+| `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 30 / 60  | client address and tenant |
+| `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS` | 300 / 60 | tenant                    |
+
+Past a limit the request answers 429 `temporarily_unavailable` with `Retry-After`; nothing is fetched. A client not
+recorded yet is also refused with 403 `access_denied` when the tenant is at its `agents` quota. Redis down: fails
+open and logs; without Redis there is no limit.
 
 ## TLS
 

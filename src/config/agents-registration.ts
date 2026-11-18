@@ -1,10 +1,13 @@
 import type { OAuthIssuers } from "@softistx/janus-oauth";
 import { createRegisterRoute } from "@/oauth/register-route";
-import type { RegisterThrottle } from "@/oauth/register-throttle";
+import type {
+  MetadataThrottle,
+  RegisterThrottle,
+} from "@/oauth/register-throttle";
 import { withRegistration } from "@/oauth/with-registration";
 import { agentClientsService, isMetadataClient } from "./agent-clients";
 import { tenantResolver, tenantsService } from "./tenancy";
-import { registerThrottle } from "./throttle";
+import { metadataThrottle, registerThrottle } from "./throttle";
 import { usageService } from "./usage";
 
 /**
@@ -14,7 +17,15 @@ import { usageService } from "./usage";
  */
 export function withAgentRegistration<
   T extends Pick<OAuthIssuers, "handle" | "serverFor">,
->(issuers: T, throttle: RegisterThrottle | undefined = registerThrottle) {
+>(
+  issuers: T,
+  throttle: RegisterThrottle | undefined = registerThrottle,
+  fetchThrottle: MetadataThrottle | undefined = metadataThrottle,
+) {
+  const agentQuotaOf = async (tenantId: string) => {
+    const [tenant] = await tenantsService.liveByIds([tenantId]);
+    return tenant === undefined ? 0 : usageService.quotasOf(tenant).agents;
+  };
   return withRegistration(issuers, {
     resolver: tenantResolver,
     agents: agentClientsService,
@@ -24,10 +35,9 @@ export function withAgentRegistration<
       serverFor: issuers.serverFor,
       throttle,
       agents: agentClientsService,
-      agentQuotaOf: async (tenantId) => {
-        const [tenant] = await tenantsService.liveByIds([tenantId]);
-        return tenant === undefined ? 0 : usageService.quotasOf(tenant).agents;
-      },
+      agentQuotaOf,
     }),
+    throttle: fetchThrottle,
+    agentQuotaOf,
   });
 }

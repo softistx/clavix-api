@@ -625,6 +625,8 @@ still pending. Reading and denying a request do not ask for a fresh session.
 
 **429 `temporarily_unavailable`**: past `CLAVIX_REGISTER_IP_LIMIT` or `CLAVIX_REGISTER_TENANT_LIMIT`; wait `Retry-After` seconds (see "Agent registration throttle" in operations.md).
 
+**`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet.
+
 **`404` on `/register` from outside**: the reverse proxy does not route the path to the API; the `@api` matcher of `deploy/Caddyfile` must list it.
 
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)

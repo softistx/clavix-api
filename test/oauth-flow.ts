@@ -14,7 +14,10 @@ import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
-import type { RegisterThrottle } from "@/oauth/register-throttle";
+import type {
+  MetadataThrottle,
+  RegisterThrottle,
+} from "@/oauth/register-throttle";
 import type { MetadataTransport } from "@/oauth/registration";
 import { createTenantParOff } from "./tenant-par-off";
 
@@ -34,6 +37,8 @@ export function createFlow(
     rolesFor?: RolesFor;
     /** What the `/register` route throttles with (none by default). */
     registerThrottle?: RegisterThrottle;
+    /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
+    metadataThrottle?: MetadataThrottle;
     /** Fetches and resolves metadata documents (the specs' stand-in for the network). */
     metadataTransport?: MetadataTransport;
   } = {},
@@ -72,6 +77,7 @@ export function createFlow(
   const issuers = withAgentRegistration(
     base,
     options.registerThrottle ?? undefined,
+    options.metadataThrottle ?? undefined,
   );
   const url = (slug: string, path: string) =>
     `https://${slug}.${DOMAIN}${path}`;
