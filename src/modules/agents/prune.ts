@@ -18,7 +18,9 @@ export interface PruneDeps {
   remove(tenantId: string, clientId: string): Promise<boolean>;
   /**
    * Runs the grant check and the delete of one agent alone for the tenant
-   * (the console's clients lock), so a grant cannot be made between the two.
+   * (the console's clients lock), serialized with the console's client writes.
+   * Consent approval does not take it: a grant made between the two is revoked
+   * with the agent (a very small window).
    * Without it they run unserialized.
    */
   locked?<T>(tenantId: string, work: () => Promise<T>): Promise<T>;
