@@ -128,4 +128,5 @@ day (03:41 UTC, queue `agents-prune`, needs `REDIS_URL`, [operations](../operati
 than 7 days ago that has no standing grant (a grant not revoked) is deleted like `deleteClient` does it, with its tokens
 closed, and recorded as the admin event `agent.prune` by the actor `system:agents:prune` (one per agent, identifiers
 only). A metadata-document agent is pruned too (it is fetched and recorded again when used). Only active tenants are
-visited, and the grant check and the deletion run under the tenant's clients lock, so a consent cannot slip in between.
+visited, and the grant check and the deletion run under the tenant's clients lock, which serializes them with the console's client changes. A consent approved
+between the check and the deletion is still revoked with the agent (a very small window).

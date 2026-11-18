@@ -47,7 +47,8 @@ export const createAgentsPrune =
         candidates: (tenantId, before) =>
           agentClientsService.registeredBefore(tenantId, before),
         hasStandingGrant,
-        // The console's clients lock: a grant cannot slip in between the check and the delete.
+        // The console's clients lock: serializes the check and the delete with console client writes
+        // (consent approval does not take it, so a grant made in between is revoked with the agent).
         locked: (tenantId, work) =>
           exclusive(clientsKey({ _id: new ObjectId(tenantId) }), work),
         remove: async (tenantId, clientId) =>
