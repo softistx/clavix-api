@@ -480,6 +480,23 @@ describe("the throttle on code lookups", () => {
     expect(tight.tenant.calls).toBe(1);
   });
 
+  test("one approval of a live code counts once, not twice", async () => {
+    const once = throttled({ user: 10 });
+    const app3 = createApp({ oauth: issuers, deviceThrottle: once.throttle });
+    const { user_code } = await deviceCodes("dacme");
+    const before = once.user.calls;
+    const approved = await gql(
+      "dacme",
+      APPROVE,
+      { code: user_code },
+      cookieOf("dacme"),
+      undefined,
+      app3,
+    );
+    expect(approved.result.errors).toBeUndefined();
+    expect(once.user.calls - before).toBe(1);
+  });
+
   test("an anonymous request is refused before anything is counted", async () => {
     const userCallsBefore = counters.user.calls;
     const { result } = await gql(
