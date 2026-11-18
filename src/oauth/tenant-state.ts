@@ -1,4 +1,3 @@
-import type { OAuthIssuers } from "@softistx/janus-oauth";
 import { isLive, TENANT_SUSPENDED } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 
@@ -8,7 +7,19 @@ const REFUSED_PATHS = new Set([
   "/par",
   "/device_authorization",
   "/token",
+  "/register",
 ]);
+
+/** The 403 a suspended or deleted tenant's session-opening paths answer. */
+export const suspendedResponse = () =>
+  Response.json(
+    {
+      error: "access_denied",
+      error_description: "This service is suspended",
+      code: TENANT_SUSPENDED,
+    },
+    { status: 403, headers: { "cache-control": "no-store" } },
+  );
 
 export interface TenantStateOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
@@ -33,33 +44,27 @@ export function subjectOf(token: unknown): string | undefined {
 }
 
 /**
- * Wraps the issuers' `handle`: `/authorize`, `/par`, `/device_authorization` and `/token` (refresh and device
+ * Wraps the issuers' `handle`: `/authorize`, `/par`, `/device_authorization`, `/register` and `/token` (refresh and device
  * codes included)
  * of a suspended or deleted tenant answer 403 `TENANT_SUSPENDED`; discovery,
  * JWKS, userinfo, introspection and revocation answer as before. A token
  * issued on `/token` counts its user as active this month.
  */
-export function withTenantState<T extends Pick<OAuthIssuers, "handle">>(
-  oauth: T,
-  { resolver, onActive }: TenantStateOptions,
-): T {
+export function withTenantState<
+  T extends {
+    handle: (request: Request, ip?: string | undefined) => Promise<Response>;
+  },
+>(oauth: T, { resolver, onActive }: TenantStateOptions): T {
   return {
     ...oauth,
-    handle: async (request: Request) => {
+    handle: async (request: Request, ip?: string | undefined) => {
       const path = new URL(request.url).pathname;
-      if (!REFUSED_PATHS.has(path)) return oauth.handle(request);
+      if (!REFUSED_PATHS.has(path)) return oauth.handle(request, ip);
       const tenant = await resolver.resolveRequest(request);
       if (tenant !== null && !isLive(tenant)) {
-        return Response.json(
-          {
-            error: "access_denied",
-            error_description: "This service is suspended",
-            code: TENANT_SUSPENDED,
-          },
-          { status: 403, headers: { "cache-control": "no-store" } },
-        );
+        return suspendedResponse();
       }
-      const response = await oauth.handle(request);
+      const response = await oauth.handle(request, ip);
       if (
         path === "/token" &&
         response.ok &&

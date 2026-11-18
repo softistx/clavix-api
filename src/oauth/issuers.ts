@@ -10,6 +10,7 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { buildIssuer, userinfoOf } from "./building";
 import type {
+  AgentCheckFor,
   AuthFor,
   ClaimsFor,
   ExchangeRulesFor,
@@ -17,6 +18,7 @@ import type {
   RolesFor,
   SigningKeysFor,
 } from "./ports";
+import type { MetadataTransport } from "./registration";
 import { type Keyed, resolveIssuer } from "./resolution";
 
 export interface ClavixOAuthOptions {
@@ -52,6 +54,10 @@ export interface ClavixOAuthOptions {
    * no client may exchange tokens.
    */
   exchangeRulesFor?: ExchangeRulesFor;
+  /** Whether a client is an agent (`agentClients`); with `subjectAgents` rules. Absent: none is. */
+  agentCheckFor?: AgentCheckFor;
+  /** The transport of the Client ID Metadata Documents fetch; for specs. Default: janus's own. */
+  metadataTransport?: MetadataTransport;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -111,6 +117,8 @@ export function createClavixOAuthIssuers(
     clock,
     rolesFor: options.rolesFor,
     exchangeRulesFor: options.exchangeRulesFor,
+    agentCheckFor: options.agentCheckFor,
+    metadataTransport: options.metadataTransport,
   });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),

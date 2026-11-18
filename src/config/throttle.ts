@@ -2,6 +2,10 @@ import { createSignInThrottle } from "@/modules/auth/throttle";
 import { createVerificationThrottle } from "@/modules/auth/verification-throttle";
 import { createDeviceThrottle } from "@/modules/consent/device-throttle";
 import { createPasskeyThrottle } from "@/modules/passkeys/throttle";
+import {
+  createMetadataThrottle,
+  createRegisterThrottle,
+} from "@/oauth/register-throttle";
 import { redis } from "./redis";
 
 // The anonymous operations' limits on the app's Redis; none without REDIS_URL
@@ -14,3 +18,7 @@ export const verifyThrottle =
   redis === undefined ? undefined : createVerificationThrottle(redis.limits);
 export const deviceThrottle =
   redis === undefined ? undefined : createDeviceThrottle(redis.limits);
+export const registerThrottle =
+  redis === undefined ? undefined : createRegisterThrottle(redis.limits);
+export const metadataThrottle =
+  redis === undefined ? undefined : createMetadataThrottle(redis.limits);

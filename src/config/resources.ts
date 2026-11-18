@@ -1,6 +1,12 @@
 import { ObjectId } from "mongodb";
+import type { DetailTextsFor } from "@/modules/consent/detail-labels";
 import type { ScopeTextsFor } from "@/modules/consent/scope-labels";
 import { Catalog } from "@/modules/resources/catalog";
+import {
+  consentReadyOf,
+  mongoClientDetailTypes,
+  mongoDetailTypeClients,
+} from "@/modules/resources/detail-types";
 import {
   type RegisterResourceInput,
   registerResource,
@@ -10,6 +16,7 @@ import { issuerOf } from "@/modules/tenants/identity";
 import { userinfoOf } from "@/oauth/building";
 import { mongo } from "./db";
 import { env } from "./env";
+import { oauthDb } from "./oauth-db";
 import { tenantBySlug, tenantResolver } from "./tenancy";
 
 const origin = {
@@ -22,6 +29,7 @@ const origin = {
 export const resourcesFor = storedResourcesFor(
   mongo.db.resources,
   mongo.db.scopes,
+  mongo.db.detailTypes,
 );
 
 /**
@@ -45,6 +53,8 @@ export const registerStoredResource = (input: RegisterResourceInput) =>
 export const catalog = new Catalog({
   resources: mongo.db.resources,
   scopes: mongo.db.scopes,
+  detailTypes: mongo.db.detailTypes,
+  clients: mongoDetailTypeClients(oauthDb),
   userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
 });
 
@@ -70,3 +80,23 @@ export const scopeTextsFor: ScopeTextsFor = async (request) => {
       : [{ name: scope.name, resource, description: scope.description }];
   });
 };
+
+/** The tenant's detail type texts the consent page shows, for the request's host. */
+export const detailTextsFor: DetailTextsFor = async (request) => {
+  const tenant = await tenantResolver.resolveRequest(request);
+  if (tenant === null) return [];
+  const types = await catalog.listDetailTypes(new ObjectId(tenant.tenantId));
+  return types.map(({ type, name, description, fields, actions }) => ({
+    type,
+    name,
+    description,
+    fields,
+    actions,
+  }));
+};
+
+/** What a client's detail type opt-in reads: the tenant's stored types and its consent readiness. */
+export const clientDetailTypes = mongoClientDetailTypes(
+  mongo.db.detailTypes,
+  consentReadyOf(env.CLAVIX_RAR_CONSENT_READY),
+);

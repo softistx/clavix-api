@@ -7,7 +7,8 @@ export const target = (
   id: string,
 ) => ({
   type: "client",
-  id,
+  // The trail holds 200 characters: a metadata-document client's id is a URL.
+  id: id.slice(0, 200),
   tenantId: tenant._id.toHexString(),
 });
 
@@ -18,6 +19,23 @@ const GRANT = {
   refresh_token: "REFRESH_TOKEN",
   [DEVICE_GRANT]: "DEVICE_CODE",
   [TOKEN_EXCHANGE_GRANT]: "TOKEN_EXCHANGE",
+} as const;
+
+const REGISTRATION = {
+  console: "CONSOLE",
+  dynamic: "DYNAMIC",
+  metadata: "METADATA",
+} as const;
+
+/** The registrations of the enum list a call sent, as the service names them; `undefined` for none. */
+export const kindsOf = (
+  kinds: readonly (keyof typeof KIND)[] | null | undefined,
+) => kinds?.map((kind) => KIND[kind]);
+
+const KIND = {
+  CONSOLE: "console",
+  DYNAMIC: "dynamic",
+  METADATA: "metadata",
 } as const;
 
 const WIRE_GRANT = {
@@ -37,6 +55,7 @@ const exchangeShape = (rules: Rules | undefined) =>
         subjectClients:
           rules.subjectClients === "any" ? [] : [...rules.subjectClients],
         anySubjectClient: rules.subjectClients === "any",
+        subjectAgents: rules.subjectAgents === true,
         mode: "DELEGATION" as const,
       };
 
@@ -50,6 +69,8 @@ export const shape = (
     createdAt: Date;
     requirePushedAuthorizationRequests: boolean;
     dpopBoundAccessTokens: boolean;
+    registration: "console" | "dynamic" | "metadata";
+    authorizationDetailsTypes: readonly string[];
   },
   rules?: Rules,
 ) => ({
@@ -63,7 +84,9 @@ export const shape = (
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
   dpopBoundAccessTokens: client.dpopBoundAccessTokens,
+  authorizationDetailsTypes: [...client.authorizationDetailsTypes],
   tokenExchange: exchangeShape(rules),
+  registration: REGISTRATION[client.registration],
 });
 
 /** The wire grants of the enum list a call sent; `undefined` when it sent none (keep or default). */

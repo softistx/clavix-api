@@ -2,6 +2,12 @@ import { OptimisticLockError } from "@softistx/mongo";
 import { GraphQLError } from "graphql";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  AgentsInputError,
+  type AgentsPolicyInput,
+  applyAgentsInput,
+  sameAgents,
+} from "./agents-input";
 import type { OAuthPolicy } from "./oauth-policy.schema";
 
 const refusal = (code: string, message: string, status: number) =>
@@ -11,6 +17,7 @@ const refusal = (code: string, message: string, status: number) =>
 export interface OAuthPolicyInput {
   par?: { required?: boolean | undefined } | undefined;
   dpop?: { required?: boolean | undefined } | undefined;
+  agents?: AgentsPolicyInput | null | undefined;
 }
 
 /**
@@ -31,6 +38,17 @@ export class OAuthPolicyService {
 
   async update(tenantId: string, input: OAuthPolicyInput): Promise<Tenant> {
     await this.get(tenantId);
+    // Checked once, on the stored policy, before any write: a bad value stores nothing.
+    const checked = (tenant: Tenant) => {
+      try {
+        return applyAgentsInput(tenant.oauth.agents, input.agents);
+      } catch (error) {
+        if (error instanceof AgentsInputError) {
+          throw refusal("BAD_USER_INPUT", error.message, 400);
+        }
+        throw error;
+      }
+    };
     try {
       return await this.tenants.updateOAuth(tenantId, (tenant) => {
         const next: OAuthPolicy = {
@@ -38,10 +56,12 @@ export class OAuthPolicyService {
           dpop: {
             required: input.dpop?.required ?? tenant.oauth.dpop.required,
           },
+          agents: checked(tenant),
         };
         if (
           next.par.required === tenant.oauth.par.required &&
-          next.dpop.required === tenant.oauth.dpop.required
+          next.dpop.required === tenant.oauth.dpop.required &&
+          sameAgents(next.agents, tenant.oauth.agents)
         ) {
           return null;
         }

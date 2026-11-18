@@ -7,6 +7,7 @@ export const OAUTH_PATHS = [
   "/par",
   "/device_authorization",
   "/token",
+  "/register",
   "/revoke",
   "/.well-known/oauth-authorization-server",
   "/.well-known/openid-configuration",
@@ -16,8 +17,12 @@ export const OAUTH_PATHS = [
 ] as const;
 
 /** The slice of `OAuthIssuers` the app mounts. */
-export type OAuthHandle = Pick<OAuthIssuers, "handle"> &
-  Partial<Pick<OAuthIssuers, "serverFor">>;
+export type OAuthHandle = Partial<Pick<OAuthIssuers, "serverFor">> & {
+  /** The endpoints; `ip` is the client address, which only the mount knows (the metadata fetch limits). */
+  handle: (request: Request, ip?: string | undefined) => Promise<Response>;
+  /** `/register` with the client address, which only the mount knows (`withRegistration`). */
+  register?: (request: Request, ip: string | undefined) => Promise<Response>;
+};
 
 /**
  * Mounts the OAuth endpoints on an app: each path hands the plain `Request`
@@ -26,12 +31,21 @@ export type OAuthHandle = Pick<OAuthIssuers, "handle"> &
  */
 export function mountOAuth<
   A extends {
-    all: (path: string, handler: (ctx: { request: Request }) => unknown) => A;
+    all: (
+      path: string,
+      handler: (ctx: { request: Request; ip?: string | undefined }) => unknown,
+    ) => A;
   },
 >(app: A, oauth: OAuthHandle): A {
   let mounted = app;
+  // Clavix's own `/register` (quota, throttle, record) when the handle has it;
+  // a bare handle (a stand-in, or janus's own) serves it through `handle`.
+  const { register } = oauth;
   for (const path of OAUTH_PATHS) {
-    mounted = mounted.all(path, ({ request }) => oauth.handle(request));
+    mounted =
+      path === "/register" && register !== undefined
+        ? mounted.all(path, ({ request, ip }) => register(request, ip))
+        : mounted.all(path, ({ request, ip }) => oauth.handle(request, ip));
   }
   return mounted;
 }

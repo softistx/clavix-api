@@ -7,6 +7,7 @@ Find the message you see, then read when it appears, why, and the fix.
 - [`BRANDING_CONTRAST` on `updateBranding`](#branding_contrast-on-updatebranding)
 - [`BAD_USER_INPUT` field `css`: "the theme's CSS is not safe"](#bad_user_input-field-css-the-themes-css-is-not-safe)
 - [`FORBIDDEN` and `NOT_FOUND` on `/graphql`](#forbidden-and-not_found-on-graphql)
+- [`BAD_USER_INPUT` "invalid_authorization_details" on `approveOAuthRequest` / `approveOAuthDeviceRequest`](#bad_user_input-invalid_authorization_details-on-approveoauthrequest--approveoauthdevicerequest)
 
 ## `temporarily_unavailable`: the issuer has no signing key yet
 
@@ -117,6 +118,108 @@ bun run clients:create --tenant acme --name "Web app" \
 
 Also refused: an unknown tenant slug or a suspended tenant, a missing `--name`, and a client id that is not
 1-64 characters of `a-z`, `0-9` and `-` (not starting or ending with `-`).
+
+## `invalid_authorization_details` (400) at `/par` or `/authorize`
+
+**When:** a request carries `authorization_details` (RFC 9396) and an entry is refused. The error
+description names the entry and the reason.
+**Why:** one of these:
+- the `type` is not one the tenant describes on that `resource`, or the client does not list it
+  (`authorizationDetailsTypes`);
+- a key the type does not define (a detail is a strict object: only `type`, `locations`, `identifier`,
+  `datatypes`, `actions` when the type lists some, and its own fields);
+- a value outside its field's bounds: a `string` longer than `maxLength`, a number outside `min`/`max`, a
+  value not in an `enum`'s `values`, a `string[]` with too many items, a missing `required` field;
+- an `actions` value the type does not list.
+
+A tenant that describes **no** type refuses the parameter altogether with `invalid_request`, not this error.
+**Fix:** read the type in the console (`Resource.detailTypes`) and send exactly its fields; or add the field
+or value with `updateDetailType`; and list the type on the client (`authorizationDetailsTypes` in the console,
+`clients:create --detail-types`). Details are best pushed to `/par`. A type that was deleted while a client still listed
+it (a race with the delete) is not served either: remove it from the client's list.
+
+```graphql
+query {
+  resource(tenantId: "6731…", id: "6732…") {
+    detailTypes {
+      type
+      fields {
+        key
+        kind
+        required
+        min
+        max
+        maxLength
+        values {
+          value
+        }
+      }
+      actions {
+        value
+      }
+    }
+  }
+}
+```
+
+### `oauthRequest.details` shows the type's name, or fewer rows than the request holds
+
+**When:** the consent API's `details` (and `oauthDeviceRequest.details`) block has the type name as its `title`, an empty
+`description`, or no row for a field the client sent.
+
+**Why:** the blocks are built from the tenant's detail type texts. A type deleted after the request (or never written in
+the viewer's language) falls back to its name and the other language, and a field the type does not define is never shown, since
+no raw JSON reaches the page. A viewer that sends no `Accept-Language` gets English.
+
+**Fix:** write the type's `name`, `description` and field `label`s in French and English (`updateDetailType`), and keep a type that
+a pending request uses. The page must render every block: approval allows all of them or none, and is refused while
+`detailsComplete` is false (see below).
+
+### `BAD_USER_INPUT` "invalid_authorization_details" on `approveOAuthRequest` / `approveOAuthDeviceRequest`
+
+**When:** the user presses Allow on the consent or device page and the mutation answers `BAD_USER_INPUT` (400), message
+`invalid_authorization_details`; the page's request or device request has `detailsComplete: false`.
+
+**Why:** a detail of the request cannot be fully described any more: its type was deleted, or the type changed after the
+request (a field removed or renamed, an action or enum value gone), so the page would show a partial summary. Approval allows
+all the details or none, so Clavix refuses rather than let the grant carry a detail the user was not shown. The request stays
+pending.
+
+**Fix:** the user denies it (`denyOAuthRequest`, `denyOAuthDeviceRequest`) and the client asks again; the hosted page must show
+only Deny while `detailsComplete` is false. To avoid it, do not remove or rename a detail type's fields while requests that use
+it are pending (they last minutes).
+
+### `DETAIL_TYPE_IN_USE` (409) on `deleteDetailType`
+
+A client still lists the type in its `authorizationDetailsTypes`. Remove it from those clients first (the message
+gives their number), then delete the type. Deleting the whole resource does not need this: it removes its types
+from the clients' lists.
+
+### `BAD_USER_INPUT` (400) on `createDetailType` / `updateDetailType`
+
+The definition breaks a bound: a type name of 1 to 64 letters, digits, `_ . : -` starting with a letter; at most
+16 fields; a field key of 64 characters, not `type`, `locations`, `actions`, `identifier`, `datatypes` or
+`privileges`, and unique; an `enum` with 1 to 50 values; a label over 100 characters or a description over 300; no
+name in either language.
+
+### `BAD_USER_INPUT` (400) on `createClient` / `updateClient` with `authorizationDetailsTypes`
+
+The message says which rule broke, and nothing was written:
+- `unknown detail type "x"`: the name is not a type of this tenant (a type of another tenant is unknown too). List
+  them with `Resource.detailTypes`, or create it first.
+- `a client that lists detail types must require PAR`: set `requirePushedAuthorizationRequests: true` (CLI
+  `--require-par`) in the same call; turning PAR off on a client that lists types is refused likewise.
+- `cannot let a client that uses /authorize or the device grant list detail types yet`: the consent pages (`/authorize` and the
+  device review) do not show details yet, so the tenant must be in `CLAVIX_RAR_CONSENT_READY` (an operator sets it). A
+  token-exchange-only client is exempt.
+- `a client lists at most 50 detail types`.
+
+The CLI prints the same message as `clients:create: …`.
+
+### `CONFLICT` (409) on `createDetailType`
+
+The tenant already has a type of that name, on this resource or another (a name is unique in the tenant).
+Choose another name, or update the existing type.
 
 ## Resource registration refusals (`resources:create`)
 
@@ -579,13 +682,13 @@ refused at sign-in. Deploy clavix-ui first or together.
 --grants urn:ietf:params:oauth:grant-type:token-exchange` (or `grantTypes: [TOKEN_EXCHANGE]`) and a secret.
 
 **`access_denied`**: the client has no rules (`setClientTokenExchange`), the `resource` is not in `targetResources`,
-or the subject token's client is not in `subjectClients` (and `anySubjectClient` is off). Read the rules with
+or the subject token's client is not in `subjectClients` (and neither `anySubjectClient` nor, for an agent's token, `subjectAgents` is on). Read the rules with
 `Client.tokenExchange`.
 
 **`invalid_grant`**: the subject token is unknown, expired, revoked, or another tenant's. A token exchanged earlier
 dies with the subject's grant.
 
-**`BAD_USER_INPUT` on `setClientTokenExchange`**: both or neither of `subjectClients` and `anySubjectClient`, more
+**`BAD_USER_INPUT` on `setClientTokenExchange`**: `anySubjectClient` with `subjectClients`, or no client, no `subjectAgents` and no `anySubjectClient`, more
 than 20 targets or 50 clients, a target that is not a resource of the tenant, or a public client.
 
 ## Device authorization refusals
@@ -616,6 +719,24 @@ still pending. Reading and denying a request do not ask for a fresh session.
 
 **`404` on `/device_authorization` from outside**: the reverse proxy does not route the path to the API; the
 `@api` matcher of `deploy/Caddyfile` must list it.
+
+## Agent registration (`/register`)
+
+**400 `invalid_request`**: the tenant's `oauth.agents.dynamic` is `off` (the default). **400 `invalid_redirect_uri`**: in `restricted` mode the callback is neither an MCP client's, a loopback address nor in `redirectUris`. **400 `invalid_client_metadata`**: the body is not a JSON object, or asks for the device or token exchange grant, which dynamic clients never get.
+
+**403 `access_denied`**: the tenant reached its `agents` quota (free 100, pro 1000); raise it with `setTenantPlan` overrides or remove agents. **403** with `TENANT_SUSPENDED`: the tenant is suspended.
+
+**429 `temporarily_unavailable`**: past `CLAVIX_REGISTER_IP_LIMIT` or `CLAVIX_REGISTER_TENANT_LIMIT`; wait `Retry-After` seconds (see "Agent registration throttle" in operations.md).
+
+**`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet.
+
+**An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` or `METADATA` agent recorded more than 7 days ago that holds no standing grant (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is recorded again at its next use. The job runs only with `REDIS_URL`.
+
+**`updateClient`, `rotateClientSecret` or `setClientTokenExchange` answers `NOT_FOUND` on an agent**: an agent, `DYNAMIC` (it registered itself) or `METADATA` (described by its document), is read-only in the console, whatever its id looks like; only `client`, `clients` and `deleteClient` apply to it. To change one, register a console client instead.
+
+**`updateOAuthPolicy` answers `BAD_USER_INPUT`** with `agents`: a redirect URI the OAuth rules refuse, a host that is not a DNS name (or `*.name`), or a list over 50 entries.
+
+**`404` on `/register` from outside**: the reverse proxy does not route the path to the API; the `@api` matcher of `deploy/Caddyfile` must list it.
 
 ## End-user roles refusals (`createRole`, `updateRole`, `assignRole`, `roleMembers`)
 

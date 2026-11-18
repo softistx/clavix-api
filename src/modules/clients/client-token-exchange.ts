@@ -30,7 +30,8 @@ export async function tokenExchangesOf(
  * Replaces the client's token exchange rules. The client is a confidential
  * one of the tenant, each target one of the tenant's resources
  * (`resourceUris`), and the subject clients are `"any"` or a list of
- * client ids (checked for shape only: a client may be created later).
+ * client ids (checked for shape only: a client may be created later), and
+ * `subjectAgents` also covers the tokens of the tenant's agents (D12).
  * Delegation is the only mode.
  */
 export async function setClientTokenExchange(
@@ -40,6 +41,7 @@ export async function setClientTokenExchange(
   input: {
     targetResources: readonly string[];
     subjectClients: readonly string[] | "any";
+    subjectAgents?: boolean;
   },
   resourceUris: readonly string[],
 ): Promise<TokenExchangeRules> {
@@ -49,10 +51,14 @@ export async function setClientTokenExchange(
       "Only a confidential client can exchange tokens",
     );
   }
-  const { targets, subjects } = validateTokenExchange(input, resourceUris);
+  const { targets, subjects, agents } = validateTokenExchange(
+    input,
+    resourceUris,
+  );
   return policies.setTokenExchange(tenant._id, client.clientId, {
     targetResources: targets,
     subjectClients: subjects,
+    subjectAgents: agents,
     mode: "delegation",
   });
 }

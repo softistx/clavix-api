@@ -199,7 +199,7 @@ export class TenantAdminService {
     return this.change(id, (tenant) => {
       const same =
         tenant.plan === input.plan &&
-        (["mau", "clients", "domains"] as const).every(
+        (["mau", "clients", "domains", "agents"] as const).every(
           (key) => tenant.quotaOverrides[key] === input.quotaOverrides[key],
         );
       return same

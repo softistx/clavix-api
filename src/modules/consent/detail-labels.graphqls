@@ -1,0 +1,37 @@
+"One line of an authorization detail: a label and its value, in the viewer's language."
+type ConsentDetailRow {
+  label: String!
+  value: String!
+}
+
+"""
+One authorization detail (RFC 9396) of a pending request, in words: the type's name and description from the
+tenant's texts, and its rows. Never raw JSON. Approval allows every detail or none (D4).
+"""
+type ConsentDetail {
+  "The detail's type, as the client asked for it."
+  type: String!
+  "The type's name in the viewer's language (`Accept-Language`), the type itself when the tenant wrote none."
+  title: String!
+  "What the type allows, in the viewer's language; empty when the tenant wrote none."
+  description: String!
+  rows: [ConsentDetailRow!]!
+}
+
+extend type OAuthRequest {
+  "The request's authorization details in words, one block each; empty when it asked for none."
+  details: [ConsentDetail!]!
+  """
+  False when a detail cannot be fully described (its type was deleted, or it carries a key, action or value its
+  type no longer defines): the page must not offer approval, only deny, and approval is refused server-side with
+  `invalid_authorization_details`. True when there is nothing to describe.
+  """
+  detailsComplete: Boolean!
+}
+
+extend type OAuthDeviceRequest {
+  "The device's authorization details in words, one block each; empty when it asked for none."
+  details: [ConsentDetail!]!
+  "As `OAuthRequest.detailsComplete`."
+  detailsComplete: Boolean!
+}

@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { registerClient } from "@/clients/register-client";
+import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
@@ -31,7 +32,11 @@ function fakeCounter() {
 }
 
 const logged: string[] = [];
-const sources = { clients: async () => 2, domains: async () => 0 };
+const sources = {
+  clients: async () => 2,
+  domains: async () => 0,
+  agents: async () => 0,
+};
 const at = new Date("2026-11-12T12:00:00Z");
 const make = (mau: Counter) =>
   new UsageService(
@@ -169,5 +174,33 @@ describe("the clients count over the real OAuth store", () => {
       await usageService.count(new ObjectId().toHexString(), "clients"),
     ).toBe(0);
     expect(await usageService.count(a._id.toHexString(), "domains")).toBe(0);
+  });
+  test("agents are not clients: dynamic agents leave the clients count and fill the agents count", async () => {
+    const service = new TenantsService(mongo.db.tenants, {
+      domain: "clavix.test",
+    });
+    const t = await service.create({ slug: "usec", name: "C" });
+    const id = t._id.toHexString();
+    const options = {
+      db: oauthDb,
+      findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+    };
+    const redirect = "https://app.example/callback";
+    await registerClient(options, {
+      tenant: "usec",
+      name: "Console",
+      redirectUris: [redirect],
+    });
+    const agent = await registerClient(options, {
+      tenant: "usec",
+      name: "Agent",
+      redirectUris: [redirect],
+    });
+    await agentClientsService.record(id, {
+      clientId: agent.clientId,
+      kind: "dynamic",
+    });
+    expect(await usageService.count(id, "clients")).toBe(1);
+    expect(await usageService.count(id, "agents")).toBe(1);
   });
 });

@@ -1,12 +1,19 @@
 import { ObjectId } from "mongodb";
 import { clientPoliciesService } from "@/config/client-policies";
+import { env } from "@/config/env";
 import { catalog } from "@/config/resources";
 import { rolesService } from "@/config/roles";
+import { tenantResolver } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type {
+  FieldDraft,
+  StoredDetailTypeDoc,
   StoredResourceDoc,
   StoredScopeDoc,
+  ValueDraft,
 } from "@/modules/resources/catalog";
+import { protectedResourceDocument } from "@/modules/resources/protected-resource-document";
+import { hostOf } from "@/modules/tenants/identity";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant, refusing } from "../catalog-support";
@@ -26,6 +33,9 @@ export const resourcesGuards: Guards = {
   "Mutation.createScope": edit,
   "Mutation.updateScope": edit,
   "Mutation.deleteScope": edit,
+  "Mutation.createDetailType": edit,
+  "Mutation.updateDetailType": edit,
+  "Mutation.deleteDetailType": edit,
 };
 
 export const resourcesAudits: Audits = {
@@ -35,11 +45,14 @@ export const resourcesAudits: Audits = {
   "Mutation.createScope": "scope.create",
   "Mutation.updateScope": "scope.update",
   "Mutation.deleteScope": "scope.delete",
+  "Mutation.createDetailType": "detailType.create",
+  "Mutation.updateDetailType": "detailType.update",
+  "Mutation.deleteDetailType": "detailType.delete",
 };
 
 // What an admin event names: the document's id and its tenant.
 const target = (
-  type: "resource" | "scope",
+  type: "resource" | "scope" | "detailType",
   tenantId: ObjectId,
   id: ObjectId,
 ) => ({
@@ -56,9 +69,80 @@ const scopeShape = (scope: StoredScopeDoc) => ({
   claims: scope.claims,
 });
 
+const KINDS = {
+  string: "STRING",
+  number: "NUMBER",
+  integer: "INTEGER",
+  boolean: "BOOLEAN",
+  enum: "ENUM",
+  "string[]": "STRING_LIST",
+} as const;
+const KIND_OF = Object.fromEntries(
+  Object.entries(KINDS).map(([stored, graphql]) => [graphql, stored]),
+) as Record<(typeof KINDS)[keyof typeof KINDS], keyof typeof KINDS>;
+
+const detailTypeShape = (doc: StoredDetailTypeDoc) => ({
+  id: doc._id.toHexString(),
+  resourceId: doc.resourceId.toHexString(),
+  type: doc.type,
+  name: doc.name,
+  description: doc.description,
+  fields: doc.fields.map((field) => ({
+    key: field.key,
+    kind: KINDS[field.kind],
+    label: field.label,
+    required: field.required,
+    min: field.min ?? null,
+    max: field.max ?? null,
+    maxLength: field.maxLength ?? null,
+    values: field.values ?? null,
+  })),
+  actions: doc.actions ?? [],
+  createdAt: doc.createdAt,
+  updatedAt: doc.updatedAt,
+});
+
+type ValueInput = {
+  value: string;
+  label?: { fr?: string | null; en?: string | null } | null;
+};
+const valueDraft = (input: ValueInput): ValueDraft => ({
+  value: input.value,
+  label: {
+    fr: input.label?.fr ?? undefined,
+    en: input.label?.en ?? undefined,
+  },
+});
+
+type FieldInput = {
+  key: string;
+  kind: keyof typeof KIND_OF;
+  label?: { fr?: string | null; en?: string | null } | null;
+  required?: boolean | null;
+  min?: number | null;
+  max?: number | null;
+  maxLength?: number | null;
+  values?: ValueInput[] | null;
+};
+const fieldDraft = (input: FieldInput): FieldDraft => ({
+  key: input.key,
+  kind: KIND_OF[input.kind],
+  label: {
+    fr: input.label?.fr ?? undefined,
+    en: input.label?.en ?? undefined,
+  },
+  required: input.required ?? undefined,
+  min: input.min ?? undefined,
+  max: input.max ?? undefined,
+  maxLength: input.maxLength ?? undefined,
+  values: input.values?.map(valueDraft),
+});
+
 const resourceShape = (
   resource: StoredResourceDoc,
   scopes: StoredScopeDoc[],
+  types: StoredDetailTypeDoc[],
+  document: ProtectedResourceDocument | null,
 ) => ({
   id: resource._id.toHexString(),
   uri: resource.uri,
@@ -66,28 +150,71 @@ const resourceShape = (
   scopes: scopes
     .filter((scope) => scope.resourceId?.equals(resource._id))
     .map(scopeShape),
+  detailTypes: types
+    .filter((doc) => doc.resourceId.equals(resource._id))
+    .map(detailTypeShape),
+  metadataUrl: document?.metadataUrl ?? null,
+  protectedResourceMetadata: document?.metadata ?? null,
   createdAt: resource.createdAt,
 });
+
+type ProtectedResourceDocument = Awaited<
+  ReturnType<typeof protectedResourceDocument>
+>;
+
+// The RFC 9728 documents of a tenant's resources: the tenant's issuer (its
+// primary host when it has one) and DPoP policy come from the resolved
+// tenant, read once per request however many resources it shows. A host that
+// does not resolve gives `null` documents, never an error.
+const documentsOf = (slug: string) => {
+  let tenant: ReturnType<typeof tenantResolver.resolveHost> | undefined;
+  return async (resource: StoredResourceDoc, scopes: StoredScopeDoc[]) => {
+    tenant ??= tenantResolver.resolveHost(hostOf(slug, env.CLAVIX_DOMAIN));
+    const resolved = await tenant;
+    if (resolved === null) return null;
+    return protectedResourceDocument({
+      uri: resource.uri,
+      issuer: resolved.issuer,
+      scopes: scopes
+        .filter((scope) => scope.resourceId?.equals(resource._id))
+        .map((scope) => scope.name),
+      dpopRequired: resolved.oauth.dpop.required,
+    });
+  };
+};
 
 export const resources: Resolvers = {
   Query: {
     resources: async (_, { tenantId }, ctx) => {
-      const { _id } = await catalogTenant(ctx, tenantId);
-      const [found, scopes] = await Promise.all([
+      const { _id, slug } = await catalogTenant(ctx, tenantId);
+      const [found, scopes, types] = await Promise.all([
         catalog.listResources(_id),
         catalog.listScopes(_id),
+        catalog.listDetailTypes(_id),
       ]);
-      return found.map((resource) => resourceShape(resource, scopes));
+      const documentOf = documentsOf(slug);
+      return Promise.all(
+        found.map(async (resource) =>
+          resourceShape(
+            resource,
+            scopes,
+            types,
+            await documentOf(resource, scopes),
+          ),
+        ),
+      );
     },
     resource: async (_, { tenantId, id }, ctx) => {
-      const { _id } = await catalogTenant(ctx, tenantId);
+      const { _id, slug } = await catalogTenant(ctx, tenantId);
       const found = await catalog.findResource(_id, id);
-      return found === undefined
-        ? null
-        : resourceShape(
-            found,
-            await catalog.listScopes(_id, { resourceId: found._id }),
-          );
+      if (found === undefined) return null;
+      const scopes = await catalog.listScopes(_id, { resourceId: found._id });
+      return resourceShape(
+        found,
+        scopes,
+        await catalog.listDetailTypes(_id, { resourceId: found._id }),
+        await documentsOf(slug)(found, scopes),
+      );
     },
     scopes: async (_, { tenantId, resourceId }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
@@ -115,27 +242,39 @@ export const resources: Resolvers = {
         "resource.create",
         target("resource", tenant._id, created._id),
       );
-      return resourceShape(created, []);
+      return resourceShape(
+        created,
+        [],
+        [],
+        await documentsOf(tenant.slug)(created, []),
+      );
     },
     updateResource: async (_, { tenantId, id, input }, ctx) => {
-      const { _id } = await catalogTenant(ctx, tenantId);
+      const { _id, slug } = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
         catalog.updateResource(_id, id, { name: input.name }),
       );
       await ctx.audit("resource.update", target("resource", _id, updated._id));
+      const scopes = await catalog.listScopes(_id, { resourceId: updated._id });
       return resourceShape(
         updated,
-        await catalog.listScopes(_id, { resourceId: updated._id }),
+        scopes,
+        await catalog.listDetailTypes(_id, { resourceId: updated._id }),
+        await documentsOf(slug)(updated, scopes),
       );
     },
     deleteResource: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       let scopes: StoredScopeDoc[] = [];
+      let types: StoredDetailTypeDoc[] = [];
       const removed = await refusing(async () => {
         const found = await catalog.findResource(tenant._id, id);
         keepConsoleResource(tenant, found);
         if (found !== undefined) {
           scopes = await catalog.listScopes(tenant._id, {
+            resourceId: found._id,
+          });
+          types = await catalog.listDetailTypes(tenant._id, {
             resourceId: found._id,
           });
           // The roles scoped to it go first: were the resource gone before them
@@ -162,6 +301,12 @@ export const resources: Resolvers = {
       // recorded on a repeat too (it may be the event the first run missed).
       for (const scope of scopes) {
         await ctx.audit("scope.delete", target("scope", tenant._id, scope._id));
+      }
+      for (const type of types) {
+        await ctx.audit(
+          "detailType.delete",
+          target("detailType", tenant._id, type._id),
+        );
       }
       if (ObjectId.isValid(id)) {
         await ctx.audit(
@@ -223,6 +368,68 @@ export const resources: Resolvers = {
         await ctx.audit(
           "scope.delete",
           target("scope", tenant._id, new ObjectId(id)),
+        );
+      }
+      return removed;
+    },
+    createDetailType: async (_, { tenantId, input }, ctx) => {
+      const { _id } = await catalogTenant(ctx, tenantId);
+      const created = await refusing(() =>
+        catalog.createDetailType(_id, input.resourceId, {
+          type: input.type,
+          name: {
+            fr: input.name.fr ?? undefined,
+            en: input.name.en ?? undefined,
+          },
+          description: {
+            fr: input.description?.fr ?? undefined,
+            en: input.description?.en ?? undefined,
+          },
+          fields: input.fields.map(fieldDraft),
+          actions: input.actions?.map(valueDraft),
+        }),
+      );
+      await ctx.audit(
+        "detailType.create",
+        target("detailType", _id, created._id),
+      );
+      return detailTypeShape(created);
+    },
+    updateDetailType: async (_, { tenantId, id, input }, ctx) => {
+      const { _id } = await catalogTenant(ctx, tenantId);
+      const updated = await refusing(() =>
+        catalog.updateDetailType(_id, id, {
+          name:
+            input.name === undefined || input.name === null
+              ? undefined
+              : {
+                  fr: input.name.fr ?? undefined,
+                  en: input.name.en ?? undefined,
+                },
+          description:
+            input.description === undefined || input.description === null
+              ? undefined
+              : {
+                  fr: input.description.fr ?? undefined,
+                  en: input.description.en ?? undefined,
+                },
+          fields: input.fields?.map(fieldDraft),
+          actions: input.actions?.map(valueDraft),
+        }),
+      );
+      await ctx.audit(
+        "detailType.update",
+        target("detailType", _id, updated._id),
+      );
+      return detailTypeShape(updated);
+    },
+    deleteDetailType: async (_, { tenantId, id }, ctx) => {
+      const { _id } = await catalogTenant(ctx, tenantId);
+      const removed = await refusing(() => catalog.deleteDetailType(_id, id));
+      if (ObjectId.isValid(id)) {
+        await ctx.audit(
+          "detailType.delete",
+          target("detailType", _id, new ObjectId(id)),
         );
       }
       return removed;

@@ -8,6 +8,7 @@ import {
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
+import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -229,6 +230,40 @@ describe("the device verification page's data", () => {
     );
   });
 
+  test("the client is marked an agent when it is one of the tenant's agents", async () => {
+    const acme = await mongo.db.tenants.findFirst({ slug: "dacme" });
+    if (acme === undefined) throw new Error("no tenant");
+    const query = `query($code: String!) { oauthDeviceRequest(userCode: $code) { client { id agent registeredAt } } }`;
+    const markOf = async () => {
+      const { user_code } = await deviceCodes("dacme");
+      const { result } = await gql(
+        "dacme",
+        query,
+        { code: user_code },
+        cookieOf("dacme"),
+      );
+      expect(result.errors).toBeUndefined();
+      const request = result.data?.["oauthDeviceRequest"] as
+        | { client: unknown }
+        | undefined;
+      return request?.client;
+    };
+    expect(await markOf()).toEqual({
+      id: "tv",
+      agent: false,
+      registeredAt: null,
+    });
+    try {
+      await agentClientsService.record(acme._id.toHexString(), {
+        clientId: "tv",
+        kind: "metadata",
+      });
+      expect(await markOf()).toMatchObject({ id: "tv", agent: true });
+    } finally {
+      await mongo.db.agentClients.raw.deleteMany({});
+    }
+  });
+
   test("an anonymous viewer is UNAUTHENTICATED", async () => {
     const { user_code } = await deviceCodes("dacme");
     const { result } = await gql("dacme", REQUEST, { code: user_code });
@@ -443,6 +478,23 @@ describe("the throttle on code lookups", () => {
       "DEVICE_CODE_THROTTLED",
     );
     expect(tight.tenant.calls).toBe(1);
+  });
+
+  test("one approval of a live code counts once, not twice", async () => {
+    const once = throttled({ user: 10 });
+    const app3 = createApp({ oauth: issuers, deviceThrottle: once.throttle });
+    const { user_code } = await deviceCodes("dacme");
+    const before = once.user.calls;
+    const approved = await gql(
+      "dacme",
+      APPROVE,
+      { code: user_code },
+      cookieOf("dacme"),
+      undefined,
+      app3,
+    );
+    expect(approved.result.errors).toBeUndefined();
+    expect(once.user.calls - before).toBe(1);
   });
 
   test("an anonymous request is refused before anything is counted", async () => {

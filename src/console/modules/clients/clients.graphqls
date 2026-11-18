@@ -14,6 +14,19 @@ enum ClientGrantType {
   TOKEN_EXCHANGE
 }
 
+"""
+How a client came to be. `DYNAMIC` and `METADATA` are the tenant's agents (MCP
+clients and other apps that registered themselves, see `OAuthPolicy.agents`).
+"""
+enum ClientRegistration {
+  "Registered by an admin in the console or by a script."
+  CONSOLE
+  "The client registered itself at `/register` (RFC 7591)."
+  DYNAMIC
+  "A Client ID Metadata Document (its URL is the client id) describes the client; recorded at its first use."
+  METADATA
+}
+
 "How an exchanged token names the client acting for the user."
 enum TokenExchangeMode {
   "The exchanged token is the user's, issued to the client, and carries `act` (the client acts for the user). The only mode."
@@ -32,6 +45,8 @@ type ClientTokenExchange {
   subjectClients: [String!]!
   "Whether a token of any client of the tenant may be exchanged."
   anySubjectClient: Boolean!
+  "Whether the tokens of any agent of the tenant (a client that registered itself) may be exchanged too. A client that is no agent is not covered."
+  subjectAgents: Boolean!
   mode: TokenExchangeMode!
 }
 
@@ -63,8 +78,15 @@ type Client {
   overrides this: every client sends a proof.
   """
   dpopBoundAccessTokens: Boolean!
+  """
+  The authorization detail types (RFC 9396, `Resource.detailTypes`) the client
+  may ask for; empty when it lists none. Never implied.
+  """
+  authorizationDetailsTypes: [String!]!
   "The token exchange rules; `null` while none is set (the client cannot exchange)."
   tokenExchange: ClientTokenExchange
+  "How the client came to be: `createdAt` is its registration time. An agent (`DYNAMIC`, `METADATA`) is read-only in the console and can be deleted."
+  registration: ClientRegistration!
 }
 
 """
@@ -108,6 +130,13 @@ input CreateClientInput {
   requirePushedAuthorizationRequests: Boolean
   "Bind the client's tokens to a DPoP key. Default false."
   dpopBoundAccessTokens: Boolean
+  """
+  The detail types the client may ask for: the names of the tenant's types.
+  BAD_USER_INPUT for an unknown type, without `requirePushedAuthorizationRequests`
+  (details in a URL are not protected), or on a client that uses `/authorize` or the device grant
+  of a tenant whose consent pages do not show details yet. Default: none.
+  """
+  authorizationDetailsTypes: [String!]
 }
 
 "Fields left out stay as they are. The type and the secret never change here."
@@ -118,6 +147,8 @@ input UpdateClientInput {
   grantTypes: [ClientGrantType!]
   requirePushedAuthorizationRequests: Boolean
   dpopBoundAccessTokens: Boolean
+  "Replaces the detail types (same rules as on creation); `[]` clears them, left out keeps them."
+  authorizationDetailsTypes: [String!]
 }
 
 "The rules of `setClientTokenExchange`: they replace the client's current ones."
@@ -128,21 +159,38 @@ input ClientTokenExchangeInput {
   subjectClients: [String!] = []
   "Any client of the tenant's tokens may be exchanged. Default false."
   anySubjectClient: Boolean = false
+  "Also exchange the tokens of the tenant's agents, with or without `subjectClients`. Default false."
+  subjectAgents: Boolean = false
 }
 
 type Query {
-  "The tenant's clients in id order (`q` matches part of the name or id, whatever the case). Needs `view` on the tenant."
-  clients(tenantId: ID!, q: String, after: String, first: Int = 25): ClientPage!
+  """
+  The tenant's clients in id order (`q` matches part of the name or id, whatever the case).
+  `kind` keeps only those registrations (`[CONSOLE]` for the registered clients, `[DYNAMIC,
+  METADATA]` for the agents); left out or empty: every client. `totalCount` honours `q` and `kind`.
+  Needs `view` on the tenant.
+  """
+  clients(
+    tenantId: ID!
+    q: String
+    kind: [ClientRegistration!]
+    after: String
+    first: Int = 25
+  ): ClientPage!
+  "A client, an agent included (a metadata-document one too). `null` for an unknown id."
   client(tenantId: ID!, id: ID!): Client
 }
 
 type Mutation {
   "Needs `edit` on the tenant. Errors: CONFLICT (id taken by a client with other values, also when two calls race), QUOTA_EXCEEDED (409, past the plan's `clients` quota). A repeat of a call whose audit record failed (same id, name, type and redirect URIs) returns the stored client with `clientSecret: null` and records the missed event."
   createClient(tenantId: ID!, input: CreateClientInput!): CreatedClient!
+  "Needs `edit`. NOT_FOUND for an unknown client or an agent (dynamic or metadata: read-only)."
   updateClient(tenantId: ID!, id: ID!, input: UpdateClientInput!): Client!
+  "Needs `edit`. NOT_FOUND for an unknown client or an agent; BAD_USER_INPUT for a public client."
   rotateClientSecret(tenantId: ID!, id: ID!): RotatedClientSecret!
   """
-  Replaces the client's token exchange rules. Needs `edit`. The client must be a
+  Replaces the client's token exchange rules. Needs `edit`. NOT_FOUND for an
+  unknown client or an agent (read-only). The client must be a
   confidential one (BAD_USER_INPUT otherwise) and each target a resource of the
   tenant (BAD_USER_INPUT). The client also lists `TOKEN_EXCHANGE` in its grants
   for the rules to apply.
@@ -152,6 +200,6 @@ type Mutation {
     id: ID!
     input: ClientTokenExchangeInput!
   ): Client!
-  "Deletes the client and its token exchange rules, and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
+  "Deletes the client and its token exchange rules, and revokes its grants and their tokens. An agent is deleted the same way and its record goes with it (it frees the `agents` quota); a metadata-document agent is fetched and recorded again at its next use. `true` when the client was deleted, `false` when it was already gone or is not a client the console manages (left untouched)."
   deleteClient(tenantId: ID!, id: ID!): Boolean!
 }

@@ -6,14 +6,17 @@ import {
 } from "@softistx/janus-oauth-mongo";
 import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
+import { DPOP_ALGORITHMS } from "@/modules/resources/protected-resource-document";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
 import { lifetimes } from "./lifetimes";
 import type {
+  AgentCheckFor,
   AuthFor,
   ExchangeRulesFor,
   RolesFor,
   SigningKeysFor,
 } from "./ports";
+import { type MetadataTransport, registrationOf } from "./registration";
 import type { Keyed } from "./resolution";
 import { exchangePolicy } from "./token-exchange";
 
@@ -30,6 +33,10 @@ export interface BuildDeps {
   rolesFor?: RolesFor | undefined;
   /** Absent: no client may exchange tokens. */
   exchangeRulesFor?: ExchangeRulesFor | undefined;
+  /** Absent: no client is an agent, so `subjectAgents` covers nothing. */
+  agentCheckFor?: AgentCheckFor | undefined;
+  /** Specs inject the metadata documents' transport; production uses janus's. */
+  metadataTransport?: MetadataTransport | undefined;
 }
 
 /**
@@ -47,6 +54,8 @@ export const buildIssuer =
     clock,
     rolesFor,
     exchangeRulesFor,
+    agentCheckFor,
+    metadataTransport,
   }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
     const keys: SigningKeyStore = signingKeysFor(tenant.tenantId);
@@ -63,7 +72,14 @@ export const buildIssuer =
       // RFC 8628: served by every tenant, gated per client by its grants (the
       // device URN is never implied). The page is the hosted `/device` of the
       // issuer's own host; `/device_authorization` is janus's endpoint.
-      deviceAuthorization: { verificationUri: `${tenant.issuer}/device` },
+      // An agent (a client that registered itself) gets no device grant (D11).
+      deviceAuthorization: {
+        verificationUri: `${tenant.issuer}/device`,
+        dynamicClients: false,
+      },
+      // Agents (D7, D8): off unless the tenant opted in; `/register` is ours
+      // (`register-route.ts`), not janus's.
+      registration: registrationOf(tenant.oauth.agents, metadataTransport),
       // RFC 9126: `/par` is always served; `required` makes every client push.
       pushedAuthorizationRequests: { required: tenant.oauth.par.required },
       // RFC 9449: proofs are single-use (the Mongo replay cache is shared by
@@ -71,7 +87,7 @@ export const buildIssuer =
       // client of the tenant send one. A client may also require it alone
       // (`dpopBoundAccessTokens`).
       dpop: {
-        algorithms: ["ES256", "EdDSA"] as const,
+        algorithms: DPOP_ALGORITHMS,
         required: tenant.oauth.dpop.required,
         replay: createMongoDPoPReplayCache(
           db,
@@ -80,7 +96,12 @@ export const buildIssuer =
         nonce: { secret: dpopNonceSecret },
       },
       // RFC 8693: served by every tenant (see `exchangePolicy`).
-      tokenExchange: { policy: exchangePolicy(exchangeRulesFor?.(tenant)) },
+      tokenExchange: {
+        policy: exchangePolicy(
+          exchangeRulesFor?.(tenant),
+          agentCheckFor?.(tenant),
+        ),
+      },
       lifetimes,
       accessTokens: {
         format: "jwt" as const,

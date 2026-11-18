@@ -5,7 +5,7 @@ import type { ClientPoliciesService } from "@/modules/client-policies/client-pol
 
 /**
  * Deletes the client. `unmanaged` is a record this service does not manage (not
- * registered through the console or the script): it is left alone, and the
+ * registered through the console or the script, and no recorded `agent`): it is left alone, and the
  * caller has nothing to record. `removed` is `false` when it was not there.
  * One read decides both, so the answer cannot disagree with what was done.
  * The client goes first (nothing new can be granted to it), then its
@@ -18,9 +18,11 @@ export async function deleteClientAndRules(
   tenant: CliTenant,
   clientId: string,
   now: Date,
+  agent = false,
 ): Promise<{ removed: boolean; unmanaged: boolean }> {
   const record = await store.findClient(clientId);
-  if (record !== null && record.source !== "registered") {
+  // A metadata-document client is not ours to manage, unless it is a recorded agent.
+  if (record !== null && record.source !== "registered" && !agent) {
     return { removed: false, unmanaged: true };
   }
   const removed = await deleteClient(store, clientId, { now });

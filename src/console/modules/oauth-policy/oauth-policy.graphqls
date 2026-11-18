@@ -4,6 +4,30 @@ type OAuthRequirement {
   required: Boolean!
 }
 
+"How the tenant's agents (MCP clients and other apps) may register themselves."
+enum AgentRegistrationMode {
+  "No dynamic registration: `/register` answers `invalid_request` and discovery shows no `registration_endpoint`."
+  OFF
+  "Registration at `/register` (RFC 7591) accepts the redirect URIs of the known MCP clients (Claude, ChatGPT, Cursor, VS Code, ...) and `agents.redirectUris`."
+  RESTRICTED
+  "Registration accepts any valid redirect URI. Anyone can create clients, bounded by the plan's `agents` quota and the registration throttle."
+  OPEN
+}
+
+"""
+The tenant's agents (M3b): MCP clients and other apps that register themselves, or
+that a Client ID Metadata Document describes. Off by default.
+"""
+type OAuthAgents {
+  dynamic: AgentRegistrationMode!
+  "Extra redirect URIs `RESTRICTED` accepts, beside the known MCP clients'."
+  redirectUris: [String!]!
+  "Whether a client id that is an HTTPS URL is read as a Client ID Metadata Document."
+  metadataDocuments: Boolean!
+  "Hosts a metadata document may be fetched from, beside the MCP clients' own."
+  allowHosts: [String!]!
+}
+
 """
 A tenant's OAuth policy. `version` is the tenant's version: it rises on every
 change, and the tenant's authorization server follows it within a minute at most.
@@ -14,6 +38,14 @@ type OAuthPolicy {
   par: OAuthRequirement!
   "DPoP-bound tokens (RFC 9449): every token request needs a DPoP proof, whatever the client. Proofs are single-use and carry a server nonce (`use_dpop_nonce`: the client retries once)."
   dpop: OAuthRequirement!
+  agents: OAuthAgents!
+  """
+  `true` when agents are on (`agents.dynamic` not `OFF`, or `agents.metadataDocuments`)
+  while `par` or `dpop` is required of the whole tenant. A tenant-wide switch has no
+  exemption: an MCP client that does not push its requests or prove its tokens is
+  refused. Show the warning; saving is allowed.
+  """
+  agentsNeedPushOrProof: Boolean!
   version: Int!
 }
 
@@ -21,10 +53,22 @@ input OAuthRequirementInput {
   required: Boolean
 }
 
+"""
+A field left out keeps its value. The lists replace the stored ones (50 entries at
+most; redirect URIs of janus's rules, hosts as DNS names with no scheme, port or path).
+"""
+input OAuthAgentsInput {
+  dynamic: AgentRegistrationMode
+  redirectUris: [String!]
+  metadataDocuments: Boolean
+  allowHosts: [String!]
+}
+
 "A flag left out keeps its value."
 input OAuthPolicyInput {
   par: OAuthRequirementInput
   dpop: OAuthRequirementInput
+  agents: OAuthAgentsInput
 }
 
 type Query {
@@ -38,7 +82,10 @@ type Mutation {
   on the tenant. Idempotent: a call that changes nothing writes nothing.
   Turning `par.required` on makes every client of the tenant push its requests:
   a client that does not breaks with `invalid_request`.
-  The platform tenant takes it too: the console pushes and proves. CONFLICT
+  The platform tenant takes it too: the console pushes and proves. BAD_USER_INPUT
+  (400) for an agents list that is too long or holds a redirect URI or a host that is
+  refused (nothing stored). Turning agents on while `par` or `dpop` is required of the
+  tenant is allowed: `agentsNeedPushOrProof` says so. CONFLICT
   (409) when other changes kept winning the race (nothing stored: read the policy and send
   the change again).
   """

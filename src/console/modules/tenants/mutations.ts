@@ -18,7 +18,12 @@ function planOrFail(plan: string): PlanId {
 
 function overridesOrFail(
   input:
-    | { mau?: number | null; clients?: number | null; domains?: number | null }
+    | {
+        mau?: number | null;
+        clients?: number | null;
+        domains?: number | null;
+        agents?: number | null;
+      }
     | null
     | undefined,
 ): QuotaOverrides {

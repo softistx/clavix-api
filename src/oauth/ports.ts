@@ -63,7 +63,14 @@ export interface ExchangeRules {
   targetResources: readonly string[];
   /** The clients whose tokens may be exchanged, or `"any"`. */
   subjectClients: readonly string[] | "any";
+  /** Whether the tokens of the tenant's agents (D12) may be exchanged too. */
+  subjectAgents: boolean;
 }
+
+/** Whether a client of the tenant is an agent (it registered itself, `agentClients`). */
+export type AgentCheckFor = (
+  tenant: ResolvedTenant,
+) => (clientId: string) => Promise<boolean>;
 
 /**
  * The token exchange rules of a tenant's client, `null` when it has none: the

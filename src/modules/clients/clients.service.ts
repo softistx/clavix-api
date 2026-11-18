@@ -5,9 +5,12 @@ import { clientIdOf, type registerClient } from "@/clients/register-client";
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
 import { CatalogError } from "@/modules/resources/catalog.errors";
+import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
 import { partitionOf } from "@/modules/tenants/identity";
+import { type AgentsReader, agentKindsOf, refuseAgent } from "./client-agents";
 import { deleteClientAndRules } from "./client-deletion";
 import {
+  type ClientRegistration,
   type ClientView,
   capability,
   countClientViews,
@@ -29,6 +32,13 @@ export interface ClientsServiceOptions {
   db: Db;
   /** The clients' per-client rules, removed with the client. */
   policies: ClientPoliciesService;
+  /**
+   * The tenant's agents: they are told apart in the listing, and a deleted
+   * client stops being one (it frees the `agents` quota).
+   */
+  agents?: AgentsReader;
+  /** The tenants' detail types a client may list (R3); without it none can be listed. */
+  detailTypes?: ClientDetailTypes;
   now?: () => Date;
 }
 
@@ -53,12 +63,34 @@ export class ClientsService {
     tenant: CliTenant,
     input: Omit<Parameters<typeof registerClient>[1], "tenant">,
   ) {
-    return registerForTenant(this.options.db, this.options.now, tenant, input);
+    return registerForTenant(
+      {
+        db: this.options.db,
+        now: this.options.now,
+        detailTypes: this.options.detailTypes,
+      },
+      tenant,
+      input,
+    );
   }
 
+  /** The tenant's agents among some client ids (none without the agents store). */
+  private agentsOf(tenant: CliTenant) {
+    return agentKindsOf(this.options.agents, tenant);
+  }
+
+  /**
+   * One page of the tenant's clients. `kinds` keeps only those registrations
+   * (`console`, `dynamic`, `metadata`); none: every one, the agents included.
+   */
   async list(
     tenant: CliTenant,
-    options: { after?: string | null; limit: number; q?: string | undefined },
+    options: {
+      after?: string | null;
+      limit: number;
+      q?: string | undefined;
+      kinds?: readonly ClientRegistration[] | undefined;
+    },
   ) {
     checkQuery(options.q);
     if ((options.after?.length ?? 0) > MAX_CURSOR) {
@@ -66,23 +98,39 @@ export class ClientsService {
     }
     return listClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
-      options,
+      { ...options, agents: this.agentsOf(tenant) },
     );
   }
 
-  /** How many clients of the tenant match `q`, whatever the page. */
-  async count(tenant: CliTenant, options: { q?: string | undefined } = {}) {
+  /** How many clients of the tenant match `q` and `kinds`, whatever the page. */
+  async count(
+    tenant: CliTenant,
+    options: {
+      q?: string | undefined;
+      kinds?: readonly ClientRegistration[] | undefined;
+    } = {},
+  ) {
     checkQuery(options.q);
     return countClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
-      options,
+      { ...options, agents: this.agentsOf(tenant) },
     );
   }
 
-  async find(tenant: CliTenant, clientId: string): Promise<ClientView | null> {
+  /**
+   * A registered client; `null` for an unknown one. A client a metadata
+   * document describes is returned only with `agents: true` (the read-only
+   * view of the console): the writes never see it.
+   */
+  async find(
+    tenant: CliTenant,
+    clientId: string,
+    options: { agents?: boolean } = {},
+  ): Promise<ClientView | null> {
     const record = await this.storeOf(tenant).findClient(clientId);
-    if (record === null || record.source !== "registered") return null;
-    return viewOf(record);
+    if (record === null) return null;
+    if (record.source !== "registered" && options.agents !== true) return null;
+    return viewOf(record, await this.agentsOf(tenant)([clientId]));
   }
 
   private async require(tenant: CliTenant, clientId: string) {
@@ -112,6 +160,8 @@ export class ClientsService {
       clientId?: string | undefined;
       requirePar?: boolean | undefined;
       dpopBound?: boolean | undefined;
+      /** The detail types the client may ask for (each a tenant type; needs `requirePar`). Default: none. */
+      detailTypes?: readonly string[] | undefined;
       /** Default: `authorization_code` and `refresh_token`. */
       grants?: readonly string[] | undefined;
     },
@@ -142,6 +192,9 @@ export class ClientsService {
         : { requirePar: input.requirePar }),
       ...(input.dpopBound === undefined ? {} : { dpopBound: input.dpopBound }),
       ...(input.grants === undefined ? {} : { grants: input.grants }),
+      ...(input.detailTypes === undefined
+        ? {}
+        : { detailTypes: input.detailTypes }),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -149,7 +202,7 @@ export class ClientsService {
     };
   }
 
-  /** Replaces the name, the redirect URIs and/or the grants; the type and the secret stay. */
+  /** Replaces the name, the redirect URIs, the grants and/or the detail types; the type and the secret stay. */
   async update(
     tenant: CliTenant,
     clientId: string,
@@ -158,9 +211,11 @@ export class ClientsService {
       redirectUris?: readonly string[] | undefined;
       requirePar?: boolean | undefined;
       dpopBound?: boolean | undefined;
+      detailTypes?: readonly string[] | undefined;
       grants?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
+    await refuseAgent(this.options.agents, tenant, clientId);
     checkSizes(input);
     const current = await this.require(tenant, clientId);
     await this.register(tenant, {
@@ -173,6 +228,10 @@ export class ClientsService {
       dpopBound: input.dpopBound ?? current.dpopBoundAccessTokens,
       // Kept as recorded unless the call changes them.
       grants: input.grants ?? current.grantTypes,
+      // Left out, `registerClient` keeps the stored list (a stale type stays).
+      ...(input.detailTypes === undefined
+        ? {}
+        : { detailTypes: input.detailTypes }),
     });
     return this.require(tenant, clientId);
   }
@@ -194,9 +253,11 @@ export class ClientsService {
     input: {
       targetResources: readonly string[];
       subjectClients: readonly string[] | "any";
+      subjectAgents?: boolean;
     },
     resourceUris: readonly string[],
   ): Promise<TokenExchangeRules> {
+    await refuseAgent(this.options.agents, tenant, clientId);
     return setClientTokenExchange(
       this.options.policies,
       tenant,
@@ -211,6 +272,7 @@ export class ClientsService {
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ client: ClientView; clientSecret: string }> {
+    await refuseAgent(this.options.agents, tenant, clientId);
     const current = await this.require(tenant, clientId);
     if (current.type !== "confidential") {
       throw new CatalogError(
@@ -235,16 +297,26 @@ export class ClientsService {
     };
   }
 
-  delete(
+  async delete(
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ removed: boolean; unmanaged: boolean }> {
-    return deleteClientAndRules(
+    const tenantId = tenant._id.toHexString();
+    // A client the agents store knows is deleted like any other, a metadata
+    // one included (it is fetched again, and recorded again, at its next use).
+    const agent = (await this.agentsOf(tenant)([clientId])).has(clientId);
+    const result = await deleteClientAndRules(
       this.storeOf(tenant),
       this.options.policies,
       tenant,
       clientId,
       (this.options.now ?? (() => new Date()))(),
+      agent,
     );
+    // On a repeat too: a run that stopped between the two is finished.
+    if (!result.unmanaged) {
+      await this.options.agents?.remove(tenantId, clientId);
+    }
+    return result;
   }
 }

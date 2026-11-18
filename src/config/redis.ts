@@ -1,6 +1,7 @@
 import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
+import { agentsPrune } from "@/modules/agents/prune.queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
 import {
   type VerificationLimitConfig,
@@ -18,6 +19,12 @@ import {
 } from "@/modules/passkeys/throttle";
 import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
+import {
+  type MetadataLimitConfig,
+  metadataLimits,
+  type RegisterLimitConfig,
+  registerLimits,
+} from "@/oauth/register-throttle";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 
@@ -58,6 +65,18 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_DEVICE_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_DEVICE_TENANT_WINDOW_SECONDS,
   },
+  register: RegisterLimitConfig = {
+    ipLimit: env.CLAVIX_REGISTER_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_REGISTER_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_REGISTER_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_REGISTER_TENANT_WINDOW_SECONDS,
+  },
+  metadata: MetadataLimitConfig = {
+    ipLimit: env.CLAVIX_METADATA_IP_LIMIT,
+    ipWindowSeconds: env.CLAVIX_METADATA_IP_WINDOW_SECONDS,
+    tenantLimit: env.CLAVIX_METADATA_TENANT_LIMIT,
+    tenantWindowSeconds: env.CLAVIX_METADATA_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -68,12 +87,14 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
-      queues: { keyRotation, tenantPurge, domainRecheck },
+      queues: { keyRotation, tenantPurge, domainRecheck, agentsPrune },
       limits: {
         ...signInLimits(limits),
         ...passkeyLimits(passkeys),
         ...verificationLimits(verification),
         ...deviceLimits(device),
+        ...registerLimits(register),
+        ...metadataLimits(metadata),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

@@ -16,16 +16,17 @@ Today it serves:
 
 ## Documentation
 
-| Page                                                                                       | What is in it                                       |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| This README                                                                                | run, environment, and each feature below            |
-| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix |
-| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls   |
-| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers     |
-| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health       |
-| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes      |
-| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                 |
-| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                   |
+| Page                                                                                       | What is in it                                                                 |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| This README                                                                                | run, environment, and each feature below                                      |
+| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                           |
+| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document |
+| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                             |
+| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                               |
+| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health                                 |
+| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes                                |
+| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                                           |
+| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                                             |
 
 ## Run
 
@@ -70,29 +71,34 @@ one needs on top:
 
 `.env.example` lists the variables; a malformed one stops the app at start, naming it.
 
-| Variable                                                               | Default / rule                                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                                                 | 3000                                                                                                                                                                                                                                           |
-| `MONGO_URI`                                                            | required; a replica set (transactions)                                                                                                                                                                                                         |
-| `REDIS_URL`                                                            | required in production; unset elsewhere, the tenant cache is off, monthly active users are not counted and the console's membership lock is per process (with it, shared by every API process; a lock that cannot be taken is a retryable 503) |
-| `CLAVIX_DOMAIN`                                                        | required in production; `clavix.localhost` elsewhere                                                                                                                                                                                           |
-| `CLAVIX_PUBLIC_SCHEME`                                                 | `https`; `http` is refused in production                                                                                                                                                                                                       |
-| `CLAVIX_PUBLIC_PORT`                                                   | optional; set when issuers are not on the scheme's own port                                                                                                                                                                                    |
-| `CLAVIX_SMTP_URL`                                                      | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                                                   |
-| `CLAVIX_KEYS_MASTER_KEY`                                               | required in production (32 bytes, base64, or a comma-separated keyring while rotating: the first seals, any opens); a public development default elsewhere                                                                                     |
-| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`               | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                                              |
-| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`       | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                                               |
-| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`         | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                                                    |
-| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS` | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                                                     |
-| `CLAVIX_VERIFY_USER_LIMIT` / `CLAVIX_VERIFY_USER_WINDOW_SECONDS`       | `requestEmailVerification` per signed-in user: 10 per 3600 s                                                                                                                                                                                   |
-| `CLAVIX_VERIFY_IP_LIMIT` / `CLAVIX_VERIFY_IP_WINDOW_SECONDS`           | `requestEmailVerification` per client address and tenant: 20 per 600 s                                                                                                                                                                         |
-| `CLAVIX_VERIFY_TENANT_LIMIT` / `CLAVIX_VERIFY_TENANT_WINDOW_SECONDS`   | `requestEmailVerification` per tenant: 200 per 3600 s                                                                                                                                                                                          |
-| `CLAVIX_DEVICE_USER_LIMIT` / `CLAVIX_DEVICE_USER_WINDOW_SECONDS`       | device user-code lookups per signed-in user: 20 per 600 s (see "Device authorization grant")                                                                                                                                                   |
-| `CLAVIX_DEVICE_IP_LIMIT` / `CLAVIX_DEVICE_IP_WINDOW_SECONDS`           | device user-code lookups per client address and tenant: 30 per 600 s                                                                                                                                                                           |
-| `CLAVIX_DEVICE_TENANT_LIMIT` / `CLAVIX_DEVICE_TENANT_WINDOW_SECONDS`   | device user-code lookups per tenant: 300 per 3600 s                                                                                                                                                                                            |
-| `CLAVIX_TLS_ASK_SECRET`                                                | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
-| `CLAVIX_TLS_ASK_LIMIT`                                                 | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
-| `CLAVIX_TRUSTED_PROXIES`                                               | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
+| Variable                                                                 | Default / rule                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                                   | 3000                                                                                                                                                                                                                                           |
+| `MONGO_URI`                                                              | required; a replica set (transactions)                                                                                                                                                                                                         |
+| `REDIS_URL`                                                              | required in production; unset elsewhere, the tenant cache is off, monthly active users are not counted and the console's membership lock is per process (with it, shared by every API process; a lock that cannot be taken is a retryable 503) |
+| `CLAVIX_DOMAIN`                                                          | required in production; `clavix.localhost` elsewhere                                                                                                                                                                                           |
+| `CLAVIX_PUBLIC_SCHEME`                                                   | `https`; `http` is refused in production                                                                                                                                                                                                       |
+| `CLAVIX_PUBLIC_PORT`                                                     | optional; set when issuers are not on the scheme's own port                                                                                                                                                                                    |
+| `CLAVIX_SMTP_URL`                                                        | `smtp://` or `smtps://` URL of the mail relay; required in production; unset elsewhere, mails stay in memory                                                                                                                                   |
+| `CLAVIX_KEYS_MASTER_KEY`                                                 | required in production (32 bytes, base64, or a comma-separated keyring while rotating: the first seals, any opens); a public development default elsewhere                                                                                     |
+| `CLAVIX_CODE_IP_LIMIT` / `CLAVIX_CODE_IP_WINDOW_SECONDS`                 | sign-in code requests per client address and tenant: 20 per 600 s                                                                                                                                                                              |
+| `CLAVIX_CODE_TENANT_LIMIT` / `CLAVIX_CODE_TENANT_WINDOW_SECONDS`         | sign-in code requests per tenant: 200 per 3600 s                                                                                                                                                                                               |
+| `CLAVIX_PASSKEY_IP_LIMIT` / `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`           | `passkeySignInOptions` requests per client address and tenant: 60 per 600 s                                                                                                                                                                    |
+| `CLAVIX_PASSKEY_TENANT_LIMIT` / `CLAVIX_PASSKEY_TENANT_WINDOW_SECONDS`   | `passkeySignInOptions` requests per tenant: 600 per 3600 s                                                                                                                                                                                     |
+| `CLAVIX_VERIFY_USER_LIMIT` / `CLAVIX_VERIFY_USER_WINDOW_SECONDS`         | `requestEmailVerification` per signed-in user: 10 per 3600 s                                                                                                                                                                                   |
+| `CLAVIX_VERIFY_IP_LIMIT` / `CLAVIX_VERIFY_IP_WINDOW_SECONDS`             | `requestEmailVerification` per client address and tenant: 20 per 600 s                                                                                                                                                                         |
+| `CLAVIX_VERIFY_TENANT_LIMIT` / `CLAVIX_VERIFY_TENANT_WINDOW_SECONDS`     | `requestEmailVerification` per tenant: 200 per 3600 s                                                                                                                                                                                          |
+| `CLAVIX_DEVICE_USER_LIMIT` / `CLAVIX_DEVICE_USER_WINDOW_SECONDS`         | device user-code lookups per signed-in user: 20 per 600 s (see "Device authorization grant")                                                                                                                                                   |
+| `CLAVIX_DEVICE_IP_LIMIT` / `CLAVIX_DEVICE_IP_WINDOW_SECONDS`             | device user-code lookups per client address and tenant: 30 per 600 s                                                                                                                                                                           |
+| `CLAVIX_DEVICE_TENANT_LIMIT` / `CLAVIX_DEVICE_TENANT_WINDOW_SECONDS`     | device user-code lookups per tenant: 300 per 3600 s                                                                                                                                                                                            |
+| `CLAVIX_RAR_CONSENT_READY`                                               | tenants whose code or device clients may list authorization detail types: slugs separated by commas, or `*`; default none (temporary, see "Authorization details")                                                                             |
+| `CLAVIX_REGISTER_IP_LIMIT` / `CLAVIX_REGISTER_IP_WINDOW_SECONDS`         | `/register` calls per client address and tenant: 20 per 3600 s (see "Agent registration throttle" in docs/operations.md)                                                                                                                       |
+| `CLAVIX_REGISTER_TENANT_LIMIT` / `CLAVIX_REGISTER_TENANT_WINDOW_SECONDS` | `/register` calls per tenant: 500 per 3600 s                                                                                                                                                                                                   |
+| `CLAVIX_METADATA_IP_LIMIT` / `CLAVIX_METADATA_IP_WINDOW_SECONDS`         | metadata-document fetches (`/authorize`, `/par`) per client address and tenant: 30 per 60 s                                                                                                                                                    |
+| `CLAVIX_METADATA_TENANT_LIMIT` / `CLAVIX_METADATA_TENANT_WINDOW_SECONDS` | metadata-document fetches per tenant: 300 per 60 s                                                                                                                                                                                             |
+| `CLAVIX_TLS_ASK_SECRET`                                                  | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
+| `CLAVIX_TLS_ASK_LIMIT`                                                   | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
+| `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
 
 ## Sign-in code limits
 
@@ -319,19 +325,20 @@ mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another ten
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 
-| Field                                                | What it does                                                                                                                                                                                                                                                                                                                                             |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                                                            |
-| `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                                                                                                                                                                    |
-| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
-| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
-| `setClientTokenExchange(tenantId, id, input)`        | replaces the client's token exchange rules (`targetResources`, `subjectClients` or `anySubjectClient`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                              |
-| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
-| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                                                                                                                                                                         |
-| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                                                                |
-| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
-| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
-| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
+| Field                                                      | What it does                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients(tenantId, q, kind, after, first)`                 | a page of clients in id order (`q` matches the name or the id; `kind` is a list of `CONSOLE`, `DYNAMIC`, `METADATA`, the `registration` of a client, agents being the last two), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                           |
+| `client(tenantId, id)`                                     | one client (a metadata-document agent too, read-only), or `null`                                                                                                                                                                                                                                                                                         |
+| `createClient(tenantId, input)`                            | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
+| `updateClient(tenantId, id, input)`                        | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
+| `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients`, `anySubjectClient`, `subjectAgents`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                               |
+| `rotateClientSecret(tenantId, id)`                         | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
+| `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; an agent (dynamic or metadata document) is deleted too, with its agent record (the `agents` quota is freed); any other record is left untouched (`false`)                                                                                                                                    |
+| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`, `metadataUrl` and `protectedResourceMetadata` (the RFC 9728 document, [guide](docs/guide/mcp.md#the-document-an-mcp-server-serves-rfc-9728))                                                                                                                                                                  |
+| `createResource`, `updateResource`, `deleteResource`       | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
+| `scopes(tenantId, resourceId)`                             | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
+| `createScope`, `updateScope`, `deleteScope`                | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
+| `createDetailType`, `updateDetailType`, `deleteDetailType` | an authorization detail type of a resource (`Resource.detailTypes`, see "Authorization details"); the type name never changes; audited as `detailType.create`, `.update`, `.delete`                                                                                                                                                                      |
 
 ```graphql
 mutation {
@@ -386,7 +393,7 @@ mutation {
   (`Accept-Language`: French, else English), then in the other language, then the scope's name.
 - **A change serves at once**: the scopes a resource offers are read on every OAuth request.
 - **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
-  redirect URIs, a search 100 characters; more is `BAD_USER_INPUT`.
+  redirect URIs and 50 detail types, a search 100 characters; more is `BAD_USER_INPUT`.
 - **The console's own client and resource** (`console` in the `clavix` tenant) cannot be changed
   or deleted here (`BAD_USER_INPUT`): use `clients:create --client-id console --rotate-secret`.
 - **Listing**: clients come in id order; a client made by `clients:create` is listed too. With
@@ -412,8 +419,8 @@ platform (`owner` or `admin` operator). Every mutation is audited (`tenant.creat
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `tenants(q, status, after, first)`      | a page of tenants by slug, the trash included (status `DELETED`), purged ones left out, `totalCount` follows `q` and `status` |
 | `tenant(id)`                            | one tenant; a tenant in the trash is `null` unless the caller is a platform operator                                          |
-| `plans`                                 | `free`, `pro`, `enterprise`, with their quotas (`mau`, `clients`, `domains`; `null` is no limit)                              |
-| `usage(tenantId, month)`                | monthly active users, clients and domains against the quotas that apply                                                       |
+| `plans`                                 | `free`, `pro`, `enterprise`, with their quotas (`mau`, `clients`, `domains`, `agents`; `null` is no limit)                    |
+| `usage(tenantId, month)`                | monthly active users, clients, domains and agents against the quotas that apply                                               |
 | `createTenant(input)`                   | slug (for ever), name, `signUp`, `plan`; `SLUG_TAKEN` for a slug in use, in the trash or purged                               |
 | `updateTenant(id, input)`               | the name and `signUp`; the slug never changes                                                                                 |
 | `setTenantPlan(id, input)`              | the plan and the whole set of quota overrides (`null` follows the plan)                                                       |
@@ -523,6 +530,10 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
   makes every client push; an `/authorize` without a `request_uri` is refused `invalid_request`. A new
   tenant starts with it **on**; a tenant that existed before it (migration `2026-11-16-oauth-policy`)
   stays **off** until an admin turns it on. `dpop.required` is the same switch for DPoP (below).
+  `agents` (dynamic registration of MCP clients and agents, off by default: `dynamic` `OFF|RESTRICTED|OPEN`,
+  `redirectUris`, `metadataDocuments`, `allowHosts`) is on the same policy; `agentsNeedPushOrProof` is `true` when agents are on
+  while `par` or `dpop` is required of the whole tenant (a warning, saving is allowed). A bad redirect URI or host is
+  `BAD_USER_INPUT`. See [docs/guide/mcp.md](docs/guide/mcp.md). Agents do not count in `clients` (the `agents` quota does). A daily clean-up (`agents-prune`, needs `REDIS_URL`: without it nothing runs) deletes agents recorded more than 7 days ago that hold no standing grant, metadata-document agents included.
   Each change is the admin event `oauthPolicy.update` and bumps the tenant's `version`; a no-op writes nothing.
 - **Per client** (`requirePushedAuthorizationRequests` on `Client`, `CreateClientInput` and
   `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant
@@ -608,7 +619,7 @@ Discovery advertises `device_authorization_endpoint`.
   A client's grants must include `authorization_code`, the device URN or the token-exchange URN.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
-  (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes). The viewer must be signed in
+  (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes; approval is refused with `invalid_authorization_details` while `detailsComplete` is false, see "Authorization details"). The viewer must be signed in
   to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
   pending); refusing does not. A code of another tenant is `NOT_FOUND`.
 - **The device polls** with the janus answers: `authorization_pending`, `slow_down` (poll less often, the interval
@@ -637,8 +648,9 @@ A confidential client (a service, an agent) trades a user's access token for ano
   refused at registration and at `/token`. It needs no redirect URI.
 - **Rules** (collection `clientPolicies`, tenant-owned, one document per client, run `bun run db:sync`):
   `targetResources` (at most 20 resource URIs of the tenant; the requested `resource` must be listed) and
-  `subjectClients` (at most 50 client ids whose tokens may be exchanged) or `anySubjectClient`. The mode is always
-  `delegation`.
+  `subjectClients` (at most 50 client ids whose tokens may be exchanged), `anySubjectClient`, and `subjectAgents`
+  (the tokens of any agent of the tenant, a client that registered itself; a client that is no agent is not covered).
+  `subjectAgents` may stand alone or beside `subjectClients`. The mode is always `delegation`.
 - **The result** is a delegation: scopes only narrow, there is no refresh token, the token carries `act`
   (`{ sub, client_id }` of the caller, also in introspection), and it lives under the subject's grant: revoking the
   grant or deleting the subject client kills it. Another tenant's token is `invalid_grant`.
@@ -767,6 +779,117 @@ A URI is matched exactly as stored (`resource=` is compared as a string): regist
 sends it. The tenant's own `<issuer>/userinfo` is built in (the default resource of OIDC clients that send
 none) and cannot be registered.
 
+## Authorization details
+
+A resource can accept rich authorization requests (RFC 9396): instead of a scope, a client asks for
+"pay 12.50 EUR to this account" as an `authorization_details` entry. A tenant describes each
+**detail type** of a resource, and Clavix serves it: the type is listed in
+`authorization_details_types_supported` of `/.well-known/openid-configuration` and
+`/.well-known/oauth-authorization-server`, a client that lists it may use it at `/par`, and a request
+that does not match is refused with `invalid_authorization_details` (HTTP 400). A tenant that
+describes no type keeps refusing the parameter (`invalid_request`).
+
+A type is a **limited list of fields**, never a free JSON Schema (no patterns, bounded sizes):
+
+| Part      | Rule                                                                                                                                                                                               |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`    | the name, 1 to 64 characters (letters, digits, `_ . : -`); unique in the tenant, so two resources cannot both define `payment`                                                                     |
+| `fields`  | at most 16, each a `key` (64 characters; not `type`, `locations`, `actions`, `identifier`, `datatypes` or `privileges`), a `kind`, a `required` flag and the labels in French and English          |
+| kinds     | `string` (`maxLength`, default 256, up to 1024), `number` and `integer` (`min`, `max`), `boolean`, `enum` (1 to 50 `values`), `string[]` (`max` items, default 16, up to 64; `maxLength` per item) |
+| `actions` | optional: the RFC 9396 `actions` the type allows (1 to 50), each with its label                                                                                                                    |
+
+Clavix compiles the list into a strict schema: a detail holds the `type`, an optional `locations`
+(at most the request's own resource), `identifier` and `datatypes`, the `actions` when the type lists
+some, and its fields; any other key is refused. The schema's output replaces what the client sent.
+A type edited by a tenant is served on the next request, with no restart. A resource may hold only
+types and no scope (a request then needs a detail). Types are stored per tenant in the `detailTypes`
+collection and removed with the tenant.
+
+**A client opts in.** It lists the types it uses (`authorizationDetailsTypes`), and a type it does not list is
+refused. In the console, `Client.authorizationDetailsTypes`, and `authorizationDetailsTypes` on `CreateClientInput` and
+`UpdateClientInput` (a list replaces, `[]` clears, left out keeps); by script, `clients:create --detail-types a,b`
+(`--detail-types=` clears, no flag keeps). Each name must be a type of the client's own tenant, and the client must
+require PAR (`requirePushedAuthorizationRequests`, `--require-par`), because details in a URL are not protected: turning PAR
+off on a client that lists types is refused too. Any other case is `BAD_USER_INPUT` (400) and nothing is written.
+A type deleted by a race with the save stays on the list but is no longer served: its requests are
+`invalid_authorization_details`.
+
+**The consent API shows them in words** (R4). `oauthRequest.details` and `oauthDeviceRequest.details` give one block per
+detail, `{ type, title, description, rows: [{ label, value }] }`, from the tenant's texts in the viewer's language
+(`Accept-Language`: French, else English, else the other language when one is empty; see "Consent"). Approval stays all or nothing:
+`approveOAuthRequest` and `approveOAuthDeviceRequest` are called without an `authorizationDetails` selection, so the user allows every
+detail or denies. **Approval is refused when a detail cannot be fully described** (`detailsComplete`): `oauthRequest.detailsComplete` and
+`oauthDeviceRequest.detailsComplete` are `Boolean!`, false when a detail's type was deleted after the request, or the detail carries a key,
+action or enum value its type no longer defines (what the page could show is then partial). The page must offer only Deny then;
+`approveOAuthRequest` and `approveOAuthDeviceRequest` answer `BAD_USER_INPUT` with the message `invalid_authorization_details`
+(`extensions.oauthError`) and the request stays pending, so it can still be denied. A request with no details is complete. The grant keeps them: the token answer, the JWT's `authorization_details` claim and introspection carry them, a refresh can
+only narrow them, a re-consent that leaves one out revokes the grant's tokens (one that asks for none keeps the standing grant), and a token
+exchange inherits them on the same resource and drops them on another.
+
+**Consent gate (temporary).** The hosted pages (clavix-ui) do not render `details` yet. Until they do, a client that shows a consent page (its grants include `authorization_code`, for `/authorize`, or the device
+grant, for the hosted device review) can list types only on a tenant listed in `CLAVIX_RAR_CONSENT_READY` (slugs
+separated by commas, or `*`; default none). A token-exchange-only client has no consent page and is not held back. The variable goes away with the hosted pages' details.
+Details travel in the 4 KiB `/authorize` URL or the 8 KiB `/par` body, so prefer `/par`.
+
+**Managing the types (console API).** `Resource.detailTypes` lists a resource's types;
+`createDetailType`, `updateDetailType` and `deleteDetailType` need `edit` on the tenant, like scopes.
+Labels hold at most 100 characters and a description 300. The resource must be the tenant's own
+(another tenant's is `NOT_FOUND`). A name the tenant already has is `CONFLICT`; an invalid definition is
+`BAD_USER_INPUT`. An update changes the texts, `fields` and `actions` (the list is replaced) and never the
+type name; it writes nothing when nothing changes. A type that a client lists cannot be deleted
+(`DETAIL_TYPE_IN_USE`, 409); deleting a resource deletes its types and removes them from the clients' lists.
+
+```graphql
+mutation {
+  createDetailType(
+    tenantId: "6731…"
+    input: {
+      resourceId: "6732…"
+      type: "payment"
+      name: { en: "Payment", fr: "Paiement" }
+      fields: [
+        {
+          key: "amount"
+          kind: NUMBER
+          required: true
+          min: 0.01
+          max: 1000
+          label: { en: "Amount", fr: "Montant" }
+        }
+        {
+          key: "currency"
+          kind: ENUM
+          required: true
+          values: [{ value: "EUR", label: { en: "Euro", fr: "Euro" } }]
+        }
+      ]
+      actions: [{ value: "initiate", label: { en: "Start", fr: "Lancer" } }]
+    }
+  ) {
+    id
+    type
+  }
+}
+```
+
+**Using a type at `/par`.** A client that lists `payment` pushes the request, then sends the user to
+`/authorize?client_id=…&request_uri=…`. The example is a confidential client (`-u`); a public one sends `client_id` in the body instead:
+
+```sh
+curl -s https://acme.clavix.example/par \
+  -u "$CLIENT_ID:$CLIENT_SECRET" \
+  --data-urlencode response_type=code \
+  --data-urlencode redirect_uri=https://office.example/callback \
+  --data-urlencode code_challenge="$CHALLENGE" \
+  --data-urlencode code_challenge_method=S256 \
+  --data-urlencode resource=https://api.acme.example/ \
+  --data-urlencode 'authorization_details=[{"type":"payment","actions":["initiate"],"amount":12.5,"currency":"EUR"}]'
+# {"request_uri":"urn:ietf:params:oauth:request_uri:…","expires_in":60}
+```
+
+A detail the type does not accept (an unknown field, a value out of bounds, a type the client does not list)
+is refused with `invalid_authorization_details` (see `docs/troubleshooting.md`).
+
 ## OAuth clients
 
 A client is registered on a tenant in the console ("Console API") or by script. Clients are per tenant:
@@ -789,6 +912,7 @@ bun run clients:create --tenant acme --name "Web app" \
 | `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                                                                                                                                                                                                |
 | `--grants <a,b>`       | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code`, `urn:ietf:params:oauth:grant-type:token-exchange`; default `authorization_code,refresh_token` (see below); the token-exchange URN is for a confidential client and needs rules set in the console |
 | `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it)                                                                                                                                                                               |
+| `--detail-types <a,b>` | the authorization detail types the client may ask for (RFC 9396, see "Authorization details"): types of the tenant, and the client needs `--require-par`; an empty value clears them, no flag keeps them                                                                                 |
 | `--dpop-bound`         | the client's tokens are bound to a DPoP key (RFC 9449): its token requests must carry a proof (kept on a re-run; `--no-dpop-bound` clears it)                                                                                                                                            |
 | `--rotate-secret`      | a new secret for an existing confidential client                                                                                                                                                                                                                                         |
 - **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client
@@ -870,6 +994,8 @@ which calls `POST /graphql` (the same API as the e-mail code sign-in) with the t
 the request host's tenant's, so a request id or a session of another tenant is `NOT_FOUND` /
 `UNAUTHENTICATED`).
 
+**Agents are marked.** Every `OAuthClient` (on `oauthRequest`, `oauthDeviceRequest` and `connectedApps`) has `agent: Boolean!` and `registeredAt: String` (ISO 8601, null for a non-agent): `agent` is true when the client is one of the tenant's agents (registered by `/register` or described by a metadata document, see [MCP clients](docs/guide/mcp.md)), false for the tenant's own clients and for an id that is an agent of another tenant. The tenant's agents are read once per request.
+
 ```graphql
 query Consent($id: ID!) {
   oauthRequest(id: $id) {
@@ -887,6 +1013,17 @@ query Consent($id: ID!) {
     scopes {
       name
       label
+    }
+    detailsComplete # false: show Deny only, approval is refused (see "Authorization details")
+    details {
+      # the authorization details (RFC 9396) in words: render every block
+      type
+      title
+      description
+      rows {
+        label
+        value
+      }
     }
   }
   connectedApps {
@@ -922,7 +1059,15 @@ The page sends the user agent to `redirectTo` (the client's redirect URI with `c
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
-scope not asked for), `STEP_UP_REQUIRED` (403).
+scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403).
+- **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
+  are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
+  enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
+  type does not define is not shown, and a type the tenant deleted shows its own name. `oauthDeviceRequest { details }` is the same for the
+  device page. The tenant's texts are read once per request. Approval is all or nothing: show every block and call the approve mutation
+  without `authorizationDetails`. `detailsComplete: Boolean!` (also on `oauthDeviceRequest`) is false when a detail cannot be fully described
+  (its type was deleted, or it carries a key, action or value its type no longer defines): the page then offers only Deny, since the approve
+  mutations refuse with `invalid_authorization_details`. janus's `authorizationDetails` JSON string stays on both types.
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
   again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;

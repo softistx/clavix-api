@@ -1,5 +1,6 @@
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type {
+  AgentCheckFor,
   AuthFor,
   ClaimsFor,
   ExchangeRulesFor,
@@ -7,7 +8,11 @@ import type {
   RolesFor,
 } from "@/oauth/ports";
 import { withTenantState } from "@/oauth/tenant-state";
-import { exchangeRulesFor as storedExchangeRulesFor } from "./client-policies";
+import { withAgentRegistration } from "./agents-registration";
+import {
+  agentCheckFor as storedAgentCheckFor,
+  exchangeRulesFor as storedExchangeRulesFor,
+} from "./client-policies";
 import { dpopNonceSecret, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
@@ -27,19 +32,23 @@ export const createIssuers = (
   resourcesFor: ResourcesFor = storedResourcesFor,
   rolesFor: RolesFor = storedRolesFor,
   exchangeRulesFor: ExchangeRulesFor = storedExchangeRulesFor,
+  agentCheckFor: AgentCheckFor = storedAgentCheckFor,
 ) =>
   withTenantState(
-    createClavixOAuthIssuers({
-      resolver: tenantResolver,
-      db: oauthDb,
-      signingKeysFor,
-      dpopNonceSecret,
-      authFor,
-      claimsFor,
-      resourcesFor,
-      rolesFor,
-      exchangeRulesFor,
-    }),
+    withAgentRegistration(
+      createClavixOAuthIssuers({
+        resolver: tenantResolver,
+        db: oauthDb,
+        signingKeysFor,
+        dpopNonceSecret,
+        authFor,
+        claimsFor,
+        resourcesFor,
+        rolesFor,
+        exchangeRulesFor,
+        agentCheckFor,
+      }),
+    ),
     {
       resolver: tenantResolver,
       onActive: (tenantId, userId) =>

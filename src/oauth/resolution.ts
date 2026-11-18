@@ -1,4 +1,5 @@
 import type { OAuthIssuerKey, OAuthResource } from "@softistx/janus-oauth";
+import { digestOf } from "@/modules/resources/detail-types/compile";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import type { ResourcesFor } from "./ports";
@@ -11,25 +12,37 @@ export type Keyed = OAuthIssuerKey & {
 
 // A short stable digest of a tenant's resources: the issuer is rebuilt when
 // one is added, changed or removed, though the tenant itself did not change.
+// The detail types count by name and by the digest of their definition
+// (`digestOf`), so an edited type rebuilds the issuer.
 export const fingerprintOf = (
   resources: Readonly<Record<string, OAuthResource>>,
 ) =>
   Bun.hash(
     JSON.stringify(
       Object.entries(resources)
-        .map(([uri, { scopes }]) => [uri, [...scopes].sort()])
+        .map(([uri, { scopes, authorizationDetails }]) => {
+          const types = Object.entries(authorizationDetails ?? {})
+            .map(([type, { schema }]) => [type, digestOf(schema) ?? ""])
+            .sort(([a], [b]) => String(a).localeCompare(String(b)));
+          return types.length === 0
+            ? [uri, [...scopes].sort()]
+            : [uri, [...scopes].sort(), types];
+        })
         .sort(([a], [b]) => String(a).localeCompare(String(b))),
     ),
   ).toString(36);
 
-// janus refuses a resource with no scope (a TypeError when the server is built)
-// and the introspection list must not name one, so a stored resource that has
-// none is left out here, once, for both.
+// janus refuses a resource with no scope and no detail type (a TypeError when
+// the server is built) and the introspection list must not name one, so a
+// stored resource that has neither is left out here, once, for both.
 const withScopes = (
   resources: Readonly<Record<string, OAuthResource>>,
 ): Readonly<Record<string, OAuthResource>> =>
   Object.fromEntries(
-    Object.entries(resources).filter(([, { scopes }]) => scopes.length > 0),
+    Object.entries(resources).filter(
+      ([, { scopes, authorizationDetails }]) =>
+        scopes.length > 0 || Object.keys(authorizationDetails ?? {}).length > 0,
+    ),
   );
 
 /**

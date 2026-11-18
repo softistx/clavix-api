@@ -7,12 +7,29 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Rich authorization requests and MCP agents** ([#17](https://github.com/softistx/clavix-api/issues/17),
+  [#18](https://github.com/softistx/clavix-api/issues/18)) — a tenant describes the authorization
+  detail types of an API (a payment, a transfer) and lets a client ask for them with a pushed
+  request, Clavix checks each request against the type and the user sees every detail in words
+  before allowing it. In the same effort an AI agent (an MCP client) can register itself on a tenant
+  that allows it, signs in with code and PKCE, and shows as an unreviewed agent on the consent page;
+  admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
+  exchange an agent's token. Done so far: the consent API marks agents (`OAuthClient.agent`), an MCP server can exchange an agent's token (`subjectAgents` on its exchange rules); the detail types of a resource are stored and served to the
+  token server, and the console API creates, changes and deletes them, and a client lists the types it may ask for (console and
+  `clients:create --detail-types`, PAR required), and the consent API shows each detail in words
+  (`oauthRequest.details`, `oauthDeviceRequest.details`), refusing an approval whose details cannot be fully described (`detailsComplete`, `invalid_authorization_details`). Next: the hosted pages render them, and a connected app lists the details it holds.
+
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with
   `EMAIL_UNVERIFIED` until the address is proved (`me { user platformRole emailVerified }` stays open; the tenant lists under `me` need the proof), as passkey
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
+
+- **MCP clients and agents** (in progress) — a tenant can opt in to dynamic registration (`/register`, RFC 7591) and
+  Client ID Metadata Documents, with a throttle and an `agents` quota ([guide](guide/mcp.md)). The console edits the policy
+  (with a warning when PAR or DPoP is required of the whole tenant), lists agents beside the other clients, deletes them,
+  a daily job prunes the dynamic agents nobody authorized in 7 days, and a resource shows the RFC 9728 document its server should serve. The hosted pages' `OAuthClient` says whether a client is an agent (`agent`, `registeredAt`).
 
 ## Next
 
@@ -32,10 +49,6 @@ nxgt-janus release says which.
 **Follow-ups**
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
-
-**Advanced protocols**
-- Rich authorization requests and their consent.
-- MCP and agents: dynamic registration policy, RFC 9728, consent per agent.
 
 **Federation, step-up and events**
 - Enterprise OIDC connections and home-realm discovery.

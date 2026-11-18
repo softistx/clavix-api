@@ -9,6 +9,7 @@ import { liveTenant, tenantIdOf } from "./ids";
 const STATUS = {
   NOT_FOUND: 404,
   CONFLICT: 409,
+  DETAIL_TYPE_IN_USE: 409,
   BAD_USER_INPUT: 400,
   ROLE_MANAGED: 403,
 } as const;

@@ -32,6 +32,29 @@ describe("the tenant purge guards", () => {
     // The clients' rules (token exchange) go with the tenant too.
     expect(names).toContain("clientPolicies");
     expect(names).not.toContain("adminEvents");
+    // The authorization detail types go with the tenant too.
+    expect(names).toContain("detailTypes");
+    // The agents (dynamic and metadata clients) go with the tenant too.
+    expect(names).toContain("agentClients");
+  });
+  test("the purge empties a tenant's detailTypes and no other's", async () => {
+    const purger = ownedPurgers().find((p) => p.name === "detailTypes");
+    const a = new ObjectId();
+    const b = new ObjectId();
+    for (const tenantId of [a, b]) {
+      await scopeToTenant(mongo.db.detailTypes, tenantId).create({
+        resourceId: new ObjectId(),
+        type: "payment",
+        name: { fr: "", en: "" },
+        description: { fr: "", en: "" },
+        fields: [],
+      });
+    }
+    expect(await purger?.deleteOwnedBy(a)).toBe(1);
+    expect(await mongo.db.detailTypes.raw.countDocuments({ tenantId: a })).toBe(
+      0,
+    );
+    expect(await purger?.deleteOwnedBy(b)).toBe(1);
   });
   test("the purge empties a tenant's clientPolicies and no other's", async () => {
     const purger = ownedPurgers().find((p) => p.name === "clientPolicies");

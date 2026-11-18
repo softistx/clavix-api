@@ -10,7 +10,7 @@ import { catalogTenant, refusing } from "../catalog-support";
 import { tenantArg } from "../ids";
 import { keepConsoleClient } from "../reserved";
 import { refusal } from "../tenants/errors";
-import { clientsKey, grantsOf, shape, target } from "./shape";
+import { clientsKey, grantsOf, kindsOf, shape, target } from "./shape";
 import { setClientTokenExchange } from "./token-exchange";
 
 const view = onTenant("view", tenantArg);
@@ -56,7 +56,7 @@ const CLIENT_ID = /^[a-z0-9-]{1,64}$/;
 
 export const clients: Resolvers = {
   Query: {
-    clients: async (_, { tenantId, q, after, first }, ctx) => {
+    clients: async (_, { tenantId, q, kind, after, first }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const [page, totalCount] = await refusing(() =>
         Promise.all([
@@ -64,8 +64,12 @@ export const clients: Resolvers = {
             after: after ?? null,
             limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
             q: q ?? undefined,
+            kinds: kindsOf(kind),
           }),
-          clientsService.count(tenant, { q: q ?? undefined }),
+          clientsService.count(tenant, {
+            q: q ?? undefined,
+            kinds: kindsOf(kind),
+          }),
         ]),
       );
       const rules = await clientsService.tokenExchangeOf(
@@ -80,7 +84,7 @@ export const clients: Resolvers = {
     },
     client: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const found = await clientsService.find(tenant, id);
+      const found = await clientsService.find(tenant, id, { agents: true });
       return found === null
         ? null
         : shape(found, await clientsService.tokenExchange(tenant, id));
@@ -100,6 +104,7 @@ export const clients: Resolvers = {
         grants: grantsOf(input.grantTypes),
         requirePar: input.requirePushedAuthorizationRequests ?? undefined,
         dpopBound: input.dpopBoundAccessTokens ?? undefined,
+        detailTypes: input.authorizationDetailsTypes ?? undefined,
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
@@ -132,6 +137,7 @@ export const clients: Resolvers = {
             grants: grantsOf(input.grantTypes),
             requirePar: input.requirePushedAuthorizationRequests ?? undefined,
             dpopBound: input.dpopBoundAccessTokens ?? undefined,
+            detailTypes: input.authorizationDetailsTypes ?? undefined,
           });
         }),
       );
