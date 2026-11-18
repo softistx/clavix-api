@@ -585,7 +585,7 @@ describe("details the page cannot fully describe", () => {
         detailTypes: [type],
       },
     ).then((done) => {
-      secrets["gifter"] = done.clientSecret ?? "";
+      secrets["gifter"] = done.clientSecret ?? secrets["gifter"] ?? "";
     });
     return tenant._id;
   }
