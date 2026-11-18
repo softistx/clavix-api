@@ -639,11 +639,11 @@ describe("deleteClient", () => {
 
 const EXCHANGE = `mutation($tenantId: ID!, $id: ID!, $input: ClientTokenExchangeInput!) {
   setClientTokenExchange(tenantId: $tenantId, id: $id, input: $input) {
-    id grantTypes tokenExchange { targetResources subjectClients anySubjectClient mode }
+    id grantTypes tokenExchange { targetResources subjectClients anySubjectClient subjectAgents mode }
   }
 }`;
 const GET_EXCHANGE = `query($tenantId: ID!, $id: ID!) {
-  client(tenantId: $tenantId, id: $id) { tokenExchange { targetResources subjectClients anySubjectClient mode } }
+  client(tenantId: $tenantId, id: $id) { tokenExchange { targetResources subjectClients anySubjectClient subjectAgents mode } }
 }`;
 const API_URI = "https://exchange-target.example/api";
 
@@ -727,6 +727,55 @@ describe("setClientTokenExchange", () => {
       (await admin(GET_EXCHANGE, { tenantId: tenantA, id: "exchanger" }))
         .data?.["client"],
     ).toMatchObject({ tokenExchange: { anySubjectClient: true } });
+  });
+
+  test("subjectAgents covers the agents, alone or beside listed clients, and is off by default", async () => {
+    const only = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], subjectAgents: true },
+    });
+    expect(only.errors).toBeUndefined();
+    expect(only.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: {
+        subjectClients: [],
+        anySubjectClient: false,
+        subjectAgents: true,
+      },
+    });
+    const both = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: {
+        targetResources: [API_URI],
+        subjectClients: ["web"],
+        subjectAgents: true,
+      },
+    });
+    expect(both.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: { subjectClients: ["web"], subjectAgents: true },
+    });
+    // The switch off by default; with no client and no switch, nothing is covered: refused.
+    const off = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], subjectClients: ["web"] },
+    });
+    expect(off.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: { subjectAgents: false },
+    });
+    const none = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI] },
+    });
+    expect(none.errors?.[0]?.extensions?.["code"]).toBe("BAD_USER_INPUT");
+    // `anySubjectClient` already covers agents: the switch is stored as given.
+    await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], anySubjectClient: true },
+    });
   });
 
   test("a target that is not the tenant's resource, a public client, bad subjects and an unknown client are refused", async () => {
@@ -1255,6 +1304,7 @@ describe("deleting a subject client prunes the rules that name it", () => {
     const rule = (subjectClients: string[] | "any") => ({
       targetResources: [API_URI],
       subjectClients,
+      subjectAgents: false,
       mode: "delegation" as const,
     });
     await clientPoliciesService.setTokenExchange(

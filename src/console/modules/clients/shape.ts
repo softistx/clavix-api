@@ -55,6 +55,7 @@ const exchangeShape = (rules: Rules | undefined) =>
         subjectClients:
           rules.subjectClients === "any" ? [] : [...rules.subjectClients],
         anySubjectClient: rules.subjectClients === "any",
+        subjectAgents: rules.subjectAgents === true,
         mode: "DELEGATION" as const,
       };
 

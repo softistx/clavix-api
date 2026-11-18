@@ -45,6 +45,10 @@ curl -s https://acme.clavix.example/register -H 'content-type: application/json'
 4. It runs `/authorize` with `code_challenge` (S256) and the `resource`, the user approves, and `/token` exchanges the
    code. The token is bound to the resource.
 
+An MCP server that calls downstream APIs for the user trades the agent's token for one on the API: give the
+server (a confidential client) token exchange rules with `subjectAgents: true`, see
+[Agents' tokens](token-exchange.md#agents-tokens).
+
 ## Refusals
 
 | Answer                                                | Cause                                                                                                     |

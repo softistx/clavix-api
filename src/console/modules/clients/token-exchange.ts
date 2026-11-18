@@ -13,13 +13,14 @@ export const setClientTokenExchange: NonNullable<
 > = async (_, { tenantId, id, input }, ctx) => {
   const tenant = await catalogTenant(ctx, tenantId);
   const listed = input.subjectClients?.length ?? 0;
-  if (input.anySubjectClient === true ? listed > 0 : listed === 0) {
+  const agents = input.subjectAgents === true;
+  if (input.anySubjectClient === true ? listed > 0 : listed === 0 && !agents) {
     await refusing(async () => {
       throw new CatalogError(
         "BAD_USER_INPUT",
         input.anySubjectClient === true
           ? "Give subjectClients or anySubjectClient, not both"
-          : "Give the clients whose tokens may be exchanged, or anySubjectClient",
+          : "Give the clients whose tokens may be exchanged, subjectAgents, or anySubjectClient",
       );
     });
   }
@@ -38,6 +39,7 @@ export const setClientTokenExchange: NonNullable<
             input.anySubjectClient === true
               ? "any"
               : (input.subjectClients ?? []),
+          subjectAgents: agents,
         },
         resources.map((resource) => resource.uri),
       );

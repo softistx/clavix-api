@@ -14,7 +14,7 @@ nxgt-janus release says which.
   before allowing it. In the same effort an AI agent (an MCP client) can register itself on a tenant
   that allows it, signs in with code and PKCE, and shows as an unreviewed agent on the consent page;
   admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
-  exchange an agent's token. Done so far: the detail types of a resource are stored and served to the
+  exchange an agent's token. Done so far: an MCP server can exchange an agent's token (`subjectAgents` on its exchange rules); the detail types of a resource are stored and served to the
   token server, and the console API creates, changes and deletes them, and a client lists the types it may ask for (console and
   `clients:create --detail-types`, PAR required). Next: the hosted consent page shows the details.
 

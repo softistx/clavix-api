@@ -25,6 +25,7 @@ mutation ($tenantId: ID!) {
       targetResources
       subjectClients
       anySubjectClient
+      subjectAgents
       mode
     }
   }
@@ -32,9 +33,39 @@ mutation ($tenantId: ID!) {
 ```
 
 - `targetResources`: at most 20, each a resource of the tenant. `subjectClients`: at most 50 client ids, or
-  `anySubjectClient: true` (not both). The call replaces the previous rules and is audited as `client.tokenExchange.set`.
+  `anySubjectClient: true` (not both), and `subjectAgents: true` to cover the tokens of every agent of the tenant (see
+  "Agents' tokens" below). The call replaces the previous rules and is audited as `client.tokenExchange.set`.
 - A public client is refused; the client need not list the grant to receive rules, but it cannot exchange without it.
 - Deleting the client deletes its rules.
+
+## Agents' tokens
+
+An MCP server that is a confidential client can trade the token of a user's agent (an MCP client that registered
+itself, see `docs/guide/mcp.md`) for a token on a downstream API. Set `subjectAgents: true` on the server's rules:
+
+```graphql
+mutation {
+  setClientTokenExchange(
+    tenantId: "..."
+    id: "mcp-server"
+    input: {
+      targetResources: ["https://api.acme.example"]
+      subjectAgents: true
+    }
+  ) {
+    tokenExchange {
+      subjectAgents
+    }
+  }
+}
+```
+
+- The switch covers any client of the tenant recorded as an agent, and only those: a regular client's token stays
+  `access_denied` unless it is in `subjectClients` (or `anySubjectClient` is on). Agents registered after the call
+  are covered too, and an agent deleted stops being covered.
+- Delegation only: the user stays the subject and `act` names the MCP server. Scopes only narrow, and the
+  authorization details of the agent's token on the same resource are inherited.
+- `subjectAgents` defaults to `false`; with it on, `subjectClients` may stay empty.
 
 ## Exchange
 
@@ -50,11 +81,11 @@ The answer is an access token for `resource`. Scopes only narrow the subject's. 
 (`{ "sub": "agent", "client_id": "agent" }`), shows it in introspection, has no refresh token, and dies with the
 subject's grant (revoked grant, deleted subject client). The mode is always delegation.
 
-| Answer                | Meaning                                                                           |
-| --------------------- | --------------------------------------------------------------------------------- |
-| `unauthorized_client` | the client does not list the grant, or is public                                  |
-| `access_denied`       | no rules, `resource` not in `targetResources`, or the subject's client not listed |
-| `invalid_grant`       | the subject token is unknown, expired, revoked or another tenant's                |
+| Answer                | Meaning                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `unauthorized_client` | the client does not list the grant, or is public                                                                              |
+| `access_denied`       | no rules, `resource` not in `targetResources`, or the subject's client neither listed nor an agent covered by `subjectAgents` |
+| `invalid_grant`       | the subject token is unknown, expired, revoked or another tenant's                                                            |
 
 ## DPoP
 
@@ -66,7 +97,7 @@ proof with the request.
 ## Defaults
 
 - No rules means `access_denied`: a client with the grant but no `setClientTokenExchange` exchanges nothing.
-- `subjectClients` defaults to `[]` and `anySubjectClient` to `false`, and the call needs one of the two (the
-  clients listed, or `anySubjectClient: true`, never both).
+- `subjectClients` defaults to `[]`, `anySubjectClient` and `subjectAgents` to `false`. The call needs the clients
+  listed, `subjectAgents: true` or `anySubjectClient: true` (never `anySubjectClient` with a list).
 - An exchanged token cannot be exchanged again (`invalid_grant`): the service exchanges the user's original token
   each time.

@@ -654,13 +654,13 @@ refused at sign-in. Deploy clavix-ui first or together.
 --grants urn:ietf:params:oauth:grant-type:token-exchange` (or `grantTypes: [TOKEN_EXCHANGE]`) and a secret.
 
 **`access_denied`**: the client has no rules (`setClientTokenExchange`), the `resource` is not in `targetResources`,
-or the subject token's client is not in `subjectClients` (and `anySubjectClient` is off). Read the rules with
+or the subject token's client is not in `subjectClients` (and neither `anySubjectClient` nor, for an agent's token, `subjectAgents` is on). Read the rules with
 `Client.tokenExchange`.
 
 **`invalid_grant`**: the subject token is unknown, expired, revoked, or another tenant's. A token exchanged earlier
 dies with the subject's grant.
 
-**`BAD_USER_INPUT` on `setClientTokenExchange`**: both or neither of `subjectClients` and `anySubjectClient`, more
+**`BAD_USER_INPUT` on `setClientTokenExchange`**: `anySubjectClient` with `subjectClients`, or no client, no `subjectAgents` and no `anySubjectClient`, more
 than 20 targets or 50 clients, a target that is not a resource of the tenant, or a public client.
 
 ## Device authorization refusals
