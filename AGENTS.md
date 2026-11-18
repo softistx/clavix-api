@@ -595,6 +595,36 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). The passkey layer accepts the same origins (`relatedOriginsOf`, `src/modules/domains/well-known.ts`).
 
+## Webhooks (`src/modules/webhooks`, `src/console/modules/webhooks`, `src/config/webhooks.ts`)
+
+A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
+- `webhookEndpoints` is tenant-owned: reached only through `WebhookEndpointsService`
+  (`scopeToTenant`; the files allowed in `guards.spec.ts` are `src/modules/webhooks/` and
+  `src/config/webhook-endpoints.ts`). Its quota is `webhooks` (free 2, pro 10, enterprise 50),
+  checked on create under `ctx.exclusive("console:webhooks:<tenantId>")`.
+- One process-wide `webhooks()` (`delivery.ts`, wired in `src/config/webhooks.ts`) serves every
+  tenant: its endpoint resolver reads the endpoints of `event.data.tenantId` at each attempt, so a
+  rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
+  reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
+  prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
+- The catalogue (D22, `events.ts`) is janus's 20 user events plus `session.signedIn`; `data` holds ids
+  only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
+  top-level field for it. Console admin events are not delivered. `webhook.test` is outside the
+  catalogue and goes to one endpoint, whatever its types.
+- Secrets (D19): `whsec_`, sealed with `webhookSecretBox` (its own subkey label) with the context
+  `<tenantId>:<endpointId>`, returned once by `createWebhookEndpoint` and `rollWebhookSecret`. A roll with
+  `keepPrevious` keeps the old secret signing for 24 h (both signatures sent); without it, it is dropped
+  at once. `webhookSecretsPrune` (daily 04:37) removes expired ones; they are ignored at send time anyway.
+- URL policy (D21, `url-policy.ts`): `https`, no credentials, public addresses only, checked on save
+  and again by `guardedFetch` on every send (a DNS rebinding is refused; redirects are never followed).
+  `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` lifts the address check for development and is refused in production.
+  A check and the connection resolve the name separately (documented in `url-policy.ts`).
+- Auto-disable (D20): 5 given-up deliveries in a row (`retriesRanOut` only; a 2xx resets the run)
+  switch the endpoint off, record the admin event `webhook.disable` (actor `system:webhooks:disable`)
+  and e-mail the owners (`notice.ts`, origin only). An admin switches it on again with
+  `updateWebhookEndpoint(enabled: true)`, which re-checks the address.
+- Admin events: `webhook.create|update|delete|rollSecret|test`; none carries a secret.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`; `grants.ts` holds the offered grants and `validate.ts` the input checks and `clientIdOf`, both re-exported by `register-client.ts`; the script `clients:create`

@@ -22,6 +22,12 @@ nxgt-janus release says which.
   NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
   ([#21](https://github.com/softistx/clavix-api/issues/21)).
 
+- **Webhooks** (M4) — a tenant registers `https` endpoints in the console and receives its users'
+  events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
+  once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
+  an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
+  ([#22](https://github.com/softistx/clavix-api/issues/22)).
+
 ## Next
 
 - **Agent follow-ups** — unused agent registrations no longer fill a tenant's `agents` quota before
