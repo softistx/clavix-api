@@ -174,6 +174,16 @@ export const env = defineEnv({
   // not built yet, so until they are no code or device client may opt in.
   // Temporary, removed with the consent page (M3b V4). Default: none.
   CLAVIX_RAR_CONSENT_READY: z.string().default(""),
+  // Traces and logs (D24): the OTLP/HTTP collector's base URL (`/v1/traces` and
+  // `/v1/logs` are appended). Unset, nothing is exported. An empty value is unset.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z
+    .string()
+    .transform((value) => value || undefined)
+    .pipe(z.url().optional())
+    .optional(),
+  // Headers sent to the collector, `key=value` pairs separated by commas (the
+  // OpenTelemetry variable of the same name), e.g. an API key.
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
   // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
   // custom domains, A4): the shared secret of that URL, at least 32 characters.
   // Unset, the endpoint does not exist. The route is internal: never expose

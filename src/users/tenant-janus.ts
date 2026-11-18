@@ -11,6 +11,7 @@ import {
   createMongoStores,
 } from "@softistx/janus-mongo";
 import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
+import { instrumentJanus } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
 import type { SecretBox } from "@/modules/sign-in-methods/secrets";
 import { isEnabled } from "@/modules/sign-in-methods/sign-in.schema";
@@ -170,7 +171,10 @@ export function buildTenantJanus(
   hooks?: InvitationHooks,
   events?: UserEventListener,
 ): TenantJanus {
-  return buildJanus(db, tenant, socialConfigOf(tenant, secrets), hooks, events);
+  // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.
+  return instrumentJanus(
+    buildJanus(db, tenant, socialConfigOf(tenant, secrets), hooks, events),
+  );
 }
 
 /** The instance when the tenant has at least one social provider, else `null`. */

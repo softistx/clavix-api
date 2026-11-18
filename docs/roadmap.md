@@ -47,7 +47,7 @@ nxgt-janus release says which.
 - Enterprise OIDC connections and home-realm discovery.
 - MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
 - Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
-  telemetry.
+  telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans).
 
 **Before v1**
 - A security review of the whole surface, a load test of the token and

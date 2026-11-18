@@ -53,6 +53,7 @@ describe("resolveHost", () => {
       issuer: "https://acme.clavix.test",
       slugIssuer: "https://acme.clavix.test",
       relatedOrigins: [],
+      plan: "free",
       partition: acme._id.toHexString(),
       version: 3,
       signIn: acme.signIn,

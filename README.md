@@ -99,6 +99,8 @@ one needs on top:
 | `CLAVIX_TLS_ASK_SECRET`                                                  | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
 | `CLAVIX_TLS_ASK_LIMIT`                                                   | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
 | `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                                            | optional: the OTLP/HTTP collector of traces and logs (D24); unset, nothing is exported (see operations, "Telemetry")                                                                                                                           |
+| `OTEL_EXPORTER_OTLP_HEADERS`                                             | optional: `key=value` pairs separated by commas, sent to the collector                                                                                                                                                                         |
 
 ## Sign-in code limits
 
