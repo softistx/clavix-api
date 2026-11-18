@@ -22,6 +22,7 @@ const origin = {
 export const resourcesFor = storedResourcesFor(
   mongo.db.resources,
   mongo.db.scopes,
+  mongo.db.detailTypes,
 );
 
 /**

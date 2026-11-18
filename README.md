@@ -767,6 +767,36 @@ A URI is matched exactly as stored (`resource=` is compared as a string): regist
 sends it. The tenant's own `<issuer>/userinfo` is built in (the default resource of OIDC clients that send
 none) and cannot be registered.
 
+## Authorization details
+
+A resource can accept rich authorization requests (RFC 9396): instead of a scope, a client asks for
+"pay 12.50 EUR to this account" as an `authorization_details` entry. A tenant describes each
+**detail type** of a resource, and Clavix serves it: the type is listed in
+`authorization_details_types_supported` of `/.well-known/openid-configuration` and
+`/.well-known/oauth-authorization-server`, a client that lists it may use it at `/par`, and a request
+that does not match is refused with `invalid_authorization_details` (HTTP 400). A tenant that
+describes no type keeps refusing the parameter (`invalid_request`).
+
+A type is a **limited list of fields**, never a free JSON Schema (no patterns, bounded sizes):
+
+| Part      | Rule                                                                                                                                                                                               |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`    | the name, 1 to 64 characters (letters, digits, `_ . : -`); unique in the tenant, so two resources cannot both define `payment`                                                                     |
+| `fields`  | at most 16, each a `key` (64 characters; not `type`, `locations`, `actions`, `identifier`, `datatypes` or `privileges`), a `kind`, a `required` flag and the labels in French and English          |
+| kinds     | `string` (`maxLength`, default 256, up to 1024), `number` and `integer` (`min`, `max`), `boolean`, `enum` (1 to 50 `values`), `string[]` (`max` items, default 16, up to 64; `maxLength` per item) |
+| `actions` | optional: the RFC 9396 `actions` the type allows (1 to 50), each with its label                                                                                                                    |
+
+Clavix compiles the list into a strict schema: a detail holds the `type`, an optional `locations`
+(at most the request's own resource), `identifier` and `datatypes`, the `actions` when the type lists
+some, and its fields; any other key is refused. The schema's output replaces what the client sent.
+A type edited by a tenant is served on the next request, with no restart. A resource may hold only
+types and no scope (a request then needs a detail). Types are stored per tenant in the `detailTypes`
+collection and removed with the tenant.
+
+A client must list the types it uses (`authorizationDetailsTypes`) and push its requests to `/par`;
+the console and the CLI to manage types and a client's list follow in the same effort (issue #17).
+Details travel in the 4 KiB `/authorize` URL or the 8 KiB `/par` body, so prefer `/par`.
+
 ## OAuth clients
 
 A client is registered on a tenant in the console ("Console API") or by script. Clients are per tenant:

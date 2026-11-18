@@ -78,6 +78,12 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
   bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
 - **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
+- **Detail types** (`detail-types/`, README "Authorization details", D1/D2 of `spec/plans/m3-rar-agents.md`):
+  the tenant-owned `detailTypes` collection (unique on `(tenantId, type)`, so a name is unique in the
+  tenant) holds a bounded field list, compiled by the pure `compile.ts` into a `z.strictObject` (no
+  free JSON Schema); `storedResourcesFor` gives each resource `authorizationDetails`, `fingerprintOf`
+  hashes the definitions (`digestOf`) so an edit rebuilds the issuer, and `withScopes` keeps a resource
+  that has types and no scope. `saveDetailType` is the writer (the console's `Catalog` wraps it).
 - **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
   texts); `resources.scopes` stays optional in the model for its `down`.
 - **Migration `2026-11-16-name-keys`** backfills `nameKey` on the `partitionedUsers` written before janus 0.66 (janus-mongo "Backfilling name keys"), which `userLookup`'s `namePrefix` reads; run `db:sync` first.

@@ -15,6 +15,8 @@ import type { ResourcesFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { Catalog, scopeNamesByResource } from "./catalog";
 import { CatalogError } from "./catalog.errors";
+import { detailTypesByResource } from "./detail-types";
+import type { detailTypes } from "./detail-types/detail-types.model";
 import { resourceUriProblem } from "./resource-uri";
 import type { resources } from "./resources.model";
 import { scopeNameProblem } from "./scope-name";
@@ -134,21 +136,33 @@ export async function registerResource(
 
 /**
  * The real `ResourcesFor`: a tenant's stored resources, read through its scope
- * (another tenant's are not visible), by URI.
+ * (another tenant's are not visible), by URI: its scopes and its compiled
+ * authorization detail types (RFC 9396).
  */
 export const storedResourcesFor =
   (
     collection: TypedCollection<typeof resources>,
     scopeDocs: TypedCollection<typeof scopes>,
+    typeDocs: TypedCollection<typeof detailTypes>,
   ): ResourcesFor =>
   async (tenant: ResolvedTenant) => {
     const tenantId = new ObjectId(tenant.tenantId);
     const found = await scopeToTenant(collection, tenantId).findMany();
     const byResource = await scopeNamesByResource(scopeDocs, tenantId);
+    const typesByResource = await detailTypesByResource(typeDocs, tenantId);
     return Object.fromEntries(
-      found.map((resource) => [
-        resource.uri,
-        { scopes: byResource.get(resource._id.toHexString()) ?? [] },
-      ]),
+      found.map((resource) => {
+        const key = resource._id.toHexString();
+        const authorizationDetails = typesByResource.get(key);
+        return [
+          resource.uri,
+          {
+            scopes: byResource.get(key) ?? [],
+            ...(authorizationDetails === undefined
+              ? {}
+              : { authorizationDetails }),
+          },
+        ];
+      }),
     );
   };

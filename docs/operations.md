@@ -323,6 +323,12 @@ it. Custom domains stay on demand.
    `2026-11-16-name-keys`, which writes `nameKey` (the folded display name) on the users written
    before janus 0.66, so the console's `userLookup` finds them by name; idempotent, it moves
    neither `version` nor `updatedAt`.
+   Authorization details (clavix-api #17): run `db:sync` **before** the release. It creates the
+   `detailTypes` collection and its unique `(tenantId, type)` index, and `syncMongoOAuthPartitioned`
+   adds the janus-oauth-mongo validators that accept `authorizationDetails` on grants, codes, tokens
+   and requests. Skipped, a request that carries details is refused by the validators (code 121,
+   `STORE_FAILED`) and the first type a tenant defines fails to save. No migration: a tenant with no
+   type behaves as before.
    Pushed authorization requests (clavix-api #13): run `db:sync` **before** `db:migrate` and before the
    deploy (the PAR validators, the replay collection and the clients validator that accepts
    `requirePushedAuthorizationRequests`). `db:migrate` then runs `2026-11-16-oauth-policy`, which writes
