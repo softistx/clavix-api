@@ -1,3 +1,4 @@
+import { oauthListener } from "@/events/oauth-listener";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type {
   AgentCheckFor,
@@ -13,6 +14,7 @@ import {
   agentCheckFor as storedAgentCheckFor,
   exchangeRulesFor as storedExchangeRulesFor,
 } from "./client-policies";
+import { eventBus } from "./events";
 import { dpopNonceSecret, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
@@ -47,6 +49,8 @@ export const createIssuers = (
         rolesFor,
         exchangeRulesFor,
         agentCheckFor,
+        eventsFor: (tenant) =>
+          oauthListener(tenant.tenantId, tenant.issuer, eventBus),
       }),
     ),
     {
