@@ -39,13 +39,13 @@ afterAll(async () => {
 });
 
 describe("detail types on a client (R3)", () => {
-  const device = ["DEVICE_CODE"];
+  const exchange = ["TOKEN_EXCHANGE"];
   const withTypes = (input: Record<string, unknown>) => ({
     tenantId: tenantA,
     input: {
-      type: "PUBLIC",
+      type: "CONFIDENTIAL",
       redirectUris: [],
-      grantTypes: device,
+      grantTypes: exchange,
       requirePushedAuthorizationRequests: true,
       ...input,
     },
@@ -154,6 +154,22 @@ describe("detail types on a client (R3)", () => {
     expect(await (await storeOf(tenantA)).findClient("code")).toBeNull();
   });
 
+  test("a device-grant client cannot list a type while the consent page does not show them", async () => {
+    expect(
+      codeOf(
+        await admin(
+          CREATE,
+          withTypes({
+            name: "Living room",
+            type: "PUBLIC",
+            grantTypes: ["DEVICE_CODE"],
+            authorizationDetailsTypes: ["payment"],
+          }),
+        ),
+      ),
+    ).toBe("BAD_USER_INPUT");
+  });
+
   test("turning PAR off on a client that lists a type is refused", async () => {
     await admin(
       CREATE,
@@ -185,10 +201,10 @@ describe("detail types on a client (R3)", () => {
         await adminC(CREATE, {
           tenantId: tenantC,
           input: {
-            type: "PUBLIC",
+            type: "CONFIDENTIAL",
             name: "Borrower",
             redirectUris: [],
-            grantTypes: device,
+            grantTypes: exchange,
             requirePushedAuthorizationRequests: true,
             authorizationDetailsTypes: ["payment"],
           },

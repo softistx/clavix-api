@@ -1,4 +1,5 @@
 import {
+  DEVICE_GRANT,
   hashOAuthSecret,
   mintOAuthSecret,
   type OAuthClientRecord,
@@ -192,7 +193,10 @@ export async function registerClient(
     tenant,
     input.detailTypes,
     existing?.authorizationDetailsTypes ?? [],
-    { requirePar, usesCode: usesRedirect(grants) },
+    {
+      requirePar,
+      hasConsent: usesRedirect(grants) || grants.includes(DEVICE_GRANT),
+    },
   );
   const record: OAuthClientRecord = {
     id: clientId,

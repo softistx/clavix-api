@@ -14,7 +14,7 @@ export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name
   --no-require-par         stop requiring it of this client
   --dpop-bound             bind the client's tokens to a DPoP key (RFC 9449): its token requests must carry a proof; kept on a re-run unless --no-dpop-bound
   --no-dpop-bound          stop requiring it of this client
-  --detail-types <a,b>     the authorization detail types (RFC 9396) the client may ask for: each is a type of the tenant, and the client must have --require-par (and the tenant's consent page must show them if the client uses /authorize); replaces the list, an empty value (--detail-types=) clears it; kept on a re-run without the flag
+  --detail-types <a,b>     the authorization detail types (RFC 9396) the client may ask for: each is a type of the tenant, and the client must have --require-par (and the tenant's consent page must show them if the client uses /authorize or the device grant); replaces the list, an empty value (--detail-types=) clears it; kept on a re-run without the flag
   --rotate-secret          mint a new secret for an existing confidential client`;
 
 /** The script's flags as a registration input; a `CliInputError` for a bad line. */

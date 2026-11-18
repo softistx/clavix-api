@@ -5,8 +5,9 @@ import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-
  * The detail types a client will list (R3). `asked` replaces the list (`[]`
  * clears it); left out, the stored list is kept. Judged on the final client:
  * a listed type needs the client to push its requests (D3, details in a URL
- * are not protected), and a client that uses `/authorize` needs a tenant whose
- * consent page can show them (`consentReady`). Each asked type must be stored
+ * are not protected), and a client that shows a consent page (`/authorize`, or the
+ * device grant's hosted review) needs a tenant whose consent pages can show
+ * them (`consentReady`); a token-exchange-only client has none. Each asked type must be stored
  * by the tenant. A kept type that is no longer stored (a race with a delete)
  * stays on the record: the issuer serves only the stored types, so a request
  * for it is `invalid_authorization_details`.
@@ -16,7 +17,7 @@ export async function detailTypesOf(
   tenant: CliTenant,
   asked: readonly string[] | undefined,
   kept: readonly string[],
-  client: { requirePar: boolean; usesCode: boolean },
+  client: { requirePar: boolean; hasConsent: boolean },
 ): Promise<string[]> {
   const listed = [...new Set(asked ?? kept)];
   if (listed.length === 0) return [];
@@ -39,9 +40,9 @@ export async function detailTypesOf(
       "a client that lists detail types must require PAR (--require-par): authorization details in a URL are not protected",
     );
   }
-  if (client.usesCode && (port === undefined || !port.consentReady(tenant))) {
+  if (client.hasConsent && (port === undefined || !port.consentReady(tenant))) {
     throw new CliInputError(
-      `tenant "${tenant.slug}" cannot let a client that uses /authorize list detail types yet: its consent page does not show them (a device-only or token-exchange client can; see CLAVIX_RAR_CONSENT_READY)`,
+      `tenant "${tenant.slug}" cannot let a client that uses /authorize or the device grant list detail types yet: its consent pages do not show them (a token-exchange-only client can; see CLAVIX_RAR_CONSENT_READY)`,
     );
   }
   return listed;

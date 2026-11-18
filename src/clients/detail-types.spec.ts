@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { DEVICE_GRANT, s256Challenge } from "@softistx/janus-oauth";
+import {
+  DEVICE_GRANT,
+  s256Challenge,
+  TOKEN_EXCHANGE_GRANT,
+} from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { scopeToTenant } from "@softistx/mongo";
 import { CliInputError } from "@/cli/errors";
@@ -164,7 +168,44 @@ describe("a client's detail types", () => {
       ),
     );
     expect(message).toContain("cannot let a client that uses /authorize");
-    // A device-only client has no /authorize consent: allowed.
+    // A device client has the hosted device review: refused too.
+    expect(
+      await refusal(
+        register(
+          "r3-a",
+          {
+            clientId: "tv",
+            redirectUris: [],
+            grants: [DEVICE_GRANT],
+            detailTypes: ["payment"],
+          },
+          notReady,
+        ),
+      ),
+    ).toContain("or the device grant");
+    // A token-exchange-only client has no consent page: allowed.
+    const exchange = await register(
+      "r3-a",
+      {
+        clientId: "svc",
+        redirectUris: [],
+        grants: [TOKEN_EXCHANGE_GRANT],
+        detailTypes: ["payment"],
+      },
+      notReady,
+    );
+    expect(exchange.detailTypes).toEqual(["payment"]);
+    // Adding the device grant to it is the refused step.
+    expect(
+      await refusal(
+        register(
+          "r3-a",
+          { clientId: "svc", grants: [TOKEN_EXCHANGE_GRANT, DEVICE_GRANT] },
+          notReady,
+        ),
+      ),
+    ).toContain("or the device grant");
+    // A ready tenant accepts a device client.
     const device = await register(
       "r3-a",
       {
@@ -173,22 +214,9 @@ describe("a client's detail types", () => {
         grants: [DEVICE_GRANT],
         detailTypes: ["payment"],
       },
-      notReady,
+      ready,
     );
     expect(device.detailTypes).toEqual(["payment"]);
-    // Adding the authorization code grant to it is the refused step.
-    expect(
-      await refusal(
-        register(
-          "r3-a",
-          {
-            clientId: "tv",
-            grants: ["authorization_code", DEVICE_GRANT],
-          },
-          notReady,
-        ),
-      ),
-    ).toContain("cannot let a client that uses /authorize");
   });
 
   test("without the types port a client cannot list any", async () => {
