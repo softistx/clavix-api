@@ -134,6 +134,7 @@ async function signedIn(ctx: unknown) {
   return true;
 }
 
+// Temporary, until @softistx/janus-oauth#886
 function guardCode(approve: Resolver): Resolver {
   return async (...args) => {
     const [, { id }, ctx] = args as unknown as [
@@ -154,6 +155,7 @@ function guardCode(approve: Resolver): Resolver {
   };
 }
 
+// Temporary, until @softistx/janus-oauth#886
 function guardDevice(
   approve: Resolver,
   beforeLookup: (ctx: never) => Promise<void>,
