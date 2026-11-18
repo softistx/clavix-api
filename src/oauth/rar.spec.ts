@@ -581,7 +581,7 @@ describe("details the page cannot fully describe", () => {
         redirectUris: [REDIRECT],
         type: "confidential",
         requirePar: true,
-        grants: [DEVICE_GRANT],
+        grants: ["authorization_code", DEVICE_GRANT],
         detailTypes: [type],
       },
     ).then((done) => {
