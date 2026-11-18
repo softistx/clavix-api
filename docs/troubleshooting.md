@@ -716,7 +716,7 @@ still pending. Reading and denying a request do not ask for a fresh session.
 
 **An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` agent that registered more than 7 days ago and was never authorized (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is never pruned.
 
-**`updateClient` or `rotateClientSecret` answers `NOT_FOUND` on an agent**: a metadata-document client is described by its document and is read-only; only `client`, `clients` and `deleteClient` apply to it.
+**`updateClient`, `rotateClientSecret` or `setClientTokenExchange` answers `NOT_FOUND` on an agent**: an agent, `DYNAMIC` (it registered itself) or `METADATA` (described by its document), is read-only in the console, whatever its id looks like; only `client`, `clients` and `deleteClient` apply to it. To change one, register a console client instead.
 
 **`updateOAuthPolicy` answers `BAD_USER_INPUT`** with `agents`: a redirect URI the OAuth rules refuse, a host that is not a DNS name (or `*.name`), or a list over 50 entries.
 

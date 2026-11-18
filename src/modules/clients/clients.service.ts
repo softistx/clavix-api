@@ -2,12 +2,12 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import type { CliTenant } from "@/cli/errors";
 import { clientIdOf, type registerClient } from "@/clients/register-client";
-import type { AgentClientsService } from "@/modules/agents/agent-clients.service";
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
 import { partitionOf } from "@/modules/tenants/identity";
+import { type AgentsReader, agentKindsOf, refuseAgent } from "./client-agents";
 import { deleteClientAndRules } from "./client-deletion";
 import {
   type ClientRegistration,
@@ -36,7 +36,7 @@ export interface ClientsServiceOptions {
    * The tenant's agents: they are told apart in the listing, and a deleted
    * client stops being one (it frees the `agents` quota).
    */
-  agents?: Pick<AgentClientsService, "kinds" | "remove">;
+  agents?: AgentsReader;
   /** The tenants' detail types a client may list (R3); without it none can be listed. */
   detailTypes?: ClientDetailTypes;
   now?: () => Date;
@@ -74,12 +74,9 @@ export class ClientsService {
     );
   }
 
-  /** The tenant's agents by client id (none without the agents store). */
-  private async agentsOf(tenant: CliTenant, clientIds?: readonly string[]) {
-    return (
-      (await this.options.agents?.kinds(tenant._id.toHexString(), clientIds)) ??
-      new Map()
-    );
+  /** The tenant's agents among some client ids (none without the agents store). */
+  private agentsOf(tenant: CliTenant) {
+    return agentKindsOf(this.options.agents, tenant);
   }
 
   /**
@@ -101,7 +98,7 @@ export class ClientsService {
     }
     return listClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
-      { ...options, agents: await this.agentsOf(tenant) },
+      { ...options, agents: this.agentsOf(tenant) },
     );
   }
 
@@ -116,7 +113,7 @@ export class ClientsService {
     checkQuery(options.q);
     return countClientViews(
       capability(this.storeOf(tenant).listClients, "listClients"),
-      { ...options, agents: await this.agentsOf(tenant) },
+      { ...options, agents: this.agentsOf(tenant) },
     );
   }
 
@@ -133,7 +130,7 @@ export class ClientsService {
     const record = await this.storeOf(tenant).findClient(clientId);
     if (record === null) return null;
     if (record.source !== "registered" && options.agents !== true) return null;
-    return viewOf(record, await this.agentsOf(tenant, [clientId]));
+    return viewOf(record, await this.agentsOf(tenant)([clientId]));
   }
 
   private async require(tenant: CliTenant, clientId: string) {
@@ -218,6 +215,7 @@ export class ClientsService {
       grants?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
+    await refuseAgent(this.options.agents, tenant, clientId);
     checkSizes(input);
     const current = await this.require(tenant, clientId);
     await this.register(tenant, {
@@ -259,6 +257,7 @@ export class ClientsService {
     },
     resourceUris: readonly string[],
   ): Promise<TokenExchangeRules> {
+    await refuseAgent(this.options.agents, tenant, clientId);
     return setClientTokenExchange(
       this.options.policies,
       tenant,
@@ -273,6 +272,7 @@ export class ClientsService {
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ client: ClientView; clientSecret: string }> {
+    await refuseAgent(this.options.agents, tenant, clientId);
     const current = await this.require(tenant, clientId);
     if (current.type !== "confidential") {
       throw new CatalogError(
@@ -304,7 +304,7 @@ export class ClientsService {
     const tenantId = tenant._id.toHexString();
     // A client the agents store knows is deleted like any other, a metadata
     // one included (it is fetched again, and recorded again, at its next use).
-    const agent = (await this.agentsOf(tenant, [clientId])).has(clientId);
+    const agent = (await this.agentsOf(tenant)([clientId])).has(clientId);
     const result = await deleteClientAndRules(
       this.storeOf(tenant),
       this.options.policies,

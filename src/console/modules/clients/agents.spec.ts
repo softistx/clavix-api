@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { registerClient } from "@/clients/register-client";
@@ -219,6 +220,45 @@ describe("client(id) of an agent", () => {
     });
     expect(codeOf(result)).toBe("NOT_FOUND");
     expect((await storeOf(tenantA).findClient(DOC))?.name).toBe("Doc agent");
+  });
+});
+
+describe("a dynamic agent is read-only", () => {
+  const ROTATE = `mutation($tenantId: ID!, $id: ID!) { rotateClientSecret(tenantId: $tenantId, id: $id) { clientSecret } }`;
+  const EXCHANGE = `mutation($tenantId: ID!, $id: ID!, $input: ClientTokenExchangeInput!) {
+    setClientTokenExchange(tenantId: $tenantId, id: $id, input: $input) { id }
+  }`;
+
+  test("update, rotate and token exchange answer NOT_FOUND for a janus-style base64url id", async () => {
+    // What janus mints for a self-registered client: 43 base64url characters.
+    const id = randomBytes(32).toString("base64url");
+    await storeOf(tenantA).upsertClient({
+      id,
+      name: "Self registered",
+      redirectUris: [REDIRECT],
+      source: "registered",
+      createdAt: new Date(),
+      expiresAt: null,
+    });
+    await agentClientsService.record(tenantA, {
+      clientId: id,
+      kind: "dynamic",
+    });
+    const calls = [
+      admin(UPDATE, { tenantId: tenantA, id, input: { name: "Renamed" } }),
+      admin(ROTATE, { tenantId: tenantA, id }),
+      admin(EXCHANGE, {
+        tenantId: tenantA,
+        id,
+        input: { targetResources: [], subjectClients: [] },
+      }),
+    ];
+    for (const result of await Promise.all(calls)) {
+      expect(codeOf(result)).toBe("NOT_FOUND");
+    }
+    expect((await storeOf(tenantA).findClient(id))?.name).toBe(
+      "Self registered",
+    );
   });
 });
 

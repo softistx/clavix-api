@@ -10,7 +10,7 @@ The tenant's OAuth policy carries `agents`:
 | Field               | Meaning                                                                                                                                                                                                                     |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dynamic`           | `off` (default): `/register` answers 400 `invalid_request`. `restricted`: RFC 7591 registration, but only for the MCP clients' known callbacks and loopback addresses, plus `redirectUris`. `open`: any valid redirect URI. |
-| `redirectUris`      | Extra callbacks accepted in `restricted` mode. A URI the OAuth rules refuse is ignored.                                                                                                                                     |
+| `redirectUris`      | Extra callbacks accepted in `restricted` mode. A URI the OAuth rules refuse is rejected: `updateOAuthPolicy` answers `BAD_USER_INPUT`.                                                                                      |
 | `metadataDocuments` | Accept a Client ID Metadata Document URL as a `client_id`.                                                                                                                                                                  |
 | `allowHosts`        | Hosts a document may be fetched from, besides the MCP clients' own. Exact names or `*.example.com`.                                                                                                                         |
 

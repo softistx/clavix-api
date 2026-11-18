@@ -34,6 +34,8 @@ describe("the tenant purge guards", () => {
     expect(names).not.toContain("adminEvents");
     // The authorization detail types go with the tenant too.
     expect(names).toContain("detailTypes");
+    // The agents (dynamic and metadata clients) go with the tenant too.
+    expect(names).toContain("agentClients");
   });
   test("the purge empties a tenant's detailTypes and no other's", async () => {
     const purger = ownedPurgers().find((p) => p.name === "detailTypes");

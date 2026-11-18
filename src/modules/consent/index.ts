@@ -5,7 +5,7 @@ import type { Context } from "@/http/context";
 import type { OAuthHandle } from "@/oauth/routes";
 import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import { type AgentMarks, type AgentsFor, markOf } from "./agent-marker";
+import { type AgentsFor, agentMarksReader, markOf } from "./agent-marker";
 import {
   type DetailTexts,
   type DetailTextsFor,
@@ -79,7 +79,7 @@ function perRequest<T>() {
 }
 const readTexts = perRequest<ScopeTexts>();
 const readDetailTexts = perRequest<DetailTexts>();
-const readAgents = perRequest<AgentMarks>();
+const readAgents = agentMarksReader();
 const textsOf = (ctx: WithServers & { request?: Request }) =>
   readTexts(ctx.request, ctx[TEXTS]);
 
@@ -95,11 +95,11 @@ async function detailed(
   return detailsOf(parent.authorizationDetails, texts, locale);
 }
 
-// One read of the tenant's agents per request, shared by every client of a page.
+// One read of the client's agent mark per request, shared by its fields.
 const agentOf = async (
   parent: { id: string },
   ctx: WithServers & { request?: Request },
-) => markOf(await readAgents(ctx.request, ctx[AGENTS]), parent.id);
+) => markOf(await readAgents(ctx.request, ctx[AGENTS], parent.id), parent.id);
 
 interface Labelled {
   name: string;

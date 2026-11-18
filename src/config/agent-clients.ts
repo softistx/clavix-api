@@ -23,9 +23,9 @@ export const isMetadataClient = async (
   )?.source === "metadata";
 
 /** The agents of the tenant the request's host names, for the hosted pages' `OAuthClient.agent`. */
-export const agentsFor: AgentsFor = async (request) => {
+export const agentsFor: AgentsFor = async (request, clientIds) => {
   const tenant = await tenantResolver.resolveRequest(request);
   return tenant === null
     ? new Map()
-    : agentClientsService.registeredAt(tenant.tenantId);
+    : agentClientsService.registeredAt(tenant.tenantId, clientIds);
 };

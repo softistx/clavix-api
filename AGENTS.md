@@ -516,7 +516,8 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 - **Still public for a suspended or deleted tenant**: the anonymous `tenantBranding` and the logo by host
   (a hosted page can show its suspended screen); `createTenant` repeated with the same slug, name, plan
   and sign-up returns the tenant and records the event again (a retry after a failed record).
-  Dynamic client registration is off; if it is ever turned on, `tenant-state.ts` must refuse `/register`.
+  Dynamic registration is per tenant (`oauth.agents.dynamic`); `tenant-state.ts` refuses `/register` for a suspended tenant (`REFUSED_PATHS`).
+  `subjectAgents` (a client's token exchange rules) lets it exchange the tokens of the tenant's agents; `AgentCheckFor` (`src/oauth/ports.ts`) tells an agent apart, from the tenant's own scope.
 
 ## Custom domains (`src/modules/domains`, `src/console/modules/domains`)
 
