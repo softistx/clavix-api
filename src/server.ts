@@ -1,4 +1,5 @@
 import { createApp } from "./app";
+import { createAgentsPrune } from "./config/agents-prune";
 import { createConsoleDeps } from "./config/console";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
@@ -9,6 +10,7 @@ import { redis } from "./config/redis";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
 import { startKeyRotation } from "./keys";
+import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { drain } from "./modules/auth/outbox";
 import { startDomainRecheck } from "./modules/domains/recheck-worker";
 import { startTenantPurge } from "./modules/tenants/purge-worker";
@@ -40,6 +42,9 @@ startDomainRecheck(
   domainRecheckDeps(consoleDeps.directory.findUser),
   redis?.queues.domainRecheck,
 );
+// Daily, the agents that registered themselves and still have no grant after
+// 7 days are deleted (D10).
+startAgentsPrune(createAgentsPrune(), redis?.queues.agentsPrune);
 const app = createApp({
   oauth,
   console: consoleDeps,

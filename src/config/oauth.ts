@@ -1,5 +1,6 @@
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type {
+  AgentCheckFor,
   AuthFor,
   ClaimsFor,
   ExchangeRulesFor,
@@ -8,7 +9,10 @@ import type {
 } from "@/oauth/ports";
 import { withTenantState } from "@/oauth/tenant-state";
 import { withAgentRegistration } from "./agents-registration";
-import { exchangeRulesFor as storedExchangeRulesFor } from "./client-policies";
+import {
+  agentCheckFor as storedAgentCheckFor,
+  exchangeRulesFor as storedExchangeRulesFor,
+} from "./client-policies";
 import { dpopNonceSecret, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
@@ -28,6 +32,7 @@ export const createIssuers = (
   resourcesFor: ResourcesFor = storedResourcesFor,
   rolesFor: RolesFor = storedRolesFor,
   exchangeRulesFor: ExchangeRulesFor = storedExchangeRulesFor,
+  agentCheckFor: AgentCheckFor = storedAgentCheckFor,
 ) =>
   withTenantState(
     withAgentRegistration(
@@ -41,6 +46,7 @@ export const createIssuers = (
         resourcesFor,
         rolesFor,
         exchangeRulesFor,
+        agentCheckFor,
       }),
     ),
     {

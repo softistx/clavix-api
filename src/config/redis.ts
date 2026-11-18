@@ -1,6 +1,7 @@
 import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
 import { RedisClient } from "bun";
 import { keyRotation } from "@/keys/queue";
+import { agentsPrune } from "@/modules/agents/prune.queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
 import {
   type VerificationLimitConfig,
@@ -86,7 +87,7 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
-      queues: { keyRotation, tenantPurge, domainRecheck },
+      queues: { keyRotation, tenantPurge, domainRecheck, agentsPrune },
       limits: {
         ...signInLimits(limits),
         ...passkeyLimits(passkeys),

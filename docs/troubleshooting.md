@@ -666,13 +666,13 @@ refused at sign-in. Deploy clavix-ui first or together.
 --grants urn:ietf:params:oauth:grant-type:token-exchange` (or `grantTypes: [TOKEN_EXCHANGE]`) and a secret.
 
 **`access_denied`**: the client has no rules (`setClientTokenExchange`), the `resource` is not in `targetResources`,
-or the subject token's client is not in `subjectClients` (and `anySubjectClient` is off). Read the rules with
+or the subject token's client is not in `subjectClients` (and neither `anySubjectClient` nor, for an agent's token, `subjectAgents` is on). Read the rules with
 `Client.tokenExchange`.
 
 **`invalid_grant`**: the subject token is unknown, expired, revoked, or another tenant's. A token exchanged earlier
 dies with the subject's grant.
 
-**`BAD_USER_INPUT` on `setClientTokenExchange`**: both or neither of `subjectClients` and `anySubjectClient`, more
+**`BAD_USER_INPUT` on `setClientTokenExchange`**: `anySubjectClient` with `subjectClients`, or no client, no `subjectAgents` and no `anySubjectClient`, more
 than 20 targets or 50 clients, a target that is not a resource of the tenant, or a public client.
 
 ## Device authorization refusals
@@ -713,6 +713,12 @@ still pending. Reading and denying a request do not ask for a fresh session.
 **429 `temporarily_unavailable`**: past `CLAVIX_REGISTER_IP_LIMIT` or `CLAVIX_REGISTER_TENANT_LIMIT`; wait `Retry-After` seconds (see "Agent registration throttle" in operations.md).
 
 **`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet.
+
+**An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` agent that registered more than 7 days ago and was never authorized (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is never pruned.
+
+**`updateClient` or `rotateClientSecret` answers `NOT_FOUND` on an agent**: a metadata-document client is described by its document and is read-only; only `client`, `clients` and `deleteClient` apply to it.
+
+**`updateOAuthPolicy` answers `BAD_USER_INPUT`** with `agents`: a redirect URI the OAuth rules refuse, a host that is not a DNS name (or `*.name`), or a list over 50 entries.
 
 **`404` on `/register` from outside**: the reverse proxy does not route the path to the API; the `@api` matcher of `deploy/Caddyfile` must list it.
 

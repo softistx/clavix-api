@@ -294,6 +294,16 @@ Past a limit the request answers 429 `temporarily_unavailable` with `Retry-After
 recorded yet is also refused with 403 `access_denied` when the tenant is at its `agents` quota. Redis down: fails
 open and logs; without Redis there is no limit.
 
+## Agents clean-up
+
+The queue `agents-prune` (daily, 03:41 UTC, 3 attempts) deletes the dynamically registered agents of active tenants
+that registered more than 7 days ago and hold no standing grant ([MCP guide](guide/mcp.md#the-daily-clean-up)). It
+needs Redis (`REDIS_URL`): without it nothing runs, and there is no pass at start. A tick that leaves an agent
+unfinished fails and the queue retries it; each agent is its own step, so one failure does not stop the others. The
+logs say `agents: could not prune <client> of <tenant>` for each failure. Every deletion is the admin event
+`agent.prune` (actor `system:agents:prune`); to check the job ran, look for that event or for the absence of old
+`DYNAMIC` agents in `clients(kind: [DYNAMIC])`. Two instances running the same tick do no harm (deleting is idempotent).
+
 ## TLS
 
 Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the

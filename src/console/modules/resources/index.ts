@@ -1,7 +1,9 @@
 import { ObjectId } from "mongodb";
 import { clientPoliciesService } from "@/config/client-policies";
+import { env } from "@/config/env";
 import { catalog } from "@/config/resources";
 import { rolesService } from "@/config/roles";
+import { tenantResolver } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type {
   FieldDraft,
@@ -10,6 +12,8 @@ import type {
   StoredScopeDoc,
   ValueDraft,
 } from "@/modules/resources/catalog";
+import { protectedResourceDocument } from "@/modules/resources/protected-resource-document";
+import { hostOf } from "@/modules/tenants/identity";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant, refusing } from "../catalog-support";
@@ -138,6 +142,7 @@ const resourceShape = (
   resource: StoredResourceDoc,
   scopes: StoredScopeDoc[],
   types: StoredDetailTypeDoc[],
+  document: { metadataUrl: string; metadata: string },
 ) => ({
   id: resource._id.toHexString(),
   uri: resource.uri,
@@ -148,30 +153,63 @@ const resourceShape = (
   detailTypes: types
     .filter((doc) => doc.resourceId.equals(resource._id))
     .map(detailTypeShape),
+  metadataUrl: document.metadataUrl,
+  protectedResourceMetadata: document.metadata,
   createdAt: resource.createdAt,
 });
+
+// The RFC 9728 document of a resource: the tenant's issuer (its primary host
+// when it has one) and DPoP policy come from the resolved tenant.
+const documentOf = async (
+  slug: string,
+  resource: StoredResourceDoc,
+  scopes: StoredScopeDoc[],
+) => {
+  const tenant = await tenantResolver.resolveHost(
+    hostOf(slug, env.CLAVIX_DOMAIN),
+  );
+  if (tenant === null) throw new Error(`tenant ${slug} does not resolve`);
+  return protectedResourceDocument({
+    uri: resource.uri,
+    issuer: tenant.issuer,
+    scopes: scopes
+      .filter((scope) => scope.resourceId?.equals(resource._id))
+      .map((scope) => scope.name),
+    dpopRequired: tenant.oauth.dpop.required,
+  });
+};
 
 export const resources: Resolvers = {
   Query: {
     resources: async (_, { tenantId }, ctx) => {
-      const { _id } = await catalogTenant(ctx, tenantId);
+      const { _id, slug } = await catalogTenant(ctx, tenantId);
       const [found, scopes, types] = await Promise.all([
         catalog.listResources(_id),
         catalog.listScopes(_id),
         catalog.listDetailTypes(_id),
       ]);
-      return found.map((resource) => resourceShape(resource, scopes, types));
+      return Promise.all(
+        found.map(async (resource) =>
+          resourceShape(
+            resource,
+            scopes,
+            types,
+            await documentOf(slug, resource, scopes),
+          ),
+        ),
+      );
     },
     resource: async (_, { tenantId, id }, ctx) => {
-      const { _id } = await catalogTenant(ctx, tenantId);
+      const { _id, slug } = await catalogTenant(ctx, tenantId);
       const found = await catalog.findResource(_id, id);
-      return found === undefined
-        ? null
-        : resourceShape(
-            found,
-            await catalog.listScopes(_id, { resourceId: found._id }),
-            await catalog.listDetailTypes(_id, { resourceId: found._id }),
-          );
+      if (found === undefined) return null;
+      const scopes = await catalog.listScopes(_id, { resourceId: found._id });
+      return resourceShape(
+        found,
+        scopes,
+        await catalog.listDetailTypes(_id, { resourceId: found._id }),
+        await documentOf(slug, found, scopes),
+      );
     },
     scopes: async (_, { tenantId, resourceId }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
@@ -199,18 +237,25 @@ export const resources: Resolvers = {
         "resource.create",
         target("resource", tenant._id, created._id),
       );
-      return resourceShape(created, [], []);
+      return resourceShape(
+        created,
+        [],
+        [],
+        await documentOf(tenant.slug, created, []),
+      );
     },
     updateResource: async (_, { tenantId, id, input }, ctx) => {
-      const { _id } = await catalogTenant(ctx, tenantId);
+      const { _id, slug } = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
         catalog.updateResource(_id, id, { name: input.name }),
       );
       await ctx.audit("resource.update", target("resource", _id, updated._id));
+      const scopes = await catalog.listScopes(_id, { resourceId: updated._id });
       return resourceShape(
         updated,
-        await catalog.listScopes(_id, { resourceId: updated._id }),
+        scopes,
         await catalog.listDetailTypes(_id, { resourceId: updated._id }),
+        await documentOf(slug, updated, scopes),
       );
     },
     deleteResource: async (_, { tenantId, id }, ctx) => {

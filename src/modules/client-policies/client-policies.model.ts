@@ -14,6 +14,8 @@ export const tokenExchangeRulesSchema = z.object({
   targetResources: z.array(z.string()),
   /** Ids of the clients whose tokens may be exchanged, or `"any"`. */
   subjectClients: z.union([z.array(z.string()), z.literal("any")]),
+  /** Whether the tokens of any agent of the tenant (D12) may be exchanged too. */
+  subjectAgents: z.boolean().default(false),
   mode: z.literal("delegation"),
 });
 export type TokenExchangeRules = z.infer<typeof tokenExchangeRulesSchema>;

@@ -14,6 +14,19 @@ enum ClientGrantType {
   TOKEN_EXCHANGE
 }
 
+"""
+How a client came to be. `DYNAMIC` and `METADATA` are the tenant's agents (MCP
+clients and other apps that registered themselves, see `OAuthPolicy.agents`).
+"""
+enum ClientRegistration {
+  "Registered by an admin in the console or by a script."
+  CONSOLE
+  "The client registered itself at `/register` (RFC 7591)."
+  DYNAMIC
+  "A Client ID Metadata Document (its URL is the client id) describes the client; recorded at its first use."
+  METADATA
+}
+
 "How an exchanged token names the client acting for the user."
 enum TokenExchangeMode {
   "The exchanged token is the user's, issued to the client, and carries `act` (the client acts for the user). The only mode."
@@ -32,6 +45,8 @@ type ClientTokenExchange {
   subjectClients: [String!]!
   "Whether a token of any client of the tenant may be exchanged."
   anySubjectClient: Boolean!
+  "Whether the tokens of any agent of the tenant (a client that registered itself) may be exchanged too. A client that is no agent is not covered."
+  subjectAgents: Boolean!
   mode: TokenExchangeMode!
 }
 
@@ -70,6 +85,8 @@ type Client {
   authorizationDetailsTypes: [String!]!
   "The token exchange rules; `null` while none is set (the client cannot exchange)."
   tokenExchange: ClientTokenExchange
+  "How the client came to be: `createdAt` is its registration time. An agent (`DYNAMIC`, `METADATA`) is read-only in the console and can be deleted."
+  registration: ClientRegistration!
 }
 
 """
@@ -142,11 +159,25 @@ input ClientTokenExchangeInput {
   subjectClients: [String!] = []
   "Any client of the tenant's tokens may be exchanged. Default false."
   anySubjectClient: Boolean = false
+  "Also exchange the tokens of the tenant's agents, with or without `subjectClients`. Default false."
+  subjectAgents: Boolean = false
 }
 
 type Query {
-  "The tenant's clients in id order (`q` matches part of the name or id, whatever the case). Needs `view` on the tenant."
-  clients(tenantId: ID!, q: String, after: String, first: Int = 25): ClientPage!
+  """
+  The tenant's clients in id order (`q` matches part of the name or id, whatever the case).
+  `kind` keeps only those registrations (`[CONSOLE]` for the registered clients, `[DYNAMIC,
+  METADATA]` for the agents); left out or empty: every client. `totalCount` honours `q` and `kind`.
+  Needs `view` on the tenant.
+  """
+  clients(
+    tenantId: ID!
+    q: String
+    kind: [ClientRegistration!]
+    after: String
+    first: Int = 25
+  ): ClientPage!
+  "A client, an agent included (a metadata-document one too). `null` for an unknown id."
   client(tenantId: ID!, id: ID!): Client
 }
 
@@ -166,6 +197,6 @@ type Mutation {
     id: ID!
     input: ClientTokenExchangeInput!
   ): Client!
-  "Deletes the client and its token exchange rules, and revokes its grants and their tokens. `true` when the client was deleted, `false` when it was already gone or is not a registered client (left untouched)."
+  "Deletes the client and its token exchange rules, and revokes its grants and their tokens. An agent is deleted the same way and its record goes with it (it frees the `agents` quota); a metadata-document agent is fetched and recorded again at its next use. `true` when the client was deleted, `false` when it was already gone or is not a client the console manages (left untouched)."
   deleteClient(tenantId: ID!, id: ID!): Boolean!
 }

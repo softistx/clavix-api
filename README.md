@@ -16,17 +16,17 @@ Today it serves:
 
 ## Documentation
 
-| Page                                                                                       | What is in it                                          |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| This README                                                                                | run, environment, and each feature below               |
-| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix    |
-| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy |
-| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls      |
-| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers        |
-| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health          |
-| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes         |
-| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                    |
-| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                      |
+| Page                                                                                       | What is in it                                                                 |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| This README                                                                                | run, environment, and each feature below                                      |
+| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                           |
+| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document |
+| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                             |
+| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                               |
+| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health                                 |
+| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes                                |
+| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                                           |
+| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                                             |
 
 ## Run
 
@@ -327,14 +327,14 @@ update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`
 
 | Field                                                      | What it does                                                                                                                                                                                                                                                                                                                                             |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                       | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                                                            |
-| `client(tenantId, id)`                                     | one client, or `null`                                                                                                                                                                                                                                                                                                                                    |
+| `clients(tenantId, q, kind, after, first)`                 | a page of clients in id order (`q` matches the name or the id; `kind` is a list of `CONSOLE`, `DYNAMIC`, `METADATA`, the `registration` of a client, agents being the last two), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                           |
+| `client(tenantId, id)`                                     | one client (a metadata-document agent too, read-only), or `null`                                                                                                                                                                                                                                                                                         |
 | `createClient(tenantId, input)`                            | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
 | `updateClient(tenantId, id, input)`                        | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
-| `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients` or `anySubjectClient`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                              |
+| `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients`, `anySubjectClient`, `subjectAgents`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                               |
 | `rotateClientSecret(tenantId, id)`                         | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
-| `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                                                                                                                                                                         |
-| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                                                                |
+| `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; an agent (dynamic or metadata document) is deleted too, with its agent record (the `agents` quota is freed); any other record is left untouched (`false`)                                                                                                                                    |
+| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`, `metadataUrl` and `protectedResourceMetadata` (the RFC 9728 document, [guide](docs/guide/mcp.md#the-document-an-mcp-server-serves-rfc-9728))                                                                                                                                                                  |
 | `createResource`, `updateResource`, `deleteResource`       | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
 | `scopes(tenantId, resourceId)`                             | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
 | `createScope`, `updateScope`, `deleteScope`                | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
@@ -530,8 +530,10 @@ the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
   makes every client push; an `/authorize` without a `request_uri` is refused `invalid_request`. A new
   tenant starts with it **on**; a tenant that existed before it (migration `2026-11-16-oauth-policy`)
   stays **off** until an admin turns it on. `dpop.required` is the same switch for DPoP (below).
-  `agents` (dynamic registration of MCP clients and agents, off by default) is stored on the same policy but not yet
-  exposed by the console; see [docs/guide/mcp.md](docs/guide/mcp.md). It does not count in `clients` (the `agents` quota does).
+  `agents` (dynamic registration of MCP clients and agents, off by default: `dynamic` `OFF|RESTRICTED|OPEN`,
+  `redirectUris`, `metadataDocuments`, `allowHosts`) is on the same policy; `agentsNeedPushOrProof` is `true` when agents are on
+  while `par` or `dpop` is required of the whole tenant (a warning, saving is allowed). A bad redirect URI or host is
+  `BAD_USER_INPUT`. See [docs/guide/mcp.md](docs/guide/mcp.md). Agents do not count in `clients` (the `agents` quota does).
   Each change is the admin event `oauthPolicy.update` and bumps the tenant's `version`; a no-op writes nothing.
 - **Per client** (`requirePushedAuthorizationRequests` on `Client`, `CreateClientInput` and
   `UpdateClientInput`, or `clients:create --require-par`): only that client must push, on a tenant
@@ -646,8 +648,9 @@ A confidential client (a service, an agent) trades a user's access token for ano
   refused at registration and at `/token`. It needs no redirect URI.
 - **Rules** (collection `clientPolicies`, tenant-owned, one document per client, run `bun run db:sync`):
   `targetResources` (at most 20 resource URIs of the tenant; the requested `resource` must be listed) and
-  `subjectClients` (at most 50 client ids whose tokens may be exchanged) or `anySubjectClient`. The mode is always
-  `delegation`.
+  `subjectClients` (at most 50 client ids whose tokens may be exchanged), `anySubjectClient`, and `subjectAgents`
+  (the tokens of any agent of the tenant, a client that registered itself; a client that is no agent is not covered).
+  `subjectAgents` may stand alone or beside `subjectClients`. The mode is always `delegation`.
 - **The result** is a delegation: scopes only narrow, there is no refresh token, the token carries `act`
   (`{ sub, client_id }` of the caller, also in introspection), and it lives under the subject's grant: revoking the
   grant or deleting the subject client kills it. Another tenant's token is `invalid_grant`.

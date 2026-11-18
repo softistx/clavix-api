@@ -14,7 +14,7 @@ nxgt-janus release says which.
   before allowing it. In the same effort an AI agent (an MCP client) can register itself on a tenant
   that allows it, signs in with code and PKCE, and shows as an unreviewed agent on the consent page;
   admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
-  exchange an agent's token. Done so far: the detail types of a resource are stored and served to the
+  exchange an agent's token. Done so far: an MCP server can exchange an agent's token (`subjectAgents` on its exchange rules); the detail types of a resource are stored and served to the
   token server, and the console API creates, changes and deletes them, and a client lists the types it may ask for (console and
   `clients:create --detail-types`, PAR required), and the consent API shows each detail in words
   (`oauthRequest.details`, `oauthDeviceRequest.details`). Next: the hosted pages render them, and a connected app lists the details it holds.
@@ -27,8 +27,9 @@ nxgt-janus release says which.
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
 - **MCP clients and agents** (in progress) — a tenant can opt in to dynamic registration (`/register`, RFC 7591) and
-  Client ID Metadata Documents, with a throttle and an `agents` quota ([guide](guide/mcp.md)). Console exposure of the
-  policy, RFC 9728 resources and consent per agent follow.
+  Client ID Metadata Documents, with a throttle and an `agents` quota ([guide](guide/mcp.md)). The console edits the policy
+  (with a warning when PAR or DPoP is required of the whole tenant), lists agents beside the other clients, deletes them,
+  a daily job prunes the dynamic agents nobody authorized in 7 days, and a resource shows the RFC 9728 document its server should serve. Agent delegation and consent per agent follow.
 
 ## Next
 
