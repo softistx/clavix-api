@@ -13,7 +13,8 @@ import {
 import { userinfoOf } from "@/oauth/building";
 import type { ResourcesFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import { Catalog, scopeNamesByResource } from "./catalog";
+import { scopeNamesByResource } from "./catalog";
+import { replaceResourceScopes } from "./catalog/scopes";
 import { CatalogError } from "./catalog.errors";
 import { detailTypesByResource } from "./detail-types";
 import type { detailTypes } from "./detail-types/detail-types.model";
@@ -120,13 +121,12 @@ export async function registerResource(
   } else {
     await scoped.update(existing._id, { name });
   }
-  const catalog = new Catalog({
-    resources: options.collection,
-    scopes: options.scopes,
-    userinfoOf: (slug) => userinfoOf(options.issuerOf(slug)),
-  });
   try {
-    await catalog.replaceResourceScopes(tenant._id, existing._id, scopes);
+    await replaceResourceScopes(
+      scopeToTenant(options.scopes, tenant._id),
+      existing._id,
+      scopes,
+    );
   } catch (error) {
     if (error instanceof CatalogError) throw new CliInputError(error.message);
     throw error;

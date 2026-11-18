@@ -79,6 +79,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
 - **The fingerprint** comes from what `storedResourcesFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
 - **Detail types** (`detail-types/`, README "Authorization details", D1/D2 of `spec/plans/m3-rar-agents.md`):
+  the console's `Catalog` (`catalog/detail-types.ts`) is the only writer: the type name is immutable, labels hold 100 and descriptions 300 characters (`MAX_LABEL`, `MAX_DESCRIPTION`), deleting a type a client lists throws `DETAIL_TYPE_IN_USE` (D6), and deleting a resource removes its types and prunes them from the clients' lists (`DetailTypeClients`);
   the tenant-owned `detailTypes` collection (unique on `(tenantId, type)`, so a name is unique in the
   tenant) holds a bounded field list, compiled by the pure `compile.ts` into a `z.strictObject` (no
   free JSON Schema); `storedResourcesFor` gives each resource `authorizationDetails`, `fingerprintOf`

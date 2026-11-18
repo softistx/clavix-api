@@ -14,8 +14,8 @@ nxgt-janus release says which.
   before allowing it. In the same effort an AI agent (an MCP client) can register itself on a tenant
   that allows it, signs in with code and PKCE, and shows as an unreviewed agent on the consent page;
   admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
-  exchange an agent's token. First step: the detail types of a resource are stored and served to the
-  token server.
+  exchange an agent's token. Done so far: the detail types of a resource are stored and served to the
+  token server, and the console API creates, changes and deletes them. Next: clients opt in.
 
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled

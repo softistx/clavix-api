@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import type { ScopeTextsFor } from "@/modules/consent/scope-labels";
 import { Catalog } from "@/modules/resources/catalog";
+import { mongoDetailTypeClients } from "@/modules/resources/detail-types";
 import {
   type RegisterResourceInput,
   registerResource,
@@ -10,6 +11,7 @@ import { issuerOf } from "@/modules/tenants/identity";
 import { userinfoOf } from "@/oauth/building";
 import { mongo } from "./db";
 import { env } from "./env";
+import { oauthDb } from "./oauth-db";
 import { tenantBySlug, tenantResolver } from "./tenancy";
 
 const origin = {
@@ -46,6 +48,8 @@ export const registerStoredResource = (input: RegisterResourceInput) =>
 export const catalog = new Catalog({
   resources: mongo.db.resources,
   scopes: mongo.db.scopes,
+  detailTypes: mongo.db.detailTypes,
+  clients: mongoDetailTypeClients(oauthDb),
   userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
 });
 

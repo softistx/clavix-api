@@ -1,10 +1,12 @@
 import type { ReadDocumentOf } from "@softistx/mongo";
 import { CatalogError } from "../catalog.errors";
+import type { detailTypes } from "../detail-types/detail-types.model";
 import type { resources } from "../resources.model";
 import type { scopes } from "../scopes.model";
 
 export type StoredResourceDoc = ReadDocumentOf<typeof resources>;
 export type StoredScopeDoc = ReadDocumentOf<typeof scopes>;
+export type StoredDetailTypeDoc = ReadDocumentOf<typeof detailTypes>;
 
 export interface Description {
   fr: string;
@@ -26,7 +28,9 @@ export interface ScopeInput {
 }
 
 export const MAX_NAME = 100;
-const MAX_DESCRIPTION = 300;
+export const MAX_DESCRIPTION = 300;
+/** The longest label (a type or a field name, an enum value or an action label). */
+export const MAX_LABEL = 100;
 const MAX_CLAIMS = 50;
 
 function refuse(message: string): never {
