@@ -497,7 +497,7 @@ true` says it was cut, `x-clavix-export-from` the range's start and `x-clavix-ex
 The body is read from the store a batch at a time, so memory stays flat. In CSV a cell that starts with
 `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` so a spreadsheet reads it as text.
 Each export records the console activity `auditLog.export` (target: the log) before the first byte; a
-refused one records nothing. Columns carry ids (`actor`, `userId`), not names.
+refused one records nothing. A body that ends early (the store failed mid-stream) is incomplete: retry; `x-clavix-export-rows` is the count when the export started, so approximate. Columns carry ids (`actor`, `userId`), not names.
 
 Retention follows the tenant's plan (`Plan.auditRetentionDays`: free 30 days, pro 90, enterprise 365;
 the platform's own events 400). The daily job `audit.retention` (queue `audit-retention`, 04:17 UTC, needs

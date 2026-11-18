@@ -1,5 +1,4 @@
 import { ObjectId } from "mongodb";
-import type { AuthEventFilter } from "@/modules/audit/auth-events.service";
 import { planOf } from "@/modules/tenants/plan.schema";
 import { CONSOLE_EXPORT_PATH } from "../identity";
 import { authenticated, type ConsoleDeps, refusal } from "../plugin";
@@ -119,10 +118,7 @@ export async function serveAuditExport(
   const total =
     log === "admin"
       ? await deps.activity.admin.count(adminScope, filter)
-      : await deps.activity.auth.count(
-          tenantId,
-          filter satisfies AuthEventFilter,
-        );
+      : await deps.activity.auth.count(tenantId, filter);
   const rows = Math.min(total, maxRows);
 
   // The export is on the record before it leaves: a failure to record is no export.
