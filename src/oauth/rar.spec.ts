@@ -275,6 +275,7 @@ beforeAll(async () => {
   await clientPoliciesService.setTokenExchange(tenant._id, "svc", {
     targetResources: [PAY, OTHER],
     subjectClients: ["payer"],
+    subjectAgents: false,
     mode: "delegation",
   });
   const auth = await janusIssuers.forRequest(new Request(url()));
