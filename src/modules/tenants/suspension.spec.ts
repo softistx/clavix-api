@@ -198,6 +198,7 @@ describe("withTenantState", () => {
     issuer: "https://acme.clavix.test",
     slugIssuer: "https://acme.clavix.test",
     relatedOrigins: [],
+    plan: "free",
     partition: "t1",
     version: 1,
     signIn: signInPolicySchema.parse(undefined),

@@ -7,6 +7,7 @@ import { signingKeysFor } from "./config/keys";
 import { createIssuers } from "./config/oauth";
 import { createTenantPurge } from "./config/purge";
 import { redis } from "./config/redis";
+import { instrumentDatabase, telemetry } from "./config/telemetry";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
 import { startKeyRotation } from "./keys";
@@ -33,6 +34,9 @@ await startKeyRotation(
 // then one per tick on the Redis queue. Only tenants deleted 30 days ago or more.
 await startTenantPurge(createTenantPurge(), redis?.queues.tenantPurge);
 
+// One client span per MongoDB command, when a collector is set (D24).
+instrumentDatabase();
+
 // The app with the OAuth/OIDC endpoints of every tenant, serving each tenant's
 // stored resources (`resources:create`) beside the built-in userinfo one.
 const oauth = createIssuers(authFor, claimsFor);
@@ -52,6 +56,8 @@ const app = createApp({
   // A code mail still in flight is awaited (the requests have already finished), then lost if late.
   if ((await drain(MAIL_DRAIN_MS)) === "timeout")
     console.warn("auth: sign-in code mail still in flight at stop, dropped");
+  // Last, so the final spans reach the collector: the backlog is shipped.
+  await telemetry.close();
 });
 
 // In dev, the URL and the route table; in production, the URL alone. On

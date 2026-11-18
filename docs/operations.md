@@ -125,6 +125,7 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                             |
 | `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                     |
 | `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                          |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`              | api                         | optional: where traces and logs go, see "Telemetry"                                                                                                             |
 | `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                               |
 | `CONSOLE_CLIENT_SECRET`                                                  | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                   |
 | `CONSOLE_SESSION_SECRET`                                                 | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                           |
@@ -313,6 +314,30 @@ unfinished fails and the queue retries it; each agent is its own step, so one fa
 logs say `agents: could not prune <client> of <tenant>` for each failure. Every deletion is the admin event
 `agent.prune` (actor `system:agents:prune`); to check the job ran, look for that event or for the absence of old
 `DYNAMIC` agents in `clients(kind: [DYNAMIC])`. Two instances running the same tick do no harm (deleting is idempotent).
+
+## Telemetry
+
+Traces and logs go to an OpenTelemetry collector over OTLP/HTTP, through `@softistx/telemetry` (no OpenTelemetry SDK).
+
+| Variable                      | Meaning                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the collector's base URL (`/v1/traces` and `/v1/logs` are appended). Unset (or empty): nothing is exported and nothing is sent |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | optional, `key=value` pairs separated by commas, sent on every export (an API key)                                             |
+
+Both are read from `deploy/.env` like the others (compose hands the file to `api`).
+- **What is traced.** One server span per request (`@alxia/telemetry`, named `POST /graphql` or `query <Name>`; `/healthz`, `/readyz`
+  and `/internal/*` are skipped), a span per sign-in, passkey, session and invitation flow with its security events as logs
+  (`@softistx/janus-telemetry`, `janus.signIn`, `janus.signIn.refused`, `janus.signIn.throttled`, ...), and a client span per MongoDB
+  command (`@softistx/telemetry-mongo`). The MongoDB command monitoring is switched on only when an endpoint is set.
+- **Attributes.** `clavix.tenant.id` and `clavix.tenant.plan` are on the server span and, inherited, on every span and log under
+  it, once the request's host names a tenant. OAuth endpoint attributes (`oauth.client.id`, `oauth.grant_type`, ...) come with
+  `instrumentOAuth` (slice T2).
+- **Never written:** tokens, codes, secrets, e-mail addresses, logins or IPs. The server span's `client.address` is removed before
+  export.
+- **Sampling.** In production 10 % of traces are kept (decided once per trace, at its root); elsewhere all. Logs are never sampled.
+- **Stopping.** The server awaits `telemetry.close()` after the HTTP server drained, so the last batch is shipped.
+- **Check it.** With the endpoint set, `bun run start` and one `POST /graphql` give a trace in the collector within a second or two;
+  an export failure is logged to stderr and never fails a request.
 
 ## TLS
 

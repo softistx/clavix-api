@@ -1,4 +1,5 @@
 import { graphql } from "@alxia/graphql";
+import type { Telemetry } from "@softistx/telemetry";
 import { agentsFor } from "./config/agent-clients";
 import { serveLogo } from "./config/branding";
 import {
@@ -65,20 +66,28 @@ export function createApp(
     detailTexts?: DetailTextsFor;
     // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
     agents?: AgentsFor;
+    // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
+    telemetry?: Telemetry;
     // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
     ready?: () => Promise<ReadyReport>;
   } = {},
 ) {
-  const base = createBase(undefined, {
-    signInThrottle:
-      "signInThrottle" in options ? options.signInThrottle : signInThrottle,
-    passkeyThrottle:
-      "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
-    verifyThrottle:
-      "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
-    deviceThrottle:
-      "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
-  })
+  const base = createBase(
+    undefined,
+    {
+      signInThrottle:
+        "signInThrottle" in options ? options.signInThrottle : signInThrottle,
+      passkeyThrottle:
+        "passkeyThrottle" in options
+          ? options.passkeyThrottle
+          : passkeyThrottle,
+      verifyThrottle:
+        "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
+      deviceThrottle:
+        "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
+    },
+    options.telemetry,
+  )
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
     .all("/readyz", async ({ request }) => {

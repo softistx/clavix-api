@@ -13,6 +13,11 @@ export const mongoConfig = defineMongo({
   collections,
   optionsFor: { tenants: { hooks: tenantHooks } },
   autoSync,
+  // The driver's command events feed the traces (`instrumentDatabase`); off
+  // without a collector.
+  clientOptions: {
+    monitorCommands: env.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined,
+  },
 });
 
 export type AppMongo = MongoOf<typeof mongoConfig>;
