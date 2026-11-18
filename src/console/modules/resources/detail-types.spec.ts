@@ -194,9 +194,29 @@ describe("createDetailType", () => {
     expect(await servedFingerprint()).not.toBe(before);
   });
 
-  test("a name the tenant already has is a CONFLICT, on this resource or another (D2)", async () => {
+  test("the same values twice on the same resource give the same record and record the event again", async () => {
+    const before = await actions();
+    const again = one(
+      await admin(CREATE, { tenantId: tenantA, input: payment() }),
+      "createDetailType",
+    );
+    const existing = (
+      await admin(RESOURCE, { tenantId: tenantA, id: resourceA })
+    ).data?.["resource"] as { detailTypes: { id: string; type: string }[] };
+    expect(existing.detailTypes.filter((t) => t.type === "payment")).toEqual([
+      { id: again.id, type: "payment" },
+    ]);
+    expect(await actions()).toEqual([...before, "detailType.create"]);
+  });
+
+  test("a name the tenant already has is a CONFLICT with other values, or on another resource (D2)", async () => {
     expect(
-      codeOf(await admin(CREATE, { tenantId: tenantA, input: payment() })),
+      codeOf(
+        await admin(CREATE, {
+          tenantId: tenantA,
+          input: payment({ name: { fr: "Autre", en: "Other" } }),
+        }),
+      ),
     ).toBe("CONFLICT");
     expect(
       codeOf(

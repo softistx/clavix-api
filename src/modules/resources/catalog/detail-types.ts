@@ -164,7 +164,22 @@ export async function createDetailType(
   resource: ObjectId,
   draft: DetailTypeDraft,
 ): Promise<StoredDetailTypeDoc> {
-  return saveDetailType(docs, tenantId, resource, cleanDetailType(draft));
+  const input = cleanDetailType(draft);
+  // A repeat of a call whose audit record failed: the stored type is returned
+  // when it is this resource's, with the same definition (the caller records
+  // the event the first run missed). Anything else stays a CONFLICT.
+  const existing = await scopeToTenant(docs, tenantId).findFirst({
+    type: input.type,
+  });
+  if (existing !== undefined) {
+    if (
+      existing.resourceId.equals(resource) &&
+      canon(input) === canon(existing)
+    ) {
+      return existing;
+    }
+  }
+  return saveDetailType(docs, tenantId, resource, input);
 }
 
 export async function updateDetailType(
