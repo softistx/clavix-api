@@ -342,8 +342,8 @@ Both are read from `deploy/.env` like the others (compose hands the file to `api
 - **Attributes.** `clavix.tenant.id` and `clavix.tenant.plan` are on the server span and, inherited, on every span and log under
   it, once the request's host names a tenant. OAuth endpoint attributes (`oauth.client.id`, `oauth.grant_type`, ...) come with
   `instrumentOAuth` (slice T2).
-- **Never written:** tokens, codes, secrets, e-mail addresses, logins or IPs. The server span's `client.address` is removed before
-  export.
+- **Never written:** tokens, codes, secrets, e-mail addresses, logins or IPs. The server span is built with `clientAddress: false`, so it
+  carries no `client.address`.
 - **Sampling.** In production 10 % of traces are kept (decided once per trace, at its root); elsewhere all. Logs are never sampled.
 - **Stopping.** The server awaits `telemetry.close()` after the HTTP server drained, so the last batch is shipped.
 - **Check it.** With the endpoint set, `bun run start` and one `POST /graphql` give a trace in the collector within a second or two;

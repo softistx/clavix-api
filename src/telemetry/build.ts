@@ -7,7 +7,6 @@ import {
 } from "@softistx/telemetry";
 import { otlpExporter } from "@softistx/telemetry-otlp";
 import { parseOtlpHeaders } from "./otlp-headers";
-import { withoutAddresses } from "./scrub";
 
 /** The service name every signal groups by. */
 export const SERVICE = "clavix-api";
@@ -42,7 +41,7 @@ export function buildTelemetry(options: ClavixTelemetryOptions): Telemetry {
           }),
         ]),
     ...(options.exporters ?? []),
-  ].map(withoutAddresses);
+  ];
   return createTelemetry(SERVICE, {
     version: options.version,
     environment: options.production ? "production" : "development",

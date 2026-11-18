@@ -45,6 +45,8 @@ export function createBase(
       .use(
         tracing({
           instance: telemetry,
+          // D24: no IP is written, so the server span leaves `client.address` off.
+          clientAddress: false,
           traced: (ctx) => !isTenantless(ctx.url.pathname),
         }),
       )
