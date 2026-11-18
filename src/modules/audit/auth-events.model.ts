@@ -16,6 +16,14 @@ export const AUTH_EVENT_TYPES = [
   "secondFactor.disabled",
   "recoveryCodes.regenerated",
   "recoveryCode.used",
+  "consent.granted",
+  "consent.denied",
+  "grant.revoked",
+  "refreshToken.reused",
+  "device.approved",
+  "device.denied",
+  "token.exchanged",
+  "client.registered",
 ] as const;
 export type AuthEventType = (typeof AUTH_EVENT_TYPES)[number];
 

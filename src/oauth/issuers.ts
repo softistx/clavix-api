@@ -1,5 +1,9 @@
 import type { Clock } from "@softistx/janus";
-import { createOAuthIssuers, type OAuthIssuers } from "@softistx/janus-oauth";
+import {
+  createOAuthIssuers,
+  type OAuthEventListener,
+  type OAuthIssuers,
+} from "@softistx/janus-oauth";
 import {
   createOidcProvider,
   type OidcClaims,
@@ -58,6 +62,11 @@ export interface ClavixOAuthOptions {
   agentCheckFor?: AgentCheckFor;
   /** The transport of the Client ID Metadata Documents fetch; for specs. Default: janus's own. */
   metadataTransport?: MetadataTransport;
+  /**
+   * The listener of a tenant's OAuth events, built per tenant so its events
+   * can only reach that tenant's log (D12, D14). Absent: none is reported.
+   */
+  eventsFor?: (tenant: ResolvedTenant) => OAuthEventListener;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -119,6 +128,7 @@ export function createClavixOAuthIssuers(
     exchangeRulesFor: options.exchangeRulesFor,
     agentCheckFor: options.agentCheckFor,
     metadataTransport: options.metadataTransport,
+    eventsFor: options.eventsFor,
   });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),

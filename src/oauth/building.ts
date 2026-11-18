@@ -1,5 +1,8 @@
 import type { Clock } from "@softistx/janus";
-import type { SigningKeyStore } from "@softistx/janus-oauth";
+import type {
+  OAuthEventListener,
+  SigningKeyStore,
+} from "@softistx/janus-oauth";
 import {
   createMongoDPoPReplayCache,
   createMongoOAuth,
@@ -8,6 +11,7 @@ import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
 import { DPOP_ALGORITHMS } from "@/modules/resources/protected-resource-document";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { lifetimes } from "./lifetimes";
 import type {
   AgentCheckFor,
@@ -35,6 +39,8 @@ export interface BuildDeps {
   exchangeRulesFor?: ExchangeRulesFor | undefined;
   /** Absent: no client is an agent, so `subjectAgents` covers nothing. */
   agentCheckFor?: AgentCheckFor | undefined;
+  /** The listener of a tenant's OAuth events (D12, D14); absent: none is reported. */
+  eventsFor?: ((tenant: ResolvedTenant) => OAuthEventListener) | undefined;
   /** Specs inject the metadata documents' transport; production uses janus's. */
   metadataTransport?: MetadataTransport | undefined;
 }
@@ -56,6 +62,7 @@ export const buildIssuer =
     exchangeRulesFor,
     agentCheckFor,
     metadataTransport,
+    eventsFor,
   }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
     const keys: SigningKeyStore = signingKeysFor(tenant.tenantId);
@@ -102,6 +109,9 @@ export const buildIssuer =
           agentCheckFor?.(tenant),
         ),
       },
+      // Consents, revocations, reuse, device decisions, exchanges and
+      // registrations of THIS tenant's issuer, for its own log only (D14).
+      ...(eventsFor === undefined ? {} : { events: eventsFor(tenant) }),
       lifetimes,
       accessTokens: {
         format: "jwt" as const,
