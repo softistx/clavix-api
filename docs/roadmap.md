@@ -17,7 +17,7 @@ nxgt-janus release says which.
   exchange an agent's token. Done so far: the consent API marks agents (`OAuthClient.agent`), an MCP server can exchange an agent's token (`subjectAgents` on its exchange rules); the detail types of a resource are stored and served to the
   token server, and the console API creates, changes and deletes them, and a client lists the types it may ask for (console and
   `clients:create --detail-types`, PAR required), and the consent API shows each detail in words
-  (`oauthRequest.details`, `oauthDeviceRequest.details`). Next: the hosted pages render them, and a connected app lists the details it holds.
+  (`oauthRequest.details`, `oauthDeviceRequest.details`), refusing an approval whose details cannot be fully described (`detailsComplete`, `invalid_authorization_details`). Next: the hosted pages render them, and a connected app lists the details it holds.
 
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled

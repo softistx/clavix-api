@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type DetailTexts, detailsOf } from "./detail-labels";
+import { type DetailTexts, detailsOf, reviewDetails } from "./detail-labels";
 
 const texts: DetailTexts = [
   {
@@ -70,5 +70,33 @@ describe("detailsOf", () => {
         rows: [{ label: "Actions", value: "go" }],
       },
     ]);
+  });
+});
+
+describe("reviewDetails: complete", () => {
+  const complete = (details: unknown) =>
+    reviewDetails(JSON.stringify(details), texts, "en").complete;
+
+  test("none asked is complete, a described detail too", () => {
+    expect(reviewDetails(null, texts, "en").complete).toBe(true);
+    expect(
+      complete([
+        { type: "export", format: "csv", tags: ["a"], identifier: "x" },
+      ]),
+    ).toBe(true);
+  });
+
+  test("a type the tenant no longer stores, a key it no longer defines or an enum value it no longer lists is not", () => {
+    expect(complete([{ type: "gone" }])).toBe(false);
+    expect(complete([{ type: "export", removed: 1 }])).toBe(false);
+    expect(complete([{ type: "export", privileges: ["p"] }])).toBe(false);
+    expect(complete([{ type: "export", format: "xml" }])).toBe(false);
+    expect(complete([{ type: "export", actions: ["read"] }])).toBe(false);
+  });
+
+  test("an entry that is not a typed object, or unreadable JSON, is not", () => {
+    expect(complete([{ type: "export" }, 3])).toBe(false);
+    expect(complete([{ nope: true }])).toBe(false);
+    expect(reviewDetails("nope", texts, "en").complete).toBe(false);
   });
 });
