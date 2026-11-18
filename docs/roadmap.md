@@ -21,6 +21,9 @@ nxgt-janus release says which.
 - **Audit export** (M4) — an admin downloads a tenant's sign-in log or console activity as CSV or
   NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
   ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **OAuth events in the sign-in log** (M4) — consents granted and denied, grant revocations, refresh-token
+  reuse, device decisions, token exchanges and client registrations of a tenant's issuer are kept in
+  its own log ([#21](https://github.com/softistx/clavix-api/issues/21)).
 
 ## Next
 

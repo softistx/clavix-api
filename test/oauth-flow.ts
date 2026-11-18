@@ -12,7 +12,10 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
-import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import {
+  type ClavixOAuthOptions,
+  createClavixOAuthIssuers,
+} from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
 import type {
   MetadataThrottle,
@@ -41,6 +44,8 @@ export function createFlow(
     metadataThrottle?: MetadataThrottle;
     /** Fetches and resolves metadata documents (the specs' stand-in for the network). */
     metadataTransport?: MetadataTransport;
+    /** The OAuth events listener of a tenant (none by default); the specs of the sign-in log pass the real one. */
+    eventsFor?: ClavixOAuthOptions["eventsFor"];
   } = {},
 ) {
   const keys = new Map<string, SigningKeyStore>();
@@ -70,6 +75,9 @@ export function createFlow(
     resourcesFor,
     exchangeRulesFor,
     agentCheckFor,
+    ...(options.eventsFor === undefined
+      ? {}
+      : { eventsFor: options.eventsFor }),
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
     ...(options.metadataTransport === undefined
       ? {}
