@@ -17,9 +17,9 @@
         "@softistx/janus-graphql": "^0.29.2",
         "@softistx/janus-mail": "^0.26.12",
         "@softistx/janus-mongo": "^0.29.3",
-        "@softistx/janus-oauth": "^0.20.2",
-        "@softistx/janus-oauth-mongo": "^0.17.2",
-        "@softistx/janus-oidc": "^0.3.31",
+        "@softistx/janus-oauth": "^0.21.0",
+        "@softistx/janus-oauth-mongo": "^0.17.3",
+        "@softistx/janus-oidc": "^0.3.32",
         "@softistx/janus-passkeys": "^0.3.16",
         "@softistx/janus-social": "^0.5.0",
         "@softistx/mail": "^1.6.0",
@@ -321,11 +321,11 @@
 
     "@softistx/janus-mongo": ["@softistx/janus-mongo@0.29.3", "https://npm.softistx.com/@softistx/janus-mongo/-/janus-mongo-0.29.3.tgz", { "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-zU70DeVp5LKzMFdCPd4QWtn2PR80ZlySG4tOYTvEgrLGAvD5vAlVksO13kX585BL9pwPVmyry6NnPRdbM06unA=="],
 
-    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.20.2", "https://npm.softistx.com/@softistx/janus-oauth/-/janus-oauth-0.20.2.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/janus-graphql": "^0.29.2", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/janus-graphql", "graphql"] }, "sha512-HB48WOcLKCLtbrl3KAMNknpKH0VrZCKX0vzD2QXn3JBcRekQmZElhBNfKdalbJZxUbqx7ZnOJ6gPbCt/mNsRTQ=="],
+    "@softistx/janus-oauth": ["@softistx/janus-oauth@0.21.0", "https://npm.softistx.com/@softistx/janus-oauth/-/janus-oauth-0.21.0.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/janus-graphql": "^0.29.2", "graphql": "^16.9.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/janus-graphql", "graphql"] }, "sha512-BBpjareDX1MOOjiP/U/WB5pv3I8z+qAL74zwYJGNpD9wfXYmC5PYiX7W6EFBFxJ09IagFdvyPqlI8A+KHU8Bzg=="],
 
-    "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.17.2", "https://npm.softistx.com/@softistx/janus-oauth-mongo/-/janus-oauth-mongo-0.17.2.tgz", { "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/janus-oauth": "^0.20.2", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-SpHnm9BXLNSUnbyhfqQsQuQ8HdGkpp/0l1z/Ve8uRnqAhAIqlEYxQFvtJWqGK4gRvbYiNBdcwl+J9AZnnmZhDg=="],
+    "@softistx/janus-oauth-mongo": ["@softistx/janus-oauth-mongo@0.17.3", "https://npm.softistx.com/@softistx/janus-oauth-mongo/-/janus-oauth-mongo-0.17.3.tgz", { "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/janus-oauth": "^0.21.0", "@softistx/mongo": ">=0.27.0 <1", "mongodb": ">=7.0.0 <8", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" } }, "sha512-bvBP+PBoDfLkoLqC9HiggHN4UvPpL74bvPBBVcaGEl+KPCjzEL9CslW42iSovVpb2x6i9haefai6UJLT815Tig=="],
 
-    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.31", "https://npm.softistx.com/@softistx/janus-oidc/-/janus-oidc-0.3.31.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/janus-oauth": "^0.20.2", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-zUJQ/Tqd4qxPqqnAlxaD7LUTI6feJd+yUe1LK2G1nkAcHXzACefKK+WKf5MqMCSWLrvH9BGfbR33hjqzD7+rjw=="],
+    "@softistx/janus-oidc": ["@softistx/janus-oidc@0.3.32", "https://npm.softistx.com/@softistx/janus-oidc/-/janus-oidc-0.3.32.tgz", { "dependencies": { "jose": "^6.2.17" }, "peerDependencies": { "@softistx/janus": "^0.69.0", "@softistx/janus-oauth": "^0.21.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-qub2lvmbg/2XDNzLZjPTMNtd787+YWN4x1fHdkbXf61cmbj8ZZKfUEJK0ndj1Tle9+hHWVfbgwgFaxjE/mg8Yw=="],
 
     "@softistx/janus-passkeys": ["@softistx/janus-passkeys@0.3.16", "https://npm.softistx.com/@softistx/janus-passkeys/-/janus-passkeys-0.3.16.tgz", { "dependencies": { "@simplewebauthn/server": "^14.0.3" }, "peerDependencies": { "@softistx/janus": "^0.69.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-HKwnT1ZfnN5eP0CwRQ9k1THX/S7ZJkG2bs2QZ1CFXFhSXC/gzuCbhnX6Sjl6eLWemWt2BQeUZmFIV15/bq4WtA=="],
 
