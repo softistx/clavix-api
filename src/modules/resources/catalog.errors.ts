@@ -1,5 +1,9 @@
 /** Why the catalog refused: the console maps the code to a GraphQL error. */
-export type CatalogErrorCode = "NOT_FOUND" | "CONFLICT" | "BAD_USER_INPUT";
+export type CatalogErrorCode =
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "BAD_USER_INPUT"
+  | "DETAIL_TYPE_IN_USE";
 
 /** A resource or scope call the catalog refuses, with a message the console may show. */
 export class CatalogError extends Error {

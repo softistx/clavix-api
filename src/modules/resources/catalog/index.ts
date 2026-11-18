@@ -1,10 +1,23 @@
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
+import { CatalogError } from "../catalog.errors";
+import type { DetailTypeClients } from "../detail-types/client-lists";
+import type { detailTypes } from "../detail-types/detail-types.model";
 import type { resources } from "../resources.model";
 import type { scopes } from "../scopes.model";
+import {
+  createDetailType,
+  type DetailTypeDraft,
+  type DetailTypePatch,
+  deleteDetailType,
+  findDetailType,
+  listDetailTypes,
+  updateDetailType,
+} from "./detail-types";
 import type {
   DescriptionInput,
   ScopeInput,
+  StoredDetailTypeDoc,
   StoredResourceDoc,
   StoredScopeDoc,
 } from "./input";
@@ -25,9 +38,16 @@ import {
 } from "./scopes";
 
 export type {
+  DetailTypeDraft,
+  DetailTypePatch,
+  FieldDraft,
+  ValueDraft,
+} from "./detail-types";
+export type {
   Description,
   DescriptionInput,
   ScopeInput,
+  StoredDetailTypeDoc,
   StoredResourceDoc,
   StoredScopeDoc,
 } from "./input";
@@ -36,6 +56,9 @@ export { scopeNamesByResource } from "./scopes";
 export interface CatalogOptions {
   resources: TypedCollection<typeof resources>;
   scopes: TypedCollection<typeof scopes>;
+  detailTypes: TypedCollection<typeof detailTypes>;
+  /** The clients' lists of detail types (D6, and the pruning of a deleted resource's). */
+  clients: DetailTypeClients;
   /** The tenant's userinfo URL, a built-in resource that cannot be registered. */
   userinfoOf: (tenantSlug: string) => string;
 }
@@ -56,6 +79,10 @@ export class Catalog {
 
   private scopesOf(tenantId: ObjectId) {
     return scopeToTenant(this.options.scopes, tenantId);
+  }
+
+  private typesOf(tenantId: ObjectId) {
+    return scopeToTenant(this.options.detailTypes, tenantId);
   }
 
   listResources(tenantId: ObjectId): Promise<StoredResourceDoc[]> {
@@ -96,12 +123,79 @@ export class Catalog {
     return updateResource(this.resourcesOf(tenantId), resourceId, input);
   }
 
-  /** Deletes the resource and its scopes; `false` when it was not there. */
+  /**
+   * Deletes the resource, its scopes and its detail types (which leave the
+   * clients' lists); `false` when it was not there.
+   */
   deleteResource(tenantId: ObjectId, resourceId: string): Promise<boolean> {
     return deleteResource(
       this.resourcesOf(tenantId),
       this.scopesOf(tenantId),
       resourceId,
+      {
+        own: this.typesOf(tenantId),
+        clients: this.options.clients,
+        tenantId,
+      },
+    );
+  }
+
+  /** The detail types of the tenant, or of one resource, by type name. */
+  listDetailTypes(
+    tenantId: ObjectId,
+    filter: { resourceId?: ObjectId } = {},
+  ): Promise<StoredDetailTypeDoc[]> {
+    return listDetailTypes(
+      this.options.detailTypes,
+      tenantId,
+      filter.resourceId,
+    );
+  }
+
+  findDetailType(
+    tenantId: ObjectId,
+    id: string,
+  ): Promise<StoredDetailTypeDoc | undefined> {
+    return findDetailType(this.typesOf(tenantId), id);
+  }
+
+  /**
+   * A detail type of one of the tenant's resources (another tenant's is "no
+   * such resource"). The name is unique in the tenant: a repeat is `CONFLICT`.
+   */
+  async createDetailType(
+    tenantId: ObjectId,
+    resourceId: string,
+    draft: DetailTypeDraft,
+  ): Promise<StoredDetailTypeDoc> {
+    const resource = await this.findResource(tenantId, resourceId);
+    if (resource === undefined) {
+      throw new CatalogError("NOT_FOUND", "No such resource");
+    }
+    return createDetailType(
+      this.options.detailTypes,
+      tenantId,
+      resource._id,
+      draft,
+    );
+  }
+
+  /** The type name and the resource never change; nothing is written when nothing changes. */
+  updateDetailType(
+    tenantId: ObjectId,
+    id: string,
+    patch: DetailTypePatch,
+  ): Promise<StoredDetailTypeDoc> {
+    return updateDetailType(this.options.detailTypes, tenantId, id, patch);
+  }
+
+  /** `false` when it was not there; `DETAIL_TYPE_IN_USE` while a client lists it. */
+  deleteDetailType(tenantId: ObjectId, id: string): Promise<boolean> {
+    return deleteDetailType(
+      this.typesOf(tenantId),
+      this.options.clients,
+      tenantId,
+      id,
     );
   }
 

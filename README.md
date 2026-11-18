@@ -319,19 +319,20 @@ mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another ten
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 
-| Field                                                | What it does                                                                                                                                                                                                                                                                                                                                             |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clients(tenantId, q, after, first)`                 | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                                                            |
-| `client(tenantId, id)`                               | one client, or `null`                                                                                                                                                                                                                                                                                                                                    |
-| `createClient(tenantId, input)`                      | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
-| `updateClient(tenantId, id, input)`                  | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
-| `setClientTokenExchange(tenantId, id, input)`        | replaces the client's token exchange rules (`targetResources`, `subjectClients` or `anySubjectClient`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                              |
-| `rotateClientSecret(tenantId, id)`                   | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
-| `deleteClient(tenantId, id)`                         | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                                                                                                                                                                         |
-| `resources(tenantId)`, `resource(tenantId, id)`      | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                                                                |
-| `createResource`, `updateResource`, `deleteResource` | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
-| `scopes(tenantId, resourceId)`                       | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
-| `createScope`, `updateScope`, `deleteScope`          | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
+| Field                                                      | What it does                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients(tenantId, q, after, first)`                       | a page of clients in id order (`q` matches the name or the id), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                                                            |
+| `client(tenantId, id)`                                     | one client, or `null`                                                                                                                                                                                                                                                                                                                                    |
+| `createClient(tenantId, input)`                            | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
+| `updateClient(tenantId, id, input)`                        | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
+| `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients` or `anySubjectClient`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                              |
+| `rotateClientSecret(tenantId, id)`                         | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
+| `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; a record that is not a registered client is left untouched (`false`)                                                                                                                                                                                                                         |
+| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`                                                                                                                                                                                                                                                                                                                |
+| `createResource`, `updateResource`, `deleteResource`       | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
+| `scopes(tenantId, resourceId)`                             | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
+| `createScope`, `updateScope`, `deleteScope`                | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
+| `createDetailType`, `updateDetailType`, `deleteDetailType` | an authorization detail type of a resource (`Resource.detailTypes`, see "Authorization details"); the type name never changes; audited as `detailType.create`, `.update`, `.delete`                                                                                                                                                                      |
 
 ```graphql
 mutation {
@@ -794,8 +795,67 @@ types and no scope (a request then needs a detail). Types are stored per tenant 
 collection and removed with the tenant.
 
 A client must list the types it uses (`authorizationDetailsTypes`) and push its requests to `/par`;
-the console and the CLI to manage types and a client's list follow in the same effort (issue #17).
+the console and the CLI to manage a client's list follow in the same effort (issue #17).
 Details travel in the 4 KiB `/authorize` URL or the 8 KiB `/par` body, so prefer `/par`.
+
+**Managing the types (console API).** `Resource.detailTypes` lists a resource's types;
+`createDetailType`, `updateDetailType` and `deleteDetailType` need `edit` on the tenant, like scopes.
+Labels hold at most 100 characters and a description 300. The resource must be the tenant's own
+(another tenant's is `NOT_FOUND`). A name the tenant already has is `CONFLICT`; an invalid definition is
+`BAD_USER_INPUT`. An update changes the texts, `fields` and `actions` (the list is replaced) and never the
+type name; it writes nothing when nothing changes. A type that a client lists cannot be deleted
+(`DETAIL_TYPE_IN_USE`, 409); deleting a resource deletes its types and removes them from the clients' lists.
+
+```graphql
+mutation {
+  createDetailType(
+    tenantId: "6731…"
+    input: {
+      resourceId: "6732…"
+      type: "payment"
+      name: { en: "Payment", fr: "Paiement" }
+      fields: [
+        {
+          key: "amount"
+          kind: NUMBER
+          required: true
+          min: 0.01
+          max: 1000
+          label: { en: "Amount", fr: "Montant" }
+        }
+        {
+          key: "currency"
+          kind: ENUM
+          required: true
+          values: [{ value: "EUR", label: { en: "Euro", fr: "Euro" } }]
+        }
+      ]
+      actions: [{ value: "initiate", label: { en: "Start", fr: "Lancer" } }]
+    }
+  ) {
+    id
+    type
+  }
+}
+```
+
+**Using a type at `/par`.** A client that lists `payment` pushes the request, then sends the user to
+`/authorize?client_id=…&request_uri=…`. Until the console can set a client's list (#17), the list is set through the janus client store. The example is a confidential client (`-u`); a public one sends `client_id` in the body instead:
+
+```sh
+curl -s https://acme.clavix.example/par \
+  -u "$CLIENT_ID:$CLIENT_SECRET" \
+  --data-urlencode response_type=code \
+  --data-urlencode redirect_uri=https://office.example/callback \
+  --data-urlencode code_challenge="$CHALLENGE" \
+  --data-urlencode code_challenge_method=S256 \
+  --data-urlencode resource=https://api.acme.example/ \
+  --data-urlencode 'authorization_details=[{"type":"payment","actions":["initiate"],"amount":12.5,"currency":"EUR"}]'
+# {"request_uri":"urn:ietf:params:oauth:request_uri:…","expires_in":60}
+```
+
+A detail the type does not accept (an unknown field, a value out of bounds, a type the client does not list)
+is refused with `invalid_authorization_details` (see `docs/troubleshooting.md`).
 
 ## OAuth clients
 
