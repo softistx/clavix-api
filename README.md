@@ -619,7 +619,7 @@ Discovery advertises `device_authorization_endpoint`.
   A client's grants must include `authorization_code`, the device URN or the token-exchange URN.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
-  (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes). The viewer must be signed in
+  (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes; approval is refused with `invalid_authorization_details` while `detailsComplete` is false, see "Authorization details"). The viewer must be signed in
   to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
   pending); refusing does not. A code of another tenant is `NOT_FOUND`.
 - **The device polls** with the janus answers: `authorization_pending`, `slow_down` (poll less often, the interval
@@ -1014,6 +1014,7 @@ query Consent($id: ID!) {
       name
       label
     }
+    detailsComplete # false: show Deny only, approval is refused (see "Authorization details")
     details {
       # the authorization details (RFC 9396) in words: render every block
       type
@@ -1058,13 +1059,15 @@ The page sends the user agent to `redirectTo` (the client's redirect URI with `c
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
-scope not asked for), `STEP_UP_REQUIRED` (403).
+scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403).
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
   are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
   enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
   type does not define is not shown, and a type the tenant deleted shows its own name. `oauthDeviceRequest { details }` is the same for the
   device page. The tenant's texts are read once per request. Approval is all or nothing: show every block and call the approve mutation
-  without `authorizationDetails`; janus's `authorizationDetails` JSON string stays on both types.
+  without `authorizationDetails`. `detailsComplete: Boolean!` (also on `oauthDeviceRequest`) is false when a detail cannot be fully described
+  (its type was deleted, or it carries a key, action or value its type no longer defines): the page then offers only Deny, since the approve
+  mutations refuse with `invalid_authorization_details`. janus's `authorizationDetails` JSON string stays on both types.
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
   again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
