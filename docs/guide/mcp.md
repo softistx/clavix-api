@@ -38,14 +38,15 @@ curl -s https://acme.clavix.example/register -H 'content-type: application/json'
 
 ## Refusals
 
-| Answer                                        | Cause                                                                                                     |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 400 `invalid_request`                         | The tenant's policy is off                                                                                |
-| 400 `invalid_redirect_uri`                    | The callback is not accepted in `restricted` mode                                                         |
-| 400 `invalid_client_metadata`                 | A grant the tenant does not offer to agents: the device URN and the token exchange URN are always refused |
-| 403 `access_denied`                           | The `agents` quota is reached (free 100, pro 1000, enterprise unlimited; a per-tenant override applies)   |
-| 403                                           | The tenant is suspended                                                                                   |
-| 429 `temporarily_unavailable` + `Retry-After` | The registration throttle ([operations](../operations.md#agent-registration-throttle))                    |
+| Answer                                                | Cause                                                                                                     |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 400 `invalid_request`                                 | The tenant's policy is off                                                                                |
+| 400 `invalid_redirect_uri`                            | The callback is not accepted in `restricted` mode                                                         |
+| 400 `invalid_client_metadata`                         | A grant the tenant does not offer to agents: the device URN and the token exchange URN are always refused |
+| 403 `access_denied`                                   | The `agents` quota is reached (free 100, pro 1000, enterprise unlimited; a per-tenant override applies)   |
+| 403                                                   | The tenant is suspended                                                                                   |
+| 429 `temporarily_unavailable` + `Retry-After`         | The registration throttle ([operations](../operations.md#agent-registration-throttle))                    |
+| 429 `temporarily_unavailable` on `/authorize`, `/par` | Too many metadata-document fetches ([operations](../operations.md#agent-registration-throttle))           |
 
 ## Counting
 
