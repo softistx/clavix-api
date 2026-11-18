@@ -55,6 +55,11 @@ describe("detailsOf", () => {
     });
   });
 
+  test("a field with nothing to show has no row", () => {
+    const json = JSON.stringify([{ type: "export", tags: [], format: {} }]);
+    expect(detailsOf(json, texts, "en")[0]?.rows).toEqual([]);
+  });
+
   test("a type the tenant no longer stores shows its name, and an unknown field is never shown", () => {
     const json = JSON.stringify([{ type: "gone", amount: 1, actions: ["go"] }]);
     expect(detailsOf(json, texts, "en")).toEqual([

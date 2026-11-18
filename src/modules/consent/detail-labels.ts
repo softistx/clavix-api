@@ -112,10 +112,10 @@ function describe(
   for (const field of text?.fields ?? []) {
     const value = detail[field.key];
     if (value === undefined || value === null) continue;
-    rows.push({
-      label: pick(field.label, locale, field.key),
-      value: formatted(value, field, locale),
-    });
+    const shown = formatted(value, field, locale);
+    // An empty list, or a value of a shape the kind does not allow, has no row.
+    if (shown === "") continue;
+    rows.push({ label: pick(field.label, locale, field.key), value: shown });
   }
   const identifier = detail["identifier"];
   if (typeof identifier === "string") {
