@@ -3,6 +3,7 @@ import { TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
 import { registerClient } from "@/clients/register-client";
+import { agentClientsService } from "@/config/agent-clients";
 import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
@@ -60,6 +61,7 @@ async function tenant(slug: string, rules: boolean | "none" = true) {
       {
         targetResources: [TARGET],
         subjectClients: ["backend"],
+        subjectAgents: false,
         mode: "delegation",
       },
     );
@@ -175,7 +177,12 @@ describe("the token exchange grant", () => {
     await clientPoliciesService.setTokenExchange(
       new ObjectId(ids["tx-a"]),
       "exch",
-      { targetResources: [TARGET], subjectClients: "any", mode: "delegation" },
+      {
+        targetResources: [TARGET],
+        subjectClients: "any",
+        subjectAgents: false,
+        mode: "delegation",
+      },
     );
     expect((await exchange("tx-a", token)).status).toBe(200);
     await clientPoliciesService.setTokenExchange(
@@ -184,9 +191,82 @@ describe("the token exchange grant", () => {
       {
         targetResources: [TARGET],
         subjectClients: ["backend"],
+        subjectAgents: false,
         mode: "delegation",
       },
     );
+  });
+
+  test("with subjectAgents an MCP server exchanges an agent's token, and only an agent's", async () => {
+    const slug = "tx-a";
+    const id = new ObjectId(ids[slug]);
+    const register = async (clientId: string) =>
+      (
+        await registerClient(
+          { db: oauthDb, findTenant },
+          {
+            tenant: slug,
+            name: clientId,
+            clientId,
+            redirectUris: ["https://app.example/callback"],
+            type: "confidential",
+            rotateSecret: true,
+          },
+        )
+      ).clientSecret ?? "";
+    const agentSecret = await register("agent-x");
+    const plainSecret = await register("plain-x");
+    await agentClientsService.record(String(id), {
+      clientId: "agent-x",
+      kind: "dynamic",
+    });
+    const tokenOf = async (clientId: string, secret: string) =>
+      (
+        await flow.tokensOf(slug, "read", {
+          resource: SOURCE,
+          userId: SUBJECT,
+          client: { id: clientId, secret },
+        })
+      ).access_token ?? "";
+    const agentToken = await tokenOf("agent-x", agentSecret);
+    const plainToken = await tokenOf("plain-x", plainSecret);
+    const rules = (subjectAgents: boolean) =>
+      clientPoliciesService.setTokenExchange(id, "exch", {
+        targetResources: [TARGET],
+        subjectClients: [],
+        subjectAgents,
+        mode: "delegation",
+      });
+    try {
+      // Switch off: the agent's token is refused.
+      await rules(false);
+      expect((await answerOf(await exchange(slug, agentToken))).error).toBe(
+        "access_denied",
+      );
+      // Switch on: delegation, `act` names the MCP server, the user stays the subject.
+      await rules(true);
+      const done = await exchange(slug, agentToken);
+      expect(done.status).toBe(200);
+      const claims = decodeJwt((await answerOf(done)).access_token ?? "");
+      expect(claims["sub"]).toBe(SUBJECT);
+      expect(claims["aud"]).toBe(TARGET);
+      expect(claims["act"]).toEqual({ sub: "exch", client_id: "exch" });
+      // A client that is no agent is not covered.
+      expect((await answerOf(await exchange(slug, plainToken))).error).toBe(
+        "access_denied",
+      );
+      // Another tenant's record of the same id does not make it an agent here.
+      expect(await agentClientsService.has(ids["tx-b"] ?? "", "agent-x")).toBe(
+        false,
+      );
+    } finally {
+      await clientPoliciesService.setTokenExchange(id, "exch", {
+        targetResources: [TARGET],
+        subjectClients: ["backend"],
+        subjectAgents: false,
+        mode: "delegation",
+      });
+    }
   });
 
   test("a target that is not listed is refused", async () => {

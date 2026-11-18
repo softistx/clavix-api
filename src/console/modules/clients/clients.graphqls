@@ -45,6 +45,8 @@ type ClientTokenExchange {
   subjectClients: [String!]!
   "Whether a token of any client of the tenant may be exchanged."
   anySubjectClient: Boolean!
+  "Whether the tokens of any agent of the tenant (a client that registered itself) may be exchanged too. A client that is no agent is not covered."
+  subjectAgents: Boolean!
   mode: TokenExchangeMode!
 }
 
@@ -157,6 +159,8 @@ input ClientTokenExchangeInput {
   subjectClients: [String!] = []
   "Any client of the tenant's tokens may be exchanged. Default false."
   anySubjectClient: Boolean = false
+  "Also exchange the tokens of the tenant's agents, with or without `subjectClients`. Default false."
+  subjectAgents: Boolean = false
 }
 
 type Query {

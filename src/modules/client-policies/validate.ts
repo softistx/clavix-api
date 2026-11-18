@@ -8,15 +8,17 @@ const SUBJECT_ID = /^[a-z0-9-]{1,64}$/;
  * The token exchange rules a call asks for, checked and deduplicated: each
  * target is one of the tenant's resources (`resourceUris`) and the subject
  * clients are `"any"` or a list of client ids (checked for shape only: a
- * client may be created later). Throws `BAD_USER_INPUT`.
+ * client may be created later), plus the `subjectAgents` switch (D12: the
+ * tokens of the tenant's agents). Throws `BAD_USER_INPUT`.
  */
 export function validateTokenExchange(
   input: {
     targetResources: readonly string[];
     subjectClients: readonly string[] | "any";
+    subjectAgents?: boolean;
   },
   resourceUris: readonly string[],
-): { targets: string[]; subjects: string[] | "any" } {
+): { targets: string[]; subjects: string[] | "any"; agents: boolean } {
   const targets = [...new Set(input.targetResources)];
   if (targets.length > MAX_TARGETS) {
     throw new CatalogError(
@@ -48,5 +50,5 @@ export function validateTokenExchange(
       );
     }
   }
-  return { targets, subjects };
+  return { targets, subjects, agents: input.subjectAgents === true };
 }

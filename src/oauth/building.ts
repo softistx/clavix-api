@@ -9,6 +9,7 @@ import type { Db } from "mongodb";
 import { OIDC_SCOPES } from "@/modules/resources/scope-name";
 import { lifetimes } from "./lifetimes";
 import type {
+  AgentCheckFor,
   AuthFor,
   ExchangeRulesFor,
   RolesFor,
@@ -31,6 +32,8 @@ export interface BuildDeps {
   rolesFor?: RolesFor | undefined;
   /** Absent: no client may exchange tokens. */
   exchangeRulesFor?: ExchangeRulesFor | undefined;
+  /** Absent: no client is an agent, so `subjectAgents` covers nothing. */
+  agentCheckFor?: AgentCheckFor | undefined;
   /** Specs inject the metadata documents' transport; production uses janus's. */
   metadataTransport?: MetadataTransport | undefined;
 }
@@ -50,6 +53,7 @@ export const buildIssuer =
     clock,
     rolesFor,
     exchangeRulesFor,
+    agentCheckFor,
     metadataTransport,
   }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
@@ -91,7 +95,12 @@ export const buildIssuer =
         nonce: { secret: dpopNonceSecret },
       },
       // RFC 8693: served by every tenant (see `exchangePolicy`).
-      tokenExchange: { policy: exchangePolicy(exchangeRulesFor?.(tenant)) },
+      tokenExchange: {
+        policy: exchangePolicy(
+          exchangeRulesFor?.(tenant),
+          agentCheckFor?.(tenant),
+        ),
+      },
       lifetimes,
       accessTokens: {
         format: "jwt" as const,

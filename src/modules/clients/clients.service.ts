@@ -255,6 +255,7 @@ export class ClientsService {
     input: {
       targetResources: readonly string[];
       subjectClients: readonly string[] | "any";
+      subjectAgents?: boolean;
     },
     resourceUris: readonly string[],
   ): Promise<TokenExchangeRules> {

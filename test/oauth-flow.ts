@@ -7,7 +7,7 @@ import {
 } from "@softistx/janus-oauth";
 import { registerClient } from "@/clients/register-client";
 import { withAgentRegistration } from "@/config/agents-registration";
-import { exchangeRulesFor } from "@/config/client-policies";
+import { agentCheckFor, exchangeRulesFor } from "@/config/client-policies";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesFor } from "@/config/resources";
@@ -69,6 +69,7 @@ export function createFlow(
     claimsFor,
     resourcesFor,
     exchangeRulesFor,
+    agentCheckFor,
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
     ...(options.metadataTransport === undefined
       ? {}

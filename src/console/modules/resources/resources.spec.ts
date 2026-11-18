@@ -526,6 +526,7 @@ describe("deleting", () => {
     const rules = (targetResources: string[]) => ({
       targetResources,
       subjectClients: "any" as const,
+      subjectAgents: false,
       mode: "delegation" as const,
     });
     const a = await mongo.db.tenants.findById(tenantA);
