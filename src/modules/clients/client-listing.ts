@@ -17,6 +17,11 @@ export type ClientRegistration = "console" | AgentKind;
 /** The tenant's recorded agents by client id (`AgentClientsPort.kinds`). */
 export type AgentKinds = ReadonlyMap<string, AgentKind>;
 
+/** Reads the recorded agents among these client ids (`AgentClientsPort.kinds` with ids): one bounded read per page. */
+export type AgentKindsOf = (
+  clientIds: readonly string[],
+) => Promise<AgentKinds>;
+
 /** A client as the console shows it: a janus record without its secret hash. */
 export interface ClientView {
   clientId: string;
@@ -76,8 +81,8 @@ export const viewOf = (
 
 /** Which clients a listing keeps, beyond `q`. */
 export interface ClientFilter {
-  /** The tenant's recorded agents. Without it only the registered clients are listed, all `console`. */
-  agents?: AgentKinds | undefined;
+  /** Reads the tenant's agents among a page's ids. Without it only the registered clients are listed, all `console`. */
+  agents?: AgentKindsOf | undefined;
   /** Only these registrations; none or an empty list: every one. */
   kinds?: readonly ClientRegistration[] | undefined;
 }
@@ -87,17 +92,18 @@ export interface ClientFilter {
  * case) whose registration is wanted. A metadata-document client is listed
  * only when the agents are known (`filter.agents`).
  */
-const matcher = (q: string | undefined, filter: ClientFilter = {}) => {
+const matcher = (
+  q: string | undefined,
+  filter: ClientFilter,
+  agents: AgentKinds | undefined,
+) => {
   const needle = q?.trim().toLowerCase() ?? "";
   const kinds = filter.kinds ?? [];
   return (record: OAuthClientRecord) => {
-    if (record.source !== "registered" && filter.agents === undefined) {
+    if (record.source !== "registered" && agents === undefined) {
       return false;
     }
-    if (
-      kinds.length > 0 &&
-      !kinds.includes(registrationOf(record, filter.agents))
-    ) {
+    if (kinds.length > 0 && !kinds.includes(registrationOf(record, agents))) {
       return false;
     }
     return (
@@ -107,6 +113,15 @@ const matcher = (q: string | undefined, filter: ClientFilter = {}) => {
     );
   };
 };
+
+/** The agents among one page's records (bounded by the page); `undefined` without a reader. */
+const agentsAmong = (
+  filter: ClientFilter,
+  page: OAuthPage<OAuthClientRecord>,
+): Promise<AgentKinds | undefined> =>
+  filter.agents === undefined
+    ? Promise.resolve(undefined)
+    : filter.agents(page.items.map((record) => record.id));
 
 // The page size a count reads the store with.
 const COUNT_READ = 100;
@@ -122,11 +137,11 @@ export async function countClientViews(
   ) => Promise<OAuthPage<OAuthClientRecord>>,
   options: { q?: string | undefined } & ClientFilter = {},
 ): Promise<number> {
-  const keep = matcher(options.q, options);
   let total = 0;
   let cursor: string | undefined;
   do {
     const page = await listClients({ cursor, limit: COUNT_READ });
+    const keep = matcher(options.q, options, await agentsAmong(options, page));
     total += page.items.filter(keep).length;
     cursor = page.nextCursor ?? undefined;
   } while (cursor !== undefined);
@@ -149,7 +164,6 @@ export async function listClientViews(
     q?: string | undefined;
   } & ClientFilter,
 ): Promise<{ items: ClientView[]; nextCursor: string | null }> {
-  const keep = matcher(options.q, options);
   const items: ClientView[] = [];
   let cursor = options.after ?? undefined;
   for (let reads = 0; reads < MAX_READS; reads += 1) {
@@ -157,10 +171,11 @@ export async function listClientViews(
       cursor,
       limit: options.limit - items.length,
     });
+    const agents = await agentsAmong(options, page);
     items.push(
       ...page.items
-        .filter(keep)
-        .map((record) => viewOf(record, options.agents)),
+        .filter(matcher(options.q, options, agents))
+        .map((record) => viewOf(record, agents)),
     );
     if (page.nextCursor === null) return { items, nextCursor: null };
     cursor = page.nextCursor;

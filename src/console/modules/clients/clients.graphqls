@@ -184,10 +184,13 @@ type Query {
 type Mutation {
   "Needs `edit` on the tenant. Errors: CONFLICT (id taken by a client with other values, also when two calls race), QUOTA_EXCEEDED (409, past the plan's `clients` quota). A repeat of a call whose audit record failed (same id, name, type and redirect URIs) returns the stored client with `clientSecret: null` and records the missed event."
   createClient(tenantId: ID!, input: CreateClientInput!): CreatedClient!
+  "Needs `edit`. NOT_FOUND for an unknown client or an agent (dynamic or metadata: read-only)."
   updateClient(tenantId: ID!, id: ID!, input: UpdateClientInput!): Client!
+  "Needs `edit`. NOT_FOUND for an unknown client or an agent; BAD_USER_INPUT for a public client."
   rotateClientSecret(tenantId: ID!, id: ID!): RotatedClientSecret!
   """
-  Replaces the client's token exchange rules. Needs `edit`. The client must be a
+  Replaces the client's token exchange rules. Needs `edit`. NOT_FOUND for an
+  unknown client or an agent (read-only). The client must be a
   confidential one (BAD_USER_INPUT otherwise) and each target a resource of the
   tenant (BAD_USER_INPUT). The client also lists `TOKEN_EXCHANGE` in its grants
   for the rules to apply.
