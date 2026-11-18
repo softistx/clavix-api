@@ -7,6 +7,16 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Rich authorization requests and MCP agents** ([#17](https://github.com/softistx/clavix-api/issues/17),
+  [#18](https://github.com/softistx/clavix-api/issues/18)) — a tenant describes the authorization
+  detail types of an API (a payment, a transfer) and lets a client ask for them with a pushed
+  request, Clavix checks each request against the type and the user sees every detail in words
+  before allowing it. In the same effort an AI agent (an MCP client) can register itself on a tenant
+  that allows it, signs in with code and PKCE, and shows as an unreviewed agent on the consent page;
+  admins list, delete and prune agents, read an API's RFC 9728 document, and let an MCP server
+  exchange an agent's token. Done so far: the detail types of a resource are stored and served to the
+  token server, and the console API creates, changes and deletes them. Next: clients opt in.
+
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with
@@ -36,9 +46,6 @@ nxgt-janus release says which.
 **Follow-ups**
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
-
-**Advanced protocols**
-- Rich authorization requests and their consent.
 
 **Federation, step-up and events**
 - Enterprise OIDC connections and home-realm discovery.

@@ -1,6 +1,8 @@
 import { ConflictError, type Scoped } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { CatalogError } from "../catalog.errors";
+import type { DetailTypeClients } from "../detail-types/client-lists";
+import type { detailTypes } from "../detail-types/detail-types.model";
 import { resourceUriProblem } from "../resource-uri";
 import type { resources } from "../resources.model";
 import type { scopes } from "../scopes.model";
@@ -8,6 +10,7 @@ import { cleanName, type StoredResourceDoc } from "./input";
 
 type OwnResources = Scoped<typeof resources>;
 type OwnScopes = Scoped<typeof scopes>;
+type OwnDetailTypes = Scoped<typeof detailTypes>;
 
 const sameUri = (a: string, b: string) => new URL(a).href === new URL(b).href;
 
@@ -89,9 +92,23 @@ export async function deleteResource(
   own: OwnResources,
   ownScopes: OwnScopes,
   resourceId: string,
+  types: {
+    own: OwnDetailTypes;
+    clients: DetailTypeClients;
+    tenantId: ObjectId;
+  },
 ): Promise<boolean> {
   const existing = await findResource(own, resourceId);
   if (existing === undefined) return false;
+  // Its detail types leave the clients' lists first (as A4 prunes exchange
+  // targets), then go: were the types gone before, a retry would find nothing
+  // to prune.
+  const typeDocs = await types.own.findMany({
+    filter: { resourceId: existing._id },
+  });
+  const names = typeDocs.map((doc) => doc.type);
+  await types.clients.drop(types.tenantId, names);
+  await types.own.hardDeleteMany({ resourceId: existing._id });
   await ownScopes.hardDeleteMany({ resourceId: existing._id });
   await own.hardDeleteMany({ _id: existing._id });
   return true;

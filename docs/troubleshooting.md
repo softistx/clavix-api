@@ -118,6 +118,65 @@ bun run clients:create --tenant acme --name "Web app" \
 Also refused: an unknown tenant slug or a suspended tenant, a missing `--name`, and a client id that is not
 1-64 characters of `a-z`, `0-9` and `-` (not starting or ending with `-`).
 
+## `invalid_authorization_details` (400) at `/par` or `/authorize`
+
+**When:** a request carries `authorization_details` (RFC 9396) and an entry is refused. The error
+description names the entry and the reason.
+**Why:** one of these:
+- the `type` is not one the tenant describes on that `resource`, or the client does not list it
+  (`authorizationDetailsTypes`);
+- a key the type does not define (a detail is a strict object: only `type`, `locations`, `identifier`,
+  `datatypes`, `actions` when the type lists some, and its own fields);
+- a value outside its field's bounds: a `string` longer than `maxLength`, a number outside `min`/`max`, a
+  value not in an `enum`'s `values`, a `string[]` with too many items, a missing `required` field;
+- an `actions` value the type does not list.
+
+A tenant that describes **no** type refuses the parameter altogether with `invalid_request`, not this error.
+**Fix:** read the type in the console (`Resource.detailTypes`) and send exactly its fields; or add the field
+or value with `updateDetailType`; and list the type on the client. Details are best pushed to `/par`.
+
+```graphql
+query {
+  resource(tenantId: "6731…", id: "6732…") {
+    detailTypes {
+      type
+      fields {
+        key
+        kind
+        required
+        min
+        max
+        maxLength
+        values {
+          value
+        }
+      }
+      actions {
+        value
+      }
+    }
+  }
+}
+```
+
+### `DETAIL_TYPE_IN_USE` (409) on `deleteDetailType`
+
+A client still lists the type in its `authorizationDetailsTypes`. Remove it from those clients first (the message
+gives their number), then delete the type. Deleting the whole resource does not need this: it removes its types
+from the clients' lists.
+
+### `BAD_USER_INPUT` (400) on `createDetailType` / `updateDetailType`
+
+The definition breaks a bound: a type name of 1 to 64 letters, digits, `_ . : -` starting with a letter; at most
+16 fields; a field key of 64 characters, not `type`, `locations`, `actions`, `identifier`, `datatypes` or
+`privileges`, and unique; an `enum` with 1 to 50 values; a label over 100 characters or a description over 300; no
+name in either language.
+
+### `CONFLICT` (409) on `createDetailType`
+
+The tenant already has a type of that name, on this resource or another (a name is unique in the tenant).
+Choose another name, or update the existing type.
+
 ## Resource registration refusals (`resources:create`)
 
 ### `resource URI "<uri>" is not in canonical form: write it as <canonical>`

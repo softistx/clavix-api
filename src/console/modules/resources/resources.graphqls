@@ -31,7 +31,100 @@ type Resource {
   uri: String!
   name: String!
   scopes: [Scope!]!
+  "The authorization detail types (RFC 9396) it accepts, by name."
+  detailTypes: [DetailType!]!
   createdAt: DateTime!
+}
+
+"The kind of one field of a detail type (a bounded list, never a free JSON Schema)."
+enum DetailFieldKind {
+  STRING
+  NUMBER
+  INTEGER
+  BOOLEAN
+  "One of `values`."
+  ENUM
+  "A list of strings: `max` items, `maxLength` per item."
+  STRING_LIST
+}
+
+"A value of an `enum` field or an action, with the words the consent page shows."
+type DetailValue {
+  value: String!
+  label: LocalizedText!
+}
+
+"One field of a detail type."
+type DetailField {
+  key: String!
+  kind: DetailFieldKind!
+  label: LocalizedText!
+  required: Boolean!
+  "Numbers: the lowest value."
+  min: Float
+  "Numbers: the highest value. A string list: the most items."
+  max: Float
+  "Strings (and each item of a list): the longest text."
+  maxLength: Int
+  "An enum's allowed values."
+  values: [DetailValue!]
+}
+
+"""
+An authorization detail type (RFC 9396) of a resource: what a client may ask
+for as an `authorization_details` entry, and the words the consent page uses.
+The `type` is unique in the tenant and never changes.
+"""
+type DetailType {
+  id: ID!
+  resourceId: ID!
+  type: String!
+  name: LocalizedText!
+  description: LocalizedText!
+  fields: [DetailField!]!
+  "The RFC 9396 `actions` the type allows; empty when it takes none."
+  actions: [DetailValue!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+input DetailValueInput {
+  value: String!
+  label: LocalizedTextInput
+}
+
+input DetailFieldInput {
+  "A letter, then letters, digits or `_` (64 characters at most); not an RFC 9396 field name."
+  key: String!
+  kind: DetailFieldKind!
+  label: LocalizedTextInput
+  required: Boolean
+  min: Float
+  max: Float
+  maxLength: Int
+  values: [DetailValueInput!]
+}
+
+"At most 16 fields, 100 characters per label, 300 per description."
+input CreateDetailTypeInput {
+  resourceId: ID!
+  "1 to 64 letters, digits, `_ . : -`, starting with a letter; unique in the tenant, never changes."
+  type: String!
+  name: LocalizedTextInput!
+  description: LocalizedTextInput
+  fields: [DetailFieldInput!]!
+  actions: [DetailValueInput!]
+}
+
+"""
+Fields left out stay as they are; `fields` and `actions` replace the whole
+list (`actions: []` clears it). The type name and the resource never change.
+"""
+input UpdateDetailTypeInput {
+  name: LocalizedTextInput
+  description: LocalizedTextInput
+  fields: [DetailFieldInput!]
+  actions: [DetailValueInput!]
 }
 
 input CreateResourceInput {
@@ -72,11 +165,21 @@ type Mutation {
   "Needs `edit` on the tenant. A URI another resource has is a CONFLICT."
   createResource(tenantId: ID!, input: CreateResourceInput!): Resource!
   updateResource(tenantId: ID!, id: ID!, input: UpdateResourceInput!): Resource!
-  "Deletes the resource and its scopes. `false` when it was already gone."
+  "Deletes the resource, its scopes and its detail types (they leave the clients' lists). `false` when it was already gone."
   deleteResource(tenantId: ID!, id: ID!): Boolean!
   "A name another scope has is a CONFLICT."
   createScope(tenantId: ID!, input: CreateScopeInput!): Scope!
   updateScope(tenantId: ID!, id: ID!, input: UpdateScopeInput!): Scope!
   "`false` when it was already gone."
   deleteScope(tenantId: ID!, id: ID!): Boolean!
+  "A name the tenant already has is a CONFLICT; an invalid definition is BAD_USER_INPUT; another tenant's resource is NOT_FOUND."
+  createDetailType(tenantId: ID!, input: CreateDetailTypeInput!): DetailType!
+  "Nothing is written when nothing changes."
+  updateDetailType(
+    tenantId: ID!
+    id: ID!
+    input: UpdateDetailTypeInput!
+  ): DetailType!
+  "`false` when it was already gone. DETAIL_TYPE_IN_USE (409) while a client lists it."
+  deleteDetailType(tenantId: ID!, id: ID!): Boolean!
 }
