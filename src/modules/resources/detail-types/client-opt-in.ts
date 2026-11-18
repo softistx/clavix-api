@@ -4,7 +4,7 @@ import type { detailTypes } from "./detail-types.model";
 
 /**
  * What a client's opt-in to detail types (R3, D3) needs to know of a tenant:
- * the types it stores, and whether its consent page can show them.
+ * the types it stores, and whether its consent pages can show them.
  */
 export interface ClientDetailTypes {
   /** The names of the tenant's stored detail types (read through its scope). */
