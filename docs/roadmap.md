@@ -14,6 +14,24 @@ nxgt-janus release says which.
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
+- **M4, federation, step-up and events** — on an integration branch, in five tracks
+  ([#24](https://github.com/softistx/clavix-api/issues/24)):
+  - **Federation** ([#19](https://github.com/softistx/clavix-api/issues/19)): enterprise OIDC
+    connections per tenant with domains proved by DNS, home-realm discovery by e-mail domain,
+    just-in-time provisioning and "require SSO". Waits on the nxgt-janus release of #509.
+  - **MFA and step-up** ([#20](https://github.com/softistx/clavix-api/issues/20)): a tenant MFA
+    policy, TOTP and recovery codes, then `acr_values`, `max_age` and `acr`/`amr` in tokens. The
+    step-up part waits on nxgt-janus releases.
+  - **Audit** ([#21](https://github.com/softistx/clavix-api/issues/21)): sign-in and OAuth events
+    beside admin events, readers for the console, CSV and NDJSON export, retention per plan.
+  - **Webhooks** ([#22](https://github.com/softistx/clavix-api/issues/22)): signed per-tenant
+    endpoints with retries, secret rotation, auto-disable and a deliveries log. Waits on
+    janus-webhooks supporting events beyond janus's own.
+  - **Telemetry** ([#23](https://github.com/softistx/clavix-api/issues/23)): traces with tenant
+    attributes and OAuth spans, no personal data.
+  - **v1 gate** ([#271](https://github.com/softistx/clavix-api/issues/271)): a load test of the
+    token and JWKS paths, a security review of the whole surface and a restore drill, last.
+
 ## Next
 
 - **Agent follow-ups** — unused agent registrations no longer fill a tenant's `agents` quota before
@@ -37,16 +55,6 @@ nxgt-janus release says which.
 **Follow-ups**
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
-
-**Federation, step-up and events**
-- Enterprise OIDC connections and home-realm discovery.
-- MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
-- Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
-  telemetry.
-
-**Before v1**
-- A security review of the whole surface, a load test of the token and
-  JWKS paths, and a restore drill.
 
 **Authorization authoring**
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary
