@@ -114,7 +114,7 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy volatile-ttl --requirepass "$$REDIS_PASSWORD"
+      - exec redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"
     expose: ["6379"]
     volumes:
       - redis-data:/data

@@ -231,7 +231,7 @@ chmod 644 server/mongo.pem; rm mongo.key mongo.csr mongo.crt ext.cnf
 
 ## Redis
 
-Redis starts with `--maxmemory 192mb --maxmemory-policy volatile-ttl` (below its 256M limit: only keys with a TTL, the caches, are evicted; queue keys never are) and `--requirepass "$REDIS_PASSWORD"` (read from the environment, so
+Redis starts with `--maxmemory 192mb --maxmemory-policy noeviction` (below its 256M limit; it never evicts, since locks, rate limits and queue dedup keys must survive: at 192 MB writes fail, which the API treats as a Redis failure, and `docker stats` shows when to raise the limit) and `--requirepass "$REDIS_PASSWORD"` (read from the environment, so
 it is not in the process list), the healthcheck authenticates with
 `REDISCLI_AUTH`, and the api's `REDIS_URL` is `redis://:<REDIS_PASSWORD>@redis:6379`.
 Redis is on the private network only; use a hex password (it sits in a URL).
