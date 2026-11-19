@@ -322,7 +322,7 @@ describe("a keyring rotation", () => {
   test("a new first key: keys:reseal seals the secrets under it (janus secondFactor.reseal)", async () => {
     await offerTotp(SLUGS.a);
     const { cookie } = await sessionOf(SLUGS.a, "rot@example.test");
-    const on = await turnOn(SLUGS.a, cookie);
+    await turnOn(SLUGS.a, cookie);
 
     const tenant = await tenantOf(SLUGS.a);
     const newMaster = new Uint8Array(32).fill(9);
