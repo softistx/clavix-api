@@ -198,20 +198,58 @@ const janusResolvers = oauthResolvers({
     );
     return { amr, acr, authTime };
   },
-  oauth: async (ctx) => {
-    // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
-    const request = requestOf(ctx);
-    const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
-    if (server === null || server === undefined) throw denial("NOT_FOUND");
-    // A code is not minted for a suspended or deleted tenant.
-    requireLive(
-      await (
-        ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
-      ).tenant(),
-    );
-    return server;
-  },
+  oauth: (ctx) => serverOf(ctx),
 });
+
+async function serverOf(ctx: unknown) {
+  // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
+  const request = requestOf(ctx);
+  const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
+  if (server === null || server === undefined) throw denial("NOT_FOUND");
+  // A code is not minted for a suspended or deleted tenant.
+  requireLive(
+    await (
+      ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
+    ).tenant(),
+  );
+  return server;
+}
+
+/**
+ * D10 and RFC 9470: a request whose `acr_values` Clavix cannot issue (no gap
+ * the user could close: `missing` is empty) is refused to the client, which
+ * gets `error=unmet_authentication_requirements` on its redirect, instead of
+ * a page that waits for a proof nobody can give. A gap the user can close
+ * (a second factor, a fresh proof, an enrolment) stays a refusal of the call
+ * (403, `missing`), and the request stays pending for the step-up.
+ */
+const isUnreachable = (error: unknown) =>
+  error instanceof GraphQLError &&
+  error.extensions["code"] === "UNMET_AUTHENTICATION_REQUIREMENTS" &&
+  Array.isArray(error.extensions["missing"]) &&
+  error.extensions["missing"].length === 0;
+
+const approveOrDenyUnmet = async (
+  parent: unknown,
+  args: { id: string },
+  ctx: unknown,
+  info: unknown,
+) => {
+  const approve = janusResolvers.Mutation?.["approveOAuthRequest"] as (
+    ...rest: unknown[]
+  ) => Promise<{ redirectTo: string }>;
+  try {
+    return await approve(parent, args, ctx, info);
+  } catch (error) {
+    if (!isUnreachable(error)) throw error;
+    const server = await serverOf(ctx);
+    const { redirectTo } = await server.deny(args.id, {
+      error: "unmet_authentication_requirements",
+      description: "the authentication requested cannot be met",
+    });
+    return { redirectTo };
+  }
+};
 
 /**
  * The consent API of the hosted `/consent` page, on `/graphql`. Both the OAuth
@@ -225,6 +263,10 @@ const janusResolvers = oauthResolvers({
  */
 export const consentResolvers: IResolvers = {
   ...janusResolvers,
+  Mutation: {
+    ...janusResolvers.Mutation,
+    approveOAuthRequest: approveOrDenyUnmet,
+  },
   // The label of a scope is the tenant's description of it (console, `Scope`),
   // in the viewer's language (`Accept-Language`); janus's own (the scope's
   // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one

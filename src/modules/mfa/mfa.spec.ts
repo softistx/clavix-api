@@ -121,6 +121,14 @@ async function signInByCode(slug: string, email: string) {
   return gql(slug, VERIFY, { challenge, code });
 }
 
+/** The `amr` janus reads off the session of `cookie`. */
+async function amrOf(slug: string, cookie: string) {
+  const current = (await janusOf(slug)).authenticate(
+    new Request(url(slug), { headers: { cookie } }),
+  );
+  return [...((await current)?.session.amr ?? [])];
+}
+
 /** A signed-in user (session cookie) of the tenant. */
 async function sessionOf(slug: string, email: string) {
   const answer = await signInByCode(slug, email);
@@ -240,6 +248,10 @@ describe("enrol, activate, sign in with the challenge", () => {
     expect(
       (await gql(SLUGS.a, ME, {}, session)).data?.["currentUser"].email,
     ).toBe(ADA);
+    // RFC 8176: an authenticator code is `otp`, with `mfa` (nxgt-janus#950).
+    const proved = await amrOf(SLUGS.a, session);
+    expect(proved).toEqual(expect.arrayContaining(["otp", "mfa"]));
+    expect(proved).not.toContain("rec");
   });
 
   test("a recovery code answers the challenge once", async () => {
@@ -254,6 +266,12 @@ describe("enrol, activate, sign in with the challenge", () => {
     });
     expect(recovered.data?.["recoverSecondFactor"].recoveryCodesLeft).toBe(9);
     expect(cookieOf(recovered)).not.toBe("");
+    // RFC 8176: a recovery code is `rec`, in place of `otp`, with `mfa`
+    // (nxgt-janus#950, #954): the session says which proof opened it.
+    const proved = await amrOf(SLUGS.a, cookieOf(recovered));
+    expect(proved).toContain("rec");
+    expect(proved).toContain("mfa");
+    expect(proved).not.toContain("otp");
 
     const again = await signInByCode(SLUGS.a, "rec@example.test");
     const next = again.data?.["verifySignInCode"].challenge as string;
