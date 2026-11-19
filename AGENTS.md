@@ -653,7 +653,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   by one enabled connection per tenant (`DOMAIN_TAKEN`).
 - Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
-- Temporary, until nxgt-janus#TBD: the linked-user count is a raw count on `partitionedSocialLinks`
+- Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
   (`src/config/connections.ts`); janus has no such API.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
   Home-realm discovery (`forEmail`) and the callback route are F2/F3.

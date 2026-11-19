@@ -9,7 +9,7 @@ import { mongo } from "./db";
 import { connectionSecretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
 
-// Temporary, until nxgt-janus#TBD (a count of the links of one provider): the
+// Temporary, until @softistx/janus-social#930 (a count of the links of one provider): the
 // accounts linked through a connection are counted in janus-mongo's
 // `partitionedSocialLinks` collection, keyed by the tenant's partition (its
 // hex id) and the provider name, which is the connection's id.
