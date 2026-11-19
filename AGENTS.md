@@ -663,12 +663,15 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `SIGN_IN_METHOD_DISABLED`); the session is `amr: ["fed"]`. JIT (D4): a new user is created only when the
   connection's `jit` is on, whatever the tenant's `signUp` (`SIGN_UP_DISABLED` otherwise); an existing user is linked.
 - **`SSO_REQUIRED` (D3)**: when the owning connection has `requireSso`, `requestSignInCode` and `requestMagicLink`
-  refuse (403), and `verifySignInCode`, `confirmMagicLink` and `signInWithPasskey` revoke the session janus just
+  refuse (403), and `verifySignInCode`, `confirmMagicLink`, `signInWithPasskey` and the answer to a second-factor challenge (`confirmSecondFactor`, `recoverSecondFactor`) revoke the session janus just
   opened (by id for a code or link, whose cookie is then never set; for a passkey every non-federated session opened
-  since the attempt began, janus-graphql having queued a cookie that now names a revoked session), run inside
+  since the attempt began, janus-graphql having queued a cookie that now names a revoked session; the same for the
+  second-factor answer), run inside
   `recordingSignIn` so it is a failed sign-in (`sso-gate.ts`). Limits: a static social app (Google, GitHub) and
   `acceptInvitation`'s sign-in are not gated. `login_hint` waits for J2; the callback route is F3.
-- Temporary: janus-social's `oidcConnections` exposes no `resolveHost`, so `federation.spec.ts` mocks
+- Temporary: `src/modules/connections/email-domain.ts` copies janus-social's internal `domainOfEmail` (not exported;
+  upstream issue to be filed by the coordinating session); janus-social's `oidcConnections` exposes no
+  `resolveHost`, so `federation.spec.ts` mocks
   `node:dns/promises`; janus has no API to mark `mfa` amr from a federated step-up proof (D6 uses the acr check).
 
 ## OAuth clients

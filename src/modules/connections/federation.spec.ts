@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { totpCode } from "@softistx/janus/testing";
 import {
   createMemorySigningKeys,
   rotateSigningKeys,
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
+import {
+  type Ceremony,
+  softwareAuthenticator,
+} from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
@@ -15,11 +20,13 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { settled } from "@/modules/auth/outbox";
+import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
+import { originOf, rpIdOf } from "@/users/rp";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
@@ -54,6 +61,10 @@ const memory = mailer as MemoryMailer;
 const tenants = new TenantsService(mongo.db.tenants, {
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
+const policies = new SignInPolicyService(tenants, {
+  seal: () => "",
+  open: () => "",
+} as never);
 const checks: { tenantId: string; ip: string }[] = [];
 let throttled = false;
 const app = createApp({
@@ -268,7 +279,7 @@ beforeAll(async () => {
     idpCalls.push(`${request.method} ${new URL(request.url).pathname}`);
     return idp.handle(request);
   }) as typeof fetch;
-});
+}, 30_000);
 
 afterAll(async () => {
   globalThis.fetch = realFetch;
@@ -279,7 +290,7 @@ afterAll(async () => {
   });
   await oauthDb.collection("partitionedUsers").deleteMany({});
   await oauthDb.collection("partitionedSocialLinks").deleteMany({});
-});
+}, 30_000);
 
 describe("home-realm discovery", () => {
   test("a domain nobody verified is not discovered", async () => {
@@ -525,5 +536,199 @@ describe("a connection turned off", () => {
     expect((await gql("fedacme", REQUEST, { e: "ada@acme.test" })).errors).toBe(
       undefined,
     );
+  });
+});
+
+const SIGN_IN_OPTIONS = `mutation { passkeySignInOptions { options challenge } }`;
+const PASSKEY = `mutation ($c: String!, $r: String!) {
+  signInWithPasskey(challenge: $c, response: $r) { user { id } }
+}`;
+const REG_OPTIONS = `mutation { passkeyRegistrationOptions { options challenge } }`;
+const REGISTER = `mutation ($c: String!, $r: String!) {
+  registerPasskey(challenge: $c, response: $r, name: "Laptop") { id }
+}`;
+const LINK = `mutation ($t: String!) {
+  confirmMagicLink(token: $t) { ... on SignedIn { user { id } } }
+}`;
+const LINK_REQUEST = `mutation ($e: EmailAddress!) { requestMagicLink(email: $e) { expiresAt } }`;
+const CHALLENGE_VERIFY = `mutation ($c: String!, $k: String!) {
+  verifySignInCode(challenge: $c, code: $k) { __typename }
+}`;
+const CHALLENGE_OF = `mutation ($c: String!, $k: String!) {
+  verifySignInCode(challenge: $c, code: $k) {
+    ... on SecondFactorChallenge { challenge }
+  }
+}`;
+const CONFIRM_TOTP = `mutation ($c: String!, $k: String!) {
+  confirmSecondFactor(challenge: $c, code: $k) { user { id } }
+}`;
+const ENROLL = "mutation { enrollSecondFactor { secret } }";
+const ACTIVATE =
+  "mutation ($k: String!) { activateSecondFactor(code: $k) { recoveryCodes } }";
+
+/** A signed-in cookie for `email`, opened through janus directly (verified address). */
+async function userWithSession(email: string) {
+  const auth = await janusIssuers.forRequest(new Request(url("fedacme")));
+  if (auth === null) throw new Error("no janus for fedacme");
+  const user = await auth.create({ email });
+  await auth.verifyEmail.confirm((await auth.verifyEmail.send(user)).token);
+  const result = await auth.signInProven(
+    (await auth.findUser(user.id)) ?? user,
+  );
+  if (result.status !== "signedIn") throw new Error("no session");
+  return { id: user.id, cookie: `${SESSION_COOKIE}=${result.token}` };
+}
+
+/** The e-mailed six-digit code of the last mail to `email`, after `before` mails. */
+const codeFrom = (before: number, email: string) =>
+  /\b(\d{6})\b/.exec(
+    memory.sent
+      .slice(before)
+      .filter((m) => JSON.stringify(m.to).includes(email))
+      .at(-1)?.text ?? "",
+  )?.[1] ?? "";
+
+describe("single sign-on required: the other doors (D3)", () => {
+  test("a magic link is refused at the request, before any mail, and at the confirmation of one asked before the rule", async () => {
+    // The previous describe turned the connection off.
+    await connectionsService.update(acme, "acme", {
+      enabled: true,
+      requireSso: true,
+    });
+    await policies.updateMethods(acme, [{ type: "magicLink", enabled: true }]);
+    const before = memory.sent.length;
+    const refused = await gql("fedacme", LINK_REQUEST, { e: "mia@acme.test" });
+    expect(codeOf(refused)).toBe("SSO_REQUIRED");
+    expect(refused.status).toBe(403);
+    await settled();
+    expect(memory.sent.length).toBe(before);
+
+    // A link asked while the rule was off is refused when it is used.
+    await connectionsService.update(acme, "acme", { requireSso: false });
+    const max = await userWithSession("max@acme.test");
+    const live = await activeSessions(max.id);
+    const asked = await gql("fedacme", LINK_REQUEST, { e: "max@acme.test" });
+    expect(asked.errors).toBeUndefined();
+    await settled();
+    const token = new URL(
+      /https?:\/\/[^\s"'<>]+\/sign-in\/link\?token=[\w-]+/.exec(
+        memory.sent
+          .slice(before)
+          .filter((m) => JSON.stringify(m.to).includes("max@acme.test"))
+          .at(-1)?.text ?? "",
+      )?.[0] ?? "",
+    ).searchParams.get("token");
+    await connectionsService.update(acme, "acme", { requireSso: true });
+    const done = await gql("fedacme", LINK, { t: token ?? "" });
+    expect(codeOf(done)).toBe("SSO_REQUIRED");
+    expect(cookieOf(done)).toBe("");
+    expect(await activeSessions(max.id)).toBe(live);
+  });
+
+  test("a user holding TOTP gets SSO_REQUIRED, not a second-factor challenge, and no session", async () => {
+    await connectionsService.update(acme, "acme", { requireSso: false });
+    await policies.updateMfa(acme, { totp: true });
+    const email = "tess@acme.test";
+    const { id: tessId, cookie } = await userWithSession(email);
+    const enrolled = await gql("fedacme", ENROLL, {}, cookie);
+    const totp = dataOf<{ secret: string }>(enrolled, "enrollSecondFactor");
+    expect(
+      (await gql("fedacme", ACTIVATE, { k: totpCode(totp.secret) }, cookie))
+        .errors,
+    ).toBeUndefined();
+
+    // Asked while the rule is off: it would end at a challenge.
+    const again = memory.sent.length;
+    const second = await gql("fedacme", REQUEST, { e: email });
+    await settled();
+    const challenge = dataOf<{ challenge: string }>(
+      second,
+      "requestSignInCode",
+    ).challenge;
+    const code = codeFrom(again, email);
+    await connectionsService.update(acme, "acme", { requireSso: true });
+    const refused = await gql("fedacme", CHALLENGE_VERIFY, {
+      c: challenge,
+      k: code,
+    });
+    expect(codeOf(refused)).toBe("SSO_REQUIRED");
+    expect(refused.data?.["verifySignInCode"] ?? null).toBeNull();
+    expect(cookieOf(refused)).toBe("");
+
+    // A challenge issued while the rule was off opens no session once it is on.
+    await connectionsService.update(acme, "acme", { requireSso: false });
+    const third = memory.sent.length;
+    const asked3 = await gql("fedacme", REQUEST, { e: email });
+    await settled();
+    const issued = await gql("fedacme", CHALLENGE_OF, {
+      c: dataOf<{ challenge: string }>(asked3, "requestSignInCode").challenge,
+      k: codeFrom(third, email),
+    });
+    const pending = dataOf<{ challenge: string }>(issued, "verifySignInCode");
+    await connectionsService.update(acme, "acme", { requireSso: true });
+    const live = await activeSessions(tessId);
+    const blocked = await gql("fedacme", CONFIRM_TOTP, {
+      c: pending.challenge,
+      k: totpCode(totp.secret, new Date(Date.now() + 30_000)),
+    });
+    expect(codeOf(blocked)).toBe("SSO_REQUIRED");
+    expect(await activeSessions(tessId)).toBe(live);
+    // janus-graphql queued its cookie: it names a revoked session.
+    const stale = await gql("fedacme", ME, {}, cookieOf(blocked));
+    expect(stale.data?.["currentUser"] ?? null).toBeNull();
+    await policies.updateMfa(acme, { totp: false });
+  });
+
+  test("a passkey sign-in is refused, and the cookie it queued names no live session", async () => {
+    await connectionsService.update(acme, "acme", { requireSso: false });
+    const { id, cookie } = await userWithSession("pam@acme.test");
+    const tenant = await tenantResolver.resolveHost(
+      `fedacme.${env.CLAVIX_DOMAIN}`,
+    );
+    if (tenant === null) throw new Error("no tenant");
+    const authenticator = await softwareAuthenticator();
+    const challengeOf = (options: string) =>
+      String((JSON.parse(options) as { challenge: unknown }).challenge);
+    const reg = dataOf<{ options: string; challenge: string }>(
+      await gql("fedacme", REG_OPTIONS, {}, cookie),
+      "passkeyRegistrationOptions",
+    );
+    const registration = await authenticator.register({
+      challenge: challengeOf(reg.options),
+      origin: originOf(tenant),
+      rpId: rpIdOf(tenant),
+    });
+    const registered = await gql(
+      "fedacme",
+      REGISTER,
+      { c: reg.challenge, r: JSON.stringify(registration) },
+      cookie,
+    );
+    expect(registered.errors).toBeUndefined();
+    await connectionsService.update(acme, "acme", { requireSso: true });
+
+    const issued = dataOf<{ options: string; challenge: string }>(
+      await gql("fedacme", SIGN_IN_OPTIONS),
+      "passkeySignInOptions",
+    );
+    const ceremony: Partial<Ceremony> = {
+      challenge: challengeOf(issued.options),
+      origin: originOf(tenant),
+      rpId: rpIdOf(tenant),
+      userHandle: Buffer.from(id).toString("base64url"),
+      counter: 1,
+    };
+    const response = await authenticator.assert(ceremony as Ceremony);
+    const live = await activeSessions(id);
+    const refused = await gql("fedacme", PASSKEY, {
+      c: issued.challenge,
+      r: JSON.stringify(response),
+    });
+    expect(codeOf(refused)).toBe("SSO_REQUIRED");
+    // The session the passkey opened is revoked: no live session was added,
+    // and a cookie the response still carries opens nothing.
+    expect(await activeSessions(id)).toBe(live);
+    const me = await gql("fedacme", ME, {}, cookieOf(refused));
+    expect(me.data?.["currentUser"] ?? null).toBeNull();
   });
 });

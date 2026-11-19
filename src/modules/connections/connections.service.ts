@@ -1,4 +1,3 @@
-import { domainToASCII } from "node:url";
 import type { ConnectionSource, OidcConnection } from "@softistx/janus-social";
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
@@ -16,6 +15,7 @@ import type {
   connections,
 } from "./connections.model";
 import { checked, partsOf } from "./connections.record";
+import { domainOfEmail } from "./email-domain";
 
 export type { ConnectionDoc } from "./connections.model";
 
@@ -66,19 +66,6 @@ export interface ConnectionsOptions {
   links: LinkCounter;
   now?: () => Date;
   log?: (message: string) => void;
-}
-
-/** The punycode, lowercase domain of an address, or `null` for text that is not an address. */
-export function domainOfEmail(email: string): string | null {
-  const at = email.lastIndexOf("@");
-  if (at < 1 || email.indexOf("@") !== at) return null;
-  const domain = domainToASCII(
-    email
-      .slice(at + 1)
-      .trim()
-      .toLowerCase(),
-  );
-  return domain === "" ? null : domain;
 }
 
 const contextOf = (tenantId: string, connectionId: string) =>

@@ -223,7 +223,7 @@ Choose another name, or update the existing type.
 
 ## `SSO_REQUIRED` (403) on a hosted sign-in
 
-The address belongs to a verified domain of an enabled enterprise connection with `requireSso`. Why: the tenant's admin requires its users to sign in through the company's identity provider. Fix: call `hostedHomeRealm(email)` and start `socialSignInStart(provider: connectionId)`; or turn `requireSso` off on the connection.
+The address belongs to a verified domain of an enabled enterprise connection with `requireSso`. Why: the tenant's admin requires its users to sign in through the company's identity provider. Fix: call `hostedHomeRealm(email)` and start `socialSignInStart(provider: connectionId)`; or turn `requireSso` off on the connection. `socialSignInStart` answers `SIGN_IN_METHOD_DISABLED` for a connection id that is unknown, not the tenant's or turned off, and a connection with `jit` off refuses a first sign-in of an unknown user (`SIGN_UP_DISABLED`).
 
 ## Resource registration refusals (`resources:create`)
 
