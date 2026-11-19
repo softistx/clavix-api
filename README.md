@@ -1119,7 +1119,7 @@ The page sends the user agent to `redirectTo` (the client's redirect URI with `c
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
-scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403).
+scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403) or `UNMET_AUTHENTICATION_REQUIREMENTS` (403, `extensions.missing`; see "Authentication level and step-up").
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
   are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
   enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
@@ -1154,7 +1154,7 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
 - **Step-up mutations**: `requestPasskeyStepUp` / `confirmPasskeyStepUp(challenge, response)` (passkey: `hwk`,
   `user`, `mfa`, so `phr`), `requestStepUp` / `confirmStepUp(challenge, code)` (the app's code for a user who has
   one, else an e-mailed code that renews the proof only). Each confirmation is a `stepUp.confirm` audit event.
-- **Federation**: a connection with `upstreamMfa.acr` marks its sessions `["fed", "mfa"]`.
+- **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
 - **Not yet**: the client is not redirected with `unmet_authentication_requirements` (janus-oauth has no such
   denial) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data).
 
@@ -1336,7 +1336,7 @@ extend type Mutation {
   spends the user's earlier one. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
   verified gets `EMAIL_UNVERIFIED` (403; janus 0.57 refuses every factor enrolment while the e-mail is unproved, see
   [troubleshooting](docs/troubleshooting.md)). The session must have signed in within 10 minutes
-  (`STEP_UP_REQUIRED`, 403: sign in again with a code). Up to 10 passkeys per user.
+  (`STEP_UP_REQUIRED`, 403: prove again with `requestPasskeyStepUp` or `requestStepUp`). Up to 10 passkeys per user.
 - **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
   (`true` when this call removed it, `false` for an id that is not the caller's; same freshness).
   A removed passkey no longer signs in. Registering and removing mail nothing yet.
