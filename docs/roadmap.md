@@ -53,6 +53,12 @@ nxgt-janus release says which.
   (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
   and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
   Waits on `@softistx/security` `remotePolicy`.
+- **Step-up and authentication level** (M4) — a client asks for `acr_values`, `max_age` or `prompt=login`
+  and gets what it asked for or a clear refusal: a request no sign-in can meet is denied on the client's
+  redirect with `unmet_authentication_requirements`, and one the user can still meet (second factor,
+  fresh proof, enrolment) stays pending for the step-up. The ID token and the JWT access token carry
+  `acr`, `amr` (`rec` for a recovery code) and `auth_time`, and a passkey step-up needs no authenticator
+  app ([#20](https://github.com/softistx/clavix-api/issues/20)).
 
 ## Later
 
@@ -62,7 +68,6 @@ nxgt-janus release says which.
 
 **Federation, step-up and events**
 - Enterprise OIDC connections: an admin registers an upstream OIDC provider with a sealed secret and verified domains, with a per-plan quota (F1, [#19](https://github.com/softistx/clavix-api/issues/19)); home-realm discovery and federated sign-in with JIT and `SSO_REQUIRED` (F2, in progress).
-- Step-up (`acr_values`, `max_age`, `acr`/`amr`): done with janus 0.76 ([#20](https://github.com/softistx/clavix-api/issues/20)): the `unmet_authentication_requirements` redirect, `acr`, `amr` (`rec` for a recovery code) and `auth_time` in the access token, passkey step-up without an authenticator app.
 - Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
   telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans, [#23](https://github.com/softistx/clavix-api/issues/23)).
 
