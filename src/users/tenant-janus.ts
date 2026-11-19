@@ -171,8 +171,16 @@ function buildJanus(
 /** The typed shape of a tenant's instance. It has no `social`: only a tenant with a provider does, reached through `socialOf`. */
 export type TenantJanus = ReturnType<typeof buildJanus>;
 
-/** The instance of a tenant with at least one social provider. */
-export type TenantSocialJanus = TenantJanus & SocialAuth;
+/**
+ * The instance of a tenant with at least one social provider. janus-graphql's
+ * `SocialAuth` leaves `countLinks` out of its narrow `social`; the instance has it.
+ */
+export type TenantSocialJanus = TenantJanus &
+  SocialAuth & {
+    readonly social: {
+      countLinks(query: { readonly provider: string }): Promise<number>;
+    };
+  };
 
 /** The provider's display name when the user schema takes it (1 to 200 characters), else none: it never refuses a sign-up. */
 function nameOf(name: string | undefined): { name?: string } {

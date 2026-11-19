@@ -1,7 +1,8 @@
-import type {
-  ConnectionSource,
-  OidcConnection,
-  OidcConnectionsOptions,
+import {
+  type ConnectionSource,
+  domainOfEmail,
+  type OidcConnection,
+  type OidcConnectionsOptions,
 } from "@softistx/janus-social";
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
@@ -19,7 +20,6 @@ import type {
   connections,
 } from "./connections.model";
 import { checked, partsOf } from "./connections.record";
-import { domainOfEmail } from "./email-domain";
 
 export type { ConnectionDoc } from "./connections.model";
 
