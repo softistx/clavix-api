@@ -83,7 +83,16 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
         current: 0,
         skipped: 1,
         failed: 0,
-        secondFactor: { sealed: 0, behind: 0 },
+        secondFactor: {
+          scanned: 0,
+          resealed: 0,
+          current: 0,
+          skipped: 0,
+          unreadable: 0,
+          sealed: 0,
+          behind: 0,
+          recoveryCodesBehind: 0,
+        },
       }),
     ).toBe(1);
     expect(
@@ -93,7 +102,16 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
         current: 1,
         skipped: 0,
         failed: 0,
-        secondFactor: { sealed: 0, behind: 0 },
+        secondFactor: {
+          scanned: 0,
+          resealed: 0,
+          current: 0,
+          skipped: 0,
+          unreadable: 0,
+          sealed: 0,
+          behind: 0,
+          recoveryCodesBehind: 0,
+        },
       }),
     ).toBe(0);
   });

@@ -1,6 +1,12 @@
 import { resealMongoSigningKeys } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import { secondFactorKeysOf } from "@/users/second-factor-keys";
+import {
+  emptySecondFactorCounts,
+  type ResealSecondFactor,
+  resealSecondFactorOf,
+  type SecondFactorResealCounts,
+} from "./second-factor-reseal";
 
 export interface ResealDeps {
   db: Db;
@@ -9,6 +15,8 @@ export interface ResealDeps {
   /** Every tenant partition (hex ids), the suspended and the trashed included. */
   tenantIds: () => Promise<string[]>;
   log?: (message: string) => void;
+  /** Seals a partition's TOTP secrets again; janus's `secondFactor.reseal` under the keyring by default. */
+  resealSecondFactor?: ResealSecondFactor;
 }
 
 export interface ResealReport {
@@ -21,11 +29,17 @@ export interface ResealReport {
   /** Tenants whose run threw (a record no key of the list opens). */
   failed: number;
   /**
-   * The TOTP secrets and recovery codes sealed under a key of the keyring, to
-   * report, never to act on: janus has no re-seal call for them, a secret
-   * moves under the first key on its user's next accepted code.
+   * The TOTP secrets, sealed again by janus (`secondFactor.reseal`), and what
+   * still sits under an older key afterwards: `behind` counts the secrets,
+   * `recoveryCodesBehind` the recovery-code hashes (those cannot be hashed
+   * again: they keep working while their key is in the keyring, and new ones
+   * are hashed under the first key).
    */
-  secondFactor: { sealed: number; behind: number };
+  secondFactor: SecondFactorResealCounts & {
+    sealed: number;
+    behind: number;
+    recoveryCodesBehind: number;
+  };
 }
 
 /** The key id of a `v1.<keyId>.<iv>.<ciphertext>` sealed value, or `null` for any other text. */
@@ -35,13 +49,13 @@ const sealKeyId = (value: unknown): string | null => {
   return version === "v1" && keyId !== undefined ? keyId : null;
 };
 
-/** Counts what the users of one partition hold sealed for the second factor, by whether it is under the first key. */
+/** Counts, after the pass, what the users of one partition still hold under an older key (verification of `secondFactor.reseal`). */
 async function countSecondFactorSeals(
   db: Db,
   partition: string,
   firstKeyId: string,
 ) {
-  const out = { sealed: 0, behind: 0 };
+  const out = { sealed: 0, behind: 0, recoveryCodesBehind: 0 };
   const users = db
     .collection<{
       secondFactor?: { secret?: string; recoveryCodes?: string[] } | null;
@@ -56,14 +70,14 @@ async function countSecondFactorSeals(
       },
     );
   for await (const user of users) {
-    for (const value of [
-      user.secondFactor?.secret,
-      ...(user.secondFactor?.recoveryCodes ?? []),
-    ]) {
-      const keyId = sealKeyId(value);
-      if (keyId === null) continue;
+    const secretKeyId = sealKeyId(user.secondFactor?.secret);
+    if (secretKeyId !== null) {
       out.sealed += 1;
-      if (keyId !== firstKeyId) out.behind += 1;
+      if (secretKeyId !== firstKeyId) out.behind += 1;
+    }
+    for (const code of user.secondFactor?.recoveryCodes ?? []) {
+      const keyId = sealKeyId(code);
+      if (keyId !== null && keyId !== firstKeyId) out.recoveryCodesBehind += 1;
     }
   }
   return out;
@@ -73,15 +87,16 @@ async function countSecondFactorSeals(
  * Re-seals the private signing keys of every tenant under the first master key
  * (`resealMongoSigningKeys`, one run per partition). Idempotent. A tenant that
  * fails is logged and the others go on. The rotation is over when a run
- * answers `resealed: 0`, `skipped: 0`, `failed: 0`. The second factor's seals
- * are only counted (`secondFactor.behind`): the old key stays in the keyring
- * until that number is 0, or its users re-enrol.
+ * answers `resealed: 0`, `skipped: 0`, `failed: 0` (`secondFactor.resealed`,
+ * `skipped` and `unreadable` included). The TOTP secrets are sealed again by
+ * janus's `secondFactor.reseal`; `secondFactor.behind` checks none is left.
  */
 export async function resealAllTenants({
   db,
   masterKeys,
   tenantIds,
   log = (message) => console.warn(message),
+  resealSecondFactor,
 }: ResealDeps): Promise<ResealReport> {
   const report: ResealReport = {
     tenants: 0,
@@ -89,12 +104,16 @@ export async function resealAllTenants({
     current: 0,
     skipped: 0,
     failed: 0,
-    secondFactor: { sealed: 0, behind: 0 },
+    secondFactor: {
+      ...emptySecondFactorCounts(),
+      sealed: 0,
+      behind: 0,
+      recoveryCodesBehind: 0,
+    },
   };
-  const [first] = secondFactorKeysOf([...masterKeys] as [
-    Uint8Array,
-    ...Uint8Array[],
-  ]);
+  const keys = secondFactorKeysOf(masterKeys);
+  const [first] = keys;
+  const sealAgain = resealSecondFactor ?? resealSecondFactorOf(db, keys);
   for (const partition of await tenantIds()) {
     report.tenants += 1;
     try {
@@ -105,9 +124,20 @@ export async function resealAllTenants({
       report.resealed += done.resealed;
       report.current += done.current;
       report.skipped += done.skipped;
+      const run = await sealAgain(partition);
+      for (const field of [
+        "scanned",
+        "resealed",
+        "current",
+        "skipped",
+        "unreadable",
+      ] as const) {
+        report.secondFactor[field] += run[field];
+      }
       const seals = await countSecondFactorSeals(db, partition, first.id);
       report.secondFactor.sealed += seals.sealed;
       report.secondFactor.behind += seals.behind;
+      report.secondFactor.recoveryCodesBehind += seals.recoveryCodesBehind;
     } catch (error) {
       report.failed += 1;
       log(
@@ -122,4 +152,9 @@ export async function resealAllTenants({
 
 /** The script's exit code: 0 only when nothing is left to reseal or retry. */
 export const resealExitCode = (report: ResealReport): number =>
-  report.skipped > 0 || report.failed > 0 ? 1 : 0;
+  report.skipped > 0 ||
+  report.failed > 0 ||
+  report.secondFactor.skipped > 0 ||
+  report.secondFactor.unreadable > 0
+    ? 1
+    : 0;
