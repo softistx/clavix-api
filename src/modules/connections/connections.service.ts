@@ -1,4 +1,8 @@
-import type { ConnectionSource, OidcConnection } from "@softistx/janus-social";
+import type {
+  ConnectionSource,
+  OidcConnection,
+  OidcConnectionsOptions,
+} from "@softistx/janus-social";
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import type { TxtResolver } from "@/modules/domains/dns";
@@ -61,6 +65,9 @@ export type ConnectionPatch = Partial<
   Omit<ConnectionInput, "id" | "clientSecret">
 >;
 
+/** How the guard resolves an identity provider's host; `node:dns` by default. */
+export type HostResolver = NonNullable<OidcConnectionsOptions["resolveHost"]>;
+
 export interface ConnectionsOptions {
   txt: TxtResolver;
   links: LinkCounter;
@@ -101,6 +108,7 @@ function nameOf(name: string): string {
 export class ConnectionsService {
   private readonly now: () => Date;
   private readonly log: (message: string) => void;
+  private hostResolver: HostResolver | undefined;
 
   constructor(
     private readonly collection: TypedCollection<typeof connections>,
@@ -486,6 +494,16 @@ export class ConnectionsService {
   async jitAllowed(tenantId: string, connectionId: string): Promise<boolean> {
     const doc = await this.find(tenantId, connectionId);
     return doc?.enabled === true && doc.jit;
+  }
+
+  /** Specs only: answers the addresses of a host with no real DNS. Production leaves it unset. */
+  useHostResolver(resolver: HostResolver | undefined): void {
+    this.hostResolver = resolver;
+  }
+
+  /** The resolver `useHostResolver` set, read when a tenant's instance is built. */
+  resolveHost(): HostResolver | undefined {
+    return this.hostResolver;
   }
 
   /**

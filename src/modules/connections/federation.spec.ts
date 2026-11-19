@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { lookup } from "node:dns/promises";
 import { totpCode } from "@softistx/janus/testing";
 import {
   createMemorySigningKeys,
@@ -33,20 +34,13 @@ import { createTenantParOff } from "../../../test/tenant-par-off";
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of
 // tenant "fedacme" (its "Acme SSO"): the whole federated sign-in runs, the
 // discovery, the authorization, the code exchange and the ID token's checks.
-// Temporary, until @softistx/janus-social exposes `resolveHost` on
-// `oidcConnections`: the guard's address check resolves the IdP's host, so
-// `node:dns/promises` answers a public address for the spec's `.test` hosts.
-const realDns = await import("node:dns/promises");
-mock.module("node:dns/promises", () => ({
-  ...realDns,
-  lookup: (host: string, options?: unknown) =>
-    host.endsWith(".clavix.test")
-      ? Promise.resolve([{ address: "93.184.216.34", family: 4 }])
-      : (realDns.lookup as (h: string, o?: unknown) => Promise<unknown>)(
-          host,
-          options,
-        ),
-}));
+// The guard's address check resolves the IdP's host: the connections answer a
+// public address for the spec's `.test` hosts, with no global DNS mock.
+connectionsService.useHostResolver(async (host) =>
+  host.endsWith(".clavix.test")
+    ? ["93.184.216.34"]
+    : (await lookup(host, { all: true })).map((a) => a.address),
+);
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -414,6 +408,12 @@ describe("federated sign-in", () => {
     };
     expect(done.created).toBe(false);
     expect(done.user.id).toBe(known);
+  });
+
+  test("a connection with linked accounts is not deleted, counted by the tenant's own store", async () => {
+    await expect(connectionsService.delete(acme, "acme")).rejects.toMatchObject(
+      { code: "CONNECTION_IN_USE" },
+    );
   });
 
   test("jit off: a new user is not created, even from the company's own IdP", async () => {
