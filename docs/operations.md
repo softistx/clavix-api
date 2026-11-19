@@ -45,11 +45,10 @@ by the `Host` header, which Caddy passes untouched.
    `*.<domain>` (so `console.<domain>` and every `<slug>.<domain>` resolve), and
    ports 80 and 443 open.
 2. Build and publish the images yourself. Both repositories build with their
-   `Dockerfile`; the API one needs the npm.softistx.com read token (`NPM_REGISTRY_TOKEN`) as a build secret:
+   `Dockerfile`; `@softistx/*` comes from public npmjs, so no token is needed:
 
    ```sh
-   export NPM_REGISTRY_TOKEN   # read token, from ~/.zshenv
-   docker build --secret id=npm_registry_token,env=NPM_REGISTRY_TOKEN -t registry.example.com/clavix-api:0.1.0 .
+   docker build -t registry.example.com/clavix-api:0.1.0 .
    ```
 
 3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate
@@ -114,30 +113,29 @@ by the `Host` header, which Caddy passes untouched.
 The variables of the API are in the README ("Environment") and `.env.example`.
 Beyond them, the deployment reads, in `deploy/.env`:
 
-| Variable                                                                 | Read by                     | Meaning                                                                                                                                                         |
-| ------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`                                    | compose                     | the images to run                                                                                                                                               |
-| `CLAVIX_DOMAIN`                                                          | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                     |
-| `ACME_EMAIL`                                                             | caddy                       | the ACME account address                                                                                                                                        |
-| `REDIS_PASSWORD`                                                         | redis, api                  | the password in `REDIS_URL`                                                                                                                                     |
-| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used only by the mongo container to initiate the replica set at start-up                   |
-| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                 |
-| `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                             |
-| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                     |
-| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                          |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`              | api                         | optional: where traces and logs go, see "Telemetry"                                                                                                             |
-| `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                               |
-| `CONSOLE_CLIENT_SECRET`                                                  | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                   |
-| `CONSOLE_SESSION_SECRET`                                                 | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                           |
-| `CONSOLE_ISSUER`                                                         | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                 |
-| `CONTACT_EMAIL`                                                          | ui                          | the public contact address                                                                                                                                      |
-| `BACKUP_DIR`, `BACKUP_KEEP`                                              | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14)  |
-| `BACKUP_OFFSITE_S3_BUCKET`                                               | backup, restore             | opt-in off-host copy: the bucket. Empty = no copy. See "Off-host copies"                                                                                        |
-| `BACKUP_OFFSITE_S3_ENDPOINT`, `BACKUP_OFFSITE_S3_REGION`                 | backup, restore             | the S3-compatible service (`https://...`; empty = AWS) and its region                                                                                           |
-| `BACKUP_OFFSITE_S3_ACCESS_KEY_ID`, `BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY` | backup, restore             | the credentials; required with a bucket. Give the backup a key that may write, list and delete under the prefix only                                            |
-| `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                            |
-| `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                           |
-| `NPM_REGISTRY_TOKEN`                                                     | compose build               | read token of `npm.softistx.com`, a build secret of the backup tools image (it bundles `@softistx/s3`); export it in the shell that runs `docker compose build` |
+| Variable                                                                 | Read by                     | Meaning                                                                                                                                                        |
+| ------------------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`                                    | compose                     | the images to run                                                                                                                                              |
+| `CLAVIX_DOMAIN`                                                          | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                    |
+| `ACME_EMAIL`                                                             | caddy                       | the ACME account address                                                                                                                                       |
+| `REDIS_PASSWORD`                                                         | redis, api                  | the password in `REDIS_URL`                                                                                                                                    |
+| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used only by the mongo container to initiate the replica set at start-up                  |
+| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                |
+| `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                            |
+| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                    |
+| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`              | api                         | optional: where traces and logs go, see "Telemetry"                                                                                                            |
+| `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                              |
+| `CONSOLE_CLIENT_SECRET`                                                  | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                  |
+| `CONSOLE_SESSION_SECRET`                                                 | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                          |
+| `CONSOLE_ISSUER`                                                         | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
+| `CONTACT_EMAIL`                                                          | ui                          | the public contact address                                                                                                                                     |
+| `BACKUP_DIR`, `BACKUP_KEEP`                                              | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
+| `BACKUP_OFFSITE_S3_BUCKET`                                               | backup, restore             | opt-in off-host copy: the bucket. Empty = no copy. See "Off-host copies"                                                                                       |
+| `BACKUP_OFFSITE_S3_ENDPOINT`, `BACKUP_OFFSITE_S3_REGION`                 | backup, restore             | the S3-compatible service (`https://...`; empty = AWS) and its region                                                                                          |
+| `BACKUP_OFFSITE_S3_ACCESS_KEY_ID`, `BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY` | backup, restore             | the credentials; required with a bucket. Give the backup a key that may write, list and delete under the prefix only                                           |
+| `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                           |
+| `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                          |
 
 The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVICE_IP_LIMIT`,
 `CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
@@ -504,7 +502,7 @@ as that user first (`mkdir -p backups`), and export
 `BACKUP_UID=$(id -u) BACKUP_GID=$(id -g)` when your user is not 1000. Archives an
 earlier run left owned by root: `sudo chown -R "$(id -u):$(id -g)" backups`.
 
-The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies; the build needs `NPM_REGISTRY_TOKEN` exported in the shell, as the API image does) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
+The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
 
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
 `clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and

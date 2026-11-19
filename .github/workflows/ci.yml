@@ -58,8 +58,6 @@ jobs:
           key: bun-install-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-install-${{ runner.os }}-${{ runner.arch }}-
       - run: bun install --frozen-lockfile
-        env:
-          NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
       - uses: actions/cache/save@v4
         if: steps.bun-cache.outputs.cache-hit != 'true'
         with:

@@ -161,7 +161,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/tools.Dockerfile
-      secrets: [npm_registry_token]
     entrypoint: ["bun"]
     command: ["/scripts/mongo-backup.js", "/backups"]
     deploy:
@@ -188,7 +187,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/tools.Dockerfile
-      secrets: [npm_registry_token]
     entrypoint: ["bun", "/scripts/mongo-restore.js"]
     deploy:
       resources:
@@ -202,11 +200,6 @@ services:
       - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
       mongo: { condition: service_healthy }
-
-# Read at build time by the tools image (the registry token of @softistx packages).
-secrets:
-  npm_registry_token:
-    environment: NPM_REGISTRY_TOKEN
 
 volumes:
   mongo-data:

@@ -699,8 +699,7 @@ one is refused (docs/troubleshooting.md).
 
 `bun run verify` = `generate`, `check:ci` (Biome), `typecheck` (`bun check`), `test`; CI
 (`.github/workflows/ci.yml`, on pull requests into `develop` only) runs it, then `build`.
-The `@softistx/*` packages come from npm.softistx.com: `export NPM_REGISTRY_TOKEN` (read token, set by ~/.zshenv)
-before `bun install`; CI uses the `NPM_REGISTRY_TOKEN` secret.
+The `@softistx/*` packages come from npmjs (public): `bun install` needs no token.
 
 ## Tests and the machine
 
