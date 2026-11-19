@@ -1154,6 +1154,9 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
 - **Step-up mutations**: `requestPasskeyStepUp` / `confirmPasskeyStepUp(challenge, response)` (passkey: `hwk`,
   `user`, `mfa`, so `phr`), `requestStepUp` / `confirmStepUp(challenge, code)` (the app's code for a user who has
   one, else an e-mailed code that renews the proof only). Each confirmation is a `stepUp.confirm` audit event.
+  Errors: the two `request*` mutations answer `UNAUTHENTICATED` (401) to an anonymous caller. `confirmStepUp` answers
+  `CODE_INVALID` (with `attemptsLeft`) for a wrong code and `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED` for a bad
+  challenge; `confirmPasskeyStepUp` answers `PASSKEY_INVALID` for a failed assertion and the same `TOKEN_*` codes.
 - **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
 - **Not yet**: the client is not redirected with `unmet_authentication_requirements` (janus-oauth has no such
   denial) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data).
