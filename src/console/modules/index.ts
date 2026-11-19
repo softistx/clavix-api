@@ -6,6 +6,11 @@ import { admins, adminsAudits, adminsGuards } from "./admins";
 import { audit, auditAudits, auditGuards } from "./audit";
 import { branding, brandingAudits, brandingGuards } from "./branding";
 import { clients, clientsAudits, clientsGuards } from "./clients";
+import {
+  connections,
+  connectionsAudits,
+  connectionsGuards,
+} from "./connections";
 import { domains, domainsAudits, domainsGuards } from "./domains";
 import { me, meGuards } from "./me";
 import {
@@ -43,6 +48,7 @@ export const resolvers: Resolvers = mergeResolvers([
   users,
   sessions,
   webhooks,
+  connections,
 ]);
 export const guards: Guards = {
   ...meGuards,
@@ -59,6 +65,7 @@ export const guards: Guards = {
   ...usersGuards,
   ...sessionsGuards,
   ...webhooksGuards,
+  ...connectionsGuards,
 };
 export const audits: Audits = {
   ...auditAudits,
@@ -74,4 +81,5 @@ export const audits: Audits = {
   ...usersAudits,
   ...sessionsAudits,
   ...webhooksAudits,
+  ...connectionsAudits,
 };

@@ -6,6 +6,7 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { secondFactorKeysOf } from "@/users/second-factor-keys";
 import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
+import { connectionsService } from "./connections";
 import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { masterKeys, secretBox } from "./keys";
@@ -36,6 +37,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     db: oauthDb,
     secondFactorKeys: secondFactorKeysOf(masterKeys),
     secrets: secretBox,
+    connections: connectionsService,
     events: (tenant) => janusListener(tenant.tenantId, eventBus),
     invitationHooks: (tenant) =>
       tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks(tenant) : undefined,

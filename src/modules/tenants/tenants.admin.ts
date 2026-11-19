@@ -8,7 +8,7 @@ import {
 import { ObjectId } from "mongodb";
 import { env } from "@/config/env";
 import { dropTenantHosts } from "./hosts";
-import type { PlanId, QuotaOverrides } from "./plan.schema";
+import { type PlanId, QUOTA_KEYS, type QuotaOverrides } from "./plan.schema";
 import { createPurgeRegistry, type PurgeRegistry } from "./purge-registry";
 import type { Tenant, tenants } from "./tenants.model";
 import type { TenantsService } from "./tenants.service";
@@ -199,7 +199,7 @@ export class TenantAdminService {
     return this.change(id, (tenant) => {
       const same =
         tenant.plan === input.plan &&
-        (["mau", "clients", "domains", "agents"] as const).every(
+        QUOTA_KEYS.every(
           (key) => tenant.quotaOverrides[key] === input.quotaOverrides[key],
         );
       return same

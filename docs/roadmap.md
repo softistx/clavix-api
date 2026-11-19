@@ -61,7 +61,7 @@ nxgt-janus release says which.
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 **Federation, step-up and events**
-- Enterprise OIDC connections and home-realm discovery.
+- Enterprise OIDC connections: an admin registers an upstream OIDC provider with a sealed secret and verified domains, with a per-plan quota (F1, in progress, [#19](https://github.com/softistx/clavix-api/issues/19)); home-realm discovery follows.
 - Step-up (`acr_values`, `max_age`, `acr`/`amr`).
 - Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
   telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans).

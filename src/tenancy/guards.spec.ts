@@ -85,6 +85,8 @@ describe("tenant-owned collections", () => {
 const allowed = [
   "src/tenancy/",
   "src/migrations/",
+  // Key rotation walks every tenant's partition of janus's own collections.
+  "src/keys/reseal.ts",
   "src/modules/tenants/",
   "src/modules/resources/",
   "src/config/resources.ts",
@@ -103,6 +105,8 @@ const allowed = [
   "src/config/agent-clients.ts",
   "src/modules/webhooks/",
   "src/config/webhook-endpoints.ts",
+  "src/modules/connections/",
+  "src/config/connections.ts",
 ];
 // Where a platform collection with a `tenantId` (owned.ts) may be reached:
 // `adminEvents` by its recorder and the recorder's wiring, nowhere else.
@@ -111,6 +115,8 @@ const platformAllowed = [
   "src/config/admin-events.ts",
   "src/modules/domains/",
   "src/config/domains.ts",
+  // Key rotation walks every tenant's partition of janus's own collections.
+  "src/keys/reseal.ts",
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.

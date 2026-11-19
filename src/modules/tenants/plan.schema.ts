@@ -4,13 +4,14 @@ import { z } from "zod";
 export const PLAN_IDS = ["free", "pro", "enterprise"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
-/** What a quota may be put on. `mau` is soft, `clients`, `domains`, `agents` and `webhooks` are hard. */
+/** What a quota may be put on. `mau` is soft, `clients`, `domains`, `agents`, `webhooks` and `connections` are hard. */
 export const QUOTA_KEYS = [
   "mau",
   "clients",
   "domains",
   "agents",
   "webhooks",
+  "connections",
 ] as const;
 export type QuotaKey = (typeof QUOTA_KEYS)[number];
 
@@ -31,6 +32,7 @@ export const planFields = {
       domains: override,
       agents: override,
       webhooks: override,
+      connections: override,
     })
     .default({}),
 };
@@ -52,7 +54,14 @@ export const PLANS: readonly Plan[] = [
   {
     id: "free",
     name: "Free",
-    quotas: { mau: 1_000, clients: 3, domains: 1, agents: 100, webhooks: 2 },
+    quotas: {
+      mau: 1_000,
+      clients: 3,
+      domains: 1,
+      agents: 100,
+      webhooks: 2,
+      connections: 1,
+    },
     auditRetentionDays: 30,
   },
   {
@@ -64,6 +73,7 @@ export const PLANS: readonly Plan[] = [
       domains: 5,
       agents: 1_000,
       webhooks: 10,
+      connections: 5,
     },
     auditRetentionDays: 90,
   },
@@ -76,6 +86,7 @@ export const PLANS: readonly Plan[] = [
       domains: null,
       agents: null,
       webhooks: 50,
+      connections: null,
     },
     auditRetentionDays: 365,
   },
@@ -94,6 +105,7 @@ export const overridesOf = (overrides: QuotaOverrides): Quotas => ({
   domains: overrides.domains ?? null,
   agents: overrides.agents ?? null,
   webhooks: overrides.webhooks ?? null,
+  connections: overrides.connections ?? null,
 });
 
 /** What applies to a tenant: its plan's quotas with its overrides on top. */
@@ -108,5 +120,6 @@ export function effectiveQuotas(tenant: {
     domains: tenant.quotaOverrides.domains ?? quotas.domains,
     agents: tenant.quotaOverrides.agents ?? quotas.agents,
     webhooks: tenant.quotaOverrides.webhooks ?? quotas.webhooks,
+    connections: tenant.quotaOverrides.connections ?? quotas.connections,
   };
 }

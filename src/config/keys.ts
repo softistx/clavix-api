@@ -25,6 +25,12 @@ export const secretBox = createSecretBox(masterKeys);
 /** Seals and opens the webhook endpoints' signing secrets (D19), under its own subkey (label `webhook-secrets`). */
 export const webhookSecretBox = createSecretBox(masterKeys, "webhook-secrets");
 
+/** Seals and opens the client secrets of the tenants' enterprise OIDC connections, under their own subkey (label `connection-secrets`). */
+export const connectionSecretBox = createSecretBox(
+  masterKeys,
+  "connection-secrets",
+);
+
 /** A tenant's first (or replacement) key; `TenantsService.create` calls it. */
 export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {
   await ensureSigningKey(signingKeysFor, tenantId);

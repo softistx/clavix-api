@@ -24,6 +24,7 @@ function overridesOrFail(
         domains?: number | null;
         agents?: number | null;
         webhooks?: number | null;
+        connections?: number | null;
       }
     | null
     | undefined,
