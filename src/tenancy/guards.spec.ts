@@ -15,6 +15,16 @@ const startsWithTenantId = (index: { key: IndexDescription["key"] }) =>
     ? [...index.key.keys()][0]
     : Object.keys(index.key)[0]) === "tenantId";
 
+// A TTL index is single-field (MongoDB refuses a compound one) and only the
+// server's expiry reads it; no query goes through it. Nothing else is exempt.
+const keysOf = (index: { key: IndexDescription["key"] }) =>
+  index.key instanceof Map ? [...index.key.keys()] : Object.keys(index.key);
+const isTtlIndex = (index: {
+  key: IndexDescription["key"];
+  expireAfterSeconds?: unknown;
+}) =>
+  typeof index.expireAfterSeconds === "number" && keysOf(index).length === 1;
+
 describe("tenant-owned collections", () => {
   // `isTenantOwned` reads `schema.shape`: a definition whose schema has none
   // (a wrapped or non-object schema) would be dropped from the guards without
@@ -41,18 +51,27 @@ describe("tenant-owned collections", () => {
   test("every index starts with tenantId", () => {
     const offenders = owned.flatMap((c) =>
       c.indexes
-        // A TTL index is single-field (MongoDB refuses a compound one) and only
-        // the server's expiry reads it; no query goes through it.
-        .filter(
-          (index) =>
-            !startsWithTenantId(index) &&
-            index.expireAfterSeconds === undefined,
-        )
+        .filter((index) => !startsWithTenantId(index) && !isTtlIndex(index))
         .map(
           (index) => `${c.name}: ${index.name ?? JSON.stringify(index.key)}`,
         ),
     );
     expect(offenders).toEqual([]);
+  });
+
+  test("only a single-field numeric TTL index is exempt from the tenantId prefix", () => {
+    expect(isTtlIndex({ key: { at: 1 }, expireAfterSeconds: 0 })).toBe(true);
+    expect(isTtlIndex({ key: { at: 1 }, expireAfterSeconds: 60 })).toBe(true);
+    expect(isTtlIndex({ key: { text: 1 } })).toBe(false);
+    expect(
+      isTtlIndex({ key: { text: 1 }, expireAfterSeconds: undefined }),
+    ).toBe(false);
+    expect(isTtlIndex({ key: { text: 1 }, expireAfterSeconds: null })).toBe(
+      false,
+    );
+    expect(
+      isTtlIndex({ key: { text: 1, at: 1 }, expireAfterSeconds: 60 }),
+    ).toBe(false);
   });
 
   test("the index check refuses an index that does not start with tenantId", () => {
