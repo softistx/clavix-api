@@ -699,8 +699,8 @@ master key (HKDF, info `second-factor`). `keys:reseal` seals them again with jan
 `secondFactor.reseal` (batches of 100, resumable, idempotent), including the users who
 do not sign in, and reports `secondFactor: { scanned, resealed, current, skipped,
 unreadable, sealed, behind, recoveryCodesBehind }`. It exits 1 while `skipped` or
-`unreadable` is above 0 (run it again; `unreadable` is a secret no key of the list
-opens). `behind` is the secrets still under an older key: 0 after a pass. The recovery
+`unreadable` is above 0 (run it again for `skipped`; an `unreadable` secret is one no key of the list
+opens: put the missing key back, or reset that user's factor with `resetUserSecondFactor`, a re-run does not clear it). `sealed` and `behind` count the secrets only (not the recovery codes); `behind` is the secrets still under an older key: 0 after a pass. The recovery
 codes are hashes and cannot be hashed again: their old hashes keep working while the old
 key is in the list, and new ones (a user's `regenerateRecoveryCodes`) are hashed under the
 first key. **Keep the old key in the list while `recoveryCodesBehind` is above 0**, or

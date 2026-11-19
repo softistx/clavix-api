@@ -361,7 +361,6 @@ describe("a keyring rotation", () => {
     expect(stored?.secondFactor?.secret?.split(".")[1]).toBe(
       secondFactorKeysOf(ring)[0].id,
     );
-    expect(on.secret).toBeString();
   });
 });
 

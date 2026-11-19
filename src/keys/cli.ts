@@ -15,8 +15,8 @@ export const RESEAL_USAGE = `Usage: bun run keys:reseal
 Re-seals every tenant's stored signing keys under the first key of CLAVIX_KEYS_MASTER_KEY.
 Prints the counts as JSON; exits 1 while records were skipped or a tenant failed: run it again.
 It also seals the users' TOTP secrets again (janus secondFactor.reseal, in batches) and reports
-secondFactor.behind, the secrets left under an older key (0 when done); exits 1 while some were skipped or
-unreadable. Recovery codes are hashes and cannot be sealed again: keep the old key until their users
+secondFactor.behind, the secrets left under an older key (0 when done); exits 1 while some were skipped (run again) or
+unreadable (put the missing key back, or reset that user's factor). Recovery codes are hashes and cannot be sealed again: keep the old key until their users
 have new ones (secondFactor.recoveryCodesBehind).`;
 
 export type RotateTarget =
