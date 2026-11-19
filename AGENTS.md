@@ -670,7 +670,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `recordingSignIn` so it is a failed sign-in (`sso-gate.ts`). Limits: a static social app (Google, GitHub) and
   `acceptInvitation`'s sign-in are not gated. `login_hint` waits for J2; the callback route is F3.
 - Temporary: `src/modules/connections/email-domain.ts` copies janus-social's internal `domainOfEmail` (not exported;
-  upstream issue to be filed by the coordinating session); janus-social's `oidcConnections` exposes no
+  `// Temporary, until @softistx/janus-social#945`); janus-social's `oidcConnections` exposes no
   `resolveHost`, so `federation.spec.ts` mocks
   `node:dns/promises`; janus has no API to mark `mfa` amr from a federated step-up proof (D6 uses the acr check).
 

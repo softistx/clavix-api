@@ -20,8 +20,9 @@ function wellFormed(domain: string): boolean {
  * `domainOfEmail` gives when it matches a connection, or a domain janus holds
  * is not found here and the SSO gate lets the address through.
  *
- * Temporary, until `@softistx/janus-social` exports `domainOfEmail` (it stays
- * internal in 0.6.1 and 0.7.0; the upstream issue is filed by the coordinating session): then this file is deleted and the export is imported.
+ * Temporary, until @softistx/janus-social#945 (it exports `domainOfEmail`; it is
+ * internal in 0.6.1 and 0.7.0): then this file is deleted and the export is
+ * imported.
  */
 export function domainOfEmail(address: string): string | null {
   if (/\s/.test(address)) return null;
