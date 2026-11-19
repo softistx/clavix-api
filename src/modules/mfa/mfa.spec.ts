@@ -266,12 +266,12 @@ describe("enrol, activate, sign in with the challenge", () => {
     });
     expect(recovered.data?.["recoverSecondFactor"].recoveryCodesLeft).toBe(9);
     expect(cookieOf(recovered)).not.toBe("");
-    // RFC 8176: a recovery code is `rec`, in place of `otp`, with `mfa`
-    // (nxgt-janus#950, #954): the session says which proof opened it.
+    // RFC 8176: a recovery code is `rec` with `mfa` (janus 0.77): the session
+    // says which second factor opened it. `otp` stays: it is the first factor
+    // here (the email sign-in code), merged with the second factor's amr.
     const proved = await amrOf(SLUGS.a, cookieOf(recovered));
     expect(proved).toContain("rec");
     expect(proved).toContain("mfa");
-    expect(proved).not.toContain("otp");
 
     const again = await signInByCode(SLUGS.a, "rec@example.test");
     const next = again.data?.["verifySignInCode"].challenge as string;
