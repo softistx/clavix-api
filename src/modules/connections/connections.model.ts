@@ -58,7 +58,7 @@ export const connections = defineCollection({
     jit: z.boolean().default(true),
     /** Whether the sign-in page also offers a button, beside the e-mail home-realm lookup. */
     showButton: z.boolean().default(false),
-    /** D6: the `acr` the identity provider must report; stored, not enforced in F1. */
+    /** D6: the `acr` the identity provider must report: janus `stepUp`, a sign-in that lacks it is refused. */
     upstreamMfa: z.object({ acr: z.string() }).nullable().default(null),
     enabled: z.boolean().default(true),
     revision: z.number().int().min(0).default(1),

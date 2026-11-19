@@ -58,17 +58,19 @@ type Query {
 
 type Mutation {
   """
-  Begins a sign-in with the tenant's own app of `provider`. `returnTo` is a
-  path of this site. SIGN_IN_METHOD_DISABLED (404) when the tenant does not
-  offer that provider; the sign-in limits apply (MAIL_THROTTLED, 429).
+  Begins a sign-in with the tenant's own app of `provider`, or with one of its
+  enterprise connections (`provider` is the `connectionId` of `hostedHomeRealm`).
+  `returnTo` is a path of this site. SIGN_IN_METHOD_DISABLED (404) when the
+  tenant does not offer that provider or the connection is off or unknown; the
+  sign-in limits apply (MAIL_THROTTLED, 429).
   """
   socialSignInStart(provider: String!, returnTo: String): SocialFlowStart!
   """
   Completes the flow with the provider's callback URL and the `flow`
   `socialSignInStart` answered, and opens the session (the cookie is set on the
   response). Refusals are janus's codes: FLOW_EXPIRED, FLOW_MISMATCH,
-  PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, the tenant closed sign-up and no
-  user holds the address), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
+  PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, no user holds the address and the
+  tenant closed sign-up, or the connection's just-in-time creation is off), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
   (409), USER_INACTIVE (403), SOCIAL_STEP_UP_UNMET (403, the provider's
   acr or max_age requirement was not met; the flow is spent).
   """

@@ -4,6 +4,11 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import {
+  requireNoSso,
+  requireNoSsoForUser,
+  revokeIfSso,
+} from "@/modules/connections/sso-gate";
 import { challengeOf } from "@/modules/mfa/challenge";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
@@ -73,6 +78,24 @@ async function answerSignIn(
   };
 }
 
+/**
+ * D3: a user whose domain requires single sign-on gets no challenge and no
+ * session from a code or a link, whatever the address typed. Run inside the
+ * recorded attempt, so the refusal is a failed sign-in in the log.
+ */
+async function unlessSso(
+  auth: TenantJanus,
+  tenantId: string,
+  done: Awaited<ReturnType<typeof verifySignInCode>>,
+) {
+  if (done.status === "secondFactor") {
+    await requireNoSsoForUser(auth, tenantId, done.userId);
+  } else {
+    await revokeIfSso(auth, tenantId, done.user.id, { id: done.session.id });
+  }
+  return done;
+}
+
 export const auth: Resolvers = {
   Query: {
     currentUser: async (_, __, ctx) => {
@@ -90,6 +113,7 @@ export const auth: Resolvers = {
         tenantId: tenant.tenantId,
         ip: ctx.ip,
       });
+      await requireNoSso(tenant.tenantId, email);
       return requestSignInCode(
         { auth, mail: tenantMail(tenant), signUp: tenant.signUp },
         email,
@@ -103,8 +127,17 @@ export const auth: Resolvers = {
         ctx,
         tenant.tenantId,
         "emailCode",
-        () =>
-          verifySignInCode(auth, challenge, code, deviceOptions(ctx.request)),
+        async () =>
+          unlessSso(
+            auth,
+            tenant.tenantId,
+            await verifySignInCode(
+              auth,
+              challenge,
+              code,
+              deviceOptions(ctx.request),
+            ),
+          ),
         (result) => (result.status === "signedIn" ? result.user.id : null),
       );
       return answerSignIn(ctx, auth, tenant.tenantId, done);
@@ -119,6 +152,7 @@ export const auth: Resolvers = {
         tenantId: tenant.tenantId,
         ip: ctx.ip,
       });
+      await requireNoSso(tenant.tenantId, email);
       return requestMagicLink(
         { auth, mail: tenantMail(tenant), signUp: tenant.signUp },
         email,
@@ -132,7 +166,12 @@ export const auth: Resolvers = {
         ctx,
         tenant.tenantId,
         "magicLink",
-        () => confirmMagicLink(auth, token, deviceOptions(ctx.request)),
+        async () =>
+          unlessSso(
+            auth,
+            tenant.tenantId,
+            await confirmMagicLink(auth, token, deviceOptions(ctx.request)),
+          ),
         (result) => (result.status === "signedIn" ? result.user.id : null),
       );
       return answerSignIn(ctx, auth, tenant.tenantId, done);

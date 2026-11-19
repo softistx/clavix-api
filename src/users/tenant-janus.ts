@@ -3,8 +3,8 @@ import {
   janus,
   type SealingKey,
   type SocialConfig,
+  SocialError,
   type SocialProfile,
-  type SocialProviderResolver,
   type UserEventListener,
 } from "@softistx/janus";
 import type { SocialAuth } from "@softistx/janus-graphql";
@@ -13,7 +13,11 @@ import {
   createMongoStores,
 } from "@softistx/janus-mongo";
 import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
-import { type ConnectionSource, oidcConnections } from "@softistx/janus-social";
+import {
+  type ConnectionSource,
+  type OidcConnections,
+  oidcConnections,
+} from "@softistx/janus-social";
 import { instrumentJanus } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
 import type { SecretBox } from "@/modules/sign-in-methods/secrets";
@@ -66,6 +70,8 @@ export interface TenantJanusOptions {
 /** Where a tenant's enterprise OIDC connections are read (`ConnectionsService`). */
 export interface ConnectionsOf {
   sourceOf(tenantId: string): ConnectionSource;
+  /** Whether a connection may create a user at a first sign-in (D4); read on every sign-up. */
+  jitAllowed(tenantId: string, connectionId: string): Promise<boolean>;
 }
 
 /** The path, on the tenant's issuer host, where an identity provider sends the visitor back: one URL for every connection of the tenant. */
@@ -172,23 +178,23 @@ function nameOf(name: string | undefined): { name?: string } {
 }
 
 /**
- * The resolver of the tenant's enterprise connections (D1): janus asks it for
- * any provider name the static social apps do not own, and it reads the
- * connection on every call. `undefined` when the tenant's redirect URI is one
- * janus refuses (https, or http on a loopback host), so a development tenant
- * on another http host loses its connections rather than its whole instance.
+ * The tenant's enterprise connections (D1): janus asks `resolve` for any
+ * provider name the static social apps do not own, and it reads the
+ * connection on every call. `forEmail` is the home-realm discovery. `undefined`
+ * when the tenant's redirect URI is one janus refuses (https, or http on a
+ * loopback host), so a development tenant on another http host loses its
+ * connections rather than its whole instance.
  */
-function connectionResolverOf(
+function connectionsOfTenant(
   tenant: ResolvedTenant,
   connections: ConnectionsOf | undefined,
-): SocialProviderResolver | undefined {
+): OidcConnections | undefined {
   if (connections === undefined) return undefined;
   try {
-    const { resolve } = oidcConnections({
+    return oidcConnections({
       source: connections.sourceOf(tenant.tenantId),
       redirectUri: ssoCallbackUrlOf(tenant.issuer),
     });
-    return resolve;
   } catch (error) {
     console.warn(
       `connections: tenant ${tenant.tenantId} has none (${error instanceof Error ? error.name : "unknown error"})`,
@@ -197,12 +203,51 @@ function connectionResolverOf(
   }
 }
 
-/** The tenant's own social apps (ADR-0035) and enterprise connections; a new user only where sign-up is open. */
+/** The connections each instance was built with: one `oidcConnections` per instance, shared by sign-in and discovery. */
+const homeRealms = new WeakMap<object, OidcConnections>();
+
+/**
+ * Home-realm discovery on the tenant's own instance (F2): the id of the
+ * connection that owns the address's domain, or `null`. It reveals that a
+ * domain has single sign-on: the caller throttles it.
+ */
+export const homeRealmOf = (
+  auth: TenantJanus,
+  email: string,
+): Promise<string | null> =>
+  homeRealms.get(auth)?.forEmail(email) ?? Promise.resolve(null);
+
+/**
+ * The new user's fields, or the refusal: through a connection, the connection's
+ * own `jit` decides (D4, even where the tenant closed sign-up); through a
+ * static social app, the tenant's sign-up policy does.
+ */
+function signUpOf(
+  tenant: ResolvedTenant,
+  hasStatic: (provider: string) => boolean,
+  connections: ConnectionsOf | undefined,
+) {
+  return async (profile: SocialProfile) => {
+    const allowed = hasStatic(profile.provider)
+      ? tenant.signUp
+      : (await connections?.jitAllowed(tenant.tenantId, profile.provider)) ===
+        true;
+    if (!allowed) {
+      throw new SocialError(
+        "SIGN_UP_DISABLED",
+        "social sign-up is not open for this provider",
+      );
+    }
+    return { email: profile.email ?? "", ...nameOf(profile.name) };
+  };
+}
+
+/** The tenant's own social apps (ADR-0035) and enterprise connections. A new user: through a connection when its `jit` is on, through a static app only where sign-up is open. */
 function socialConfigOf(
   tenant: ResolvedTenant,
   secrets: SecretBox | undefined,
   connections?: ConnectionsOf,
-): SocialConfig | undefined {
+): { config: SocialConfig | undefined; realms?: OidcConnections } {
   const providers =
     secrets === undefined
       ? {}
@@ -211,20 +256,24 @@ function socialConfigOf(
             `social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`,
           ),
         );
-  const resolveProvider = connectionResolverOf(tenant, connections);
+  const realms = connectionsOfTenant(tenant, connections);
   const hasStatic = Object.keys(providers).length > 0;
-  if (!hasStatic && resolveProvider === undefined) return undefined;
-  const signUp = tenant.signUp
-    ? (profile: SocialProfile) => ({
-        email: profile.email ?? "",
-        ...nameOf(profile.name),
-      })
-    : (false as const);
+  if (!hasStatic && realms === undefined) return { config: undefined };
   return {
-    ...(hasStatic ? { providers } : {}),
-    ...(resolveProvider === undefined ? {} : { resolveProvider }),
-    signUp,
-  } as SocialConfig;
+    config: {
+      ...(hasStatic ? { providers } : {}),
+      ...(realms === undefined ? {} : { resolveProvider: realms.resolve }),
+      signUp:
+        realms === undefined && !tenant.signUp
+          ? (false as const)
+          : signUpOf(
+              tenant,
+              (name) => Object.hasOwn(providers, name),
+              connections,
+            ),
+    } as SocialConfig,
+    ...(realms === undefined ? {} : { realms }),
+  };
 }
 
 export function buildTenantJanus(
@@ -237,17 +286,13 @@ export function buildTenantJanus(
   secondFactorKeys: [SealingKey, ...SealingKey[]] = ephemeralSecondFactorKeys(),
   connections?: ConnectionsOf,
 ): TenantJanus {
+  const { config, realms } = socialConfigOf(tenant, secrets, connections);
   // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.
-  return instrumentJanus(
-    buildJanus(
-      db,
-      tenant,
-      secondFactorKeys,
-      socialConfigOf(tenant, secrets, connections),
-      hooks,
-      events,
-    ),
+  const instance = instrumentJanus(
+    buildJanus(db, tenant, secondFactorKeys, config, hooks, events),
   );
+  if (realms !== undefined) homeRealms.set(instance, realms);
+  return instance;
 }
 
 /** The instance when the tenant has at least one social provider, else `null`. */

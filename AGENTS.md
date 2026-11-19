@@ -643,7 +643,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Every admin input goes through janus-social's `checkConnection` (`connections.record.ts`): its
   `checkConnection:` TypeError becomes `BAD_USER_INPUT` with the field names, no values. Ids `google`,
   `github`, `microsoft` are refused (they are the static apps). `emailTrust` offers `claimAndDomain`
-  and `domain` only. `upstreamMfa` is stored, not enforced yet.
+  and `domain` only. `upstreamMfa.acr` is enforced (D6): it becomes the connection's `stepUp.acrValues`, so an ID token without that `acr` is `SOCIAL_STEP_UP_UNMET`.
 - `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `tenant-janus.ts` wires it as
   `social.resolveProvider` through `oidcConnections` (one redirect URI per tenant:
   `<issuer>/sign-in/sso/callback`). Every tenant's janus instance carries it, so the static-social
@@ -656,7 +656,20 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
   (`src/config/connections.ts`); janus has no such API.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
-  Home-realm discovery (`forEmail`) and the callback route are F2/F3.
+- **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
+  enabled connection owning the address's verified domain (`ownerOf`: two claimants answer none), else null; it
+  spends the `signInThrottle` (IP and tenant) and is `no-store`. The federated sign-in is janus's
+  `socialSignInStart` / `socialSignInComplete` with the connection id as `provider` (an unknown or disabled one is
+  `SIGN_IN_METHOD_DISABLED`); the session is `amr: ["fed"]`. JIT (D4): a new user is created only when the
+  connection's `jit` is on, whatever the tenant's `signUp` (`SIGN_UP_DISABLED` otherwise); an existing user is linked.
+- **`SSO_REQUIRED` (D3)**: when the owning connection has `requireSso`, `requestSignInCode` and `requestMagicLink`
+  refuse (403), and `verifySignInCode`, `confirmMagicLink` and `signInWithPasskey` revoke the session janus just
+  opened (by id for a code or link, whose cookie is then never set; for a passkey every non-federated session opened
+  since the attempt began, janus-graphql having queued a cookie that now names a revoked session), run inside
+  `recordingSignIn` so it is a failed sign-in (`sso-gate.ts`). Limits: a static social app (Google, GitHub) and
+  `acceptInvitation`'s sign-in are not gated. `login_hint` waits for J2; the callback route is F3.
+- Temporary: janus-social's `oidcConnections` exposes no `resolveHost`, so `federation.spec.ts` mocks
+  `node:dns/promises`; janus has no API to mark `mfa` amr from a federated step-up proof (D6 uses the acr check).
 
 ## OAuth clients
 

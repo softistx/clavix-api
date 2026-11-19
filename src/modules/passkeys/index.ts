@@ -4,6 +4,7 @@ import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
+import { revokeIfSso } from "@/modules/connections/sso-gate";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import {
@@ -61,18 +62,24 @@ export const passkeys: Resolvers = {
       if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
       requireLive(tenant);
       requireMethod(tenant, "passkey");
+      const auth = await authOf(ctx);
+      const since = new Date();
       const signedIn = await recordingSignIn(
         ctx,
         tenant.tenantId,
         "passkey",
-        () =>
-          asPasskeyInvalid(() =>
+        async () => {
+          const done = await asPasskeyInvalid(() =>
             passkeySignIn(_, { challenge, assertion: response }, ctx),
-          ),
+          );
+          // D3: the user is known only now; a user who must use single
+          // sign-on loses the session this opened, and the attempt is a failure.
+          await revokeIfSso(auth, tenant.tenantId, done.userId, { since });
+          return done;
+        },
         (done) => done.userId,
       );
       // janus types `signedIn.user` as an id and a type only: read the profile.
-      const auth = await authOf(ctx);
       const user = await auth.findUser(signedIn.userId);
       if (user === null) throw passkeyInvalid();
       await usageService.recordActive(tenant.tenantId, user.id);

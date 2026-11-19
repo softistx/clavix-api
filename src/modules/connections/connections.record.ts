@@ -20,6 +20,8 @@ export interface RecordParts {
   emailTrust: string;
   claims: Record<string, string | undefined>;
   domains: readonly string[];
+  /** D6: the `acr` the identity provider must report on every sign-in through the connection; none when absent. */
+  upstreamAcr?: string | null;
   revision: number;
 }
 
@@ -56,6 +58,9 @@ export function checked(parts: RecordParts): OidcConnection {
     ...(parts.scopes === null ? {} : { scopes: [...parts.scopes] }),
     domains: parts.domains.length === 0 ? [PLACEHOLDER_DOMAIN] : parts.domains,
     emailTrust: parts.emailTrust,
+    ...(parts.upstreamAcr === undefined || parts.upstreamAcr === null
+      ? {}
+      : { stepUp: { acrValues: [parts.upstreamAcr] } }),
     ...(Object.keys(claims).length === 0 ? {} : { claims }),
     revision: parts.revision,
   };
@@ -89,5 +94,6 @@ export const partsOf = (
   emailTrust: doc.emailTrust,
   claims: doc.claims,
   domains,
+  upstreamAcr: doc.upstreamMfa?.acr ?? null,
   revision: doc.revision,
 });
