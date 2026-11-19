@@ -75,19 +75,45 @@ const socialEntrySchema = z.object({
 });
 export type SocialEntry = z.infer<typeof socialEntrySchema>;
 
+/** D7: `passkeySufficient` asks no second factor at sign-in; `required` asks a multi-factor session at every approval (enforced at consent, M2). */
+export const MFA_MODES = ["passkeySufficient", "required"] as const;
+export type MfaMode = (typeof MFA_MODES)[number];
+
+/**
+ * The tenant's multi-factor policy (D7, D8). `totp` says whether its users may
+ * enrol an authenticator app (off until the tenant turns it on: janus asks for
+ * the code of every user who holds an active factor anyway, so turning it off
+ * only closes the enrolment).
+ */
+export const mfaPolicySchema = z.object({
+  mode: z.enum(MFA_MODES).default("passkeySufficient"),
+  totp: z.boolean().default(false),
+});
+export type MfaPolicy = z.infer<typeof mfaPolicySchema>;
+
+const defaultMfa = (): MfaPolicy => ({
+  mode: "passkeySufficient",
+  totp: false,
+});
+
 /**
  * A tenant's sign-in policy (slice A5): the tenant document's `signIn` field
  * and `ResolvedTenant.signIn`. `methods` is a list of entries, one per type at
  * most (a type with no entry reads its default); a later `mfa` block sits
- * beside `methods` and `social`. A tenant stored before the policy existed
- * reads the defaults.
+ * beside `methods` and `social` (`mfa`, M4; a tenant cached before it reads the
+ * defaults). A tenant stored before the policy existed reads the defaults.
  */
 export const signInPolicySchema = z
   .object({
     methods: z.array(methodEntrySchema).default(defaultMethods),
     social: z.array(socialEntrySchema).default([]),
+    mfa: mfaPolicySchema.default(defaultMfa),
   })
-  .default(() => ({ methods: defaultMethods(), social: [] }));
+  .default(() => ({
+    methods: defaultMethods(),
+    social: [],
+    mfa: defaultMfa(),
+  }));
 export type SignInPolicy = z.infer<typeof signInPolicySchema>;
 
 /** Whether the policy turns `type` on. An unavailable method is never on. */

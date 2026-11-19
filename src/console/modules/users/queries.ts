@@ -25,7 +25,7 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
     if (email !== null && email !== undefined) {
       const found = await ctx.users.findByEmail(tenantId, email);
       return {
-        items: found === null ? [] : [shape(found)],
+        items: found === null ? [] : [shape(found, tenantId)],
         nextCursor: null,
         totalCount: found === null ? 0 : 1,
       };
@@ -38,7 +38,7 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
         ...filter,
       });
       return {
-        items: page.items.map(shape),
+        items: page.items.map((item) => shape(item, tenantId)),
         nextCursor: page.nextCursor,
         totalCount: await ctx.users.count(tenantId, filter),
       };
@@ -72,7 +72,7 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
     const tenantId = tenantIdOf(given);
     await liveTenant(ctx.directory, tenantId);
     const found = await ctx.users.find(tenantId, id);
-    return found === null ? null : shape(found);
+    return found === null ? null : shape(found, tenantId);
   },
   userInvitations: async (_, { tenantId: given }, ctx) => {
     const tenantId = tenantIdOf(given);

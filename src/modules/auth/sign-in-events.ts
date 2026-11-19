@@ -66,7 +66,7 @@ export async function recordingSignIn<T>(
   tenantId: string,
   method: AuthMethod,
   run: () => Promise<T>,
-  userIdOf: (done: T) => string,
+  userIdOf: (done: T) => string | null,
 ): Promise<T> {
   let done: T;
   try {
@@ -83,6 +83,8 @@ export async function recordingSignIn<T>(
     });
     throw error;
   }
-  await recordSignIn(ctx, tenantId, method, userIdOf(done));
+  // `null`: the step ended in a second-factor challenge, which is no sign-in yet.
+  const userId = userIdOf(done);
+  if (userId !== null) await recordSignIn(ctx, tenantId, method, userId);
   return done;
 }

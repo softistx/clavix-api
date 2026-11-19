@@ -4,6 +4,7 @@ import type { Resolvers } from "@/generated/console/resolvers";
 import {
   isAvailable,
   type MethodType,
+  type MfaMode,
   methodsOf,
   type SocialProviderId,
 } from "@/modules/sign-in-methods/sign-in.schema";
@@ -20,7 +21,13 @@ export const signInMethodsGuards: Guards = {
   "Mutation.updateSignInMethods": onTenant("edit", tenantArg),
   "Mutation.setSocialProvider": onTenant("edit", tenantArg),
   "Mutation.removeSocialProvider": onTenant("edit", tenantArg),
+  "Mutation.updateMfaPolicy": onTenant("edit", tenantArg),
 };
+
+const MODE = {
+  passkeySufficient: "PASSKEY_SUFFICIENT",
+  required: "REQUIRED",
+} as const satisfies Record<MfaMode, string>;
 
 const METHOD = {
   passkey: "PASSKEY",
@@ -84,6 +91,7 @@ async function policyOf(tenant: Tenant) {
       enabled: entry.enabled,
       callbackUrl: callbackUrlOf(issuer, entry.provider),
     })),
+    mfa: { mode: MODE[tenant.signIn.mfa.mode], totp: tenant.signIn.mfa.totp },
     version: tenant.version,
   };
 }
@@ -130,6 +138,19 @@ export const signInMethods: Resolvers = {
       });
       return await policyOf(tenant);
     },
+    updateMfaPolicy: async (_, { tenantId, input }, ctx) => {
+      const tenant = await service.updateMfa(tenantId.toLowerCase(), {
+        ...(input.mode == null ? {} : { mode: storedOf(MODE, input.mode) }),
+        ...(input.totp == null ? {} : { totp: input.totp }),
+      });
+      const id = tenant._id.toHexString();
+      await ctx.audit("mfaPolicy.update", {
+        type: "mfaPolicy",
+        id,
+        tenantId: id,
+      });
+      return await policyOf(tenant);
+    },
     removeSocialProvider: async (_, { tenantId, provider: kind }, ctx) => {
       const provider = storedOf(KIND, kind);
       const tenant = await service.removeSocial(
@@ -151,4 +172,5 @@ export const signInMethodsAudits: Audits = {
   "Mutation.updateSignInMethods": "signInPolicy.update",
   "Mutation.setSocialProvider": "socialProvider.set",
   "Mutation.removeSocialProvider": "socialProvider.remove",
+  "Mutation.updateMfaPolicy": "mfaPolicy.update",
 };

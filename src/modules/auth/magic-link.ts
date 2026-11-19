@@ -45,10 +45,8 @@ export async function confirmMagicLink(
   options?: { deviceLabel?: string },
 ) {
   try {
-    const result = await auth.magicLink.confirm(token, options);
-    // No second factor is configured, so the link always opens a session.
-    if ("session" in result && result.status === "signedIn") return result;
-    throw magicLinkInvalid();
+    // A session, or the second-factor challenge of a user who holds a factor.
+    return await auth.magicLink.confirm(token, options);
   } catch (error) {
     if (error instanceof JanusError) {
       if (error.code === "MAGIC_LINK_DISABLED") throw magicLinkDisabled();

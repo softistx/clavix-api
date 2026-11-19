@@ -9,6 +9,7 @@ import {
   isAvailable,
   type MethodEntry,
   type MethodType,
+  type MfaPolicy,
   methodsOf,
   type SignInPolicy,
   type SocialEntry,
@@ -93,6 +94,25 @@ export class SignInPolicyService {
       const next = { ...signIn, methods };
       if (slug === PLATFORM_TENANT_SLUG) this.firstParty(next);
       return this.usable(next);
+    });
+  }
+
+  /**
+   * Sets the tenant's multi-factor policy (D7); a field left out keeps its
+   * value, and a change that changes nothing writes nothing.
+   */
+  async updateMfa(
+    tenantId: string,
+    input: Partial<MfaPolicy>,
+  ): Promise<Tenant> {
+    await this.get(tenantId);
+    return this.write(tenantId, ({ signIn }) => {
+      const mfa: MfaPolicy = {
+        mode: input.mode ?? signIn.mfa.mode,
+        totp: input.totp ?? signIn.mfa.totp,
+      };
+      if (same(mfa, signIn.mfa)) return null;
+      return { ...signIn, mfa };
     });
   }
 

@@ -29,6 +29,28 @@ type SignedIn {
 }
 
 """
+A sign-in that is not finished: the user holds a TOTP second factor, so no
+session is open yet. Answer it with `confirmSecondFactor` (the app's code) or
+`recoverSecondFactor` (a recovery code), with the same `challenge`. The
+challenge is a secret like a session token: keep it where the next request
+presents it, never in a URL or a log. Single use and `Cache-Control: no-store`.
+"""
+type SecondFactorChallenge {
+  challenge: String!
+  "The challenge lapses then."
+  expiresAt: DateTime!
+  "What can answer it: `totp` always, `passkey` when the user holds one."
+  methods: [String!]!
+  "JSON text for `navigator.credentials.get({ publicKey })`; present exactly when `methods` holds `passkey`."
+  passkeyOptions: String
+  "The path a social flow was started with, or null (always null for a code or a link)."
+  returnTo: String
+}
+
+"What a sign-in by code or link answers: a session, or a second-factor challenge to answer first."
+union SignInResult = SignedIn | SecondFactorChallenge
+
+"""
 The answer to `requestMagicLink`: always the same, whether the address has an
 account or not, so it says nothing about it. The link itself only reaches the
 inbox.
@@ -53,10 +75,12 @@ type Mutation {
   """
   requestSignInCode(email: EmailAddress!): SignInChallenge!
   """
-  Checks the code against its challenge and opens the session. Every refusal
-  (wrong, spent, expired or unknown challenge) is the same CODE_INVALID, 401.
+  Checks the code against its challenge and opens the session, or, for a user
+  who holds a TOTP second factor, answers a `SecondFactorChallenge` (no session
+  yet). Every refusal (wrong, spent, expired or unknown challenge) is the same
+  CODE_INVALID, 401.
   """
-  verifySignInCode(challenge: String!, code: String!): SignedIn!
+  verifySignInCode(challenge: String!, code: String!): SignInResult!
   """
   Asks for a sign-in link by e-mail (only when the deployment turns magic-link
   sign-in on; otherwise 404 MAGIC_LINK_DISABLED, as if the operation did not
@@ -74,7 +98,7 @@ type Mutation {
   offers a new link. MAGIC_LINK_DISABLED (404) when the switch is off; the token
   is not spent then.
   """
-  confirmMagicLink(token: String!): SignedIn!
+  confirmMagicLink(token: String!): SignInResult!
   """
   Mails the signed-in user a link that proves their address (hosted page
   `/verify?token=...`, which must POST the token to `confirmEmailVerification`,

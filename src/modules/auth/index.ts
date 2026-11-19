@@ -4,8 +4,10 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { challengeOf } from "@/modules/mfa/challenge";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
+import type { TenantJanus } from "@/users/tenant-janus";
 import { deviceOptions } from "./device";
 import {
   confirmEmailVerification,
@@ -44,6 +46,33 @@ const currentUserOf = (user: {
   emailVerified: user.emailVerified,
 });
 
+/**
+ * The answer of a sign-in step that may stop at a second factor: a session
+ * (cookie set, activity counted) or the challenge of a user who holds a TOTP
+ * factor, with no session yet. The challenge is single-use: `no-store`.
+ */
+async function answerSignIn(
+  ctx: Context,
+  auth: TenantJanus,
+  tenantId: string,
+  done: Awaited<ReturnType<typeof verifySignInCode>>,
+) {
+  ctx.set.headers.set("cache-control", "no-store");
+  if (done.status === "secondFactor") {
+    return challengeOf(done, ctx.request);
+  }
+  await usageService.recordActive(tenantId, done.user.id);
+  ctx.set.headers.append(
+    "set-cookie",
+    auth.cookie.serialize(done.token, done.session),
+  );
+  return {
+    __typename: "SignedIn" as const,
+    user: currentUserOf(done.user),
+    expiresAt: done.session.expiresAt,
+  };
+}
+
 export const auth: Resolvers = {
   Query: {
     currentUser: async (_, __, ctx) => {
@@ -70,24 +99,15 @@ export const auth: Resolvers = {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
       requireMethod(tenant, "emailCode");
-      const signedIn = await recordingSignIn(
+      const done = await recordingSignIn(
         ctx,
         tenant.tenantId,
         "emailCode",
         () =>
           verifySignInCode(auth, challenge, code, deviceOptions(ctx.request)),
-        (done) => done.user.id,
+        (result) => (result.status === "signedIn" ? result.user.id : null),
       );
-      await usageService.recordActive(tenant.tenantId, signedIn.user.id);
-      ctx.set.headers.set("cache-control", "no-store");
-      ctx.set.headers.append(
-        "set-cookie",
-        auth.cookie.serialize(signedIn.token, signedIn.session),
-      );
-      return {
-        user: currentUserOf(signedIn.user),
-        expiresAt: signedIn.session.expiresAt,
-      };
+      return answerSignIn(ctx, auth, tenant.tenantId, done);
     },
     requestMagicLink: async (_, { email }, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);
@@ -108,23 +128,14 @@ export const auth: Resolvers = {
       const { auth, tenant } = await tenantOf(ctx);
       requireLive(tenant);
       if (!auth.magicLink.enabled) throw magicLinkDisabled();
-      const signedIn = await recordingSignIn(
+      const done = await recordingSignIn(
         ctx,
         tenant.tenantId,
         "magicLink",
         () => confirmMagicLink(auth, token, deviceOptions(ctx.request)),
-        (done) => done.user.id,
+        (result) => (result.status === "signedIn" ? result.user.id : null),
       );
-      await usageService.recordActive(tenant.tenantId, signedIn.user.id);
-      ctx.set.headers.set("cache-control", "no-store");
-      ctx.set.headers.append(
-        "set-cookie",
-        auth.cookie.serialize(signedIn.token, signedIn.session),
-      );
-      return {
-        user: currentUserOf(signedIn.user),
-        expiresAt: signedIn.session.expiresAt,
-      };
+      return answerSignIn(ctx, auth, tenant.tenantId, done);
     },
     requestEmailVerification: async (_, __, ctx) => {
       const { auth, tenant } = await tenantOf(ctx);

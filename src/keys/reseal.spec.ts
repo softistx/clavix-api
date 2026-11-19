@@ -83,6 +83,7 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
         current: 0,
         skipped: 1,
         failed: 0,
+        secondFactor: { sealed: 0, behind: 0 },
       }),
     ).toBe(1);
     expect(
@@ -92,6 +93,7 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
         current: 1,
         skipped: 0,
         failed: 0,
+        secondFactor: { sealed: 0, behind: 0 },
       }),
     ).toBe(0);
   });

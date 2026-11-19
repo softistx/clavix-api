@@ -18,6 +18,7 @@ export const usersGuards: Guards = {
   "Mutation.deleteUser": onTenant("edit", tenantArg),
   "Mutation.revokeUserSessions": onTenant("edit", tenantArg),
   "Mutation.setUserEmailVerified": onTenant("edit", tenantArg),
+  "Mutation.resetUserSecondFactor": onTenant("edit", tenantArg),
   "Mutation.revokeGrant": onTenant("edit", tenantArg),
 };
 
@@ -33,5 +34,6 @@ export const usersAudits: Audits = {
   "Mutation.deleteUser": "user.delete",
   "Mutation.revokeUserSessions": "user.revokeSessions",
   "Mutation.setUserEmailVerified": "user.setEmailVerified",
+  "Mutation.resetUserSecondFactor": "user.resetSecondFactor",
   "Mutation.revokeGrant": "user.revokeGrant",
 };

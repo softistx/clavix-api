@@ -13,7 +13,9 @@ Emergency rotation: retires the tenant's current signing key now and makes a new
 export const RESEAL_USAGE = `Usage: bun run keys:reseal
 
 Re-seals every tenant's stored signing keys under the first key of CLAVIX_KEYS_MASTER_KEY.
-Prints the counts as JSON; exits 1 while records were skipped or a tenant failed: run it again.`;
+Prints the counts as JSON; exits 1 while records were skipped or a tenant failed: run it again.
+It also counts the TOTP secrets and recovery codes still sealed under an older key (secondFactor.behind):
+they move to the first key on their user's next accepted code, so keep the old key until that is 0.`;
 
 export type RotateTarget =
   | { all: true; dropOld: boolean }

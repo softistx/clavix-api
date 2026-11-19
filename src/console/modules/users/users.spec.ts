@@ -205,6 +205,7 @@ const MUTATIONS = (tenant: string, user: string) => [
   `revokeUserSession(tenantId: "${tenant}", userId: "${user}", sessionId: "s")`,
   `setUserEmailVerified(tenantId: "${tenant}", userId: "${user}", verified: true) { id }`,
   `revokeGrant(tenantId: "${tenant}", userId: "${user}", grantId: "g")`,
+  `resetUserSecondFactor(tenantId: "${tenant}", userId: "${user}") { id }`,
 ];
 const READS = (tenant: string, user: string) => [
   `users(tenantId: "${tenant}") { items { id } }`,
@@ -634,6 +635,37 @@ describe("e-mail verified flag", () => {
   });
 });
 
+describe("second factor", () => {
+  const read = (user: string) =>
+    asConsole(
+      ownA,
+      `{ user(tenantId: "${tenantA}", id: "${user}") { secondFactor { enabled recoveryCodesLeft } } }`,
+    );
+  const reset = (who: string, tenant: string, user: string) =>
+    asConsole(
+      who,
+      `mutation { resetUserSecondFactor(tenantId: "${tenant}", userId: "${user}") { id secondFactor { enabled } } }`,
+    );
+
+  test("a user with no factor reads disabled; reset is idempotent; an unknown user is NOT_FOUND", async () => {
+    expect((await read(uA1)).data?.["user"]).toEqual({
+      secondFactor: { enabled: false, recoveryCodesLeft: null },
+    });
+    expect(
+      (await reset(admA, tenantA, uA1)).data?.["resetUserSecondFactor"],
+    ).toEqual({
+      id: uA1,
+      secondFactor: { enabled: false },
+    });
+    expect(code(await reset(ownA, tenantA, "ghost"))).toBe("NOT_FOUND");
+  });
+
+  test("a viewer is refused, and B's user is unknown under A", async () => {
+    expect(code(await reset(vwA, tenantA, uA1))).toBe("FORBIDDEN");
+    expect(code(await reset(ownA, tenantA, uB1))).toBe("NOT_FOUND");
+  });
+});
+
 describe("tenant A / B isolation", () => {
   test("the owner of A reads and touches nothing of B", async () => {
     for (const read of READS(tenantB, uB1)) {
@@ -1060,6 +1092,7 @@ describe("admin events", () => {
         f: revokeInvitation(tenantId: "${t}", invitationId: "inv1")
         g: revokeUserSession(tenantId: "${t}", userId: "${uA2}", sessionId: "s1")
         h: setUserEmailVerified(tenantId: "${t}", userId: "${uA2}", verified: true) { id }
+        i: resetUserSecondFactor(tenantId: "${t}", userId: "${uA2}") { id }
       }`,
     );
     const events = await mongo.db.adminEvents.raw
@@ -1078,6 +1111,7 @@ describe("admin events", () => {
       ["user.revokeInvitation", "invitation", "inv1", ownA],
       ["user.revokeSession", "session", "s1", ownA],
       ["user.setEmailVerified", "user", uA2, ownA],
+      ["user.resetSecondFactor", "user", uA2, ownA],
     ]);
   });
 });

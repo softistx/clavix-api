@@ -1,0 +1,79 @@
+"""
+The TOTP second factor of the signed-in user of the tenant the request's host
+names (an authenticator app and ten recovery codes), and the two answers that
+finish a sign-in that stopped at a `SecondFactorChallenge`. A tenant turns it on
+with `signIn.mfa.totp`; with it off, enrolment is refused and a user who already
+holds a factor keeps it (and can still disable it or renew the codes).
+"""
+type SecondFactorStatus {
+  "True once the factor is active: a sign-in then asks for a code. A factor started and never activated is not enabled."
+  enabled: Boolean!
+  "The recovery codes not yet used. Null without an active factor, 0 when all are spent."
+  recoveryCodesLeft: Int
+}
+
+"A factor started, not yet active. Never cached, never logged."
+type SecondFactorEnrolment {
+  "The TOTP secret in base32, for a user who types it in."
+  secret: String!
+  "The `otpauth://` URI to render as a QR code."
+  uri: String!
+}
+
+"Ten recovery codes, shown once: no call answers them again."
+type RecoveryCodes {
+  recoveryCodes: [String!]!
+}
+
+"A second-factor sign-in completed; the session cookie is set on the response."
+type SecondFactorSignedIn {
+  user: CurrentUser!
+  "When the session lapses if not used again; it slides."
+  expiresAt: DateTime!
+  "Whether the session was opened from a device the user had not used."
+  newDevice: Boolean!
+  "The recovery codes left after `recoverSecondFactor` spent one; null after `confirmSecondFactor`."
+  recoveryCodesLeft: Int
+}
+
+extend type Query {
+  "The signed-in user's second factor. UNAUTHENTICATED (401) when anonymous."
+  secondFactor: SecondFactorStatus!
+  "Until when the session counts as freshly confirmed (its sign-in or last step-up plus ten minutes); in the past once it no longer does."
+  sessionConfirmedUntil: DateTime
+}
+
+extend type Mutation {
+  """
+  Redeems the challenge of a sign-in with the authenticator app's code and
+  opens the session (cookie set). Five attempts per challenge: CODE_INVALID
+  with `attemptsLeft`.
+  """
+  confirmSecondFactor(challenge: String!, code: String!): SecondFactorSignedIn!
+  """
+  Redeems the challenge with a recovery code instead (a lost phone). The code
+  is spent and `recoveryCodesLeft` answers what remains. Refused like
+  `confirmSecondFactor`.
+  """
+  recoverSecondFactor(
+    challenge: String!
+    recoveryCode: String!
+  ): SecondFactorSignedIn!
+  """
+  Starts a factor and answers the secret and the URI to show as a QR code.
+  SECOND_FACTOR_DISABLED (403) when the tenant did not turn TOTP on;
+  SECOND_FACTOR_ACTIVE when one is active; STEP_UP_REQUIRED when the session
+  proved who it is more than ten minutes ago; EMAIL_UNVERIFIED (403) until the
+  address is proven.
+  """
+  enrollSecondFactor: SecondFactorEnrolment!
+  """
+  Checks the app's first code and makes the factor active; answers the recovery
+  codes, once. CODE_INVALID, SECOND_FACTOR_NOT_ENROLLED, SECOND_FACTOR_DISABLED.
+  """
+  activateSecondFactor(code: String!): RecoveryCodes!
+  "Replaces all the recovery codes with new ones, on a current code of the app."
+  regenerateRecoveryCodes(code: String!): RecoveryCodes!
+  "Turns the factor off, on a current code of the app."
+  disableSecondFactor(code: String!): Boolean!
+}

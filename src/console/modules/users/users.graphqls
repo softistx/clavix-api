@@ -7,6 +7,16 @@ type TenantUser {
   "False once a console admin disabled the user: no sign-in."
   active: Boolean!
   createdAt: DateTime!
+  "Whether the user holds a TOTP second factor (tenant viewer). Never the secret or the codes."
+  secondFactor: UserSecondFactor!
+}
+
+"A user's TOTP second factor, as an admin may know it."
+type UserSecondFactor {
+  "True once the factor is active: the user's sign-in by code, link or social asks for it."
+  enabled: Boolean!
+  "The recovery codes not yet used; null without an active factor."
+  recoveryCodesLeft: Int
 }
 
 """
@@ -171,4 +181,11 @@ extend type Mutation {
   user's (or does not exist).
   """
   revokeGrant(tenantId: ID!, userId: ID!, grantId: ID!): Boolean!
+  """
+  Removes the user's TOTP second factor and recovery codes (tenant admin), for
+  a user who lost the phone and the codes. Their sessions stay; the next
+  sign-in no longer asks for a code. True or not, it is recorded; NOT_FOUND for
+  an unknown user.
+  """
+  resetUserSecondFactor(tenantId: ID!, userId: ID!): TenantUser!
 }
