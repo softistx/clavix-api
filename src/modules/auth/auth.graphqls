@@ -71,14 +71,16 @@ type Mutation {
   with an account, one without and, on a tenant that closed sign-up, one that
   is not invited: a code is sent only when an account exists (or sign-up is
   open). Errors: MAIL_THROTTLED (429) past five requests per address and ten
-  minutes.
+  minutes; SSO_REQUIRED (403) for an address whose domain requires single
+  sign-on (`hostedHomeRealm` names the connection to use).
   """
   requestSignInCode(email: EmailAddress!): SignInChallenge!
   """
   Checks the code against its challenge and opens the session, or, for a user
   who holds a TOTP second factor, answers a `SecondFactorChallenge` (no session
   yet). Every refusal (wrong, spent, expired or unknown challenge) is the same
-  CODE_INVALID, 401.
+  CODE_INVALID, 401. SSO_REQUIRED (403), with no session, when the user's
+  domain requires single sign-on.
   """
   verifySignInCode(challenge: String!, code: String!): SignInResult!
   """
@@ -88,7 +90,8 @@ type Mutation {
   and, on a tenant that closed sign-up, one that is not invited. The link opens
   the hosted page `/sign-in/link?token=...` of the tenant, which must POST the
   token to `confirmMagicLink` (never sign in on GET: mail scanners open links).
-  Errors: MAGIC_LINK_DISABLED (404), MAIL_THROTTLED (429).
+  Errors: MAGIC_LINK_DISABLED (404), MAIL_THROTTLED (429), SSO_REQUIRED (403)
+  for an address whose domain requires single sign-on.
   """
   requestMagicLink(email: EmailAddress!): MagicLinkRequested!
   """
@@ -96,7 +99,8 @@ type Mutation {
   (the cookie is set on the response). Every refusal (unknown, spent, expired or
   stale link, deactivated user) is the same MAGIC_LINK_INVALID, 401; the page
   offers a new link. MAGIC_LINK_DISABLED (404) when the switch is off; the token
-  is not spent then.
+  is not spent then. SSO_REQUIRED (403), with no session, when the user's
+  domain requires single sign-on.
   """
   confirmMagicLink(token: String!): SignInResult!
   """

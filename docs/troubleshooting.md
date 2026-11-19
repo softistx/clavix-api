@@ -221,6 +221,10 @@ The CLI prints the same message as `clients:create: …`.
 The tenant already has a type of that name, on this resource or another (a name is unique in the tenant).
 Choose another name, or update the existing type.
 
+## `SSO_REQUIRED` (403) on a hosted sign-in
+
+The address belongs to a verified domain of an enabled enterprise connection with `requireSso`. Why: the tenant's admin requires its users to sign in through the company's identity provider. Fix: call `hostedHomeRealm(email)` and start `socialSignInStart(provider: connectionId)`; or turn `requireSso` off on the connection. `socialSignInStart` answers `SIGN_IN_METHOD_DISABLED` for a connection id that is unknown, not the tenant's or turned off, and a connection with `jit` off refuses a first sign-in of an unknown user (`SIGN_UP_DISABLED`).
+
 ## Resource registration refusals (`resources:create`)
 
 ### `resource URI "<uri>" is not in canonical form: write it as <canonical>`

@@ -562,6 +562,24 @@ curl -s https://api.clavix.example/console/graphql \
 }
 ```
 
+## Enterprise connections: home-realm discovery and single sign-on
+
+A tenant's enterprise OIDC connections (console API) sign its users in through their company's identity provider. The hosted pages' part, on `/graphql`:
+
+```graphql
+query {
+  hostedHomeRealm(email: "ada@acme.test") {
+    connectionId
+    name
+  }
+}
+```
+
+`hostedHomeRealm` answers the one enabled connection that owns the address's verified domain, or `null` (no connection, an unverified domain, two claimants). It spends the sign-in limits of the tenant and the client address and is `no-store`. The page then calls `socialSignInStart(provider: <connectionId>)` and `socialSignInComplete`, as for a social app; the session's `amr` is `["fed"]`.
+- **Just-in-time creation**: a user unknown to the tenant is created on the first federated sign-in only when the connection's `jit` is on, even where the tenant's sign-up is closed; otherwise `SIGN_UP_DISABLED` (403). A known user (same address, or the one already linked) is linked, never duplicated.
+- **`SSO_REQUIRED` (403)**: when the connection has `requireSso`, `requestSignInCode` and `requestMagicLink` refuse an address of its domain, and `verifySignInCode`, `confirmMagicLink` and `signInWithPasskey` end with it (no cookie for a code or link; the session a passkey opened is revoked). Static social apps and `acceptInvitation`'s sign-in are not gated yet.
+- **Upstream step-up**: a connection's `upstreamMfa.acr` makes the identity provider's ID token carry that `acr`, else `SOCIAL_STEP_UP_UNMET`.
+
 ## Pushed authorization requests
 
 Each tenant host serves `POST /par` (RFC 9126, `@softistx/janus-oauth`): a client authenticates on

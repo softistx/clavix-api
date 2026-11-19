@@ -9,6 +9,7 @@ import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
+import { revokeIfSso } from "@/modules/connections/sso-gate";
 import { requireLive } from "@/tenancy/live";
 
 /** How long a session counts as freshly confirmed for the writes of the factor. */
@@ -95,16 +96,24 @@ async function answer(
   const tenant = await ctx.tenant();
   if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
   requireLive(tenant);
+  const auth = await janusIssuers.forRequest(ctx.request);
+  const since = new Date();
   const done = await recordingSignIn(
     ctx,
     tenant.tenantId,
     method,
-    run,
+    async () => {
+      const result = await run();
+      // D3: a challenge issued before `requireSso` turned on opens no session.
+      if (auth !== null) {
+        await revokeIfSso(auth, tenant.tenantId, result.userId, { since });
+      }
+      return result;
+    },
     (result) => result.userId,
   );
   ctx.set.headers.set("cache-control", "no-store");
   await usageService.recordActive(tenant.tenantId, done.userId);
-  const auth = await janusIssuers.forRequest(ctx.request);
   const user = auth === null ? null : await auth.findUser(done.userId);
   if (user === null)
     throw denial("FORBIDDEN", "Sign-in could not be completed");

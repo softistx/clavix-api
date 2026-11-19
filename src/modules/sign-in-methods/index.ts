@@ -1,4 +1,5 @@
 import { denial, socialResolvers } from "@softistx/janus-graphql";
+import { connectionsService } from "@/config/connections";
 import { secretBox } from "@/config/keys";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
@@ -58,17 +59,23 @@ const social = socialResolvers({
   },
 });
 
-/** The tenant's social instance; `SIGN_IN_METHOD_DISABLED` for a tenant with no social provider. */
+/**
+ * The tenant's social instance; `SIGN_IN_METHOD_DISABLED` for a tenant with no
+ * social provider. The instance also carries the tenant's enterprise
+ * connections (every tenant has the resolver): the surface is open when the
+ * tenant offers a static social app or has a connection, and refused as before
+ * otherwise.
+ */
 async function socialOfTenant(ctx: Context) {
   const auth = await authOf(ctx.request);
   if (auth === null) throw denial("NOT_FOUND", "No such tenant");
   const instance = socialOf(auth);
   if (instance === null) throw methodDisabled("social");
-  // The instance also carries the tenant's enterprise-connection resolver
-  // (every tenant has one): this surface is the static social apps' only, so a
-  // tenant that offers none is refused here, as before connections.
-  const { signIn } = await tenantOf(ctx);
-  if (offeredSocial(signIn, secretBox.opens).length === 0) {
+  const { signIn, tenantId } = await tenantOf(ctx);
+  if (
+    offeredSocial(signIn, secretBox.opens).length === 0 &&
+    (await connectionsService.count(tenantId)) === 0
+  ) {
     throw methodDisabled("social");
   }
   return { auth: instance, resolvers: social };
@@ -97,8 +104,16 @@ export const signInMethods: Resolvers = {
       requireLive(tenant);
       const offered = offeredSocial(tenant.signIn, secretBox.opens);
       if (!offered.some((entry) => entry.provider === provider)) {
-        // A fixed word: the caller's string is not echoed.
-        throw methodDisabled("this provider");
+        // Not one of the tenant's static apps: an enabled enterprise
+        // connection of the tenant (its id is the provider name). A fixed
+        // word: the caller's string is not echoed.
+        const connection = await connectionsService.find(
+          tenant.tenantId,
+          provider,
+        );
+        if (connection === undefined || !connection.enabled) {
+          throw methodDisabled("this provider");
+        }
       }
       const { resolvers } = await socialOfTenant(ctx);
       await ctx.signInThrottle?.check({

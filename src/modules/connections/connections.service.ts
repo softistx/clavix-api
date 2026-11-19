@@ -15,6 +15,7 @@ import type {
   connections,
 } from "./connections.model";
 import { checked, partsOf } from "./connections.record";
+import { domainOfEmail } from "./email-domain";
 
 export type { ConnectionDoc } from "./connections.model";
 
@@ -168,6 +169,7 @@ export class ConnectionsService {
       emailTrust,
       claims: claimsOf(input.claims),
       domains: [],
+      upstreamAcr: input.upstreamMfa?.acr ?? null,
       revision: 1,
     });
     const scoped = this.scoped(tenantId);
@@ -226,6 +228,10 @@ export class ConnectionsService {
       emailTrust: patch.emailTrust ?? current.emailTrust,
       claims:
         patch.claims === undefined ? current.claims : claimsOf(patch.claims),
+      upstreamAcr:
+        patch.upstreamMfa === undefined
+          ? (current.upstreamMfa?.acr ?? null)
+          : (patch.upstreamMfa?.acr ?? null),
     };
     const domains = current.domains.map((entry) => entry.domain);
     const record = checked({
@@ -439,6 +445,50 @@ export class ConnectionsService {
   }
 
   /**
+   * The one enabled connection that owns a verified domain, or `undefined`.
+   * Two enabled connections claiming one domain answer nothing (logged),
+   * so neither can take the other's sign-ins.
+   */
+  private async ownerOf(
+    tenantId: string,
+    domain: string,
+  ): Promise<ConnectionDoc | undefined> {
+    const found = (
+      await this.scoped(tenantId).findMany({
+        filter: { enabled: true, "domains.domain": domain },
+      })
+    ).filter((doc) =>
+      doc.domains.some((d) => d.domain === domain && d.verifiedAt !== null),
+    );
+    if (found.length > 1) {
+      this.log(
+        `connections: ${found.length} enabled connections of tenant ${tenantId} claim one domain; none answers`,
+      );
+      return undefined;
+    }
+    return found[0];
+  }
+
+  /**
+   * Whether the address belongs to a verified domain of an enabled connection
+   * that requires single sign-on (D3): every other way in is refused for it.
+   */
+  async requiresSso(tenantId: string, email: string): Promise<boolean> {
+    const domain = domainOfEmail(email);
+    if (domain === null) return false;
+    return (await this.ownerOf(tenantId, domain))?.requireSso === true;
+  }
+
+  /**
+   * Whether a connection of the tenant may create a user at a first sign-in
+   * (D4, `jit`). Read on every sign-up, so turning it off takes effect at once.
+   */
+  async jitAllowed(tenantId: string, connectionId: string): Promise<boolean> {
+    const doc = await this.find(tenantId, connectionId);
+    return doc?.enabled === true && doc.jit;
+  }
+
+  /**
    * The tenant's connections as janus's `oidcConnections` reads them: enabled
    * ones with a verified domain, the secret opened. Anything that cannot be
    * built is not offered (logged by id only) and a domain two connections
@@ -451,20 +501,7 @@ export class ConnectionsService {
         return doc === undefined ? null : this.build(tenantId, doc);
       },
       findConnectionByDomain: async (domain) => {
-        const found = (
-          await this.scoped(tenantId).findMany({
-            filter: { enabled: true, "domains.domain": domain },
-          })
-        ).filter((doc) =>
-          doc.domains.some((d) => d.domain === domain && d.verifiedAt !== null),
-        );
-        if (found.length > 1) {
-          this.log(
-            `connections: ${found.length} enabled connections of tenant ${tenantId} claim one domain; none answers`,
-          );
-          return null;
-        }
-        const [only] = found;
+        const only = await this.ownerOf(tenantId, domain);
         return only === undefined ? null : this.build(tenantId, only);
       },
     };
