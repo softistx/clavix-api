@@ -728,11 +728,12 @@ still pending. Reading and denying a request do not ask for a fresh session.
 **`UNMET_AUTHENTICATION_REQUIREMENTS`** (403, `extensions.missing`) on approve: the session does not meet the request's
 `acr_values`, `max_age` or `prompt=login`, or the tenant's `required` mode. `missing` says what: `SECOND_FACTOR` (prove with a
 step-up), `FRESH_PROOF` (prove again), `ENROLMENT` (the user holds no second factor; enrol one first). An empty `missing` means
-the request names only an `acr` Clavix does not issue. The request stays pending.
+the request names only an `acr` Clavix does not issue: nothing can meet it, so the request is denied and the client is
+redirected with `error=unmet_authentication_requirements` (`approveOAuthRequest` answers that `redirectTo`). In the other
+cases the request stays pending for the step-up.
 
 **`CODE_INVALID`** on `confirmStepUp` (with `attemptsLeft`) is a wrong code; **`PASSKEY_INVALID`** on `confirmPasskeyStepUp` is a failed
-assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: a passkey step-up needs an active authenticator app
-(nxgt-janus#951).
+assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: the passkey step-up is not available to the user (no passkey, or `passkeys.firstFactor` off); it needs no authenticator app.
 
 **`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
 

@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { totpCode } from "@softistx/janus/testing";
 import {
   createMemorySigningKeys,
   DEVICE_GRANT,
@@ -153,25 +152,7 @@ async function signedIn(
       }),
   };
   if (passkey) {
-    // janus registers a second-factor passkey, and steps up with one, only
-    // beside an active authenticator app.
-    const enrolled = await gql(
-      slug,
-      "mutation { enrollSecondFactor { secret } }",
-      {},
-      cookie,
-    );
-    const activated = await gql(
-      slug,
-      "mutation($code: String!) { activateSecondFactor(code: $code) { recoveryCodes } }",
-      {
-        code: totpCode(
-          fieldOf<{ secret: string }>(enrolled, "enrollSecondFactor").secret,
-        ),
-      },
-      cookie,
-    );
-    expect(activated.errors).toBeUndefined();
+    // A passkey-only user: no authenticator app (nxgt-janus#951).
     const asked = await auth.passkeys.registrationOptions(user);
     const current = await auth.authenticate(
       new Request(url(slug), { headers: { cookie } }),
@@ -353,6 +334,20 @@ describe("acr_values", () => {
     expect(claims["amr"]).toEqual(
       expect.arrayContaining(["hwk", "user", "mfa"]),
     );
+    // The access token states the same (RFC 9068, nxgt-janus#952).
+    const access = decodeJwt(tokens.access_token);
+    expect(access["acr"]).toBe(claims["acr"]);
+    expect(access["amr"]).toEqual(claims["amr"]);
+    expect(access["auth_time"]).toBe(claims["auth_time"]);
+  });
+
+  test("a passkey-only user steps up to acr phr, with no authenticator app", async () => {
+    const pat = await signedIn("stup", "pat@example.test", true);
+    const id = await authorize("stup", { acr_values: ACR.phishingResistant });
+    await stepUp("stup", pat);
+    const tokens = await approved("stup", id, pat.cookie);
+    expect(decodeJwt(tokens.id_token)["acr"]).toBe(ACR.phishingResistant);
+    expect(decodeJwt(tokens.access_token)["acr"]).toBe(ACR.phishingResistant);
   });
 
   test("a code-only session meets acr 1fa and the ID token says so", async () => {
@@ -382,7 +377,24 @@ describe("acr_values", () => {
       met: false,
       missing: [],
     });
-    expect(codeOf(await gql("stup", APPROVE, { id }, dee.cookie))).toBe(UNMET);
+    // Nothing the user can do: the client is told, not left waiting
+    // (nxgt-janus#949, RFC 9470), and the request is spent.
+    const refused = await gql("stup", APPROVE, { id }, dee.cookie);
+    expect(refused.errors).toBeUndefined();
+    const { redirectTo } = fieldOf<{ redirectTo: string }>(
+      refused,
+      "approveOAuthRequest",
+    );
+    const back = new URL(redirectTo);
+    expect(back.origin + back.pathname).toBe(REDIRECT);
+    expect(back.searchParams.get("error")).toBe(
+      "unmet_authentication_requirements",
+    );
+    expect(back.searchParams.get("state")).toBe("xyz");
+    expect(back.searchParams.get("code")).toBeNull();
+    expect(
+      (await gql("stup", APPROVE, { id }, dee.cookie)).errors,
+    ).toBeDefined();
   });
 
   test("refresh keeps the acr of the approval", async () => {

@@ -23,6 +23,7 @@ import {
   type ScopeTextsFor,
   textOf,
 } from "./scope-labels";
+import { denyUnreachable, isUnreachable } from "./unmet";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -198,20 +199,39 @@ const janusResolvers = oauthResolvers({
     );
     return { amr, acr, authTime };
   },
-  oauth: async (ctx) => {
-    // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
-    const request = requestOf(ctx);
-    const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
-    if (server === null || server === undefined) throw denial("NOT_FOUND");
-    // A code is not minted for a suspended or deleted tenant.
-    requireLive(
-      await (
-        ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
-      ).tenant(),
-    );
-    return server;
-  },
+  oauth: (ctx) => serverOf(ctx),
 });
+
+async function serverOf(ctx: unknown) {
+  // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
+  const request = requestOf(ctx);
+  const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
+  if (server === null || server === undefined) throw denial("NOT_FOUND");
+  // A code is not minted for a suspended or deleted tenant.
+  requireLive(
+    await (
+      ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
+    ).tenant(),
+  );
+  return server;
+}
+
+const approveOrDenyUnmet = async (
+  parent: unknown,
+  args: { id: string },
+  ctx: unknown,
+  info: unknown,
+) => {
+  const approve = janusResolvers.Mutation?.["approveOAuthRequest"] as (
+    ...rest: unknown[]
+  ) => Promise<{ redirectTo: string }>;
+  try {
+    return await approve(parent, args, ctx, info);
+  } catch (error) {
+    if (!isUnreachable(error)) throw error;
+    return denyUnreachable(await serverOf(ctx), args.id);
+  }
+};
 
 /**
  * The consent API of the hosted `/consent` page, on `/graphql`. Both the OAuth
@@ -225,6 +245,10 @@ const janusResolvers = oauthResolvers({
  */
 export const consentResolvers: IResolvers = {
   ...janusResolvers,
+  Mutation: {
+    ...janusResolvers.Mutation,
+    approveOAuthRequest: approveOrDenyUnmet,
+  },
   // The label of a scope is the tenant's description of it (console, `Scope`),
   // in the viewer's language (`Accept-Language`); janus's own (the scope's
   // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one

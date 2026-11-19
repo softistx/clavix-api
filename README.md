@@ -1136,13 +1136,13 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
 - **Same origin, JSON only**: this holds for every `/graphql` operation, not only consent (see "Same
   origin on /graphql" below).
 - **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`, moved to now by a step-up).
-  `acr` and `amr` are on the ID token too: see "Authentication level and step-up".
+  `acr` and `amr` are on the ID token and on the JWT access token too (same values): see "Authentication level and step-up".
 
 ### Authentication level and step-up
 
 - **`acr` values** (`acr_values_supported` in discovery): `urn:clavix:acr:1fa` (one factor), `urn:clavix:acr:mfa`
   (a second factor) and `phr` (a user-verified passkey, which also meets `mfa`). `amr` carries RFC 8176 values
-  (`hwk`, `user`, `otp`, `mfa`, `fed`); a lone e-mailed code is `email`.
+  (`hwk`, `user`, `otp`, `rec` (a recovery code, in place of `otp`), `mfa`, `fed`); a lone e-mailed code is `email`.
 - **What is asked**: the tenant's `signIn.mfa.mode` (`required` asks `mfa` of every approval) and the client's
   `acr_values` (essential, any one supported value met satisfies), `max_age` and `prompt=login` (= `max_age=0`,
   read as a proof of the last 60 seconds).
@@ -1150,7 +1150,9 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
   `acr_values` or `max_age`, only the tenant's mode) is `{ acr, current, maxAge, met, missing }`, `missing` listing
   `SECOND_FACTOR` (prove a passkey or an app code now), `FRESH_PROOF` (prove again) and `ENROLMENT` (the user holds
   no second factor). While `met` is false the approve mutations answer `UNMET_AUTHENTICATION_REQUIREMENTS` (403,
-  `extensions.missing`) and the request stays pending.
+  `extensions.missing`) and the request stays pending. When `missing` is empty (an `acr` Clavix does not issue) nothing
+  can meet it: the request is denied and the mutation answers a `redirectTo` with `error=unmet_authentication_requirements`,
+  `state` and `iss`.
 - **Step-up mutations**: `requestPasskeyStepUp` / `confirmPasskeyStepUp(challenge, response)` (passkey: `hwk`,
   `user`, `mfa`, so `phr`), `requestStepUp` / `confirmStepUp(challenge, code)` (the app's code for a user who has
   one, else an e-mailed code that renews the proof only). Each confirmation is a `stepUp.confirm` audit event.
@@ -1158,8 +1160,7 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
   `CODE_INVALID` (with `attemptsLeft`) for a wrong code and `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED` for a bad
   challenge; `confirmPasskeyStepUp` answers `PASSKEY_INVALID` for a failed assertion and the same `TOKEN_*` codes.
 - **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
-- **Not yet**: the client is not redirected with `unmet_authentication_requirements` (janus-oauth has no such
-  denial, nxgt-janus#949) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data, nxgt-janus#952). The `rec` amr value is not emitted (janus cannot tell a recovery code from a TOTP code, nxgt-janus#950), and a passkey step-up needs an active authenticator app (nxgt-janus#951).
+- **Tokens**: the ID token and the JWT access token carry `acr`, `amr` and `auth_time` (the approval's values; a refresh keeps them). A passkey step-up needs no authenticator app (`passkeys.firstFactor`).
 
 ## E-mail code sign-in
 

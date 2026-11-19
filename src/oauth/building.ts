@@ -118,22 +118,35 @@ export const buildIssuer =
         keys,
         // Runs on every code exchange and refresh: a refreshed token carries
         // the user's current roles. The audience is the token's resource.
-        ...(rolesFor === undefined
-          ? {}
-          : {
-              claims: async ({
-                subject,
-                audience,
-              }: {
-                subject: string;
-                audience: string;
-              }) => ({
+        // `acr`, `amr` and `auth_time` are the grant's, the values of the ID
+        // token (RFC 9068, RFC 9470); a grant that records none adds none.
+        claims: async ({
+          subject,
+          audience,
+          authTime,
+          acr,
+          amr,
+        }: {
+          subject: string;
+          audience: string;
+          authTime?: Date;
+          acr?: string;
+          amr?: readonly string[];
+        }) => ({
+          ...(rolesFor === undefined
+            ? {}
+            : {
                 roles: await rolesFor(tenant)(
                   subject,
                   audience === userinfo ? null : audience,
                 ),
               }),
-            }),
+          ...(authTime === undefined
+            ? {}
+            : { auth_time: Math.floor(authTime.getTime() / 1000) }),
+          ...(acr === undefined ? {} : { acr }),
+          ...(amr === undefined ? {} : { amr: [...amr] }),
+        }),
       },
       tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
       ...(clock === undefined ? {} : { clock }),
