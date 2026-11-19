@@ -584,8 +584,14 @@ one in the trash.
 runs the console itself. `updateOAuthPolicy` on that tenant is accepted: the console pushes (PAR) and proves (DPoP), and the
 `clavix` tenant requires both since migration `2026-11-17-console-par-dpop`.
 
-**`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
-(`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
+**Enterprise connections** (console): `DOMAIN_TAKEN` (409), another enabled connection of the tenant already holds the
+domain; `DOMAIN_NOT_VERIFIED`, the domain's TXT record `_clavix-sso.<domain>` is missing or wrong, add the token
+and verify again; `VERIFY_COOLDOWN` (429, `retryAfter` in seconds), wait before verifying again (60 s);
+`CONNECTION_IN_USE`, users are linked to the connection, so it is disabled, not deleted; `ISSUER_REFUSED`
+(the issuer's discovery is refused: https, public address, matching issuer) and `ISSUER_UNREACHABLE` (it did not answer).
+
+**`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain, a connection) would pass the plan's limit
+(`extensions.field` names the quota: `clients`, `domains` or `connections`). Change the plan or the override with `setTenantPlan`.
 Monthly active users never block: `usage` only reports `exceeded`.
 
 **`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on every console write of a tenant's own admins (clients, resources, roles, users, admins, domains, branding, sign-in methods, `updateTenant`: the console stays readable on a suspended tenant, platform operators can still write), and as `access_denied` JSON on

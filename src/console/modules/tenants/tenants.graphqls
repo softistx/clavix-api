@@ -23,6 +23,8 @@ type Quotas {
   agents: Int
   "Webhook endpoints. Hard: creating one more is QUOTA_EXCEEDED."
   webhooks: Int
+  "Enterprise OIDC connections. Hard: creating one more is QUOTA_EXCEEDED."
+  connections: Int
 }
 
 "A plan of the platform: a name and the quotas it grants."
@@ -81,6 +83,8 @@ type Usage {
   agents: UsageMeter!
   "Webhook endpoints now, enabled or not."
   webhooks: UsageMeter!
+  "Enterprise OIDC connections now, enabled or not."
+  connections: UsageMeter!
 }
 
 input CreateTenantInput {
@@ -106,6 +110,7 @@ input QuotaOverridesInput {
   domains: Int
   agents: Int
   webhooks: Int
+  connections: Int
 }
 
 "The plan and the whole set of overrides (a replacement, so repeating a call changes nothing)."

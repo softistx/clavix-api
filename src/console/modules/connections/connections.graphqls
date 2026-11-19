@@ -1,0 +1,236 @@
+"""
+How an identity provider's e-mail counts as proven. CLAIM_AND_DOMAIN: the
+`email_verified` claim is true and the address is in a verified domain of the
+connection. DOMAIN: the address is in a verified domain (for providers that do
+not send the claim). The claim alone is not offered: it would let the identity
+provider assert any address.
+"""
+enum ConnectionEmailTrust {
+  CLAIM_AND_DOMAIN
+  DOMAIN
+}
+
+"""
+The names of the ID token claims that fill the identity; a claim left out keeps
+its standard name. The protocol claims (`sub`, `iss`, `aud`, `nonce`, ...)
+cannot be named.
+"""
+type ConnectionClaims {
+  email: String
+  emailVerified: String
+  name: String
+  picture: String
+}
+
+input ConnectionClaimsInput {
+  email: String
+  emailVerified: String
+  name: String
+  picture: String
+}
+
+"The ID token signature algorithms a connection accepts: asymmetric only."
+enum ConnectionAlgorithm {
+  RS256
+  RS384
+  RS512
+  PS256
+  PS384
+  PS512
+  ES256
+  ES384
+  ES512
+  EdDSA
+}
+
+"How the client secret reaches the identity provider's token endpoint."
+enum ConnectionClientAuthentication {
+  POST
+  BASIC
+}
+
+"""
+An e-mail domain of a connection. It signs in through the connection only once
+verified: publish `txtToken` as a TXT record at `txtName`, then call
+`verifyConnectionDomain`.
+"""
+type ConnectionDomain {
+  "Lowercase, punycode."
+  domain: String!
+  "`_clavix-sso.<domain>`."
+  txtName: String!
+  txtToken: String!
+  verified: Boolean!
+  verifiedAt: DateTime
+  checkedAt: DateTime
+}
+
+"""
+A tenant's enterprise OpenID Connect connection: its own identity provider,
+signed in to through the hosted sign-in. The client secret is sealed and is
+never returned.
+"""
+type Connection {
+  "The connection's name in links and events: `[a-z][a-z0-9-]{0,31}`, for ever."
+  id: ID!
+  name: String!
+  "`https` issuer URL; its discovery document is read. Fixed once accounts are linked."
+  issuer: String!
+  clientId: String!
+  clientAuthentication: ConnectionClientAuthentication
+  idTokenSignedResponseAlg: ConnectionAlgorithm
+  "Absent: `openid email profile`."
+  scopes: [String!]
+  emailTrust: ConnectionEmailTrust!
+  claims: ConnectionClaims!
+  domains: [ConnectionDomain!]!
+  "A verified domain of this connection signs in through it only (D4)."
+  requireSso: Boolean!
+  "A user is created at the first sign-in, where the tenant's sign-up is open (D5)."
+  jit: Boolean!
+  "Also offer a button on the sign-in page."
+  showButton: Boolean!
+  "The `acr` the identity provider must report (D6). Stored; not enforced yet."
+  upstreamMfa: ConnectionUpstreamMfa
+  enabled: Boolean!
+  "Rises on every change."
+  revision: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ConnectionUpstreamMfa {
+  acr: String!
+}
+
+input ConnectionUpstreamMfaInput {
+  acr: String!
+}
+
+"What a successful `checkConnection` read."
+type ConnectionCheck {
+  issuer: String!
+  authorizationEndpoint: String!
+}
+
+input CreateConnectionInput {
+  "`[a-z][a-z0-9-]{0,31}`, not `google`, `github` or `microsoft`."
+  id: ID!
+  name: String!
+  issuer: String!
+  clientId: String!
+  "Sealed at once; never returned."
+  clientSecret: String!
+  clientAuthentication: ConnectionClientAuthentication
+  idTokenSignedResponseAlg: ConnectionAlgorithm
+  scopes: [String!]
+  "Default CLAIM_AND_DOMAIN."
+  emailTrust: ConnectionEmailTrust
+  claims: ConnectionClaimsInput
+  "Default true."
+  requireSso: Boolean
+  "Default true."
+  jit: Boolean
+  "Default false."
+  showButton: Boolean
+  upstreamMfa: ConnectionUpstreamMfaInput
+  "Default true."
+  enabled: Boolean
+}
+
+"Fields left out stay as they are; `null` clears an optional one. The id never changes."
+input UpdateConnectionInput {
+  name: String
+  issuer: String
+  clientId: String
+  clientAuthentication: ConnectionClientAuthentication
+  idTokenSignedResponseAlg: ConnectionAlgorithm
+  scopes: [String!]
+  emailTrust: ConnectionEmailTrust
+  claims: ConnectionClaimsInput
+  requireSso: Boolean
+  jit: Boolean
+  showButton: Boolean
+  upstreamMfa: ConnectionUpstreamMfaInput
+  enabled: Boolean
+}
+
+"The candidate of `checkConnection`: a connection that is not saved."
+input CheckConnectionInput {
+  id: ID!
+  issuer: String!
+  clientId: String!
+  clientSecret: String!
+  clientAuthentication: ConnectionClientAuthentication
+  idTokenSignedResponseAlg: ConnectionAlgorithm
+  scopes: [String!]
+  emailTrust: ConnectionEmailTrust
+  claims: ConnectionClaimsInput
+}
+
+type Query {
+  "Needs `view` on the tenant. Oldest first. The secret is never part of it."
+  connections(tenantId: ID!): [Connection!]!
+  "Needs `view`. `null` when there is no such connection."
+  connection(tenantId: ID!, id: ID!): Connection
+  """
+  Reads an issuer's discovery document for a connection not yet saved, over a
+  guarded request (https, a public address, no redirect, bounded). Needs
+  `edit` on the tenant, since it makes an outbound request. Errors:
+  BAD_USER_INPUT (400), ISSUER_REFUSED (400), ISSUER_UNREACHABLE (502).
+  """
+  checkConnection(tenantId: ID!, input: CheckConnectionInput!): ConnectionCheck!
+}
+
+type Mutation {
+  """
+  Adds a connection. Needs `edit` on the tenant. Errors: BAD_USER_INPUT (400:
+  janus's `checkConnection` refused it; `extensions.field` `id` for a
+  built-in name), CONFLICT (409: the id is taken), QUOTA_EXCEEDED (409,
+  `extensions.field` `connections`).
+  """
+  createConnection(tenantId: ID!, input: CreateConnectionInput!): Connection!
+  """
+  Needs `edit`. Errors: NOT_FOUND (404), BAD_USER_INPUT (400), DOMAIN_TAKEN
+  (409: switching on a connection whose domain another enabled one holds),
+  CONNECTION_IN_USE (409: the issuer cannot change while accounts are linked).
+  """
+  updateConnection(
+    tenantId: ID!
+    id: ID!
+    input: UpdateConnectionInput!
+  ): Connection!
+  "Replaces the client secret (sealed, never returned). Needs `edit`. Errors: NOT_FOUND (404), BAD_USER_INPUT (400)."
+  setConnectionSecret(
+    tenantId: ID!
+    id: ID!
+    clientSecret: String!
+  ): Connection!
+  """
+  Removes a connection. `false` when it was already gone. Errors:
+  CONNECTION_IN_USE (409): accounts are linked through it; switch it off.
+  """
+  deleteConnection(tenantId: ID!, id: ID!): Boolean!
+  """
+  Claims an e-mail domain and mints its TXT token. Errors: NOT_FOUND (404),
+  BAD_USER_INPUT (400: not a valid domain, too many), CONFLICT (409: already
+  on the connection), DOMAIN_TAKEN (409: on another connection of the tenant).
+  """
+  addConnectionDomain(tenantId: ID!, id: ID!, domain: String!): Connection!
+  """
+  Looks for the TXT record. `verified` says whether it was found. At most one
+  check a minute per domain: VERIFY_COOLDOWN (429, `extensions.retryAfter`).
+  """
+  verifyConnectionDomain(
+    tenantId: ID!
+    id: ID!
+    domain: String!
+  ): ConnectionDomainCheck!
+  "Drops a domain, verified or not. Errors: NOT_FOUND (404)."
+  removeConnectionDomain(tenantId: ID!, id: ID!, domain: String!): Connection!
+}
+
+type ConnectionDomainCheck {
+  connection: Connection!
+  verified: Boolean!
+}

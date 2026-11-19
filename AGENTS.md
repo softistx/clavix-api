@@ -632,6 +632,32 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   reads them (parent `WebhookEndpointParent` carries the tenant id); deleting an endpoint deletes its attempts.
 - Admin events: `webhook.create|update|delete|rollSecret|test`; none carries a secret.
 
+## Enterprise OIDC connections (`src/modules/connections`, `src/console/modules/connections`, `src/config/connections.ts`)
+
+- A tenant registers upstream OIDC identity providers (F1 of M4, Part of #19). `connections` is
+  tenant-owned (`src/modules/collections.ts`, allowed files in `src/tenancy/guards.spec.ts`):
+  `connectionId` unique per tenant, `domains[]` (`domain`, `txtToken`, `verifiedAt`), and a partial
+  unique index on a verified-and-enabled domain per tenant.
+- The client secret is sealed (`connectionSecretBox`, label `connection-secrets`, context
+  `<tenantId>:<connectionId>`), never returned, logged or put in an admin event.
+- Every admin input goes through janus-social's `checkConnection` (`connections.record.ts`): its
+  `checkConnection:` TypeError becomes `BAD_USER_INPUT` with the field names, no values. Ids `google`,
+  `github`, `microsoft` are refused (they are the static apps). `emailTrust` offers `claimAndDomain`
+  and `domain` only. `upstreamMfa` is stored, not enforced yet.
+- `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `tenant-janus.ts` wires it as
+  `social.resolveProvider` through `oidcConnections` (one redirect URI per tenant:
+  `<issuer>/sign-in/sso/callback`). Every tenant's janus instance carries it, so the static-social
+  gate in `sign-in-methods` also checks the tenant's offered providers.
+- Domain ownership: `addConnectionDomain` returns a TXT name `_clavix-sso.<domain>` and token;
+  `verifyConnectionDomain` reads the TXT (60 s cooldown) and can be asked again. A domain is claimed
+  by one enabled connection per tenant (`DOMAIN_TAKEN`).
+- Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
+  A connection with linked users is not deleted (`CONNECTION_IN_USE`).
+- Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
+  (`src/config/connections.ts`); janus has no such API.
+- Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
+  Home-realm discovery (`forEmail`) and the callback route are F2/F3.
+
 ## OAuth clients
 
 `src/clients/` registers a client on a tenant (`registerClient`; `grants.ts` holds the offered grants and `validate.ts` the input checks and `clientIdOf`, both re-exported by `register-client.ts`; the script `clients:create`
