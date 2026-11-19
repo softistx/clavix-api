@@ -16,9 +16,9 @@ interface LinkCountingSocial {
 }
 
 // The accounts linked through a connection, counted by the tenant's own janus
-// instance (\`auth.social.countLinks\`): its stores count within the tenant's
+// instance (`auth.social.countLinks`): its stores count within the tenant's
 // partition, and the provider name is the connection's id. A tenant with no
-// social instance has no link. \`./users\` imports this module, so \`forTenant\`
+// social instance has no link. `./users` imports this module, so `forTenant`
 // is read at call time only.
 const linkCount = async (tenantId: string, connectionId: string) => {
   const tenant = await tenantAdmin.find(tenantId);
@@ -30,8 +30,12 @@ const linkCount = async (tenantId: string, connectionId: string) => {
         );
   const { forTenant } = await import("./users");
   const auth = resolved === null ? null : await forTenant(resolved);
-  if (auth === null || socialOf(auth) === null) return 0;
-  // janus-graphql's \`SocialAuth\` type leaves \`countLinks\` out; the instance has it.
+  // Fail closed: a count that cannot be made must not read as "no link".
+  if (auth === null) {
+    throw new Error(`link count: tenant ${tenantId} has no instance`);
+  }
+  if (socialOf(auth) === null) return 0;
+  // janus-graphql's `SocialAuth` type leaves `countLinks` out; the instance has it.
   const { social } = auth as unknown as { social: LinkCountingSocial };
   return social.countLinks({ provider: connectionId });
 };
