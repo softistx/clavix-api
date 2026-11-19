@@ -674,6 +674,7 @@ describe("single sign-on required: the other doors (D3)", () => {
     expect(codeOf(blocked)).toBe("SSO_REQUIRED");
     expect(await activeSessions(tessId)).toBe(live);
     // janus-graphql queued its cookie: it names a revoked session.
+    expect(cookieOf(blocked)).not.toBe("");
     const stale = await gql("fedacme", ME, {}, cookieOf(blocked));
     expect(stale.data?.["currentUser"] ?? null).toBeNull();
     await policies.updateMfa(acme, { totp: false });
@@ -728,6 +729,7 @@ describe("single sign-on required: the other doors (D3)", () => {
     // The session the passkey opened is revoked: no live session was added,
     // and a cookie the response still carries opens nothing.
     expect(await activeSessions(id)).toBe(live);
+    expect(cookieOf(refused)).not.toBe("");
     const me = await gql("fedacme", ME, {}, cookieOf(refused));
     expect(me.data?.["currentUser"] ?? null).toBeNull();
   });
