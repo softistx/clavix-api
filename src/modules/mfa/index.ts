@@ -22,7 +22,7 @@ export const secondFactorDisabled = () =>
 
 // `auth` is a function of the context: janus-graphql asks it on every field for
 // the instance of the tenant that serves the request (nxgt-janus#914).
-const resolvers: SecondFactorResolvers = secondFactorResolvers({
+const janus: SecondFactorResolvers = secondFactorResolvers({
   auth: async (ctx) => {
     const auth = await janusIssuers.forRequest((ctx as Context).request);
     if (auth === null) throw denial("NOT_FOUND", "No such tenant");
@@ -38,57 +38,40 @@ const resolvers: SecondFactorResolvers = secondFactorResolvers({
   },
 });
 
-// The resolver map is bound once; the tenant is resolved per request.
-const janusOf = async (_ctx: Context) => resolvers;
-
 const iso = (value: string) => new Date(value);
 
 export const mfa: Resolvers = {
   Query: {
     secondFactor: async (_, __, ctx) =>
-      (await janusOf(ctx)).Query.secondFactor(_, undefined, ctx),
+      janus.Query.secondFactor(_, undefined, ctx),
     sessionConfirmedUntil: async (_, __, ctx) => {
-      const until = await (await janusOf(ctx)).Query.sessionConfirmedUntil(
-        _,
-        undefined,
-        ctx,
-      );
+      const until = await janus.Query.sessionConfirmedUntil(_, undefined, ctx);
       return until === null ? null : iso(until);
     },
   },
   Mutation: {
     confirmSecondFactor: async (_, { challenge, code }, ctx) => {
-      const janus = await janusOf(ctx);
       return answer(ctx, "totp", () =>
         janus.Mutation.confirmSecondFactor(_, { challenge, code }, ctx),
       );
     },
     recoverSecondFactor: async (_, { challenge, recoveryCode }, ctx) => {
-      const janus = await janusOf(ctx);
       return answer(ctx, "recoveryCode", () =>
         janus.Mutation.recoverSecondFactor(_, { challenge, recoveryCode }, ctx),
       );
     },
     enrollSecondFactor: async (_, __, ctx) => {
-      const out = await (await janusOf(ctx)).Mutation.enrollSecondFactor(
-        _,
-        undefined,
-        ctx,
-      );
+      const out = await janus.Mutation.enrollSecondFactor(_, undefined, ctx);
       ctx.set.headers.set("cache-control", "no-store");
       return out;
     },
     activateSecondFactor: async (_, { code }, ctx) => {
-      const out = await (await janusOf(ctx)).Mutation.activateSecondFactor(
-        _,
-        { code },
-        ctx,
-      );
+      const out = await janus.Mutation.activateSecondFactor(_, { code }, ctx);
       ctx.set.headers.set("cache-control", "no-store");
       return { recoveryCodes: [...out.recoveryCodes] };
     },
     regenerateRecoveryCodes: async (_, { code }, ctx) => {
-      const out = await (await janusOf(ctx)).Mutation.regenerateRecoveryCodes(
+      const out = await janus.Mutation.regenerateRecoveryCodes(
         _,
         { code },
         ctx,
@@ -97,7 +80,7 @@ export const mfa: Resolvers = {
       return { recoveryCodes: [...out.recoveryCodes] };
     },
     disableSecondFactor: async (_, { code }, ctx) =>
-      (await janusOf(ctx)).Mutation.disableSecondFactor(_, { code }, ctx),
+      janus.Mutation.disableSecondFactor(_, { code }, ctx),
   },
 };
 

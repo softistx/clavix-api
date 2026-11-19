@@ -388,3 +388,18 @@ describe("tenants are isolated", () => {
     ).toBe(true);
   });
 });
+
+describe("an unknown host", () => {
+  test("is NOT_FOUND on the second-factor operations", async () => {
+    const host = `http://nobody-here.${env.CLAVIX_DOMAIN}`;
+    const response = await app.request(`${host}/graphql`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: host },
+      body: JSON.stringify({ query: "{ secondFactor { enabled } }" }),
+    });
+    const body = (await response.json()) as {
+      errors?: { extensions: Record<string, unknown> }[];
+    };
+    expect(body.errors?.[0]?.extensions["code"]).toBe("NOT_FOUND");
+  });
+});
