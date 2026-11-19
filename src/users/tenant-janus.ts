@@ -344,8 +344,20 @@ export function buildTenantJanus(
   if (realms !== undefined) homeRealms.set(instance, realms);
   // janus answers `stepUp.request(user, { via: "passkey" })` and `confirmPasskey`
   // for an instance with passkeys and a second factor (both wired above), but
-  // its inferred type leaves them out: `StepUpPasskeyApi` names them.
-  return instance as TenantJanus;
+  // its inferred type leaves them out: `StepUpPasskeyApi` names them, and the
+  // guard checks them at runtime instead of casting.
+  if (!hasPasskeyStepUp(instance)) {
+    throw new Error("janus: the step-up by passkey is not wired");
+  }
+  return instance;
+}
+
+function hasPasskeyStepUp(instance: BuiltJanus): instance is TenantJanus {
+  const { stepUp } = instance as { stepUp: Partial<Record<string, unknown>> };
+  return (
+    typeof stepUp["confirmPasskey"] === "function" &&
+    typeof stepUp["request"] === "function"
+  );
 }
 
 /** The instance when the tenant has at least one social provider, else `null`. */

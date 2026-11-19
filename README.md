@@ -680,7 +680,7 @@ Discovery advertises `device_authorization_endpoint`.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
   (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes; approval is refused with `invalid_authorization_details` while `detailsComplete` is false, see "Authorization details"). The viewer must be signed in
-  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
+  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again or prove again with the step-up mutations, the request stays
   pending); refusing does not. A code of another tenant is `NOT_FOUND`.
 - **The device polls** with the janus answers: `authorization_pending`, `slow_down` (poll less often, the interval
   grows by 5 s), `access_denied`, `expired_token` (the code lived 10 minutes) and `invalid_grant`. A successful
@@ -1159,7 +1159,7 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
   challenge; `confirmPasskeyStepUp` answers `PASSKEY_INVALID` for a failed assertion and the same `TOKEN_*` codes.
 - **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
 - **Not yet**: the client is not redirected with `unmet_authentication_requirements` (janus-oauth has no such
-  denial) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data).
+  denial, nxgt-janus#949) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data, nxgt-janus#952). The `rec` amr value is not emitted (janus cannot tell a recovery code from a TOTP code, nxgt-janus#950), and a passkey step-up needs an active authenticator app (nxgt-janus#951).
 
 ## E-mail code sign-in
 
