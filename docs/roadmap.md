@@ -14,6 +14,10 @@ nxgt-janus release says which.
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
+- **MFA policy, TOTP and recovery codes** (M4) — a tenant offers an authenticator app
+  (`signIn.mfa.totp`, admin event `mfaPolicy.update`); a user who turned it on is asked for the code after
+  a sign-in by code, link or social account, or answers with a recovery code, and an admin can reset it
+  ([#20](https://github.com/softistx/clavix-api/issues/20)).
 - **Sign-in events and activity readers** (M4) — a tenant's sign-ins, sign-outs, second-factor and
   passkey changes are kept in its own log, kept 30, 90 or 365 days by plan; the console reads that
   log (admins) and the console activity (viewers), and operators read every tenant's and the
@@ -58,7 +62,7 @@ nxgt-janus release says which.
 
 **Federation, step-up and events**
 - Enterprise OIDC connections and home-realm discovery.
-- MFA policy and step-up (`acr_values`, `max_age`, `acr`/`amr`).
+- Step-up (`acr_values`, `max_age`, `acr`/`amr`).
 - Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
   telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans).
 

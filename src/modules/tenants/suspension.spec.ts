@@ -45,7 +45,7 @@ async function gql(slug: string, query: string): Promise<Answer> {
 const REQUEST =
   'mutation { requestSignInCode(email: "ada@example.test") { challenge } }';
 const verify = (challenge: string) =>
-  `mutation { verifySignInCode(challenge: "${challenge}", code: "000000") { expiresAt } }`;
+  `mutation { verifySignInCode(challenge: "${challenge}", code: "000000") { __typename } }`;
 
 afterAll(async () => {
   await mongo.db.tenants.raw.deleteMany({
@@ -101,7 +101,7 @@ describe("a suspended or deleted tenant's hosted pages", () => {
   test("social sign-in and invitation acceptance are refused like code sign-in, then work again", async () => {
     const social = [
       'mutation { socialSignInStart(provider: "github", returnTo: null) { url } }',
-      'mutation { socialSignInComplete(callbackUrl: "https://x.test/cb", flow: "f") { created } }',
+      'mutation { socialSignInComplete(callbackUrl: "https://x.test/cb", flow: "f") { __typename } }',
       'mutation { acceptInvitation(code: "abc") { signedIn } }',
     ];
     await tenantsService.suspend(id);

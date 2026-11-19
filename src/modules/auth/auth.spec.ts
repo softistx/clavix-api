@@ -68,7 +68,7 @@ const REQUEST = `mutation ($email: EmailAddress!) {
 }`;
 const VERIFY = `mutation ($challenge: String!, $code: String!) {
   verifySignInCode(challenge: $challenge, code: $code) {
-    expiresAt user { id email emailVerified }
+    ... on SignedIn { expiresAt user { id email emailVerified } }
   }
 }`;
 const ME = "{ currentUser { id email emailVerified } }";

@@ -5,6 +5,7 @@ import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
+import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
 import { socialOf } from "@/users/tenant-janus";
 import { methodDisabled } from "./gate";
@@ -116,21 +117,23 @@ export const signInMethods: Resolvers = {
         ctx,
         tenant.tenantId,
         "social",
-        async () => {
-          const completed = await resolvers.Mutation.socialSignInComplete(
+        () =>
+          resolvers.Mutation.socialSignInComplete(
             _,
             { callbackUrl, flow },
             ctx,
-          );
-          // No second factor is configured and nothing starts a link flow: a
-          // completed flow is a sign-in.
-          if (completed.status !== "signedIn") {
-            throw denial("FORBIDDEN", "Sign-in could not be completed");
-          }
-          return completed;
-        },
-        (completed) => completed.userId,
+          ),
+        (completed) =>
+          completed.status === "signedIn" ? completed.userId : null,
       );
+      ctx.set.headers.set("cache-control", "no-store");
+      if (done.status === "secondFactor") {
+        return challengeAnswer(done, done.returnTo);
+      }
+      // Nothing here starts a link flow: a completed flow is a sign-in.
+      if (done.status !== "signedIn") {
+        throw denial("FORBIDDEN", "Sign-in could not be completed");
+      }
       // janus types the user as an id and a type only: read the profile.
       const user = await auth.findUser(done.userId);
       if (user === null) {
@@ -138,6 +141,7 @@ export const signInMethods: Resolvers = {
       }
       await usageService.recordActive(tenant.tenantId, user.id);
       return {
+        __typename: "SocialSignedIn" as const,
         user: {
           id: user.id,
           email: user.email,

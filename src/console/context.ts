@@ -170,6 +170,19 @@ export interface ConsoleUsers {
     id: string,
     verified: boolean,
   ): Promise<TenantUserView | null>;
+  /** The user's TOTP factor; `enabled: false` for a user with none (or an unknown one). */
+  secondFactor(
+    tenantId: string,
+    id: string,
+  ): Promise<{ enabled: boolean; recoveryCodesLeft: number | null }>;
+  /**
+   * Removes the user's TOTP factor and recovery codes (a lost phone and lost
+   * codes); the user as written, or `null` when unknown. Idempotent.
+   */
+  resetSecondFactor(
+    tenantId: string,
+    id: string,
+  ): Promise<TenantUserView | null>;
   /** Ends every session; answers how many. */
   revokeSessions(tenantId: string, id: string): Promise<number>;
   /** The user's standing sessions, newest first; empty for an unknown user. */

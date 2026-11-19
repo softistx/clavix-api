@@ -677,7 +677,7 @@ record another instance sealed under the new one):
 2. Deploy `CLAVIX_KEYS_MASTER_KEY=<new>,<old>`: the new key seals.
 3. Re-seal what is still under the old key, from any instance with the same
    environment: `bun run keys:reseal`. It goes over every tenant (suspended and
-   trashed included), prints `{ tenants, resealed, current, skipped, failed }`
+   trashed included), prints `{ tenants, resealed, current, skipped, failed, secondFactor }`
    and **exits 1 while `skipped` or `failed` is above 0**: run it again. A
    record is `skipped` when someone changed it meanwhile; a tenant is `failed`
    when no key of the list opens one of its records (the message names the
@@ -693,6 +693,14 @@ The tenants' social client secrets (sign-in methods) use a subkey of the same
 master key. With a keyring they are still opened under any key of the list, but
 `keys:reseal` does not re-wrap them (clavix-api#49): **keep the old key in the
 list while any social secret is sealed under it**, or enter those secrets again.
+
+The users' TOTP secrets and recovery codes (second factor) are sealed under
+subkeys of the same master key (HKDF, info `second-factor`) and janus has no call
+to re-wrap them: a secret moves under the first key on its user's next accepted
+code. `keys:reseal` reports `secondFactor: { sealed, behind }`, the seals still
+under an older key; it does not make the exit code fail. **Keep the old key in the
+list while `behind` is above 0**, or the users concerned reset their factor
+(an admin's `resetUserSecondFactor`) and enrol again.
 
 ### Emergency rotation (a signing key leaked)
 

@@ -76,7 +76,7 @@ const START = `mutation ($p: String!, $r: String) {
 }`;
 const COMPLETE = `mutation ($u: String!, $f: String!) {
   socialSignInComplete(callbackUrl: $u, flow: $f) {
-    created returnTo expiresAt user { id email name emailVerified }
+    ... on SocialSignedIn { created returnTo expiresAt user { id email name emailVerified } }
   }
 }`;
 const REQUEST_CODE = `mutation { requestSignInCode(email: "ada@example.com") { expiresAt } }`;
@@ -181,7 +181,7 @@ describe("a method the tenant turned off", () => {
     await policy.updateMethods(social, [{ type: "emailCode", enabled: false }]);
     const code = await gql(
       "sih-social",
-      `mutation { verifySignInCode(challenge: "c", code: "000000") { expiresAt } }`,
+      `mutation { verifySignInCode(challenge: "c", code: "000000") { __typename } }`,
     );
     expect(codeOf(code)).toBe("SIGN_IN_METHOD_DISABLED");
     await policy.updateMethods(social, [{ type: "emailCode", enabled: true }]);

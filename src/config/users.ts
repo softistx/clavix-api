@@ -3,11 +3,12 @@ import { userKey } from "@/console/modules/user-key";
 import { janusListener } from "@/events/janus-listener";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { secondFactorKeysOf } from "@/users/second-factor-keys";
 import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
 import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
-import { secretBox } from "./keys";
+import { masterKeys, secretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { tenantResolver, tenantsService } from "./tenancy";
 
@@ -33,6 +34,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
   {
     resolver: tenantResolver,
     db: oauthDb,
+    secondFactorKeys: secondFactorKeysOf(masterKeys),
     secrets: secretBox,
     events: (tenant) => janusListener(tenant.tenantId, eventBus),
     invitationHooks: (tenant) =>

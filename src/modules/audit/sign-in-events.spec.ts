@@ -54,9 +54,9 @@ async function gql(
 }
 
 const REQUEST_CODE = `mutation ($email: EmailAddress!) { requestSignInCode(email: $email) { challenge } }`;
-const VERIFY = `mutation ($challenge: String!, $code: String!) { verifySignInCode(challenge: $challenge, code: $code) { user { id } } }`;
+const VERIFY = `mutation ($challenge: String!, $code: String!) { verifySignInCode(challenge: $challenge, code: $code) { ... on SignedIn { user { id } } } }`;
 const REQUEST_LINK = `mutation ($email: EmailAddress!) { requestMagicLink(email: $email) { expiresAt } }`;
-const CONFIRM = `mutation ($token: String!) { confirmMagicLink(token: $token) { user { id } } }`;
+const CONFIRM = `mutation ($token: String!) { confirmMagicLink(token: $token) { ... on SignedIn { user { id } } } }`;
 const SIGN_OUT = "mutation { signOut }";
 
 async function codeFor(slug: string, email: string) {

@@ -99,10 +99,67 @@ mutation ($tenantId: ID!, $secret: String!) {
 - **Microsoft**: an account's e-mail counts as verified only when the ID token carries the
   `xms_edov` claim. Add it as an optional claim of the app registration (Token configuration);
   without it every sign-up is refused `EMAIL_UNVERIFIED`.
-- Each mutation records an admin event (`signInPolicy.update`, `socialProvider.set`,
+- Each mutation records an admin event (`signInPolicy.update`, `mfaPolicy.update`, `socialProvider.set`,
   `socialProvider.remove`): the actor, the tenant and the provider, never the client id or secret.
 - A new user is created from a provider account only when the tenant's sign-up is open; otherwise
   the account's verified e-mail must already belong to a user of the tenant.
+
+### Two-factor sign-in (TOTP)
+
+`signInPolicy.mfa` holds `mode` (`PASSKEY_SUFFICIENT`, the default, or `REQUIRED`) and `totp`
+(off by default). `updateMfaPolicy(tenantId, input: { mode, totp })` changes what it sends and needs
+`edit`; it records `mfaPolicy.update`.
+
+```graphql
+mutation ($tenantId: ID!) {
+  updateMfaPolicy(tenantId: $tenantId, input: { totp: true }) {
+    mfa {
+      mode
+      totp
+    }
+  }
+}
+```
+
+With `totp` on, a signed-in user of the tenant starts a factor on the hosted `/graphql`:
+`enrollSecondFactor` answers the secret and an `otpauth://` URI, `activateSecondFactor(code)` checks the
+first code and answers ten recovery codes, once. The session must have proved who it is in the last ten
+minutes (`STEP_UP_REQUIRED` otherwise). With `totp` off, enrolment is refused (`SECOND_FACTOR_DISABLED`,
+403); a user who already holds a factor keeps it and can still disable it or renew the codes.
+
+From then on `verifySignInCode`, `confirmMagicLink` and `socialSignInComplete` answer a union: the
+session as before, or a `SecondFactorChallenge` (no cookie yet).
+
+```graphql
+mutation ($challenge: String!, $code: String!) {
+  verifySignInCode(challenge: $challenge, code: $code) {
+    __typename
+    ... on SignedIn {
+      user {
+        id
+      }
+      expiresAt
+    }
+    ... on SecondFactorChallenge {
+      challenge
+      methods
+    }
+  }
+}
+mutation ($challenge: String!, $code: String!) {
+  confirmSecondFactor(challenge: $challenge, code: $code) {
+    user {
+      id
+    }
+    newDevice
+  }
+}
+```
+
+`recoverSecondFactor(challenge, recoveryCode)` answers it with a recovery code instead. A passkey
+sign-in is multi-factor and still answers `SignedIn`. An admin removes a user's factor with
+`resetUserSecondFactor(tenantId, userId)` (`edit`, event `user.resetSecondFactor`); `TenantUser.secondFactor`
+shows `enabled` and `recoveryCodesLeft`.
 
 ### Errors
 

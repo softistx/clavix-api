@@ -38,6 +38,25 @@ type SocialProviderConfig {
 }
 
 """
+When a tenant's users are asked for a second factor (D7). PASSKEY_SUFFICIENT
+asks none at sign-in: a passkey is multi-factor, an e-mail code, a link or a
+social sign-in single-factor. REQUIRED asks a multi-factor session at every
+approval (consent and device approval): a passkey is enough alone, any other
+first factor needs a passkey or a TOTP code on top.
+"""
+enum MfaMode {
+  PASSKEY_SUFFICIENT
+  REQUIRED
+}
+
+"The tenant's multi-factor policy."
+type MfaPolicy {
+  mode: MfaMode!
+  "Whether the tenant's users may enrol an authenticator app (TOTP) and keep ten recovery codes. A user who already holds one is still asked for the code when this is off."
+  totp: Boolean!
+}
+
+"""
 A tenant's sign-in policy. `version` is the tenant's version: it rises on every
 change, and the tenant's sign-in pages follow it within a minute at most.
 """
@@ -45,6 +64,7 @@ type SignInPolicy {
   tenantId: ID!
   methods: [SignInMethod!]!
   social: [SocialProviderConfig!]!
+  mfa: MfaPolicy!
   version: Int!
 }
 
@@ -63,6 +83,12 @@ input SocialProviderInput {
   clientId: String
   clientSecret: String
   enabled: Boolean
+}
+
+"The multi-factor policy change: a field left out keeps its value."
+input MfaPolicyInput {
+  mode: MfaMode
+  totp: Boolean
 }
 
 type Query {
@@ -95,6 +121,13 @@ type Mutation {
   CONFLICT (409) as above.
   """
   setSocialProvider(tenantId: ID!, input: SocialProviderInput!): SignInPolicy!
+  """
+  Sets the tenant's multi-factor policy (D7): the mode and whether its users
+  may enrol an authenticator app. Needs edit on the tenant. Idempotent: a call
+  that changes nothing writes nothing. Records the admin event
+  `mfaPolicy.update`. CONFLICT (409) when other changes kept winning the race.
+  """
+  updateMfaPolicy(tenantId: ID!, input: MfaPolicyInput!): SignInPolicy!
   """
   Removes the tenant's app for a provider, and its secret. Needs edit on the
   tenant. Idempotent. NO_SIGN_IN_METHOD (409) when it was the last way to sign

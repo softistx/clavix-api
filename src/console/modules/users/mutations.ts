@@ -61,7 +61,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const user = await ctx.users.rename(tenantId, userId, name);
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.update", target("user", userId, tenantId));
-    return shape(user);
+    return shape(user, tenantId);
   },
   disableUser: (_, { tenantId, userId }, ctx) =>
     setActive(ctx, tenantId, userId, false),
@@ -113,7 +113,16 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const user = await ctx.users.setEmailVerified(tenantId, userId, verified);
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.setEmailVerified", target("user", userId, tenantId));
-    return shape(user);
+    return shape(user, tenantId);
+  },
+  resetUserSecondFactor: async (_, { tenantId: given, userId }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    idArg(userId, "userId");
+    await liveTenant(ctx.directory, tenantId);
+    const user = await ctx.users.resetSecondFactor(tenantId, userId);
+    if (user === null) throw denial("NOT_FOUND", "No such user");
+    await ctx.audit("user.resetSecondFactor", target("user", userId, tenantId));
+    return shape(user, tenantId);
   },
   revokeGrant: async (_, { tenantId: given, userId, grantId }, ctx) => {
     const tenantId = tenantIdOf(given);
@@ -154,5 +163,5 @@ async function setActive(
     active ? "user.enable" : "user.disable",
     target("user", userId, tenantId),
   );
-  return shape(user);
+  return shape(user, tenantId);
 }

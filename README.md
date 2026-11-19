@@ -287,7 +287,7 @@ grant or invitation id of another tenant is unknown, never touched.
 | `deleteUser(tenantId, userId)`                                                      | Revokes the user's grants (and tokens), ends their sessions, removes their role assignments, deletes the user. True also when already gone.                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 Each mutation records an admin event, repeats included (`user.invite`, `user.revokeInvitation`,
-`user.update`, `user.setEmailVerified`, `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeSession`, `user.revokeGrant`; target: the
+`user.update`, `user.setEmailVerified`, `user.resetSecondFactor`, `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeSession`, `user.revokeGrant`; target: the
 user, session, invitation or grant id, never an address).
 
 ```sh
@@ -1134,11 +1134,17 @@ mutation {
 }
 mutation {
   verifySignInCode(challenge: "...", code: "123456") {
-    user {
-      id
-      email
+    ... on SignedIn {
+      user {
+        id
+        email
+      }
+      expiresAt
     }
-    expiresAt
+    ... on SecondFactorChallenge {
+      challenge
+      methods
+    }
   }
 }
 query {
@@ -1158,7 +1164,7 @@ A 6-digit code is mailed from `no-reply@<CLAVIX_DOMAIN>` (valid 10 minutes, 5 at
 address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` cookie; a wrong, spent
 or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
 `clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
-come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
+come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. A user who turned on the TOTP second factor (the tenant's `signIn.mfa.totp`, console `updateMfaPolicy`; the user's `enrollSecondFactor` then `activateSecondFactor`) gets a `SecondFactorChallenge` and no cookie: `confirmSecondFactor(challenge, code)` or `recoverSecondFactor(challenge, recoveryCode)` opens the session; `confirmMagicLink` and `socialSignInComplete` answer the same way (docs/guide/sign-in-methods.md, "Two-factor sign-in"). An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
 
 ## Magic-link sign-in
 

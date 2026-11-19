@@ -11,6 +11,7 @@ import { type Guards, onTenant } from "../../guard";
 import { refusing } from "../catalog-support";
 import { idArg, liveTenant, tenantArg, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
+import { shape as userShape } from "../users/shapes";
 
 const view = onTenant("view", tenantArg);
 const edit = onTenant("edit", tenantArg);
@@ -116,14 +117,7 @@ export const roles: Resolvers = {
           ? []
           : [
               {
-                user: {
-                  id: user.id,
-                  email: user.email,
-                  name: user.name ?? null,
-                  emailVerified: user.emailVerified,
-                  active: user.active,
-                  createdAt: user.createdAt,
-                },
+                user: userShape(user, tenant.hex),
                 assignedAt: held.createdAt,
               },
             ];

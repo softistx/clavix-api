@@ -48,6 +48,9 @@ type SocialSignedIn {
   returnTo: String
 }
 
+"A social sign-in that opened a session, or a second-factor challenge to answer first."
+union SocialSignInResult = SocialSignedIn | SecondFactorChallenge
+
 type Query {
   "The methods the tenant of this host offers; 404 for a host that names no tenant."
   hostedSignInMethods: HostedSignInMethods!
@@ -69,5 +72,5 @@ type Mutation {
   (409), USER_INACTIVE (403), SOCIAL_STEP_UP_UNMET (403, the provider's
   acr or max_age requirement was not met; the flow is spent).
   """
-  socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignedIn!
+  socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignInResult!
 }

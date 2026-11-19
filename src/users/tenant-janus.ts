@@ -1,6 +1,7 @@
 import {
   createJanusIssuers,
   janus,
+  type SealingKey,
   type SocialConfig,
   type SocialProfile,
   type UserEventListener,
@@ -19,6 +20,7 @@ import { socialProvidersOf } from "@/modules/sign-in-methods/social";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { originOf, rpIdOf } from "./rp";
+import { ephemeralSecondFactorKeys } from "./second-factor-keys";
 import { userSchema } from "./user";
 
 /** Host-only, `__Host-` prefixed: no Domain, Secure, Path=/ (janus's defaults), so a browser never sends it to another host. */
@@ -44,6 +46,11 @@ export interface TenantJanusOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
   /** The database of the janus collections (`syncMongoStoresPartitioned`). */
   db: Db;
+  /**
+   * The sealing keys of the TOTP secrets and recovery codes
+   * (`secondFactorKeysOf(masterKeys)`): the first seals, every one opens.
+   */
+  secondFactorKeys?: [SealingKey, ...SealingKey[]];
   /** Opens the tenants' sealed social secrets; without it no tenant has a social provider. */
   secrets?: SecretBox;
   /** What accepting an invitation of this tenant checks and does; nothing when left out. */
@@ -73,6 +80,7 @@ export type InvitationHooksFor = (
 function buildJanus(
   db: Db,
   tenant: ResolvedTenant,
+  secondFactorKeys: [SealingKey, ...SealingKey[]],
   social?: SocialConfig,
   hooks?: InvitationHooks,
   events?: UserEventListener,
@@ -96,6 +104,15 @@ function buildJanus(
     // choice (its sign-in policy, off until it turns it on). Off,
     // `requestMagicLink` and `confirmMagicLink` answer 404 MAGIC_LINK_DISABLED.
     magicLink: { enabled: isEnabled(tenant.signIn, "magicLink") },
+    // The TOTP second factor (D8), always wired: a user who holds an active one
+    // is asked for the code whatever the tenant's policy says now (janus fails
+    // closed without it), and the policy's `mfa.totp` only gates the
+    // enrolment (the hosted `guard`, `src/modules/mfa`). The tenant's name is
+    // what the authenticator app shows.
+    secondFactor: {
+      issuer: tenant.name,
+      keys: secondFactorKeys,
+    },
     // A passkey as the first factor: the relying party is the tenant's own
     // host (`rp.ts`), so a passkey is unknown to every other tenant. janus
     // accepts `http://<name>.localhost` origins, so a development tenant on
@@ -170,10 +187,19 @@ export function buildTenantJanus(
   secrets?: SecretBox,
   hooks?: InvitationHooks,
   events?: UserEventListener,
+  // Specs only: the server always passes the keyring's (`createTenantJanusIssuers`).
+  secondFactorKeys: [SealingKey, ...SealingKey[]] = ephemeralSecondFactorKeys(),
 ): TenantJanus {
   // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.
   return instrumentJanus(
-    buildJanus(db, tenant, socialConfigOf(tenant, secrets), hooks, events),
+    buildJanus(
+      db,
+      tenant,
+      secondFactorKeys,
+      socialConfigOf(tenant, secrets),
+      hooks,
+      events,
+    ),
   );
 }
 
@@ -197,6 +223,7 @@ const fingerprintOf = (origins: readonly string[]): string =>
 export function createTenantJanusIssuers({
   resolver,
   db,
+  secondFactorKeys = ephemeralSecondFactorKeys(),
   secrets,
   invitationHooks,
   events,
@@ -222,6 +249,7 @@ export function createTenantJanusIssuers({
         secrets,
         invitationHooks?.(tenant),
         events?.(tenant),
+        secondFactorKeys,
       ),
   });
 }

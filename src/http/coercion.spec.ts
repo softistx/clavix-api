@@ -25,7 +25,7 @@ describe("variable coercion errors on the hosted /graphql", () => {
   ] as const) {
     test(`a code sent as ${name} is refused without quoting it back`, async () => {
       const response = await post(
-        'mutation V($c: String!) { verifySignInCode(challenge: "x", code: $c) { expiresAt } }',
+        'mutation V($c: String!) { verifySignInCode(challenge: "x", code: $c) { __typename } }',
         { c: code },
       );
       const text = await response.text();
