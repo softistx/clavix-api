@@ -5,6 +5,8 @@ import type { Context } from "@/http/context";
 /** RFC 8176: a recovery code, in place of the `otp` janus records for any second-factor code. */
 export const RECOVERY_AMR = "rec";
 
+// Temporary, until @softistx/janus#960: janus does not keep which second factor
+// opened a session on its `amr`.
 /**
  * `recoverSecondFactor` opened a session for `userId` at or after `since`:
  * janus records `otp` and `mfa` for a recovery code as for an authenticator
@@ -47,7 +49,11 @@ export async function markRecoverySession(
       opened.authenticatedAt,
       marked,
     );
-  } catch {
-    // The proof stays `otp`: the sign-in is not undone by a failed mark.
+  } catch (error) {
+    // The proof stays `otp`: the sign-in is not undone by a failed mark. Named
+    // by error class only: no user, e-mail or code.
+    console.warn(
+      `auth: the recovery-code proof was not marked on the session (${error instanceof Error ? error.name : "unknown"})`,
+    );
   }
 }

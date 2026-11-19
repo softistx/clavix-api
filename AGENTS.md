@@ -249,13 +249,13 @@ The same-origin guard is not in this module: it is the HTTP-layer plugin below, 
 `assessment` (`authentication.ts`, over the pure `src/oauth/authentication-level.ts`) for the code and device flows and
 refuses with `UNMET_AUTHENTICATION_REQUIREMENTS` (403, extension `missing`); `approveOptions` passes `amr`, `acr` and
 `authTime`. A request nothing can meet (`missing` empty: an `acr` Clavix does not issue) is not left pending: `approveOAuthRequest`
-is wrapped (`approveOrDenyUnmet`, `consent/index.ts`) and denies it with `unmet_authentication_requirements`
+is wrapped (`approveOrDenyUnmet`, `consent/index.ts`; `consent/unmet.ts`) and denies it with `unmet_authentication_requirements`
 (nxgt-janus#949), answering `{ redirectTo }` with `error`, `state` and `iss`; a gap the user can close (`SECOND_FACTOR`,
 `FRESH_PROOF`, `ENROLMENT`) stays the 403 and the request stays pending for the step-up. The access-token `claims` hook
 (`oauth/building.ts`) puts the grant's `acr`, `amr` and `auth_time` in the JWT, the ID token's values (nxgt-janus#952).
 A recovery-code sign-in is `rec` in place of `otp` (RFC 8176): janus answers `method: 'recovery'` but does not store it on
 the session (nxgt-janus#950), so `answer()` in `src/modules/mfa/index.ts` calls `markRecoverySession`
-(`recovery-proof.ts`), which rewrites the new session's `amr` through the store port. A passkey step-up needs no
+(`recovery-proof.ts`), which rewrites the new session's `amr` through the store port (`Temporary, until @softistx/janus#960`, clavix-api#321; a failed mark is a `console.warn`). A passkey step-up needs no
 authenticator app with `passkeys.firstFactor` (nxgt-janus#951). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language` French else English, then the other
 language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`

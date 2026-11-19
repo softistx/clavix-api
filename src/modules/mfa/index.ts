@@ -150,6 +150,7 @@ async function answer(
     },
     (result) => result.userId,
   );
+  // Temporary, until @softistx/janus#960 (see recovery-proof.ts).
   if (method === "recoveryCode") {
     await markRecoverySession(ctx, done.userId, since);
   }

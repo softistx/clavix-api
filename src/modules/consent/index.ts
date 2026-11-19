@@ -23,6 +23,7 @@ import {
   type ScopeTextsFor,
   textOf,
 } from "./scope-labels";
+import { denyUnreachable, isUnreachable } from "./unmet";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -215,20 +216,6 @@ async function serverOf(ctx: unknown) {
   return server;
 }
 
-/**
- * D10 and RFC 9470: a request whose `acr_values` Clavix cannot issue (no gap
- * the user could close: `missing` is empty) is refused to the client, which
- * gets `error=unmet_authentication_requirements` on its redirect, instead of
- * a page that waits for a proof nobody can give. A gap the user can close
- * (a second factor, a fresh proof, an enrolment) stays a refusal of the call
- * (403, `missing`), and the request stays pending for the step-up.
- */
-const isUnreachable = (error: unknown) =>
-  error instanceof GraphQLError &&
-  error.extensions["code"] === "UNMET_AUTHENTICATION_REQUIREMENTS" &&
-  Array.isArray(error.extensions["missing"]) &&
-  error.extensions["missing"].length === 0;
-
 const approveOrDenyUnmet = async (
   parent: unknown,
   args: { id: string },
@@ -242,12 +229,7 @@ const approveOrDenyUnmet = async (
     return await approve(parent, args, ctx, info);
   } catch (error) {
     if (!isUnreachable(error)) throw error;
-    const server = await serverOf(ctx);
-    const { redirectTo } = await server.deny(args.id, {
-      error: "unmet_authentication_requirements",
-      description: "the authentication requested cannot be met",
-    });
-    return { redirectTo };
+    return denyUnreachable(await serverOf(ctx), args.id);
   }
 };
 
