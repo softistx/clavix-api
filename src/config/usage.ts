@@ -6,6 +6,7 @@ import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { redis } from "./redis";
 import { domainStore } from "./tenancy";
+import { webhookEndpoints } from "./webhook-endpoints";
 
 // Agents that registered themselves are `source: "registered"` clients of the
 // janus store too (J4), but they do not count against the hard `clients` quota
@@ -30,6 +31,7 @@ export const usageService = new UsageService(
       return Math.max(0, registered - agents);
     },
     agents: (tenantId) => agentClientsService.count(tenantId),
+    webhooks: (tenantId) => webhookEndpoints.count(tenantId),
     domains: (tenantId) => domainStore.count(new ObjectId(tenantId)),
   },
   redis?.mau,

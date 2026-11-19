@@ -11,12 +11,14 @@ import { redis } from "./config/redis";
 import { instrumentDatabase, telemetry } from "./config/telemetry";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
+import { createWebhookSecretsPrune, webhookDelivery } from "./config/webhooks";
 import { startKeyRotation } from "./keys";
 import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { startAuditRetention } from "./modules/audit/retention-worker";
 import { drain } from "./modules/auth/outbox";
 import { startDomainRecheck } from "./modules/domains/recheck-worker";
 import { startTenantPurge } from "./modules/tenants/purge-worker";
+import { startWebhookSecretsPrune } from "./modules/webhooks/secrets-prune-worker";
 
 // Longest wait for a sign-in code mail in flight when the server stops.
 const MAIL_DRAIN_MS = 10_000;
@@ -54,6 +56,11 @@ startAgentsPrune(createAgentsPrune(), redis?.queues.agentsPrune);
 // Daily, the sign-in log and the console activity are cut at each tenant's
 // plan retention, the platform's own events at 400 days (D16).
 startAuditRetention(createAuditRetention(), redis?.queues.auditRetention);
+// Daily, the rolled webhook secrets past their 24 hours are dropped (D19).
+startWebhookSecretsPrune(
+  createWebhookSecretsPrune(),
+  redis?.queues.webhookSecretsPrune,
+);
 const app = createApp({
   oauth,
   console: consoleDeps,
@@ -61,6 +68,8 @@ const app = createApp({
   // A code mail still in flight is awaited (the requests have already finished), then lost if late.
   if ((await drain(MAIL_DRAIN_MS)) === "timeout")
     console.warn("auth: sign-in code mail still in flight at stop, dropped");
+  // The requests in flight finish; what waits for a retry stays in Redis for the next process.
+  await webhookDelivery.close();
   // Last, so the final spans reach the collector: the backlog is shipped.
   await telemetry.close();
 });

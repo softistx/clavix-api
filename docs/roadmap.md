@@ -25,6 +25,16 @@ nxgt-janus release says which.
 - **Audit export** (M4) — an admin downloads a tenant's sign-in log or console activity as CSV or
   NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
   ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **OAuth events in the sign-in log** (M4) — consents granted and denied, grant revocations, refresh-token
+  reuse, device decisions, token exchanges and client registrations of a tenant's issuer are kept in
+  its own log ([#21](https://github.com/softistx/clavix-api/issues/21)).
+
+- **Webhooks** (M4) — a tenant registers `https` endpoints in the console and receives its users'
+  events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
+  once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
+  an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
+  ([#22](https://github.com/softistx/clavix-api/issues/22)). A deliveries log (the last 100 attempts per
+  endpoint, 7 days: status, failure name, duration, never a body) shows an admin why an endpoint fails.
 
 ## Next
 

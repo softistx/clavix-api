@@ -22,6 +22,9 @@ export const { signingKeysFor, jwksFor } = createTenantKeys({
 /** Seals and opens the tenants' social client secrets, under a subkey of the master key (label `social-secrets`); with a keyring the first seals and every key opens. */
 export const secretBox = createSecretBox(masterKeys);
 
+/** Seals and opens the webhook endpoints' signing secrets (D19), under its own subkey (label `webhook-secrets`). */
+export const webhookSecretBox = createSecretBox(masterKeys, "webhook-secrets");
+
 /** A tenant's first (or replacement) key; `TenantsService.create` calls it. */
 export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {
   await ensureSigningKey(signingKeysFor, tenantId);

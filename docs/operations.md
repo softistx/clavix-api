@@ -325,6 +325,34 @@ needs Redis (`REDIS_URL`): without it nothing runs. A tick that leaves a tenant 
 queue retries it; the logs say `audit: retention failed for <tenant> (...)`. It deletes in batches of
 1,000 and writes no event per deletion (actor `system:audit:retention`). A plan change applies at the next run.
 
+## Webhooks
+
+A tenant's events are posted to its endpoints (`https` only, public addresses only, checked when saved and
+on every send; redirects are not followed). With `REDIS_URL` the delivery queue is Redis
+(`clavix:webhooks:*`), so what waits survives a restart and runs on any instance; without it the queue is in
+memory and a restart loses what waits. A delivery is retried on the Standard Webhooks schedule, 10 s timeout,
+2xx only. An endpoint that fails 5 deliveries in a row is switched off, its tenant's owners are e-mailed and
+the console records `webhook.disable` (actor `system:webhooks:disable`); an admin switches it on again.
+
+Every request attempt is logged in `webhookDeliveries` (event id and type, attempt rank, response status or the
+failure's name, duration, whether it was delivered or will be retried; never the URL, a header or a body):
+the newest 100 per endpoint, dropped after 7 days by a TTL index on `at` (`bun run db:sync` creates it).
+`WebhookEndpoint.deliveries(first:)` in the console API reads them, newest first; deleting an endpoint deletes
+its attempts, and a tenant purge empties them.
+
+| Variable                        | Meaning                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production. |
+
+Endpoint secrets (`whsec_...`) are sealed in MongoDB with a subkey of `CLAVIX_KEYS_MASTER_KEY` (label
+`webhook-secrets`); losing the key leaves endpoints with no way to sign, and they are skipped, never sent
+unsigned. The queue `webhook-secrets-prune` (daily, 04:37 UTC) removes rolled secrets whose 24 hours are over.
+
+A receiver verifies the Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`,
+HMAC-SHA256 over `id.timestamp.body`, every `v1,` signature of the header is tried during a roll) and dedupes
+on `webhook-id` (delivery is at least once). The body is `{ "type", "timestamp", "data" }`; `data` holds
+`tenantId` and ids only (`userId`, `userType`, `provider` on the social events), never an address or an e-mail.
+
 ## Telemetry
 
 Traces and logs go to an OpenTelemetry collector over OTLP/HTTP, through `@softistx/telemetry` (no OpenTelemetry SDK).

@@ -23,6 +23,9 @@ const config: CodegenConfig = {
           Tenant: "@/console/modules/tenants/parent#TenantParent",
           // A user with its tenant, for the fields read from its pool.
           TenantUser: "@/console/modules/users/shapes#TenantUserParent",
+          // An endpoint with its tenant, which its `deliveries` read through.
+          WebhookEndpoint:
+            "@/console/modules/webhooks/parent#WebhookEndpointParent",
         },
       },
     },

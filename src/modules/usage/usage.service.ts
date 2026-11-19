@@ -26,6 +26,8 @@ export interface UsageSources {
   domains(tenantId: string): Promise<number>;
   /** The tenant's agents now (dynamically registered and metadata-document clients). */
   agents(tenantId: string): Promise<number>;
+  /** The tenant's webhook endpoints now. */
+  webhooks(tenantId: string): Promise<number>;
 }
 
 export interface UsageMeter {
@@ -41,6 +43,7 @@ export interface UsageReport {
   clients: UsageMeter;
   domains: UsageMeter;
   agents: UsageMeter;
+  webhooks: UsageMeter;
 }
 
 const meter = (used: number, quota: number | null): UsageMeter => ({
@@ -93,11 +96,12 @@ export class UsageService {
   ): Promise<UsageReport> {
     const tenantId = tenant._id.toHexString();
     const quotas = effectiveQuotas(tenant);
-    const [mau, clients, domains, agents] = await Promise.all([
+    const [mau, clients, domains, agents, webhooks] = await Promise.all([
       this.activeUsers(tenantId, month),
       this.sources.clients(tenantId),
       this.sources.domains(tenantId),
       this.sources.agents(tenantId),
+      this.sources.webhooks(tenantId),
     ]);
     return {
       tenantId,
@@ -106,10 +110,11 @@ export class UsageService {
       clients: meter(clients, quotas.clients),
       domains: meter(domains, quotas.domains),
       agents: meter(agents, quotas.agents),
+      webhooks: meter(webhooks, quotas.webhooks),
     };
   }
 
-  /** The count of `key` now, for the hard quotas (`clients`, `domains`, `agents`). */
+  /** The count of `key` now, for the hard quotas (`clients`, `domains`, `agents`, `webhooks`). */
   count(tenantId: string, key: Exclude<QuotaKey, "mau">): Promise<number> {
     return this.sources[key](tenantId);
   }

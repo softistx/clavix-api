@@ -1,4 +1,9 @@
-import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
+import {
+  bindUniqueCounter,
+  defineRedis,
+  openRedis,
+  type RedisConnection,
+} from "@softistx/redis";
 import { RedisClient } from "bun";
 import {
   type ExportLimitConfig,
@@ -24,6 +29,7 @@ import {
 } from "@/modules/passkeys/throttle";
 import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
+import { webhookSecretsPrune } from "@/modules/webhooks/secrets-prune.queue";
 import {
   type MetadataLimitConfig,
   metadataLimits,
@@ -102,6 +108,7 @@ export async function openAppRedis(
         domainRecheck,
         agentsPrune,
         auditRetention,
+        webhookSecretsPrune,
       },
       limits: {
         ...signInLimits(limits),
@@ -119,8 +126,25 @@ export async function openAppRedis(
       },
     }),
   );
+  // The connection the webhook queue takes (`createRedisWebhookQueue`): it
+  // reads `client` only, and the client is closed by `close` below.
+  const connection: RedisConnection = {
+    client,
+    ping: async () => {
+      const started = performance.now();
+      try {
+        await client.send("PING", []);
+        return { ok: true, latencyMs: performance.now() - started };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    },
+    close: async () => {},
+    [Symbol.asyncDispose]: async () => {},
+  };
   return {
     ...redis,
+    connection,
     // Active users of the month per tenant (usage, quotas).
     mau: bindUniqueCounter(client, monthlyActiveUsers),
     close: async () => {
