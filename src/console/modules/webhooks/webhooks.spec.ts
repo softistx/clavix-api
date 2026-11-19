@@ -3,6 +3,7 @@ import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
+import { webhookDeliveries } from "@/config/webhook-endpoints";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { codeOf, consoleAs } from "~/console";
 
@@ -51,6 +52,7 @@ afterAll(async () => {
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
   await mongo.db.webhookEndpoints.raw.deleteMany({});
+  await mongo.db.webhookDeliveries.raw.deleteMany({});
   await mongo.db.adminEvents.raw.deleteMany({});
   await oauthDb.collection("relations").deleteMany({});
 });
@@ -184,6 +186,64 @@ describe("update, roll, test and delete", () => {
     const types = result.data?.["webhookEventTypes"] as string[];
     expect(types).toHaveLength(21);
     expect(types).toContain("session.signedIn");
+  });
+});
+
+describe("deliveries", () => {
+  const DELIVERIES = `query($tenantId: ID!) { webhookEndpoints(tenantId: $tenantId) { id deliveries(first: 2) { eventId type attempt status error durationMs delivered willRetry at } } }`;
+
+  test("an admin reads the attempts of an endpoint, newest first, and a viewer too", async () => {
+    await mongo.db.webhookEndpoints.raw.deleteMany({});
+    const made = createdOf(
+      await admin(CREATE, { tenantId: tenantA, input: { url: URL_1 } }),
+    );
+    const id = made.endpoint.id;
+    for (let n = 1; n <= 3; n++) {
+      await webhookDeliveries.record(tenantA, {
+        endpointId: id,
+        eventId: `evt-${n}`,
+        type: "user.created",
+        attempt: n,
+        status: n === 3 ? null : 503,
+        error: n === 3 ? "TimeoutError" : null,
+        durationMs: 20 * n,
+        delivered: false,
+        willRetry: true,
+      });
+    }
+    for (const who of [admin, viewer]) {
+      const result = await who(DELIVERIES, { tenantId: tenantA });
+      expect(result.errors).toBeUndefined();
+      const [endpoint] = (result.data?.["webhookEndpoints"] ?? []) as {
+        deliveries: { attempt: number; error: string | null }[];
+      }[];
+      expect(endpoint?.deliveries.map((row) => row.attempt)).toEqual([3, 2]);
+      expect(endpoint?.deliveries[0]?.error).toBe("TimeoutError");
+    }
+    expect(codeOf(await adminB(DELIVERIES, { tenantId: tenantA }))).toBe(
+      "FORBIDDEN",
+    );
+  });
+
+  test("deleting the endpoint deletes its attempts", async () => {
+    await mongo.db.webhookEndpoints.raw.deleteMany({});
+    const made = createdOf(
+      await admin(CREATE, { tenantId: tenantA, input: { url: URL_1 } }),
+    );
+    const id = made.endpoint.id;
+    await webhookDeliveries.record(tenantA, {
+      endpointId: id,
+      eventId: "e",
+      type: "user.created",
+      attempt: 1,
+      status: 200,
+      error: null,
+      durationMs: 1,
+      delivered: true,
+      willRetry: false,
+    });
+    await admin(DELETE, { tenantId: tenantA, id });
+    expect(await webhookDeliveries.list(tenantA, id)).toEqual([]);
   });
 });
 

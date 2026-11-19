@@ -624,6 +624,11 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   switch the endpoint off, record the admin event `webhook.disable` (actor `system:webhooks:disable`)
   and e-mail the owners (`notice.ts`, origin only). An admin switches it on again with
   `updateWebhookEndpoint(enabled: true)`, which re-checks the address.
+- Deliveries log (W2): `onAttempt` writes `webhookDeliveries` through `WebhookDeliveriesService`
+  (tenant-owned, same allowed files): event id and type, attempt, status or failure name, duration,
+  `delivered`, `willRetry`, `at`; never the URL, a header or a body. A TTL index on `at` (7 days) and a trim
+  to the newest 100 per endpoint on each write; a failed write is only logged. `WebhookEndpoint.deliveries(first:)`
+  reads them (parent `WebhookEndpointParent` carries the tenant id); deleting an endpoint deletes its attempts.
 - Admin events: `webhook.create|update|delete|rollSecret|test`; none carries a secret.
 
 ## OAuth clients

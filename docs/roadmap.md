@@ -29,7 +29,8 @@ nxgt-janus release says which.
   events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
   once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
   an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
-  ([#22](https://github.com/softistx/clavix-api/issues/22)).
+  ([#22](https://github.com/softistx/clavix-api/issues/22)). A deliveries log (the last 100 attempts per
+  endpoint, 7 days: status, failure name, duration, never a body) shows an admin why an endpoint fails.
 
 ## Next
 

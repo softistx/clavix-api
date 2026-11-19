@@ -38,6 +38,32 @@ type WebhookEndpoint {
   secrets: [WebhookSecret!]!
   createdAt: DateTime!
   updatedAt: DateTime!
+  "The latest request attempts, newest first (at most 100, kept 7 days): why an endpoint fails. `first` is capped at 100."
+  deliveries(first: Int = 50): [WebhookDelivery!]!
+}
+
+"""
+One request of a delivery (the last 100 per endpoint, kept 7 days). No body,
+URL or header is kept: only what the receiver answered.
+"""
+type WebhookDelivery {
+  id: ID!
+  "The event's id: the `webhook-id` the receiver saw."
+  eventId: ID!
+  "The event's type, `webhook.test` for a test."
+  type: String!
+  "1-based: the request's rank among those of this delivery."
+  attempt: Int!
+  "The response's HTTP status; null when there was none."
+  status: Int
+  "The failure's name (`TimeoutError`, `TypeError`), null when the receiver answered."
+  error: String
+  durationMs: Int!
+  "A 2xx answer."
+  delivered: Boolean!
+  "False once delivered or given up: another attempt is scheduled when true."
+  willRetry: Boolean!
+  at: DateTime!
 }
 
 "An endpoint with its new secret. The secret is returned this once and never again."

@@ -41,7 +41,13 @@ describe("tenant-owned collections", () => {
   test("every index starts with tenantId", () => {
     const offenders = owned.flatMap((c) =>
       c.indexes
-        .filter((index) => !startsWithTenantId(index))
+        // A TTL index is single-field (MongoDB refuses a compound one) and only
+        // the server's expiry reads it; no query goes through it.
+        .filter(
+          (index) =>
+            !startsWithTenantId(index) &&
+            index.expireAfterSeconds === undefined,
+        )
         .map(
           (index) => `${c.name}: ${index.name ?? JSON.stringify(index.key)}`,
         ),

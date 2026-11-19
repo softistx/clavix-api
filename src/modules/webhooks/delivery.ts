@@ -10,6 +10,7 @@ import {
   signedInWebhookEvent,
   type WebhookData,
 } from "./events";
+import type { WebhookDeliveriesService } from "./webhook-deliveries.service";
 import type { WebhookEndpointsService } from "./webhook-endpoints.service";
 
 /** The type of the event `sendTestWebhook` sends: not in the catalogue, never subscribed to. */
@@ -25,6 +26,8 @@ export interface DisabledEndpoint {
 
 export interface DeliveryDeps {
   endpoints: WebhookEndpointsService;
+  /** Where each attempt is logged (W2); absent, none is. */
+  deliveries?: WebhookDeliveriesService;
   /** The guarded `fetch` (D21): checks the address on every send. */
   fetch: typeof fetch;
   /** The shared queue (Redis); in memory when absent. */
@@ -66,12 +69,29 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
     ...(deps.timeout === undefined ? {} : { timeout: deps.timeout }),
     ...(deps.poll === undefined ? {} : { poll: deps.poll }),
     onAttempt: async (attempt) => {
+      const tenantId = attempt.event.data.tenantId;
+      // The log keeps what the receiver answered, never the URL or a body; a
+      // failure to write it must not touch the delivery.
+      if (deps.deliveries !== undefined) {
+        try {
+          await deps.deliveries.record(tenantId, {
+            endpointId: attempt.endpoint,
+            eventId: attempt.event.id,
+            type: attempt.event.type,
+            attempt: attempt.attempt,
+            status: attempt.status,
+            error: attempt.error,
+            durationMs: attempt.durationMs,
+            delivered: attempt.delivered,
+            willRetry: attempt.willRetry,
+          });
+        } catch (error) {
+          log(`webhooks: could not log an attempt: ${String(error)}`);
+        }
+      }
       if (!attempt.delivered) return;
       try {
-        await deps.endpoints.recordDelivered(
-          attempt.event.data.tenantId,
-          attempt.endpoint,
-        );
+        await deps.endpoints.recordDelivered(tenantId, attempt.endpoint);
       } catch (error) {
         log(`webhooks: could not record a delivery: ${String(error)}`);
       }
