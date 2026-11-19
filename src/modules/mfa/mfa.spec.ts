@@ -9,7 +9,7 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { resealAllTenants } from "@/keys/reseal";
+import { resealAllTenants, resealExitCode } from "@/keys/reseal";
 import { settled } from "@/modules/auth/outbox";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
@@ -319,10 +319,10 @@ describe("reset by an admin", () => {
 });
 
 describe("a keyring rotation", () => {
-  test("a new first key keeps TOTP working, and keys:reseal counts what is behind", async () => {
+  test("a new first key: keys:reseal seals the secrets under it (janus secondFactor.reseal)", async () => {
     await offerTotp(SLUGS.a);
-    const { cookie, id } = await sessionOf(SLUGS.a, "rot@example.test");
-    const on = await turnOn(SLUGS.a, cookie);
+    const { cookie } = await sessionOf(SLUGS.a, "rot@example.test");
+    await turnOn(SLUGS.a, cookie);
 
     const tenant = await tenantOf(SLUGS.a);
     const newMaster = new Uint8Array(32).fill(9);
@@ -333,20 +333,34 @@ describe("a keyring rotation", () => {
       tenantIds: async () => [tenant.partition],
       log: () => {},
     });
-    // The secret and ten codes are sealed under the old first key.
-    expect(report.secondFactor.behind).toBeGreaterThanOrEqual(11);
-    expect(report.secondFactor.behind).toBe(report.secondFactor.sealed);
+    // The secret moved under the new first key, whoever signs in; the ten
+    // recovery codes are hashes, they keep the old key until new ones are issued.
+    expect(report.secondFactor.resealed).toBeGreaterThanOrEqual(1);
+    expect(report.secondFactor.unreadable).toBe(0);
+    expect(report.secondFactor.behind).toBe(0);
+    expect(report.secondFactor.recoveryCodesBehind).toBeGreaterThanOrEqual(10);
     expect(secondFactorKeysOf(ring)).toHaveLength(masterKeys.length + 1);
 
-    // The old key still opens: the user signs in with a code.
-    const stopped = await signInByCode(SLUGS.a, "rot@example.test");
-    const challenge = stopped.data?.["verifySignInCode"].challenge as string;
-    const confirmed = await gql(SLUGS.a, CONFIRM, {
-      challenge,
-      code: totpCode(on.secret, new Date(Date.now() + 30_000)),
+    // Idempotent: a second pass has nothing to seal again.
+    const again = await resealAllTenants({
+      db: mongo.db as never,
+      masterKeys: ring,
+      tenantIds: async () => [tenant.partition],
+      log: () => {},
     });
-    expect(confirmed.errors).toBeUndefined();
-    expect(confirmed.data?.["confirmSecondFactor"].user.id).toBe(id);
+    expect(again.secondFactor).toMatchObject({ resealed: 0, skipped: 0 });
+    expect(resealExitCode(again)).toBe(0);
+
+    // The stored secret is now sealed under the new first key.
+    const stored = await mongo.db
+      .collection<{ secondFactor?: { secret?: string } }>("partitionedUsers")
+      .findOne({
+        partition: tenant.partition,
+        "secondFactor.secret": { $exists: true },
+      });
+    expect(stored?.secondFactor?.secret?.split(".")[1]).toBe(
+      secondFactorKeysOf(ring)[0].id,
+    );
   });
 });
 

@@ -694,13 +694,18 @@ master key. With a keyring they are still opened under any key of the list, but
 `keys:reseal` does not re-wrap them (clavix-api#49): **keep the old key in the
 list while any social secret is sealed under it**, or enter those secrets again.
 
-The users' TOTP secrets and recovery codes (second factor) are sealed under
-subkeys of the same master key (HKDF, info `second-factor`) and janus has no call
-to re-wrap them: a secret moves under the first key on its user's next accepted
-code. `keys:reseal` reports `secondFactor: { sealed, behind }`, the seals still
-under an older key; it does not make the exit code fail. **Keep the old key in the
-list while `behind` is above 0**, or the users concerned reset their factor
-(an admin's `resetUserSecondFactor`) and enrol again.
+The users' TOTP secrets (second factor) are sealed under a subkey of the same
+master key (HKDF, info `second-factor`). `keys:reseal` seals them again with janus's
+`secondFactor.reseal` (batches of 100, resumable, idempotent), including the users who
+do not sign in, and reports `secondFactor: { scanned, resealed, current, skipped,
+unreadable, sealed, behind, recoveryCodesBehind }`. It exits 1 while `skipped` or
+`unreadable` is above 0 (run it again for `skipped`; an `unreadable` secret is one no key of the list
+opens: put the missing key back, or reset that user's factor with `resetUserSecondFactor`, a re-run does not clear it). `sealed` and `behind` count the secrets only (not the recovery codes); `behind` is the secrets still under an older key: 0 after a pass. The recovery
+codes are hashes and cannot be hashed again: their old hashes keep working while the old
+key is in the list, and new ones (a user's `regenerateRecoveryCodes`) are hashed under the
+first key. **Keep the old key in the list while `recoveryCodesBehind` is above 0**, or
+those users' remaining recovery codes stop working (an admin's `resetUserSecondFactor`
+lets them enrol again).
 
 ### Emergency rotation (a signing key leaked)
 

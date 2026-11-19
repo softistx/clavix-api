@@ -83,7 +83,16 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
         current: 0,
         skipped: 1,
         failed: 0,
-        secondFactor: { sealed: 0, behind: 0 },
+        secondFactor: {
+          scanned: 0,
+          resealed: 0,
+          current: 0,
+          skipped: 0,
+          unreadable: 0,
+          sealed: 0,
+          behind: 0,
+          recoveryCodesBehind: 0,
+        },
       }),
     ).toBe(1);
     expect(
@@ -93,8 +102,71 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
         current: 1,
         skipped: 0,
         failed: 0,
-        secondFactor: { sealed: 0, behind: 0 },
+        secondFactor: {
+          scanned: 0,
+          resealed: 0,
+          current: 0,
+          skipped: 0,
+          unreadable: 0,
+          sealed: 0,
+          behind: 0,
+          recoveryCodesBehind: 0,
+        },
       }),
     ).toBe(0);
+  });
+
+  const clean = {
+    tenants: 1,
+    resealed: 0,
+    current: 1,
+    skipped: 0,
+    failed: 0,
+    secondFactor: {
+      scanned: 0,
+      resealed: 0,
+      current: 0,
+      skipped: 0,
+      unreadable: 0,
+      sealed: 0,
+      behind: 0,
+      recoveryCodesBehind: 0,
+    },
+  };
+
+  test("a second-factor secret skipped or unreadable makes the exit code non-zero", () => {
+    for (const field of ["skipped", "unreadable"] as const) {
+      expect(
+        resealExitCode({
+          ...clean,
+          secondFactor: { ...clean.secondFactor, [field]: 1 },
+        }),
+      ).toBe(1);
+    }
+  });
+
+  test("the second factor's counts of every tenant are summed", async () => {
+    await ensureSigningKey(under([newKey]).signingKeysFor, A, now);
+    await ensureSigningKey(under([newKey]).signingKeysFor, B, now);
+    const report = await resealAllTenants({
+      db: mongo.db,
+      masterKeys: [newKey],
+      tenantIds: async () => [A, B],
+      log: quiet,
+      resealSecondFactor: async () => ({
+        scanned: 3,
+        resealed: 2,
+        current: 1,
+        skipped: 1,
+        unreadable: 0,
+      }),
+    });
+    expect(report.secondFactor).toMatchObject({
+      scanned: 6,
+      resealed: 4,
+      current: 2,
+      skipped: 2,
+    });
+    expect(resealExitCode(report)).toBe(1);
   });
 });
