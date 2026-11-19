@@ -16,6 +16,7 @@ import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
 import {
   type ConnectionSource,
   type OidcConnections,
+  type OidcConnectionsOptions,
   oidcConnections,
 } from "@softistx/janus-social";
 import { instrumentJanus } from "@softistx/janus-telemetry";
@@ -70,6 +71,8 @@ export interface TenantJanusOptions {
 /** Where a tenant's enterprise OIDC connections are read (`ConnectionsService`). */
 export interface ConnectionsOf {
   sourceOf(tenantId: string): ConnectionSource;
+  /** Specs only: the host resolver of the guard's address check; DNS when absent. */
+  resolveHost?(): OidcConnectionsOptions["resolveHost"];
   /** Whether a connection may create a user at a first sign-in (D4); read on every sign-up. */
   jitAllowed(tenantId: string, connectionId: string): Promise<boolean>;
 }
@@ -191,8 +194,10 @@ function connectionsOfTenant(
 ): OidcConnections | undefined {
   if (connections === undefined) return undefined;
   try {
+    const resolveHost = connections.resolveHost?.();
     return oidcConnections({
       source: connections.sourceOf(tenant.tenantId),
+      ...(resolveHost === undefined ? {} : { resolveHost }),
       redirectUri: ssoCallbackUrlOf(tenant.issuer),
     });
   } catch (error) {
