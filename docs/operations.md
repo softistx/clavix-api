@@ -348,6 +348,11 @@ Endpoint secrets (`whsec_...`) are sealed in MongoDB with a subkey of `CLAVIX_KE
 `webhook-secrets`); losing the key leaves endpoints with no way to sign, and they are skipped, never sent
 unsigned. The queue `webhook-secrets-prune` (daily, 04:37 UTC) removes rolled secrets whose 24 hours are over.
 
+Enterprise connection client secrets are sealed with another subkey of `CLAVIX_KEYS_MASTER_KEY` (label
+`connection-secrets`); losing the key makes them unreadable and those sign-ins fail until an admin sets the
+secret again. A connection's domain is proved by a TXT record `_clavix-sso.<domain>` holding the token the
+console shows; verification reads DNS at most once a minute per connection.
+
 A receiver verifies the Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`,
 HMAC-SHA256 over `id.timestamp.body`, every `v1,` signature of the header is tried during a roll) and dedupes
 on `webhook-id` (delivery is at least once). The body is `{ "type", "timestamp", "data" }`; `data` holds
