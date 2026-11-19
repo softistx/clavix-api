@@ -77,3 +77,59 @@ extend type Mutation {
   "Turns the factor off, on a current code of the app."
   disableSecondFactor(code: String!): Boolean!
 }
+
+"How the code of a step-up reaches the user."
+enum StepUpVia {
+  "A code e-mailed to the user's address (a user with no second factor)."
+  EMAIL
+  "The code of the user's authenticator app; nothing is sent."
+  SECOND_FACTOR
+}
+
+"A step-up under way: keep `challenge` (never in a URL) and give it to `confirmStepUp` with the code."
+type StepUpChallenge {
+  via: StepUpVia!
+  challenge: String!
+  expiresAt: DateTime!
+}
+
+"A passkey step-up under way: the options for `navigator.credentials.get`, and the challenge `confirmPasskeyStepUp` redeems."
+type PasskeyStepUpChallenge {
+  "JSON text for `navigator.credentials.get({ publicKey })`, after `PublicKeyCredential.parseRequestOptionsFromJSON`."
+  options: String!
+  challenge: String!
+  expiresAt: DateTime!
+}
+
+"The session proved who it is just now."
+type StepUpConfirmed {
+  confirmedAt: DateTime!
+  "Until when the session counts as freshly confirmed; null when no window is set."
+  confirmedUntil: DateTime
+}
+
+extend type Mutation {
+  """
+  Starts a step-up of the signed-in session: the authenticator app's code for a
+  user who has one, else a code e-mailed to the user. A code step-up renews the
+  proof (`max_age`, `prompt=login`) and an app code also reaches `mfa`.
+  UNAUTHENTICATED (401) when anonymous.
+  """
+  requestStepUp: StepUpChallenge!
+  """
+  Confirms the step-up with its code: the session is stamped, and the next
+  approval states what it proved (`amr`, `acr`). CODE_INVALID with
+  `attemptsLeft`, TOKEN_UNKNOWN, TOKEN_SPENT, TOKEN_EXPIRED.
+  """
+  confirmStepUp(challenge: String!, code: String!): StepUpConfirmed!
+  """
+  Starts a step-up by one of the user's passkeys. A passkey reaches `phr` and
+  `mfa`. UNAUTHENTICATED (401) when anonymous.
+  """
+  requestPasskeyStepUp: PasskeyStepUpChallenge!
+  """
+  Confirms it with the browser's answer (`credential.toJSON()`, as a JSON
+  string). PASSKEY_INVALID (401) for every refusal.
+  """
+  confirmPasskeyStepUp(challenge: String!, response: String!): StepUpConfirmed!
+}

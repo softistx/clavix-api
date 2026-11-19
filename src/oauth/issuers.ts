@@ -12,6 +12,7 @@ import {
 import type { Db } from "mongodb";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
+import { SUPPORTED_ACR } from "./authentication-level";
 import { buildIssuer, userinfoOf } from "./building";
 import type {
   AgentCheckFor,
@@ -104,6 +105,9 @@ export function createClavixOAuthIssuers(
     // `openid` releases nothing else (`sub` aside), so roles go with every
     // OpenID Connect token, in the id_token as well as at userinfo.
     scopeClaims: { openid: ["roles"] },
+    // D9: the `acr` values a client may ask for (`acr_values`, enforced at
+    // approval, `authentication-level.ts`).
+    acrValuesSupported: SUPPORTED_ACR,
     idToken: { includeClaims: true },
   });
   const withRoles = async (

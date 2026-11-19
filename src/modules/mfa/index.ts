@@ -11,6 +11,12 @@ import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { revokeIfSso } from "@/modules/connections/sso-gate";
 import { requireLive } from "@/tenancy/live";
+import {
+  confirmPasskeyStepUp,
+  recordingStepUp,
+  requestPasskeyStepUp,
+  sendStepUpCode,
+} from "./step-up";
 
 /** How long a session counts as freshly confirmed for the writes of the factor. */
 const FRESH_WITHIN = "10m" as const;
@@ -30,6 +36,7 @@ const janus: SecondFactorResolvers = secondFactorResolvers({
     return auth;
   },
   freshWithin: FRESH_WITHIN,
+  sendStepUpCode: (issued, ctx) => sendStepUpCode(issued, ctx as Context),
   guard: async (action, _user, ctx) => {
     if (action !== "enroll" && action !== "activate") return;
     const tenant = await (ctx as Context).tenant();
@@ -82,6 +89,36 @@ export const mfa: Resolvers = {
     },
     disableSecondFactor: async (_, { code }, ctx) =>
       janus.Mutation.disableSecondFactor(_, { code }, ctx),
+    // D10: a step-up renews the proof and, by an app code or a passkey, reaches
+    // `mfa`. The e-mailed code (a user with no factor) only renews it.
+    requestStepUp: async (_, __, ctx) => {
+      const out = await janus.Mutation.requestStepUp(_, undefined, ctx);
+      ctx.set.headers.set("cache-control", "no-store");
+      return {
+        via: out.via === "email" ? "EMAIL" : "SECOND_FACTOR",
+        challenge: out.challenge,
+        expiresAt: iso(out.expiresAt),
+      };
+    },
+    confirmStepUp: async (_, { challenge, code }, ctx) => {
+      const user = await ctx.janus.user();
+      const auth = await janusIssuers.forRequest(ctx.request);
+      const totp =
+        user !== null &&
+        auth !== null &&
+        (await auth.secondFactor.recoveryCodesLeft(user)) !== null;
+      const out = await recordingStepUp(ctx, totp ? "totp" : "emailCode", () =>
+        janus.Mutation.confirmStepUp(_, { challenge, code }, ctx),
+      );
+      return {
+        confirmedAt: iso(out.confirmedAt),
+        confirmedUntil:
+          out.confirmedUntil === null ? null : iso(out.confirmedUntil),
+      };
+    },
+    requestPasskeyStepUp: async (_, __, ctx) => requestPasskeyStepUp(ctx),
+    confirmPasskeyStepUp: async (_, { challenge, response }, ctx) =>
+      confirmPasskeyStepUp(ctx, challenge, response),
   },
 };
 

@@ -479,7 +479,7 @@ What a tenant's users do to their own access is written to its own `authEvents` 
 (tenant-owned, closed schema): `session.signIn` (by `emailCode`, `magicLink`, `passkey` or `social`,
 a refusal with its reason code) and `session.signOut` from the hosted sign-in, and the second-factor and
 passkey changes janus reports (`secondFactor.*`, `recoveryCode*`, `passkey.*`); `stepUp.confirm` is
-reserved for the step-up. Per-token events are not recorded. Each event holds the type, the time, the
+the step-up confirmation (passkey, app code or e-mailed code). Per-token events are not recorded. Each event holds the type, the time, the
 outcome, the actor, the user or client, the full address, a browser family (never the whole
 User-Agent) and the request id. The address is kept for the retention period only and never goes into a
 webhook or telemetry. A failed write is logged and counted, and never fails the sign-in.
@@ -1131,13 +1131,32 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
   again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
-  the request stays pending. `denyOAuthRequest` and the read do not ask. janus's `auth.stepUp.*`
-  mutations are not exposed.
+  the request stays pending. `denyOAuthRequest` and the read do not ask. To prove again without a new
+  sign-in, use the step-up mutations of "Authentication level and step-up" below.
 - **Same origin, JSON only**: this holds for every `/graphql` operation, not only consent (see "Same
   origin on /graphql" below).
-- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No `amr` or
-  `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL surface does not), and
-  M1 needs neither.
+- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`, moved to now by a step-up).
+  `acr` and `amr` are on the ID token too: see "Authentication level and step-up".
+
+### Authentication level and step-up
+
+- **`acr` values** (`acr_values_supported` in discovery): `urn:clavix:acr:1fa` (one factor), `urn:clavix:acr:mfa`
+  (a second factor) and `phr` (a user-verified passkey, which also meets `mfa`). `amr` carries RFC 8176 values
+  (`hwk`, `user`, `otp`, `mfa`, `fed`); a lone e-mailed code is `email`.
+- **What is asked**: the tenant's `signIn.mfa.mode` (`required` asks `mfa` of every approval) and the client's
+  `acr_values` (essential, any one supported value met satisfies), `max_age` and `prompt=login` (= `max_age=0`,
+  read as a proof of the last 60 seconds).
+- **`OAuthRequest.authentication`** (and `OAuthDeviceRequest.authentication`; the device request has no
+  `acr_values` or `max_age`, only the tenant's mode) is `{ acr, current, maxAge, met, missing }`, `missing` listing
+  `SECOND_FACTOR` (prove a passkey or an app code now), `FRESH_PROOF` (prove again) and `ENROLMENT` (the user holds
+  no second factor). While `met` is false the approve mutations answer `UNMET_AUTHENTICATION_REQUIREMENTS` (403,
+  `extensions.missing`) and the request stays pending.
+- **Step-up mutations**: `requestPasskeyStepUp` / `confirmPasskeyStepUp(challenge, response)` (passkey: `hwk`,
+  `user`, `mfa`, so `phr`), `requestStepUp` / `confirmStepUp(challenge, code)` (the app's code for a user who has
+  one, else an e-mailed code that renews the proof only). Each confirmation is a `stepUp.confirm` audit event.
+- **Federation**: a connection with `upstreamMfa.acr` marks its sessions `["fed", "mfa"]`.
+- **Not yet**: the client is not redirected with `unmet_authentication_requirements` (janus-oauth has no such
+  denial) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data).
 
 ## E-mail code sign-in
 
@@ -1341,7 +1360,7 @@ extend type Mutation {
   (`clavix:passkey-ip:<tenantId>/<ip>`, `clavix:passkey-tenant:<tenantId>`), the address counted
   first, `CLAVIX_TRUSTED_PROXIES` for the client IP, and no limit without `REDIS_URL`; Redis down or
   slow: the request goes through and a warning is logged.
-- **Not yet**: the `amr`/`acr` claims stay unset.
+- `acr` and `amr` on the tokens: see "Authentication level and step-up".
 
 ## Same origin on /graphql
 
