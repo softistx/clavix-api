@@ -27,7 +27,12 @@ export async function markRecoverySession(
     });
     if (sessions.listUserSessions === undefined) return;
     const opened = (await sessions.listUserSessions(userId, new Date()))
-      .filter((session) => session.authenticatedAt.getTime() >= since.getTime())
+      .filter(
+        (session) =>
+          session.authenticatedAt.getTime() >= since.getTime() &&
+          (session.amr ?? []).includes("otp") &&
+          (session.amr ?? []).includes("mfa"),
+      )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     if (opened === undefined) return;
     const marked = [
