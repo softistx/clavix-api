@@ -190,6 +190,12 @@ describe("the tenant's policy", () => {
     ).toEqual({ enabled: false, recoveryCodesLeft: null });
   });
 
+  test("activation is refused too while TOTP is off", async () => {
+    const { cookie } = await sessionOf(SLUGS.a, "off2@example.test");
+    const refused = await gql(SLUGS.a, ACTIVATE, { code: "000000" }, cookie);
+    expect(codeOf(refused)).toBe("SECOND_FACTOR_DISABLED");
+  });
+
   test("an anonymous request has no second factor", async () => {
     await offerTotp(SLUGS.a);
     expect(codeOf(await gql(SLUGS.a, STATUS))).toBe("UNAUTHENTICATED");
@@ -337,7 +343,7 @@ describe("a keyring rotation", () => {
     const challenge = stopped.data?.["verifySignInCode"].challenge as string;
     const confirmed = await gql(SLUGS.a, CONFIRM, {
       challenge,
-      code: totpCode(on.secret, new Date(Date.now() + 60_000)),
+      code: totpCode(on.secret, new Date(Date.now() + 30_000)),
     });
     expect(confirmed.errors).toBeUndefined();
     expect(confirmed.data?.["confirmSecondFactor"].user.id).toBe(id);
@@ -347,7 +353,7 @@ describe("a keyring rotation", () => {
 describe("tenants are isolated", () => {
   test("a factor of tenant A does not exist on tenant B, and A's session does not read B", async () => {
     await offerTotp(SLUGS.a);
-    await offerTotp(SLUGS.b);
+    await offerTotp(SLUGS.b, false);
     const a = await sessionOf(SLUGS.a, BOB);
     const aOn = await turnOn(SLUGS.a, a.cookie);
     expect(aOn.recoveryCodes).toHaveLength(10);
@@ -360,11 +366,9 @@ describe("tenants are isolated", () => {
       "UNAUTHENTICATED",
     );
     // B's TOTP being off blocks B's enrolment only.
-    await offerTotp(SLUGS.b, false);
     const bSession = cookieOf(b);
-    expect(codeOf(await gql(SLUGS.b, ENROLL, {}, bSession))).toBe(
-      "SECOND_FACTOR_DISABLED",
-    );
+    const enrolB = await gql(SLUGS.b, ENROLL, {}, bSession);
+    expect(codeOf(enrolB)).toBe("SECOND_FACTOR_DISABLED");
     expect(
       (await gql(SLUGS.a, STATUS, {}, a.cookie)).data?.["secondFactor"].enabled,
     ).toBe(true);

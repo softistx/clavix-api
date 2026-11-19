@@ -4,10 +4,12 @@ import {
   secondFactorResolvers,
 } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
+import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
+import { requireLive } from "@/tenancy/live";
 import type { TenantJanus } from "@/users/tenant-janus";
 
 /** How long a session counts as freshly confirmed for the writes of the factor. */
@@ -119,6 +121,7 @@ async function answer(
 ) {
   const tenant = await ctx.tenant();
   if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+  requireLive(tenant);
   const done = await recordingSignIn(
     ctx,
     tenant.tenantId,
@@ -127,6 +130,7 @@ async function answer(
     (result) => result.userId,
   );
   ctx.set.headers.set("cache-control", "no-store");
+  await usageService.recordActive(tenant.tenantId, done.userId);
   const auth = await janusIssuers.forRequest(ctx.request);
   const user = auth === null ? null : await auth.findUser(done.userId);
   if (user === null)
