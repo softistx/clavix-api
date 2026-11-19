@@ -11,7 +11,6 @@ import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { revokeIfSso } from "@/modules/connections/sso-gate";
 import { requireLive } from "@/tenancy/live";
-import { markRecoverySession } from "./recovery-proof";
 import {
   confirmPasskeyStepUp,
   recordingStepUp,
@@ -150,10 +149,6 @@ async function answer(
     },
     (result) => result.userId,
   );
-  // Temporary, until @softistx/janus#960 (see recovery-proof.ts).
-  if (method === "recoveryCode") {
-    await markRecoverySession(ctx, done.userId, since);
-  }
   ctx.set.headers.set("cache-control", "no-store");
   await usageService.recordActive(tenant.tenantId, done.userId);
   const user = auth === null ? null : await auth.findUser(done.userId);
