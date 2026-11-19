@@ -64,7 +64,7 @@ nxgt-janus release says which.
 - Enterprise OIDC connections: an admin registers an upstream OIDC provider with a sealed secret and verified domains, with a per-plan quota (F1, [#19](https://github.com/softistx/clavix-api/issues/19)); home-realm discovery and federated sign-in with JIT and `SSO_REQUIRED` (F2, in progress).
 - Step-up (`acr_values`, `max_age`, `acr`/`amr`).
 - Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
-  telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans).
+  telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans, [#23](https://github.com/softistx/clavix-api/issues/23)).
 
 **Before v1**
 - A security review of the whole surface, a load test of the token and
