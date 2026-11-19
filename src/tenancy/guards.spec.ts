@@ -115,6 +115,8 @@ const platformAllowed = [
   "src/config/admin-events.ts",
   "src/modules/domains/",
   "src/config/domains.ts",
+  // Key rotation walks every tenant's partition of janus's own collections.
+  "src/keys/reseal.ts",
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.
