@@ -371,10 +371,12 @@ Both are read from `deploy/.env` like the others (compose hands the file to `api
 - **What is traced.** One server span per request (`@alxia/telemetry`, named `POST /graphql` or `query <Name>`; `/healthz`, `/readyz`
   and `/internal/*` are skipped), a span per sign-in, passkey, session and invitation flow with its security events as logs
   (`@softistx/janus-telemetry`, `janus.signIn`, `janus.signIn.refused`, `janus.signIn.throttled`, ...), and a client span per MongoDB
-  command (`@softistx/telemetry-mongo`). The MongoDB command monitoring is switched on only when an endpoint is set.
+  command (`@softistx/telemetry-mongo`), and a span per OAuth endpoint of each issuer (`oauth.authorize`, `oauth.token`, `oauth.par`,
+  `oauth.introspect`, `oauth.revoke`, `oauth.device`, `oauth.register`; `instrumentOAuth`). A refused client authentication is an
+  `oauth.client.refused` warning inside its span, a refused DPoP proof an `oauth.dpop.refused` one. The MongoDB command monitoring is switched on only when an endpoint is set.
 - **Attributes.** `clavix.tenant.id` and `clavix.tenant.plan` are on the server span and, inherited, on every span and log under
-  it, once the request's host names a tenant. OAuth endpoint attributes (`oauth.client.id`, `oauth.grant_type`, ...) come with
-  `instrumentOAuth` (slice T2).
+  it, once the request's host names a tenant. The OAuth spans add `oauth.client.id`, `oauth.grant_type`, `oauth.resource`, `oauth.dpop`,
+  `oauth.par` and, for a refusal, `oauth.error` (the OAuth error code); they carry the tenant's attributes themselves.
 - **Never written:** tokens, codes, secrets, e-mail addresses, logins or IPs. The server span is built with `clientAddress: false`, so it
   carries no `client.address`.
 - **Sampling.** In production 10 % of traces are kept (decided once per trace, at its root); elsewhere all. Logs are never sampled.

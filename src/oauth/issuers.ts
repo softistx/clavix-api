@@ -9,7 +9,9 @@ import {
   type OidcClaims,
   type OidcSubject,
 } from "@softistx/janus-oidc";
+import { instrumentOAuth } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
+import { tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { buildIssuer, userinfoOf } from "./building";
@@ -136,6 +138,10 @@ export function createClavixOAuthIssuers(
       tenantOf.set(keyed.tenant.issuer, keyed.tenant);
       return build(keyed);
     },
+    // Traced (D24): a span per endpoint, the refused client authentications as
+    // warnings; the tenant's id and plan on each, never a token, secret or address.
+    instrument: (server, { tenant }) =>
+      instrumentOAuth(server, { attributes: () => tenantAttributes(tenant) }),
     endpoints: ({ resources }) => ({
       consentUrl: options.consentUrl ?? "/consent",
       // Same-tenant confidential clients introspect the tokens of the
