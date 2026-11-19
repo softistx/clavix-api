@@ -253,9 +253,9 @@ is wrapped (`approveOrDenyUnmet`, `consent/index.ts`; `consent/unmet.ts`) and de
 (janus-oauth 0.24), answering `{ redirectTo }` with `error`, `state` and `iss`; a gap the user can close (`SECOND_FACTOR`,
 `FRESH_PROOF`, `ENROLMENT`) stays the 403 and the request stays pending for the step-up. The access-token `claims` hook
 (`oauth/building.ts`) puts the grant's `acr`, `amr` and `auth_time` in the JWT, the ID token's values (janus 0.76).
-A recovery-code sign-in is `rec` in place of `otp` (RFC 8176): janus answers `method: 'recovery'` but does not store it on
-the session until a release carries nxgt-janus#960, so `answer()` in `src/modules/mfa/index.ts` calls `markRecoverySession`
-(`recovery-proof.ts`), which rewrites the new session's `amr` through the store port (`Temporary, until nxgt-janus#960` is released: fixed on janus develop, not yet in a release; clavix-api#321; a failed mark is a `console.warn`). A passkey step-up needs no
+A recovery-code sign-in is `rec` in place of `otp` (RFC 8176): janus answers `method: 'recovery'` but, before 0.77, did not store it on
+the session (nxgt-janus#960, fixed in @softistx/janus 0.77), so `answer()` in `src/modules/mfa/index.ts` calls `markRecoverySession`
+(`recovery-proof.ts`), which rewrites the new session's `amr` through the store port (`Temporary, until @softistx/janus#960`: fixed in @softistx/janus 0.77; the workaround goes when clavix-api adopts it, clavix-api#321; a failed mark is a `console.warn`). A passkey step-up needs no
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language` French else English, then the other
 language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`

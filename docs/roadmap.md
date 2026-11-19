@@ -41,6 +41,7 @@ nxgt-janus release says which.
   fresh proof, enrolment) stays pending for the step-up. The ID token and the JWT access token carry
   `acr`, `amr` (`rec` for a recovery code) and `auth_time`, and a passkey step-up needs no authenticator
   app ([#20](https://github.com/softistx/clavix-api/issues/20)).
+  When this moves to Shipped, update the step-up sentence of `guide/migrating-from-embedded-janus.md` in the same change.
 
 ## Next
 
