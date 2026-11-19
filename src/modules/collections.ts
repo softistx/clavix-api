@@ -8,6 +8,7 @@ export { agentClients } from "./agents/agent-clients.model";
 export { authEvents } from "./audit/auth-events.model";
 export { branding } from "./branding/branding.model";
 export { clientPolicies } from "./client-policies/client-policies.model";
+export { connections } from "./connections/connections.model";
 export { domains } from "./domains/domains.model";
 export { detailTypes } from "./resources/detail-types/detail-types.model";
 export { resources } from "./resources/resources.model";

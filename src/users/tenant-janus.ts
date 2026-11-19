@@ -4,6 +4,7 @@ import {
   type SealingKey,
   type SocialConfig,
   type SocialProfile,
+  type SocialProviderResolver,
   type UserEventListener,
 } from "@softistx/janus";
 import type { SocialAuth } from "@softistx/janus-graphql";
@@ -12,6 +13,7 @@ import {
   createMongoStores,
 } from "@softistx/janus-mongo";
 import { simpleWebAuthnVerifier } from "@softistx/janus-passkeys";
+import { type ConnectionSource, oidcConnections } from "@softistx/janus-social";
 import { instrumentJanus } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
 import type { SecretBox } from "@/modules/sign-in-methods/secrets";
@@ -53,11 +55,22 @@ export interface TenantJanusOptions {
   secondFactorKeys?: [SealingKey, ...SealingKey[]];
   /** Opens the tenants' sealed social secrets; without it no tenant has a social provider. */
   secrets?: SecretBox;
+  /** The tenants' enterprise OIDC connections (M4, F1); without it no tenant has one. */
+  connections?: ConnectionsOf;
   /** What accepting an invitation of this tenant checks and does; nothing when left out. */
   invitationHooks?: InvitationHooksFor;
   /** Hears the user events of one tenant's instance (D12); nothing when left out. */
   events?: (tenant: ResolvedTenant) => UserEventListener;
 }
+
+/** Where a tenant's enterprise OIDC connections are read (`ConnectionsService`). */
+export interface ConnectionsOf {
+  sourceOf(tenantId: string): ConnectionSource;
+}
+
+/** The path, on the tenant's issuer host, where an identity provider sends the visitor back: one URL for every connection of the tenant. */
+export const ssoCallbackUrlOf = (issuer: string) =>
+  `${issuer}/sign-in/sso/callback`;
 
 /** janus's `invitations.beforeAccept` and `onAccepted` of one tenant. */
 export interface InvitationHooks {
@@ -158,27 +171,60 @@ function nameOf(name: string | undefined): { name?: string } {
   return trimmed === "" || trimmed.length > 200 ? {} : { name: trimmed };
 }
 
-/** The tenant's own social apps (ADR-0035); a new user only where sign-up is open. */
+/**
+ * The resolver of the tenant's enterprise connections (D1): janus asks it for
+ * any provider name the static social apps do not own, and it reads the
+ * connection on every call. `undefined` when the tenant's redirect URI is one
+ * janus refuses (https, or http on a loopback host), so a development tenant
+ * on another http host loses its connections rather than its whole instance.
+ */
+function connectionResolverOf(
+  tenant: ResolvedTenant,
+  connections: ConnectionsOf | undefined,
+): SocialProviderResolver | undefined {
+  if (connections === undefined) return undefined;
+  try {
+    const { resolve } = oidcConnections({
+      source: connections.sourceOf(tenant.tenantId),
+      redirectUri: ssoCallbackUrlOf(tenant.issuer),
+    });
+    return resolve;
+  } catch (error) {
+    console.warn(
+      `connections: tenant ${tenant.tenantId} has none (${error instanceof Error ? error.name : "unknown error"})`,
+    );
+    return undefined;
+  }
+}
+
+/** The tenant's own social apps (ADR-0035) and enterprise connections; a new user only where sign-up is open. */
 function socialConfigOf(
   tenant: ResolvedTenant,
   secrets: SecretBox | undefined,
+  connections?: ConnectionsOf,
 ): SocialConfig | undefined {
-  if (secrets === undefined) return undefined;
-  const providers = socialProvidersOf(tenant, secrets, (provider, reason) =>
-    console.warn(
-      `social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`,
-    ),
-  );
-  if (Object.keys(providers).length === 0) return undefined;
+  const providers =
+    secrets === undefined
+      ? {}
+      : socialProvidersOf(tenant, secrets, (provider, reason) =>
+          console.warn(
+            `social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`,
+          ),
+        );
+  const resolveProvider = connectionResolverOf(tenant, connections);
+  const hasStatic = Object.keys(providers).length > 0;
+  if (!hasStatic && resolveProvider === undefined) return undefined;
+  const signUp = tenant.signUp
+    ? (profile: SocialProfile) => ({
+        email: profile.email ?? "",
+        ...nameOf(profile.name),
+      })
+    : (false as const);
   return {
-    providers,
-    signUp: tenant.signUp
-      ? (profile: SocialProfile) => ({
-          email: profile.email ?? "",
-          ...nameOf(profile.name),
-        })
-      : false,
-  };
+    ...(hasStatic ? { providers } : {}),
+    ...(resolveProvider === undefined ? {} : { resolveProvider }),
+    signUp,
+  } as SocialConfig;
 }
 
 export function buildTenantJanus(
@@ -189,6 +235,7 @@ export function buildTenantJanus(
   events?: UserEventListener,
   // Specs only: the server always passes the keyring's (`createTenantJanusIssuers`).
   secondFactorKeys: [SealingKey, ...SealingKey[]] = ephemeralSecondFactorKeys(),
+  connections?: ConnectionsOf,
 ): TenantJanus {
   // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.
   return instrumentJanus(
@@ -196,7 +243,7 @@ export function buildTenantJanus(
       db,
       tenant,
       secondFactorKeys,
-      socialConfigOf(tenant, secrets),
+      socialConfigOf(tenant, secrets, connections),
       hooks,
       events,
     ),
@@ -225,6 +272,7 @@ export function createTenantJanusIssuers({
   db,
   secondFactorKeys = ephemeralSecondFactorKeys(),
   secrets,
+  connections,
   invitationHooks,
   events,
 }: TenantJanusOptions) {
@@ -250,6 +298,7 @@ export function createTenantJanusIssuers({
         invitationHooks?.(tenant),
         events?.(tenant),
         secondFactorKeys,
+        connections,
       ),
   });
 }

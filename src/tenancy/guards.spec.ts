@@ -103,6 +103,8 @@ const allowed = [
   "src/config/agent-clients.ts",
   "src/modules/webhooks/",
   "src/config/webhook-endpoints.ts",
+  "src/modules/connections/",
+  "src/config/connections.ts",
 ];
 // Where a platform collection with a `tenantId` (owned.ts) may be reached:
 // `adminEvents` by its recorder and the recorder's wiring, nowhere else.

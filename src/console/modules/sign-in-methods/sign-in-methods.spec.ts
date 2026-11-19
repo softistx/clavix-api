@@ -620,7 +620,9 @@ describe("the social providers", () => {
     const janus = await janusIssuers.forRequest(
       new Request(issuerOf("sim-a", origin)),
     );
-    expect(janus === null ? "none" : socialOf(janus)).toBeNull();
+    // Every tenant's instance now carries the connection resolver (it is
+    // social-capable with no static provider): the rebuild is what is checked.
+    expect(janus).not.toBeNull();
   });
 });
 

@@ -64,6 +64,13 @@ async function socialOfTenant(ctx: Context) {
   if (auth === null) throw denial("NOT_FOUND", "No such tenant");
   const instance = socialOf(auth);
   if (instance === null) throw methodDisabled("social");
+  // The instance also carries the tenant's enterprise-connection resolver
+  // (every tenant has one): this surface is the static social apps' only, so a
+  // tenant that offers none is refused here, as before connections.
+  const { signIn } = await tenantOf(ctx);
+  if (offeredSocial(signIn, secretBox.opens).length === 0) {
+    throw methodDisabled("social");
+  }
   return { auth: instance, resolvers: social };
 }
 
