@@ -479,7 +479,7 @@ What a tenant's users do to their own access is written to its own `authEvents` 
 (tenant-owned, closed schema): `session.signIn` (by `emailCode`, `magicLink`, `passkey` or `social`,
 a refusal with its reason code) and `session.signOut` from the hosted sign-in, and the second-factor and
 passkey changes janus reports (`secondFactor.*`, `recoveryCode*`, `passkey.*`); `stepUp.confirm` is
-reserved for the step-up. Per-token events are not recorded. Each event holds the type, the time, the
+the step-up confirmation (passkey, app code or e-mailed code). Per-token events are not recorded. Each event holds the type, the time, the
 outcome, the actor, the user or client, the full address, a browser family (never the whole
 User-Agent) and the request id. The address is kept for the retention period only and never goes into a
 webhook or telemetry. A failed write is logged and counted, and never fails the sign-in.
@@ -680,7 +680,7 @@ Discovery advertises `device_authorization_endpoint`.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
   (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes; approval is refused with `invalid_authorization_details` while `detailsComplete` is false, see "Authorization details"). The viewer must be signed in
-  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
+  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again or prove again with the step-up mutations, the request stays
   pending); refusing does not. A code of another tenant is `NOT_FOUND`.
 - **The device polls** with the janus answers: `authorization_pending`, `slow_down` (poll less often, the interval
   grows by 5 s), `access_denied`, `expired_token` (the code lived 10 minutes) and `invalid_grant`. A successful
@@ -1119,7 +1119,7 @@ The page sends the user agent to `redirectTo` (the client's redirect URI with `c
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
-scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403).
+scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403) or `UNMET_AUTHENTICATION_REQUIREMENTS` (403, `extensions.missing`; see "Authentication level and step-up").
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
   are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
   enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
@@ -1131,13 +1131,35 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
   again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
-  the request stays pending. `denyOAuthRequest` and the read do not ask. janus's `auth.stepUp.*`
-  mutations are not exposed.
+  the request stays pending. `denyOAuthRequest` and the read do not ask. To prove again without a new
+  sign-in, use the step-up mutations of "Authentication level and step-up" below.
 - **Same origin, JSON only**: this holds for every `/graphql` operation, not only consent (see "Same
   origin on /graphql" below).
-- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No `amr` or
-  `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL surface does not), and
-  M1 needs neither.
+- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`, moved to now by a step-up).
+  `acr` and `amr` are on the ID token too: see "Authentication level and step-up".
+
+### Authentication level and step-up
+
+- **`acr` values** (`acr_values_supported` in discovery): `urn:clavix:acr:1fa` (one factor), `urn:clavix:acr:mfa`
+  (a second factor) and `phr` (a user-verified passkey, which also meets `mfa`). `amr` carries RFC 8176 values
+  (`hwk`, `user`, `otp`, `mfa`, `fed`); a lone e-mailed code is `email`.
+- **What is asked**: the tenant's `signIn.mfa.mode` (`required` asks `mfa` of every approval) and the client's
+  `acr_values` (essential, any one supported value met satisfies), `max_age` and `prompt=login` (= `max_age=0`,
+  read as a proof of the last 60 seconds).
+- **`OAuthRequest.authentication`** (and `OAuthDeviceRequest.authentication`; the device request has no
+  `acr_values` or `max_age`, only the tenant's mode) is `{ acr, current, maxAge, met, missing }`, `missing` listing
+  `SECOND_FACTOR` (prove a passkey or an app code now), `FRESH_PROOF` (prove again) and `ENROLMENT` (the user holds
+  no second factor). While `met` is false the approve mutations answer `UNMET_AUTHENTICATION_REQUIREMENTS` (403,
+  `extensions.missing`) and the request stays pending.
+- **Step-up mutations**: `requestPasskeyStepUp` / `confirmPasskeyStepUp(challenge, response)` (passkey: `hwk`,
+  `user`, `mfa`, so `phr`), `requestStepUp` / `confirmStepUp(challenge, code)` (the app's code for a user who has
+  one, else an e-mailed code that renews the proof only). Each confirmation is a `stepUp.confirm` audit event.
+  Errors: the two `request*` mutations answer `UNAUTHENTICATED` (401) to an anonymous caller. `confirmStepUp` answers
+  `CODE_INVALID` (with `attemptsLeft`) for a wrong code and `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED` for a bad
+  challenge; `confirmPasskeyStepUp` answers `PASSKEY_INVALID` for a failed assertion and the same `TOKEN_*` codes.
+- **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
+- **Not yet**: the client is not redirected with `unmet_authentication_requirements` (janus-oauth has no such
+  denial, nxgt-janus#949) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data, nxgt-janus#952). The `rec` amr value is not emitted (janus cannot tell a recovery code from a TOTP code, nxgt-janus#950), and a passkey step-up needs an active authenticator app (nxgt-janus#951).
 
 ## E-mail code sign-in
 
@@ -1317,7 +1339,7 @@ extend type Mutation {
   spends the user's earlier one. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
   verified gets `EMAIL_UNVERIFIED` (403; janus 0.57 refuses every factor enrolment while the e-mail is unproved, see
   [troubleshooting](docs/troubleshooting.md)). The session must have signed in within 10 minutes
-  (`STEP_UP_REQUIRED`, 403: sign in again with a code). Up to 10 passkeys per user.
+  (`STEP_UP_REQUIRED`, 403: prove again with `requestPasskeyStepUp` or `requestStepUp`). Up to 10 passkeys per user.
 - **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
   (`true` when this call removed it, `false` for an id that is not the caller's; same freshness).
   A removed passkey no longer signs in. Registering and removing mail nothing yet.
@@ -1341,7 +1363,7 @@ extend type Mutation {
   (`clavix:passkey-ip:<tenantId>/<ip>`, `clavix:passkey-tenant:<tenantId>`), the address counted
   first, `CLAVIX_TRUSTED_PROXIES` for the client IP, and no limit without `REDIS_URL`; Redis down or
   slow: the request goes through and a warning is logged.
-- **Not yet**: the `amr`/`acr` claims stay unset.
+- `acr` and `amr` on the tokens: see "Authentication level and step-up".
 
 ## Same origin on /graphql
 

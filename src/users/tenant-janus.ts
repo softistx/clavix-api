@@ -5,6 +5,8 @@ import {
   type SocialConfig,
   SocialError,
   type SocialProfile,
+  type SocialProvider,
+  type StepUpPasskeyApi,
   type UserEventListener,
 } from "@softistx/janus";
 import type { SocialAuth } from "@softistx/janus-graphql";
@@ -169,7 +171,9 @@ function buildJanus(
 }
 
 /** The typed shape of a tenant's instance. It has no `social`: only a tenant with a provider does, reached through `socialOf`. */
-export type TenantJanus = ReturnType<typeof buildJanus>;
+type BuiltJanus = ReturnType<typeof buildJanus>;
+export type TenantJanus = BuiltJanus &
+  StepUpPasskeyApi<NonNullable<Awaited<ReturnType<BuiltJanus["findUser"]>>>>;
 
 /**
  * The instance of a tenant with at least one social provider. janus-graphql's
@@ -214,6 +218,32 @@ function connectionsOfTenant(
     );
     return undefined;
   }
+}
+
+/**
+ * D6: a connection whose `upstreamMfa.acr` is set asks the identity provider
+ * for that `acr` (a sign-in whose ID token holds another is refused), so a
+ * sign-in that completes is one the identity provider proved at that level:
+ * its session records `mfa` beside `fed` and reaches the `mfa` level. A
+ * connection with none records `fed` alone.
+ */
+function trustingUpstreamMfa(
+  resolve: (name: string) => Promise<SocialProvider | null>,
+  source: ConnectionSource,
+) {
+  return async (name: string): Promise<SocialProvider | null> => {
+    const provider = await resolve(name);
+    if (provider === null) return null;
+    const connection = await source.findConnection(name);
+    const acrValues = connection?.stepUp?.acrValues;
+    if (acrValues === undefined || acrValues.length === 0) return provider;
+    return {
+      ...provider,
+      federatedAmr: {
+        acr: Object.fromEntries(acrValues.map((acr) => [acr, ["mfa"]])),
+      },
+    };
+  };
 }
 
 /** The connections each instance was built with: one `oidcConnections` per instance, shared by sign-in and discovery. */
@@ -275,7 +305,14 @@ function socialConfigOf(
   return {
     config: {
       ...(hasStatic ? { providers } : {}),
-      ...(realms === undefined ? {} : { resolveProvider: realms.resolve }),
+      ...(realms === undefined || connections === undefined
+        ? {}
+        : {
+            resolveProvider: trustingUpstreamMfa(
+              realms.resolve,
+              connections.sourceOf(tenant.tenantId),
+            ),
+          }),
       signUp:
         realms === undefined && !tenant.signUp
           ? (false as const)
@@ -305,7 +342,22 @@ export function buildTenantJanus(
     buildJanus(db, tenant, secondFactorKeys, config, hooks, events),
   );
   if (realms !== undefined) homeRealms.set(instance, realms);
+  // janus answers `stepUp.request(user, { via: "passkey" })` and `confirmPasskey`
+  // for an instance with passkeys and a second factor (both wired above), but
+  // its inferred type leaves them out: `StepUpPasskeyApi` names them, and the
+  // guard checks them at runtime instead of casting.
+  if (!hasPasskeyStepUp(instance)) {
+    throw new Error("janus: the step-up by passkey is not wired");
+  }
   return instance;
+}
+
+function hasPasskeyStepUp(instance: BuiltJanus): instance is TenantJanus {
+  const { stepUp } = instance as { stepUp: Partial<Record<string, unknown>> };
+  return (
+    typeof stepUp["confirmPasskey"] === "function" &&
+    typeof stepUp["request"] === "function"
+  );
 }
 
 /** The instance when the tenant has at least one social provider, else `null`. */

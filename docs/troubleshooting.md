@@ -722,8 +722,17 @@ code), or an approved scope was not asked by the device.
 **`DEVICE_CODE_THROTTLED` (429)**: too many code lookups by this user, address or tenant. Wait the `Retry-After`
 seconds; operators tune `CLAVIX_DEVICE_*`. Every lookup counts, hit or miss.
 
-**`STEP_UP_REQUIRED`** on approve: the session is older than 5 minutes. Sign in again; the request is
+**`STEP_UP_REQUIRED`** on approve: the session is older than 5 minutes. Sign in again, or prove again with `requestPasskeyStepUp` / `requestStepUp` and their `confirm*`; the request is
 still pending. Reading and denying a request do not ask for a fresh session.
+
+**`UNMET_AUTHENTICATION_REQUIREMENTS`** (403, `extensions.missing`) on approve: the session does not meet the request's
+`acr_values`, `max_age` or `prompt=login`, or the tenant's `required` mode. `missing` says what: `SECOND_FACTOR` (prove with a
+step-up), `FRESH_PROOF` (prove again), `ENROLMENT` (the user holds no second factor; enrol one first). An empty `missing` means
+the request names only an `acr` Clavix does not issue. The request stays pending.
+
+**`CODE_INVALID`** on `confirmStepUp` (with `attemptsLeft`) is a wrong code; **`PASSKEY_INVALID`** on `confirmPasskeyStepUp` is a failed
+assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: a passkey step-up needs an active authenticator app
+(nxgt-janus#951).
 
 **`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
 

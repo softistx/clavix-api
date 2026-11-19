@@ -281,7 +281,7 @@ describe("the consent screen's data", () => {
 });
 
 describe("approve", () => {
-  test("ends with an id_token whose auth_time is the session's sign-in time, with no amr", async () => {
+  test("ends with an id_token whose auth_time is the session's sign-in time and a first-factor acr", async () => {
     const id = await authorize("acme");
     const approved = await gql("acme", APPROVE, { id }, cookieOf("acme"));
     expect(approved.errors).toBeUndefined();
@@ -294,9 +294,8 @@ describe("approve", () => {
     const claims = decodeJwt(id_token);
     const signedInAt = sessions["acme"]?.authenticatedAt ?? new Date(0);
     expect(claims["auth_time"]).toBe(Math.floor(signedInAt.getTime() / 1000));
-    // janus-oauth's resolvers pass no amr/acr (README, "Consent").
-    expect(claims["amr"]).toBeUndefined();
-    expect(claims["acr"]).toBeUndefined();
+    // The session proved one factor: the approval states it (D9).
+    expect(claims["acr"]).toBe("urn:clavix:acr:1fa");
   });
 
   test("a session older than five minutes is STEP_UP_REQUIRED and the request stays pending", async () => {

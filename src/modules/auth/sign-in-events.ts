@@ -22,7 +22,7 @@ export const reasonOf = (error: unknown): string => {
   return typeof code === "string" ? code : "error";
 };
 
-const sourceOf = (ctx: Context) => ({
+export const sourceOf = (ctx: Context) => ({
   ip: ctx.ip,
   userAgent: ctx.request.headers.get("user-agent") ?? undefined,
   requestId: requestIdOf(ctx.request),

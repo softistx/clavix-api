@@ -25,6 +25,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
+import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
 import { originOf, rpIdOf } from "@/users/rp";
@@ -170,7 +171,7 @@ const homeOf = async (email: string, slug = "fedacme") =>
   (await gql(slug, HOME, { e: email })).data?.["hostedHomeRealm"] ?? null;
 
 /** The visitor's trip to the IdP: authorize, approve as `subject`, and the callback URL it sends back. */
-async function throughIdp(authorizeUrl: string, subject: string) {
+async function throughIdp(authorizeUrl: string, subject: string, acr?: string) {
   const authorize = await idp.handle(new Request(authorizeUrl));
   expect(authorize.status).toBe(302);
   const consent = new URL(
@@ -185,20 +186,26 @@ async function throughIdp(authorizeUrl: string, subject: string) {
     {
       scopes: ["openid", "email", "profile"],
       authTime: new Date(),
+      ...(acr === undefined ? {} : { acr }),
     },
   );
   return redirectTo;
 }
 
 /** A whole federated sign-in on `slug` as `<subject>@acme.test`. */
-async function federated(subject: string, slug = "fedacme", provider = "acme") {
+async function federated(
+  subject: string,
+  slug = "fedacme",
+  provider = "acme",
+  acr?: string,
+) {
   const started = await gql(slug, START, { p: provider });
   if (started.errors !== undefined) return { started } as const;
   const start = started.data?.["socialSignInStart"] as {
     url: string;
     flow: string;
   };
-  const callback = await throughIdp(start.url, subject);
+  const callback = await throughIdp(start.url, subject, acr);
   return {
     start,
     callback,
@@ -446,6 +453,27 @@ describe("federated sign-in", () => {
     expect(codeOf(refused.done)).toBe("SOCIAL_STEP_UP_UNMET");
     expect(refused.done.cookies).toEqual([]);
     await connectionsService.update(acme, "acme", { upstreamMfa: null });
+  });
+
+  test("a connection that trusts the IdP's MFA gives the session mfa, so acr mfa is reached (D6)", async () => {
+    await connectionsService.update(acme, "acme", {
+      upstreamMfa: { acr: "urn:acme:mfa" },
+    });
+    try {
+      const done = await federated("mia", "fedacme", "acme", "urn:acme:mfa");
+      if (!("done" in done)) throw new Error("no sign-in");
+      expect(done.done.errors).toBeUndefined();
+      const user = dataOf<{ user: { id: string } }>(
+        done.done,
+        "socialSignInComplete",
+      ).user;
+      const auth = await janusIssuers.forRequest(new Request(url("fedacme")));
+      const [session] = (await auth?.sessions.list(user.id)) ?? [];
+      expect(session?.amr).toEqual(["fed", "mfa"]);
+      expect(acrOf(session?.amr ?? [])).toBe(ACR.mfa);
+    } finally {
+      await connectionsService.update(acme, "acme", { upstreamMfa: null });
+    }
   });
 
   test("the callback of another tenant with this tenant's flow is refused (mix-up)", async () => {

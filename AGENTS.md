@@ -245,8 +245,12 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 (a Yoga plugin added in `createApp` when `oauth.serverFor` exists) puts the issuers in the context, and
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
-`approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
-not worked around). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
+`approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`). Step-up (M2): `beforeApprove` runs
+`assessment` (`authentication.ts`, over the pure `src/oauth/authentication-level.ts`) for the code and device flows and
+refuses with `UNMET_AUTHENTICATION_REQUIREMENTS` (403, extension `missing`); `approveOptions` passes `amr`, `acr` and
+`authTime`. janus-oauth cannot answer the client `unmet_authentication_requirements` (nxgt-janus#949) and its access-token `claims`
+hook carries no grant data (nxgt-janus#952); janus gives no TOTP/recovery distinction, so no `rec` (nxgt-janus#950), and a
+passkey step-up needs an active TOTP (nxgt-janus#951) (upstream gaps, not worked around). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language` French else English, then the other
 language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
 resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
@@ -671,7 +675,8 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `acceptInvitation`'s sign-in are not gated. `login_hint` waits for J2; the callback route is F3.
 - `domainOfEmail` is janus-social's (exported since 0.9); `federation.spec.ts` injects `resolveHost`. janus has no
   API to mark `mfa` amr from a federated step-up proof for tenant connections (`oidcConnections` takes no `federatedAmr`
-  by design): D6 uses the acr check.
+  by design): D6 uses the acr check, and `trustingUpstreamMfa` (`tenant-janus.ts`) wraps the resolved provider with
+  `federatedAmr` for a connection whose `stepUp.acrValues` is set, so such a session is `["fed", "mfa"]` (acr `mfa`).
 
 ## OAuth clients
 
