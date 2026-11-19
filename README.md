@@ -1161,7 +1161,6 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
   challenge; `confirmPasskeyStepUp` answers `PASSKEY_INVALID` for a failed assertion and the same `TOKEN_*` codes.
 - **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
 - **Tokens**: the ID token and the JWT access token carry `acr`, `amr` and `auth_time` (the approval's values; a refresh keeps them). A passkey step-up needs no authenticator app (`passkeys.firstFactor`).
-  denial, nxgt-janus#949) and the JWT access token has no `acr` or `auth_time` (its claims hook has no grant data, nxgt-janus#952). The `rec` amr value is not emitted (janus cannot tell a recovery code from a TOTP code, nxgt-janus#950), and a passkey step-up needs an active authenticator app (nxgt-janus#951).
 
 ## E-mail code sign-in
 

@@ -733,8 +733,7 @@ redirected with `error=unmet_authentication_requirements` (`approveOAuthRequest`
 cases the request stays pending for the step-up.
 
 **`CODE_INVALID`** on `confirmStepUp` (with `attemptsLeft`) is a wrong code; **`PASSKEY_INVALID`** on `confirmPasskeyStepUp` is a failed
-assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: the passkey step-up is not available to the user (no passkey, or `passkeys.firstFactor` off); it needs no authenticator app
-(nxgt-janus#951).
+assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: the passkey step-up is not available to the user (no passkey, or `passkeys.firstFactor` off); it needs no authenticator app.
 
 **`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
 
