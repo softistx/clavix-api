@@ -334,6 +334,12 @@ memory and a restart loses what waits. A delivery is retried on the Standard Web
 2xx only. An endpoint that fails 5 deliveries in a row is switched off, its tenant's owners are e-mailed and
 the console records `webhook.disable` (actor `system:webhooks:disable`); an admin switches it on again.
 
+Every request attempt is logged in `webhookDeliveries` (event id and type, attempt rank, response status or the
+failure's name, duration, whether it was delivered or will be retried; never the URL, a header or a body):
+the newest 100 per endpoint, dropped after 7 days by a TTL index on `at` (`bun run db:sync` creates it).
+`WebhookEndpoint.deliveries(first:)` in the console API reads them, newest first; deleting an endpoint deletes
+its attempts, and a tenant purge empties them.
+
 | Variable                        | Meaning                                                                                                       |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production. |

@@ -16,7 +16,11 @@ import { mailer } from "./mail";
 import { redis } from "./redis";
 import { tenantAdmin, tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
-import { urlPolicy, webhookEndpoints } from "./webhook-endpoints";
+import {
+  urlPolicy,
+  webhookDeliveries,
+  webhookEndpoints,
+} from "./webhook-endpoints";
 
 // The console's users are the `clavix` tenant's; its owners are mailed.
 const findOwner = async (id: string) => {
@@ -37,6 +41,7 @@ const findOwner = async (id: string) => {
  */
 export const webhookDelivery = createWebhookDelivery({
   endpoints: webhookEndpoints,
+  deliveries: webhookDeliveries,
   fetch: guardedFetch(urlPolicy),
   ...(redis === undefined
     ? {}

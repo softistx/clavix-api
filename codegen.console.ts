@@ -21,6 +21,9 @@ const config: CodegenConfig = {
           Me: "@/console/modules/me#MeParent",
           // A tenant by id, slug and name, and its stored document when read.
           Tenant: "@/console/modules/tenants/parent#TenantParent",
+          // An endpoint with its tenant, which its `deliveries` read through.
+          WebhookEndpoint:
+            "@/console/modules/webhooks/parent#WebhookEndpointParent",
         },
       },
     },

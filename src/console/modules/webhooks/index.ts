@@ -1,7 +1,10 @@
 import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { tenantAdmin } from "@/config/tenancy";
-import { webhookEndpoints as endpoints } from "@/config/webhook-endpoints";
+import {
+  webhookEndpoints as endpoints,
+  webhookDeliveries,
+} from "@/config/webhook-endpoints";
 import { webhookDelivery } from "@/config/webhooks";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { effectiveQuotas } from "@/modules/tenants/plan.schema";
@@ -13,6 +16,7 @@ import { type Guards, onTenant } from "../../guard";
 import { catalogTenant } from "../catalog-support";
 import { tenantArg } from "../ids";
 import { refusal } from "../tenants/errors";
+import type { WebhookEndpointParent } from "./parent";
 
 const view = onTenant("view", tenantArg);
 const edit = onTenant("edit", tenantArg);
@@ -66,7 +70,8 @@ const target = (tenantId: ObjectId, id: string) => ({
 const webhooksKey = (tenant: { _id: ObjectId }) =>
   `console:webhooks:${tenant._id.toHexString()}`;
 
-const shape = (doc: WebhookEndpointDoc) => ({
+const shape = (doc: WebhookEndpointDoc): WebhookEndpointParent => ({
+  tenantId: doc.tenantId.toHexString(),
   id: doc._id.toHexString(),
   url: doc.url,
   description: doc.description,
@@ -88,6 +93,28 @@ const shape = (doc: WebhookEndpointDoc) => ({
 });
 
 export const webhooks: Resolvers = {
+  WebhookEndpoint: {
+    // Under the endpoint's own `view` guard: it is reached through a guarded query or mutation.
+    deliveries: async (endpoint, { first }) =>
+      (
+        await webhookDeliveries.list(
+          endpoint.tenantId,
+          endpoint.id,
+          first ?? undefined,
+        )
+      ).map((doc) => ({
+        id: doc._id.toHexString(),
+        eventId: doc.eventId,
+        type: doc.type,
+        attempt: doc.attempt,
+        status: doc.status,
+        error: doc.error,
+        durationMs: doc.durationMs,
+        delivered: doc.delivered,
+        willRetry: doc.willRetry,
+        at: doc.at,
+      })),
+  },
   Query: {
     webhookEndpoints: async (_, { tenantId }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -140,6 +167,7 @@ export const webhooks: Resolvers = {
       let removed = true;
       try {
         await endpoints.delete(tenant._id.toHexString(), id);
+        await webhookDeliveries.deleteForEndpoint(tenant._id.toHexString(), id);
       } catch (error) {
         if (!(error instanceof WebhookError) || error.code !== "NOT_FOUND") {
           throw refusal(error);

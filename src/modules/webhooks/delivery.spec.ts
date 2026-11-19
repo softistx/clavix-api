@@ -12,6 +12,7 @@ import { createSecretBox } from "@/modules/sign-in-methods/secrets";
 import { createWebhookDelivery, type DisabledEndpoint } from "./delivery";
 import { userWebhookEvent } from "./events";
 import { guardedFetch, type UrlPolicy } from "./url-policy";
+import { WebhookDeliveriesService } from "./webhook-deliveries.service";
 import { WebhookEndpointsService } from "./webhook-endpoints.service";
 
 // The "receiver" is a fetch that records each request and answers with the
@@ -45,6 +46,7 @@ const endpoints = new WebhookEndpointsService(
   ),
   { policy, now: () => clock, mint: mintWebhookSecret, log: () => {} },
 );
+const attempts = new WebhookDeliveriesService(mongo.db.webhookDeliveries);
 const A = new ObjectId().toHexString();
 const B = new ObjectId().toHexString();
 const disabled: DisabledEndpoint[] = [];
@@ -53,6 +55,7 @@ const deliveries: ReturnType<typeof createWebhookDelivery>[] = [];
 const makeDelivery = (retries: readonly string[] = ["10ms"]) => {
   const delivery = createWebhookDelivery({
     endpoints,
+    deliveries: attempts,
     fetch: guardedFetch(policy, receiver),
     queue: createMemoryWebhookQueue(),
     retries: retries as never,
@@ -73,6 +76,7 @@ afterEach(async () => {
   disabled.length = 0;
   clock = new Date();
   await mongo.db.webhookEndpoints.raw.deleteMany({});
+  await mongo.db.webhookDeliveries.raw.deleteMany({});
 });
 
 const until = async (done: () => boolean | Promise<boolean>) => {
@@ -220,6 +224,63 @@ describe("failures", () => {
     await delivery.relay(created(A));
     await Bun.sleep(150);
     expect(received.length).toBe(sent);
+  });
+
+  test("each attempt is logged: a 500 then a 200, with its status, rank and no body", async () => {
+    const { endpoint } = await endpoints.create(
+      A,
+      { url: "https://hooks.example.com/in" },
+      2,
+    );
+    const id = endpoint._id.toHexString();
+    statuses = [500, 200];
+    const delivery = makeDelivery(["10ms"]);
+    const event = created(A);
+    await delivery.relay(event);
+    await until(async () => (await attempts.list(A, id)).length === 2);
+    const [second, first] = await attempts.list(A, id);
+    expect(first).toMatchObject({
+      attempt: 1,
+      status: 500,
+      delivered: false,
+      willRetry: true,
+      eventId: event.event.id,
+      type: "user.created",
+    });
+    expect(second).toMatchObject({
+      attempt: 2,
+      status: 200,
+      delivered: true,
+      willRetry: false,
+    });
+    expect(second?.durationMs).toBeGreaterThanOrEqual(0);
+    const stored = JSON.stringify(
+      await mongo.db.webhookDeliveries.raw.find({}).toArray(),
+    );
+    expect(stored).not.toContain("hooks.example.com");
+    expect(await attempts.list(B, id)).toEqual([]);
+  });
+
+  test("a failed log write never stops the delivery", async () => {
+    await endpoints.create(A, { url: "https://hooks.example.com/in" }, 2);
+    const broken = {
+      record: async () => {
+        throw new Error("down");
+      },
+    } as unknown as WebhookDeliveriesService;
+    const delivery = createWebhookDelivery({
+      endpoints,
+      deliveries: broken,
+      fetch: guardedFetch(policy, receiver),
+      queue: createMemoryWebhookQueue(),
+      retries: [],
+      poll: "10ms" as never,
+      onDisabled: async () => {},
+      log: () => {},
+    });
+    deliveries.push(delivery);
+    await delivery.relay(created(A));
+    await until(() => received.length === 1);
   });
 
   test("a delivered attempt ends the run of given-up deliveries", async () => {

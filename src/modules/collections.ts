@@ -15,4 +15,5 @@ export { scopes } from "./resources/scopes.model";
 export { roleAssignments, roles } from "./roles/roles.model";
 export { tenants } from "./tenants/tenants.model";
 export { usageCounters } from "./usage/usage.model";
+export { webhookDeliveries } from "./webhooks/webhook-deliveries.model";
 export { webhookEndpoints } from "./webhooks/webhook-endpoints.model";
