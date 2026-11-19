@@ -10,7 +10,6 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { requireLive } from "@/tenancy/live";
-import type { TenantJanus } from "@/users/tenant-janus";
 
 /** How long a session counts as freshly confirmed for the writes of the factor. */
 const FRESH_WITHIN = "10m" as const;
@@ -21,35 +20,26 @@ export const secondFactorDisabled = () =>
     extensions: { code: "SECOND_FACTOR_DISABLED", http: { status: 403 } },
   });
 
-// janus-graphql binds `secondFactorResolvers` to one instance, and a tenant's
-// instance is built per tenant version: one resolver map per instance, made
-// when it is first asked for and dropped with it.
-const bound = new WeakMap<TenantJanus, SecondFactorResolvers>();
+// `auth` is a function of the context: janus-graphql asks it on every field for
+// the instance of the tenant that serves the request (nxgt-janus#914).
+const resolvers: SecondFactorResolvers = secondFactorResolvers({
+  auth: async (ctx) => {
+    const auth = await janusIssuers.forRequest((ctx as Context).request);
+    if (auth === null) throw denial("NOT_FOUND", "No such tenant");
+    return auth;
+  },
+  freshWithin: FRESH_WITHIN,
+  guard: async (action, _user, ctx) => {
+    if (action !== "enroll" && action !== "activate") return;
+    const tenant = await (ctx as Context).tenant();
+    if (tenant === null || !tenant.signIn.mfa.totp) {
+      throw secondFactorDisabled();
+    }
+  },
+});
 
-function resolversOf(auth: TenantJanus): SecondFactorResolvers {
-  let found = bound.get(auth);
-  if (found === undefined) {
-    found = secondFactorResolvers({
-      auth,
-      freshWithin: FRESH_WITHIN,
-      guard: async (action, _user, ctx) => {
-        if (action !== "enroll" && action !== "activate") return;
-        const tenant = await (ctx as Context).tenant();
-        if (tenant === null || !tenant.signIn.mfa.totp) {
-          throw secondFactorDisabled();
-        }
-      },
-    });
-    bound.set(auth, found);
-  }
-  return found;
-}
-
-async function janusOf(ctx: Context) {
-  const auth = await janusIssuers.forRequest(ctx.request);
-  if (auth === null) throw denial("NOT_FOUND", "No such tenant");
-  return resolversOf(auth);
-}
+// The resolver map is bound once; the tenant is resolved per request.
+const janusOf = async (_ctx: Context) => resolvers;
 
 const iso = (value: string) => new Date(value);
 
