@@ -44,12 +44,13 @@ export async function requireNoSsoForUser(
 export type OpenedSession = { id: string } | { since: Date };
 
 /**
- * A sign-in that already opened a session (a passkey, a code, a link, which
+ * A sign-in that already opened a session (a code, a link, a second-factor answer, which
  * know the user only once they are done): for a user who must use single
  * sign-on the session it opened is revoked before the refusal, so it is dead
  * on the server. A code or a link sets its cookie after this check, so none
- * is sent; janus-graphql's passkey sign-in queues its own cookie, which then
- * names a revoked session.
+ * is sent; janus-graphql's second-factor answer queues its own cookie, which then
+ * names a revoked session. The passkey sign-in no longer comes here: its
+ * `signInGuard` refuses before any session exists.
  */
 export async function revokeIfSso(
   auth: TenantJanus,

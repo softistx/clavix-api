@@ -4,7 +4,7 @@ import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
-import { revokeIfSso } from "@/modules/connections/sso-gate";
+import { requireNoSsoForUser } from "@/modules/connections/sso-gate";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import {
@@ -31,7 +31,18 @@ async function authOf(ctx: Context) {
   return auth;
 }
 
-const janusPasskeys = passkeyResolvers({ auth: authOf, firstFactor: true });
+// D3: `signInGuard` runs once the assertion verified and before any session,
+// token or cookie exists: a user who must use single sign-on is refused with
+// nothing to revoke.
+const janusPasskeys = passkeyResolvers({
+  auth: authOf,
+  firstFactor: true,
+  signInGuard: async (user, ctx) => {
+    const [auth, tenant] = await Promise.all([authOf(ctx), ctx.tenant()]);
+    if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+    await requireNoSsoForUser(auth, tenant.tenantId, user.id);
+  },
+});
 const signInOptions = janusPasskeys.Query.passkeySignInOptions;
 const passkeySignIn = janusPasskeys.Mutation.passkeySignIn;
 
@@ -63,19 +74,16 @@ export const passkeys: Resolvers = {
       requireLive(tenant);
       requireMethod(tenant, "passkey");
       const auth = await authOf(ctx);
-      const since = new Date();
       const signedIn = await recordingSignIn(
         ctx,
         tenant.tenantId,
         "passkey",
         async () => {
-          const done = await asPasskeyInvalid(() =>
+          // D3: the sign-in guard refuses a user who must use single sign-on
+          // before any session or cookie exists; the attempt is a failure.
+          return asPasskeyInvalid(() =>
             passkeySignIn(_, { challenge, assertion: response }, ctx),
           );
-          // D3: the user is known only now; a user who must use single
-          // sign-on loses the session this opened, and the attempt is a failure.
-          await revokeIfSso(auth, tenant.tenantId, done.userId, { since });
-          return done;
         },
         (done) => done.userId,
       );

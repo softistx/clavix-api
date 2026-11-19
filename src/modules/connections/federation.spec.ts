@@ -226,6 +226,14 @@ const activeSessions = async (userId: string) =>
     )?.sessions.list(userId)
   )?.filter((s) => s.revokedAt === null).length ?? 0;
 
+/** Every session of the user, revoked ones included. */
+const sessionsOf = async (userId: string) =>
+  (
+    await (
+      await janusIssuers.forRequest(new Request(url("fedacme")))
+    )?.sessions.list(userId)
+  )?.length ?? 0;
+
 beforeAll(async () => {
   acme = (await createTenantParOff(tenants, { slug: "fedacme", name: "Acme" }))
     .id;
@@ -680,7 +688,7 @@ describe("single sign-on required: the other doors (D3)", () => {
     await policies.updateMfa(acme, { totp: false });
   });
 
-  test("a passkey sign-in is refused, and the cookie it queued names no live session", async () => {
+  test("a passkey sign-in is refused by the sign-in guard: no cookie and no session", async () => {
     await connectionsService.update(acme, "acme", { requireSso: false });
     const { id, cookie } = await userWithSession("pam@acme.test");
     const tenant = await tenantResolver.resolveHost(
@@ -721,16 +729,17 @@ describe("single sign-on required: the other doors (D3)", () => {
     };
     const response = await authenticator.assert(ceremony as Ceremony);
     const live = await activeSessions(id);
+    const total = await sessionsOf(id);
     const refused = await gql("fedacme", PASSKEY, {
       c: issued.challenge,
       r: JSON.stringify(response),
     });
     expect(codeOf(refused)).toBe("SSO_REQUIRED");
-    // The session the passkey opened is revoked: no live session was added,
-    // and a cookie the response still carries opens nothing.
+    // janus-graphql's `signInGuard` throws before any session, token or
+    // cookie exists: nothing was opened, so nothing was revoked.
+    expect(refused.data?.["signInWithPasskey"] ?? null).toBeNull();
+    expect(cookieOf(refused)).toBe("");
     expect(await activeSessions(id)).toBe(live);
-    expect(cookieOf(refused)).not.toBe("");
-    const me = await gql("fedacme", ME, {}, cookieOf(refused));
-    expect(me.data?.["currentUser"] ?? null).toBeNull();
+    expect(await sessionsOf(id)).toBe(total);
   });
 });
