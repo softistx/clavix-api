@@ -108,8 +108,8 @@ and the preset's own page,
 [`docs/guide/oidc-step-up.md`](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus-social/docs/guide/oidc-step-up.md).
 The preset asks for `openid email profile`. The identity it hands janus is `accountId` = the
 ID token's `sub`, `email`, `emailVerified`, `name`, `picture`. Its optional `acrValues` and
-`maxAge` need MFA and step-up on the tenant, which are **not built** yet (see the [roadmap](../roadmap.md)): leave
-them out for now.
+`maxAge` need MFA and step-up on the tenant, which are in progress (see the [roadmap](../roadmap.md)): leave
+them out until they ship.
 
 The app keeps its own janus session cookie after `complete` answers `signedIn`.
 
