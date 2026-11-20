@@ -786,6 +786,73 @@ tenant-owned collections), so do not restore a backup into production just to re
 tenant. In the scratch database of the drill, check that a tenant in the trash (`deletedAt` set) is
 listed with its `purgeAt`, and that the `tenant-purge` queue still ticks at 03:17 UTC.
 
+### Full drill on a fresh host (v1 gate G3)
+
+The drill above restores into a scratch database. The v1 gate also rehearses the whole
+recovery: a new host, a restore, the API on it, then a master-key rotation. It ran on a
+throwaway stack on 2026-11-20 (MongoDB 8 as a one-node replica set without authentication,
+Redis 7, the `deploy/tools.Dockerfile` image, the API from the repository) over a database of
+29 documents in 34 collections: the `clavix` tenant plus one tenant with a client, a verified
+user, a webhook endpoint and a Google social provider.
+1. **Seed.** `bun run db:sync`, `bun run db:migrate` (with `CLAVIX_PUBLIC_SCHEME=https`),
+   `bun run tenants:create --slug drill --name Drill`,
+   `bun run clients:create --tenant drill --name Machine --client-id machine --confidential --redirect-uri http://localhost:9/cb`,
+   then, from a throwaway script on the app's wiring: `webhookEndpoints.create(tenantId, {url, types: [], description}, null)`,
+   `signInPolicyService.setSocial(tenantId, {provider: "google", clientId, clientSecret, enabled: true})`,
+   and on the tenant's janus instance `auth.create({email})` then `auth.verifyEmail.confirm(...)`. Sign a
+   token with the tenant's current signing key (`signingKeysFor(tenantId).findCurrentKey`) and keep the JWKS.
+2. **Back up**, the same job as "Backup" (here by hand, on the stack's network):
+   `docker run --rm --network <net> -e MONGO_URI=mongodb://mongo:27017/clavix?directConnection=true -v $PWD/backups:/backups --entrypoint bun <tools-image> /scripts/mongo-backup.js /backups`.
+   It runs against the live database.
+3. **Lose the host**: stop the API, remove MongoDB and Redis. Start a fresh MongoDB
+   (`mongo:8 --replSet rs0`, then `rs.initiate`) and an empty Redis.
+4. **Restore**, the same job as "Restore" (`dc stop api ui` first, `dc up -d api ui` after):
+   `docker run --rm ... -e CONFIRM=yes -e MONGO_URI=<fresh uri> ... /scripts/mongo-restore.js /backups/<archive>`,
+   then `bun run db:sync` (do not skip it) and start the API.
+5. **Check**: `/readyz` is `ok` with the empty Redis, the discovery document is served, `/jwks.json`
+   is byte for byte the one from before (same `kid`), the token signed before the loss verifies against
+   it, and the collection counts equal those taken before the backup. A `POST /token` with a wrong
+   client secret answers `invalid_client`; with the right secret and a made-up refresh token it answers
+   `invalid_grant`, which shows the client's secret still verifies.
+6. **Rotate the master key** on the restored database (see "Rotating the master key"):
+   `CLAVIX_KEYS_MASTER_KEY=<new>,<old>` then `keys:reseal` (exit 0, `oldKeyNeededBy: []`: the signing keys
+   of the 2 tenants, 1 webhook secret and 1 social secret sealed again), then the API on `<new>` alone:
+   the JWKS and the old token are unchanged, a token is signed with the new key only, and the webhook
+   secret and the social client secret open (the social secret's `kid` changed). The old key alone
+   no longer opens the webhook secret (`webhooks: a secret of endpoint <id> could not be opened`).
+
+| Step                                              | Time  |
+| ------------------------------------------------- | ----- |
+| Build of the tools image (layers cached)          | 11 s  |
+| Backup (`mongodump --gzip`, 11 KB archive)        | < 1 s |
+| Fresh MongoDB, replica set initiated, empty Redis | 5 s   |
+| Restore (checksum, `mongorestore --drop`)         | 1 s   |
+| `db:sync` and API ready on the restore            | 6 s   |
+| `keys:reseal`                                     | 1 s   |
+
+**RPO: 24 hours** (nightly backup plus the off-host copy; a write between two backups is lost, see
+"Point-in-time recovery"). **RTO: 4 hours is the target** (an owner objective, D27); the recovery path
+measured about 12 s from a stopped host to a serving API (fresh MongoDB, restore, `db:sync`, API ready),
+about 25 s for the whole drill with the image build and the reseal, on a small database. The time grows
+with the dump (restore and index builds) and the archive fetch from the bucket; the 4 hours leave room
+for what the drill does not measure: provisioning the host, DNS, pulling the images and fetching the
+master key from the secret manager. Redis is not backed up and is lost with the host: the restored API
+starts on an empty Redis (cold cache, rate-limit counters at zero, the month's active-user counts reset)
+and loses the queued jobs, the pending webhook deliveries among them.
+
+What the drill showed about the setup:
+- The restored database opens only with the same master key, or a keyring that holds it ("Backup").
+  `restore` refuses an archive without its `.sha256`, and takes the target database from `MONGO_URI`.
+- The OAuth server accepts an `http:` issuer only on exactly `localhost`, so a local stack with tenant
+  subdomains needs an `https` front for `<slug>.<domain>` (a self-signed proxy to the API port, with
+  `CLAVIX_PUBLIC_SCHEME=https`, `CLAVIX_PUBLIC_PORT` the proxy's port, and, for development only,
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` for the API's own requests). `db:migrate` also needs
+  `CLAVIX_PUBLIC_SCHEME=https`: the console client's redirect URI must be https.
+- The backup is taken against the live database: no stop is needed.
+- The drill does not exercise a `client_credentials` token: Clavix does not offer that grant
+  (`grant_types_supported` lists `authorization_code`, `refresh_token`, the device and the token-exchange
+  grants), so the token checked after the restore is one signed with the tenant's key.
+
 ## Signing keys
 
 Each tenant's ES256 keys rotate by themselves: a key signs for 90 days, the next

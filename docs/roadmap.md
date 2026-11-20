@@ -83,8 +83,8 @@ nxgt-janus release says which.
   telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans, [#23](https://github.com/softistx/clavix-api/issues/23)).
 
 **Before v1**
-- A security review of the whole surface, a load test of the token and
-  JWKS paths, and a restore drill.
+- A security review of the whole surface and a load test of the token and
+  JWKS paths (the restore drill is done: see "Restore drill" in operations.md).
 
 **Authorization authoring**
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary

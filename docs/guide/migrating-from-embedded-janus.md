@@ -234,7 +234,7 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
    which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
-5. **Per-client grants and `client_credentials`** are not available (janus-oauth enforces a client's
-   grant types, which Clavix limits to code and refresh, and has no `client_credentials`), so a back end calling the API as itself cannot yet use a Clavix
-   token.
+5. **`client_credentials` is not available**: a client's grants are set per client (`--grants`: code,
+   refresh, device, token exchange), but Clavix offers no `client_credentials`, so a back end calling
+   the API as itself cannot yet use a Clavix token.
 6. **`@softistx/janus-social` is on npmjs** (public): `bun install` needs no token.
