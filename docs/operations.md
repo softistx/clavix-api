@@ -504,7 +504,7 @@ taken in step 2 (below).
 
 ## Staging
 
-Staging runs on the shared VPS behind its traefik (the `proxy` network of nxgt-docker),
+Staging runs on the shared VPS behind its Traefik v3 (the `proxy` network of nxgt-docker),
 not behind Caddy. `deploy/compose.traefik.yml` is an overlay of `compose.yml`; `deploy/deploy.ts`
 drives both.
 
@@ -537,8 +537,8 @@ bun deploy/deploy.ts
 
 In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
-`NPM_REGISTRY_TOKEN` (or export it; the ui image build still reads it, as clavix-ui's `Dockerfile` mounts it, unlike the api's, so it is required here; the builds take it as a build secret and the api container does not receive it). The script refuses to run when the file is missing, readable by
-others (not mode 600) or incomplete (the keys of "First boot", step 3; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
+no registry token (the `@softistx` packages come from public npmjs). The script refuses to run when the file is missing, readable by
+others (not mode 600 or 400) or incomplete (the keys of "First boot", step 3; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
 
 One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
 and ui images on the host (no registry), starts `mongo` and `redis`, runs `db:sync` and `db:migrate`
@@ -554,7 +554,7 @@ follow "First boot", steps 5 and 6, then run it again.
 To check the merged files without deploying:
 
 ```sh
-NPM_REGISTRY_TOKEN=x CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' docker compose \
+CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' docker compose \
   -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env config -q
 ```
 
@@ -562,7 +562,7 @@ NPM_REGISTRY_TOKEN=x CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' dock
 
 The `backup` and `restore` tools (profile `tools`) work as in "Backup" and "Restore", with both files in the
 alias: `dc='docker compose -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env'`
-(and `CLAVIX_DOMAIN_RE` and `NPM_REGISTRY_TOKEN` exported as above). To restore, follow "Restore" (stop `api ui`, restore, start
+(and `CLAVIX_DOMAIN_RE` exported as above). To restore, follow "Restore" (stop `api ui`, restore, start
 them) and "Off-host copies" for `offsite:latest`.
 
 ## Backup

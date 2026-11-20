@@ -120,19 +120,6 @@ export function composeEnv(
   return { ...env, ...derived };
 }
 
-/**
- * The read token of the @softistx packages, handed to BuildKit as a secret:
- * the env file's NPM_REGISTRY_TOKEN, else the shell's. Undefined when none.
- */
-export function npmToken(
-  shell: Record<string, string | undefined>,
-  values: Record<string, string>,
-): string | undefined {
-  return (
-    values["NPM_REGISTRY_TOKEN"] || shell["NPM_REGISTRY_TOKEN"] || undefined
-  );
-}
-
 /** The UI checkout the image is built from, as an absolute path. */
 export function uiContext(values: Record<string, string>): string {
   const ctx = values["CLAVIX_UI_CONTEXT"] || "../../clavix-ui";
@@ -185,8 +172,6 @@ export async function loadStack(): Promise<Stack> {
   const derived: Record<string, string> = {
     CLAVIX_DOMAIN_RE: domainRegex(values["CLAVIX_DOMAIN"] as string),
   };
-  const token = npmToken(process.env, values);
-  if (token !== undefined) derived["NPM_REGISTRY_TOKEN"] = token;
   const env = composeEnv(process.env, values, derived);
   const files = [
     "-f",

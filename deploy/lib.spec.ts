@@ -9,7 +9,6 @@ import {
   envFileProblem,
   envProblems,
   imageRepository,
-  npmToken,
   parseEnv,
   staleImageIds,
   uiContext,
@@ -121,16 +120,6 @@ describe("composeEnv", () => {
       { CLAVIX_DOMAIN_RE: "^x$" },
     );
     expect(env).toEqual({ PATH: "/bin", CLAVIX_DOMAIN_RE: "^x$" });
-  });
-});
-
-describe("npmToken", () => {
-  test("the env file wins over the shell, none gives undefined", () => {
-    expect(
-      npmToken({ NPM_REGISTRY_TOKEN: "s" }, { NPM_REGISTRY_TOKEN: "f" }),
-    ).toBe("f");
-    expect(npmToken({ NPM_REGISTRY_TOKEN: "s" }, {})).toBe("s");
-    expect(npmToken({}, {})).toBeUndefined();
   });
 });
 

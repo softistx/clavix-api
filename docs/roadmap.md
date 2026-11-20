@@ -43,7 +43,7 @@ nxgt-janus release says which.
   app ([#20](https://github.com/softistx/clavix-api/issues/20)).
   When this moves to Shipped, update the step-up sentence of `guide/migrating-from-embedded-janus.md` in the same change.
 
-- **Staging at v1** — Clavix runs on the shared VPS behind its traefik, as the sibling apps do: one
+- **Staging at v1** — Clavix runs on the shared VPS behind its Traefik v3, as the sibling apps do: one
   command (`bun deploy/deploy.ts`) pulls, builds the images on the host, migrates, starts the stack,
   waits for health and cleans the replaced images and the old build cache. Tenants are served at
   `<slug>.clavix.softistx.com` with one wildcard certificate; custom domains stay off in staging

@@ -62,11 +62,6 @@ if (args.includes("--no-pull")) {
   }
 }
 
-if (!stack.values["NPM_REGISTRY_TOKEN"] && !process.env["NPM_REGISTRY_TOKEN"])
-  fail(
-    "no NPM_REGISTRY_TOKEN: the image builds install the @softistx packages with it (a build secret). Export it, or set it in deploy/.env",
-  );
-
 const imageId = async (image: string): Promise<string> =>
   (await $`docker image inspect --format {{.Id}} ${image}`.quiet().nothrow())
     .text()
