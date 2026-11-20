@@ -14,6 +14,7 @@ import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant } from "../catalog-support";
 import { tenantArg } from "../ids";
+import { issuerFor } from "../sign-in-methods";
 import { refusal } from "../tenants/errors";
 
 const view = onTenant("view", tenantArg);
@@ -103,8 +104,13 @@ const TRUST_IN = {
 const AUTH = { post: "POST", basic: "BASIC" } as const;
 const AUTH_IN = { POST: "post", BASIC: "basic" } as const;
 
-const shape = (doc: ConnectionDoc) => ({
+/** Where the identity provider sends the visitor back: this connection's own callback on the tenant's issuer host, the URI the admin registers there. */
+const redirectUriOf = (issuer: string, connectionId: string) =>
+  `${issuer}/sign-in/social/${connectionId}/callback`;
+
+const shape = (doc: ConnectionDoc, issuer: string) => ({
   id: doc.connectionId,
+  redirectUri: redirectUriOf(issuer, doc.connectionId),
   name: doc.name,
   issuer: doc.issuer,
   clientId: doc.clientId,
@@ -158,12 +164,15 @@ export const connectionsModule: Resolvers = {
   Query: {
     connections: async (_, { tenantId }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      return (await connections.list(tenant._id.toHexString())).map(shape);
+      const issuer = await issuerFor(tenant);
+      return (await connections.list(tenant._id.toHexString())).map((doc) =>
+        shape(doc, issuer),
+      );
     },
     connection: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const found = await connections.find(tenant._id.toHexString(), id);
-      return found === undefined ? null : shape(found);
+      return found === undefined ? null : shape(found, await issuerFor(tenant));
     },
     checkConnection: async (_, { tenantId, input }, ctx) => {
       await catalogTenant(ctx, tenantId);
@@ -222,7 +231,7 @@ export const connectionsModule: Resolvers = {
         "connection.create",
         target(tenant._id, created.connectionId),
       );
-      return shape(created);
+      return shape(created, await issuerFor(tenant));
     },
     updateConnection: async (_, { tenantId, id, input }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -263,7 +272,7 @@ export const connectionsModule: Resolvers = {
         ),
       );
       await ctx.audit("connection.update", target(tenant._id, id));
-      return shape(updated);
+      return shape(updated, await issuerFor(tenant));
     },
     setConnectionSecret: async (_, { tenantId, id, clientSecret }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -273,7 +282,7 @@ export const connectionsModule: Resolvers = {
         ),
       );
       await ctx.audit("connection.setSecret", target(tenant._id, id));
-      return shape(updated);
+      return shape(updated, await issuerFor(tenant));
     },
     deleteConnection: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -292,7 +301,7 @@ export const connectionsModule: Resolvers = {
         ),
       );
       await ctx.audit("connection.addDomain", target(tenant._id, id));
-      return shape(updated);
+      return shape(updated, await issuerFor(tenant));
     },
     verifyConnectionDomain: async (_, { tenantId, id, domain }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -303,7 +312,7 @@ export const connectionsModule: Resolvers = {
       );
       await ctx.audit("connection.verifyDomain", target(tenant._id, id));
       return {
-        connection: shape(checked.connection),
+        connection: shape(checked.connection, await issuerFor(tenant)),
         verified: checked.verified,
       };
     },
@@ -315,7 +324,7 @@ export const connectionsModule: Resolvers = {
         ),
       );
       await ctx.audit("connection.removeDomain", target(tenant._id, id));
-      return shape(updated);
+      return shape(updated, await issuerFor(tenant));
     },
   },
 };

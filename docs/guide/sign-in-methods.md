@@ -67,7 +67,7 @@ mutation ($tenantId: ID!) {
 ### Bring an enterprise connection
 
 An enterprise OIDC connection has its own redirect URI, built from its id:
-`https://<tenant host>/sign-in/social/<connection id>/callback`. Register that URL, and only that one, with the
+`https://<tenant host>/sign-in/social/<connection id>/callback`, which the console returns as `Connection.redirectUri`. Register that URL, and only that one, with the
 customer's identity provider. The sign-in refuses a callback received on another connection's URL.
 
 ### Bring a social app

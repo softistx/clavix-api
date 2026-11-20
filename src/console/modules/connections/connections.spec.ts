@@ -14,7 +14,7 @@ let tenantA = "";
 let tenantB = "";
 
 const SECRET = "s3cr3t-never-returned";
-const FIELDS = `id name issuer clientId emailTrust requireSso jit showButton enabled revision
+const FIELDS = `id name redirectUri issuer clientId emailTrust requireSso jit showButton enabled revision
   domains { domain txtName txtToken verified } claims { email } upstreamMfa { acr }`;
 const CREATE = `mutation($tenantId: ID!, $input: CreateConnectionInput!) {
   createConnection(tenantId: $tenantId, input: $input) { ${FIELDS} }
@@ -37,6 +37,11 @@ const ONE = `query($tenantId: ID!, $id: ID!) { connection(tenantId: $tenantId, i
 const CHECK = `query($tenantId: ID!, $input: CheckConnectionInput!) {
   checkConnection(tenantId: $tenantId, input: $input) { issuer authorizationEndpoint }
 }`;
+
+// The tenant's sign-in host, the connection's own callback path.
+const REDIRECT = expect.stringMatching(
+  /^https?:\/\/cn-a\..+\/sign-in\/social\/acme\/callback$/,
+);
 
 const base = (over: Record<string, unknown> = {}) => ({
   id: "acme",
@@ -70,6 +75,7 @@ describe("createConnection", () => {
     expect(result.errors).toBeUndefined();
     expect(result.data?.["createConnection"]).toMatchObject({
       id: "acme",
+      redirectUri: REDIRECT,
       emailTrust: "CLAIM_AND_DOMAIN",
       requireSso: true,
       jit: true,
@@ -79,6 +85,10 @@ describe("createConnection", () => {
       domains: [],
     });
     const list = await admin(LIST, { tenantId: tenantA });
+    const one = await admin(ONE, { tenantId: tenantA, id: "acme" });
+    const redirectUri = REDIRECT;
+    expect(list.data?.["connections"]).toMatchObject([{ redirectUri }]);
+    expect(one.data?.["connection"]).toMatchObject({ redirectUri });
     expect(JSON.stringify(list)).not.toContain(SECRET);
     expect(JSON.stringify(result)).not.toContain(SECRET);
     // The sealed value sits in the store, not the clear secret.
