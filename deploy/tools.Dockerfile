@@ -3,13 +3,11 @@
 # the Bun runtime, and scripts/mongo-backup.ts and mongo-restore.ts bundled with
 # their dependencies (@softistx/s3 for the off-host copy), so nothing is
 # installed at run time. The build context is the repository root
-# (deploy/compose.yml); @softistx packages come from npm.softistx.com: the
-# token is a build secret, it never lands in a layer.
+# (deploy/compose.yml); @softistx packages come from npmjs (public): no token.
 FROM oven/bun:1.4.4 AS bundle
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
-RUN --mount=type=secret,id=npm_registry_token \
-    NPM_REGISTRY_TOKEN="$(cat /run/secrets/npm_registry_token)" bun install --frozen-lockfile --production --ignore-scripts
+RUN bun install --frozen-lockfile --production --ignore-scripts
 COPY scripts ./scripts
 RUN bun build scripts/mongo-backup.ts scripts/mongo-restore.ts --target=bun --outdir=/out
 

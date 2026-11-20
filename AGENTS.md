@@ -29,7 +29,8 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `.claude/settings.json`); healthix-api is the worked example this skeleton was cut from.
 - Layout: `src/modules/<name>/` holds a module's `*.graphqls`, resolvers and services,
   merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
-  `src/config/` reads the environment once (`defineEnv`); `src/cli/` holds what the scripts share
+  `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
+  introspection (`src/http/introspection.ts`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/cli/` holds what the scripts share
   (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below); generated code is in
   `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
@@ -37,12 +38,24 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
-  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
+  db:sync` also syncs the OAuth collections (the clients `source` index of `countClients`, which counts the quota's clients in `src/config/usage.ts`) (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
 - Split by responsibility: no file that holds several roles.
 - Commits and PR titles follow Conventional Commits (`type(scope): description`).
+
+## Telemetry (`src/telemetry/`, `src/config/telemetry.ts`, D24)
+
+`buildTelemetry` makes the app's `@softistx/telemetry` (OTLP/HTTP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, no exporter
+otherwise; `ratioSampler(0.1)` in production), `config/telemetry.ts` installs it, and `createBase` (`http/context.ts`) gives
+`@alxia/telemetry` to `use` first, with `createApp({ telemetry })` to swap it in a spec. A second middleware resolves the tenant
+(the memoised `ctx.tenant()`) and runs the rest under `withAttributes` of `clavix.tenant.id` and `clavix.tenant.plan` (`ResolvedTenant.plan`,
+`telemetry/tenant.ts`); `/healthz`, `/readyz` and `/internal/*` are neither traced nor resolved. `buildTenantJanus` returns
+`instrumentJanus(...)`; `createClavixOAuthIssuers` passes `instrument` (`instrumentOAuth`, tenant attributes via `tenantAttributes`; spec `src/oauth/telemetry.spec.ts`); the MongoDB command spans (`instrumentDatabase`, `server.ts`) need `monitorCommands`, set in `db.ts` only
+with an endpoint. **Never written:** tokens, codes, secrets, e-mails, logins, IPs: `createBase` passes `clientAddress: false`
+to `@alxia/telemetry` (>= 0.9.0), so the server span leaves `client.address` off. A new attribute is
+added to `tenantAttributes` or to the span that owns it, never from a request body. Spec: `telemetry/telemetry.spec.ts`.
 
 ## Console pages carry `totalCount: Int!`
 
@@ -111,6 +124,7 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 - **Every write goes through `OAuthPolicyService`** (over `TenantsService.updateOAuth`, optimistic lock, no write when nothing changes, `version` bump), modelled on `SignInPolicyService`. The `clavix` tenant accepts `par.required` / `dpop.required` like any tenant (the 409 guard is lifted, #233): migration `2026-11-17-console-par-dpop` sets both on the tenant and marks the `console` client `requirePar` + `dpopBound` (idempotent, version bumped only on a change; its `down` relaxes them). The console (clavix-ui#228) pushes (PAR) and proves (DPoP ES256), so **deploy clavix-ui first or together**: an older console is locked out once the migration has run. `test/setup.ts` relaxes the platform tenant after the migrations, so the specs keep minting plain tokens; `console.spec.ts` sets `dpop.required` itself and restores it.
 - `TenantsService.create` writes `par.required: true` for a new tenant (not the platform one); migration `2026-11-16-oauth-policy` writes an explicit `false` on the existing ones (`db:sync` first). Specs that authorize directly on a tenant made by `createFlow().setUp` get PAR turned off there (`{ par: true }` keeps it).
 - **Device grant** (`deviceAuthorization: { verificationUri: \`${issuer}/device\` }`in`building.ts`for every tenant;`/device_authorization`is in`OAUTH_PATHS`, `REFUSED_PATHS`and the Caddyfile`@api`matcher). It is never implied: a client lists`DEVICE_GRANT`in`grantTypes`. `registerClient`requires redirect URIs only when the grants include`authorization_code` (`usesRedirect`); default grants are `DEFAULT_GRANTS`, not `OFFERED_GRANTS`. The verification page's operations are janus's `oauthResolvers` (`modules/consent/index.ts`) with `beforeUserCodeLookup`=`deviceThrottle` (`modules/consent/device-throttle.ts`, `CLAVIX_DEVICE_*`, on the shared `createUserThrottle`of`http/throttle/core.ts`). The hook runs before the store is read, so it counts every lookup, not only misses. The device approve guard looks the code up first, so it runs the hook itself and marks the call (`counted`) so janus's hook does not count it twice. Specs that call `/authorize`on a new tenant use`createTenantParOff`.
+- **Client credentials grant** (#362): opt-in at three levels. A resource sets `allowClientCredentials` (`Resource` model, `storedResourcesFor` gives janus `clientCredentials: true`, `updateResource` in the console, refused on the console's own resource by `refuseMachineConsole`); `building.ts` turns the server option on for a tenant only when one of its resources opted in (`fingerprintOf` adds `cc` so the cached issuer rebuilds); a client lists `CLIENT_CREDENTIALS_GRANT`, is confidential and has `allowedScopes` (the ceiling janus enforces; `defaultScopes` optional), judged by `registerClient`/`validate.ts`. The `accessTokens.claims` hook skips `roles` for `subjectType: "client"`. Only the token endpoint accepts a client token: the console's `authenticateRequest` never passes `clientCredentials`, userinfo answers 401, and no other endpoint reads a bearer principal. `OAuthPrincipal` is a union (`kind`/`subjectType`); the console uses `OAuthUserPrincipal`. Revoking does not cut a client off: delete it, drop the grant or rotate the secret. Spec: `src/oauth/client-credentials.spec.ts`; guide: `docs/guide/client-credentials.md`.
 - **Token exchange** (`tokenExchange: { policy: exchangePolicy(...) }` in `building.ts`, every tenant; `exchangePolicy` is in `src/oauth/token-exchange.ts`): the policy reads the client's rules through the `ExchangeRulesFor` port (`src/oauth/ports.ts`, stored by `src/config/client-policies.ts`, collection `clientPolicies`, tenant-owned) and answers `delegation` or `null` (`access_denied`); with no port, always `null`. Rules: `targetResources` and `subjectClients | "any"`. A client lists `TOKEN_EXCHANGE_GRANT` and is confidential (`registerClient`, `ClientsService.setTokenExchange`, which checks the input with `validateTokenExchange` in `src/modules/client-policies/validate.ts`); `ClientsService.delete` deletes its rules and removes the client from the other rules' `subjectClients` (`removeSubjectClient`); deleting a resource removes its URI from `targetResources` (`removeTarget`), both tenant-scoped.
 - **DPoP** (`dpop` in `building.ts`, every tenant): `algorithms ['ES256','EdDSA']`, `required: tenant.oauth.dpop.required`, `replay: createMongoDPoPReplayCache(oauthDb, { clock })` (Mongo, shared by instances, not Redis) and `nonce: { secret }`, the secret being `dpopNonceSecretOf(masterKeys)` (`src/config/keys.ts`: HKDF-SHA256 of the first master key, info `dpop-nonce`) passed to `createClavixOAuthIssuers({ dpopNonceSecret })` (required: specs pass a constant). The proof's `htu` is the issuer's public URL. New tenants start with `dpop.required: false` (`newTenantOAuthPolicy`). A client's `dpopBoundAccessTokens` goes through `registerClient` (`dpopBound`, CLI `--dpop-bound` / `--no-dpop-bound`, kept on a re-run) and `ClientsService`; `ClientView` carries it. The console (`src/console/auth.ts`) takes `Bearer` and `DPoP` through `server.authenticateRequest({ headers, method, url: publicUrl }, { resource })`, `publicUrl` being `https://console.<domain>/console/graphql` (`config/console.ts`); a refused DPoP request is a `ConsoleDPoPRefusal` that the plugin answers as `WWW-Authenticate: DPoP` plus `DPoP-Nonce`. Specs: `~/dpop` signs proofs (`createDpopKey`) and retries on `use_dpop_nonce` (`withNonce`). The console also refuses a delegated token (`principal.actor`, an RFC 8693 exchange) with a plain 401.
 - A client's own `requirePushedAuthorizationRequests` goes through `registerClient` (`requirePar`, CLI `--require-par`) and `ClientsService`; `ClientView` carries it.
@@ -122,14 +136,29 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 ## Users and sessions
 
 Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:
-- **One field, one schema**: `signIn: signInPolicySchema` (`sign-in.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (a later `mfa` block goes beside it) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
+- **One field, one schema**: `signIn: signInPolicySchema` (`sign-in.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (`mfa: { mode: passkeySufficient|required, totp }` goes beside it, with zod defaults so a cached tenant without it still parses: `totp` off, mode `passkeySufficient`) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
 - **Every write goes through `SignInPolicyService`** (`service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
 - **Gates**: `requireMethod(tenant, method)` (`gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked in the resolver before the throttle. Registering a passkey while signed in is not gated.
 - **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
+- **A social sign-in may replace an unverified holder (nxgt-janus #978)**. **Assumed, not answered**:
+  `social.unverifiedHolder` (`unverifiedHolderOf`, `tenant-janus.ts`) answers `'replace'` for the tenant's built-in
+  social apps (Google, GitHub, Microsoft: the static providers, which vouch for the addresses they hold) and
+  `'refuse'` for an enterprise connection (the tenant's own identity provider could vouch for an address it does
+  not control). janus asks only once the provider reported the e-mail verified, and never replaces a verified
+  user. A replaced user loses their credentials, links and sessions; `SocialSignedIn.replaced` says so, and the
+  sign-in log's `session.signIn` carries `reason: "replaced"`. Clavix revokes the replaced user's OAuth grants
+  and refresh tokens itself: `socialSignInComplete` calls `revokeOAuthGrants` (`modules/consent/revoke.ts`, janus-oauth
+  `grants.revokeAll`) when `replaced` is true, before anything else. janus does not repeat `replaced`, so a
+  failure must not be lost (clavix-api #353): `revokeOnReplace` (`modules/consent/revoke-job.ts`) puts a failed
+  revocation on the `grants-revoke` queue (`revoke.queue.ts`, `{ tenantId, userId }`, 8 attempts, backoff 1 min
+  doubling to 1 h, `grantsRevokeQueue` in `config/grants-revoke.ts`) and the sign-in succeeds once the job is
+  stored; the worker (`startGrantsRevoke`, started in `server.ts`, `createGrantsRevoke`) finds the tenant's
+  server by its issuer URL and repeats the idempotent `revokeAll`. With no Redis, or when the job cannot be
+  added, the original error fails the sign-in as before.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
 - **Console users** (`src/console/modules/users/`): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port (`janus-users.ts`), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `src/modules/auth/device.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.
-- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; re-wrapping is clavix-api#49).
+- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; `keys:reseal` wraps them again under the first).
 
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
@@ -146,7 +175,7 @@ partitioned: never use them for tenant users.
   `originOf` (`src/users/rp.ts`). A verified custom domain is a WebAuthn related origin of it
   (ADR-0036): `ResolvedTenant.relatedOrigins` (the same `relatedOriginsOf` list the well-known document
   serves) joins janus's `passkeys.origins`, and the janus issuer cache's version carries its digest, so
-  verifying or removing a domain rebuilds the instance. A passkey is scoped to its rpId for good.
+  verifying or removing a domain rebuilds the instance. A passkey is scoped to its rpId for good. The janus and OAuth issuer cache versions start with `tenantId`, so a tenant recreated under a purged slug never gets the old instance, bound to the old partition (#290).
 - **Sign-up** is the tenant's `signUp` flag (default `false`: closed, invitation only; `clavix` is
   closed). It rides in `ResolvedTenant`, so changing it bumps the `version` and rebuilds the janus.
   Invitations: `createMongoInvitations(db, { partition })`; accepting one is the hosted
@@ -213,7 +242,8 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
   its names, arguments and errors, so the janus refusals (`CREDENTIALS_INVALID`, `TOKEN_*`, a non-JSON
   response) are answered as one `PASSKEY_INVALID` 401 (`asPasskeyInvalid`; `STORE_FAILED` stays 503).
   Registration lets janus's errors through (`janusMasking`). Cookie as `verifySignInCode`.
-- No `secondFactor` is configured (no TOTP is offered). janus (0.55+) accepts
+- **TOTP second factor (M4 M1)**: every tenant's janus is built with `secondFactor` (`tenant-janus.ts`), so a user who holds a factor gets a challenge instead of a session. The sealing keys come from the keyring (`src/users/second-factor-keys.ts`: HKDF-SHA256 of each master key, info `second-factor`, key id = another 8 bytes of the same master key): the first key seals, every key opens, so a rotation of `CLAVIX_KEYS_MASTER_KEY` keeps TOTP working. `keys:reseal` seals the TOTP secrets again with janus's `secondFactor.reseal` (`src/keys/second-factor-reseal.ts`) and counts what is still under an older key (`secondFactor.behind` for secrets, `recoveryCodesBehind` for the recovery-code hashes, which cannot be re-hashed): keep the old key until `recoveryCodesBehind` is 0. `src/modules/mfa/` binds janus-graphql's `secondFactorResolvers` (bound once, `auth` a function of the context answering the request's tenant janus (nxgt-janus#914), `NOT_FOUND` for an unknown host, `freshWithin: '10m'`) behind our own SDL; its guard refuses `enroll` and `activate` with 403 `SECOND_FACTOR_DISABLED` when the policy's `mfa.totp` is off (a factor that exists is kept; disabling and new recovery codes stay allowed). The code, link and social completions answer a union (`SignInResult`, `SocialSignInResult`: the session or a `SecondFactorChallenge`), recorded as a sign-in only when a session opened; `confirmSecondFactor` / `recoverSecondFactor` record `session.signIn` by `totp` / `recoveryCode`, and `confirmSecondFactorWithPasskey` by `passkey` (janus-graphql's `passkeyResolvers().Mutation.confirmSecondFactorPasskey`, the same five attempts; clavix-api#293). `requestSecondFactorPasskeyOptions` re-reads the passkey options of a challenge: no attempt is counted, it shares `ctx.passkeyThrottle`, and runs `requireLive` then `requireMethod("passkey")`. A passkey sign-in stays `SignedIn` (a passkey is multi-factor). Console: `updateMfaPolicy` (`edit`, event `mfaPolicy.update`), `TenantUser.secondFactor`, `resetUserSecondFactor` (`edit`, event `user.resetSecondFactor`). `TenantUser.secondFactor` reads through a per-request DataLoader (`second-factor-loader.ts`, `ConsoleUsers.secondFactors`: one `findMany`, the recovery codes of the holders only); the users module resolvers are wrapped in `freshPerMutation`, so a field read after a reset sees the write.
+- janus (0.55+) accepts
   `http://<name>.localhost` origins, so a development tenant on http (`<slug>.clavix.localhost`) gets its
   real rpId and origin like any other: no http special case.
 - Specs use `softwareAuthenticator` from `@softistx/janus-passkeys/testing`.
@@ -232,8 +262,16 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 (a Yoga plugin added in `createApp` when `oauth.serverFor` exists) puts the issuers in the context, and
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
-`approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`) and passes no `amr`/`acr` (janus gap,
-not worked around). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
+`approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`). Step-up (M2): `beforeApprove` runs
+`assessment` (`authentication.ts`, over the pure `src/oauth/authentication-level.ts`) for the code and device flows and
+refuses with `UNMET_AUTHENTICATION_REQUIREMENTS` (403, extension `missing`); `approveOptions` passes `amr`, `acr` and
+`authTime`. A request nothing can meet (`missing` empty: an `acr` Clavix does not issue) is not left pending: `approveOAuthRequest`
+is wrapped (`approveOrDenyUnmet`, `consent/index.ts`; `consent/unmet.ts`) and denies it with `unmet_authentication_requirements`
+(janus-oauth 0.24), answering `{ redirectTo }` with `error`, `state` and `iss`; a gap the user can close (`SECOND_FACTOR`,
+`FRESH_PROOF`, `ENROLMENT`) stays the 403 and the request stays pending for the step-up. The access-token `claims` hook
+(`oauth/building.ts`) puts the grant's `acr`, `amr` and `auth_time` in the JWT, the ID token's values (janus 0.76).
+A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176), not `otp`: janus stores it on the session itself (@softistx/janus 0.77), and `mfa.spec.ts` asserts it. A passkey step-up needs no
+authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language` French else English, then the other
 language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
 resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
@@ -252,7 +290,7 @@ so a code mail in flight is not lost; `stopTimeout` is set above it.
 
 `src/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
 `src/config/keys.ts`; a tenant's partition is its hex id), the rotation policy and the hourly
-`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). Sign and
+`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, which must cover **every store sealed under the keyring** (signing keys, TOTP secrets, and the `createSecretBox` stores in `SECRET_STORES`, `src/keys/reseal.ts`: each service's `resealSecrets(tenantId)`; a new sealed store adds its entry there, and the old key is dropped only when the report's `oldKeyNeededBy` is empty), and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). `withPublicDocuments` (`src/oauth/public-documents.ts`) serves the JWKS and discovery documents from memory (key `<tenantId>.<version>.<keys generation>`, 60 s TTL, ETag and 304); `createTenantKeys` bumps the generation on every key insert, promote or retire, so a key write goes through `signingKeysFor`; a write from another process (the `keys:rotate` CLI, another instance) shows only when the TTL ends. Sign and
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 
@@ -284,10 +322,12 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
 - **Writes on the `clavix` tenant are the platform's** (`guard.ts`, `allowed`): an `onTenant` guard
   with `edit` or `manage` whose target is the `clavix` tenant itself asks `canPlatform` instead of
   the tenant role (operators, the issuer's domains, sign-in policy, clients, branding and users
-  are all behind it); `view` stays tenant-level. It is central, so no module opts in. A tenant-level
+  are all behind it); `view` stays tenant-level. It is central, so no module opts in: the rule is
+  `permitted` (`guard.ts`), which the audit export's route uses too (`log=auth` on `clavix` is the platform's `edit`); a new way into the console that checks a role goes through it, never `access.can` bare. A tenant-level
   role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
-  also removes their console relations (`access.removeUser`); disabling or deleting a `clavix` user
-  who holds a platform role or owns a tenant needs platform `manage` (`users/operators.ts`).
+  also removes their console relations (`access.removeUser`); every mutation that changes the account of a `clavix` user
+  who holds a platform role or owns a tenant needs platform `manage` (`keepOwners`, `users/operators.ts`: disable, enable,
+  delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
   there, never in `src/modules`.
@@ -327,10 +367,10 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
   Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
   **One owner rule** (`otherLiveOwners`, `service.ts`): an owner counts only while they exist and can
-  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable and
-  delete of a `clavix` user, tenant ownerships and the last live platform owner, under
+  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable,
+  delete and un-verify of a `clavix` user (`OwnerChange`; `touch` checks the caller only, no count), tenant ownerships and the last live platform owner, under
   `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
-  ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` is never `LAST_OWNER`.
+  ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` or un-verify is never `LAST_OWNER`.
   Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
   (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
   mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
@@ -347,6 +387,10 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   from janus's `updatedAt`, so it holds across processes with no Redis; the check and the write run under
   `ctx.exclusive` per invitation. Refusals are `ResendRefusedError` (`NOT_FOUND`, `INVITATION_NOT_PENDING`,
   `RESEND_TOO_SOON` with `retryAfter`). A users-pool invitation has no resend yet.
+  `invite` is guarded by `guardInvite` (`src/invitations/invite-guards.ts`, from the stored pending list, so no Redis and
+  it holds when Redis is down): re-inviting an address inside the cooldown is `INVITE_TOO_SOON` (`retryAfter`), a new
+  address past `CLAVIX_INVITE_PENDING_LIMIT` (500 per scope) is `PENDING_INVITATIONS_LIMIT`; both are `ResendRefusedError`s
+  that `refusing` maps (429 / 409). Not atomic. The Redis budgets (`CLAVIX_INVITE_*`) stay fail-open, as the audit export.
   Its events are `membership.invite` / `.resendInvitation` / `.revokeInvitation` (target `invitation`) and `membership.change`
   / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
   canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse
@@ -386,12 +430,34 @@ does two things, and nothing else touches the collection:
 - **Never a secret**: an event is identifiers only (`target` is `{ type, id }`). The schema is
   closed (`z.strictObject`, no free-form field), so there is no place for a secret, a token or the
   before/after of a value, and none is to be added.
+- **Sign-in events (M4 E1, D12-D18)**: `src/events/` is the event bus (`createEventBus`: every
+  subscriber awaited, a failure reported and swallowed, so an event never fails its caller, D13;
+  `config/events.ts` counts failures in `eventFailures`); `authEvents` (`modules/audit/`, tenant-owned,
+  closed schema, `scopeToTenant` only) is written by the `authRecorder` subscriber. Sources: the hosted
+  sign-in resolvers through `recordingSignIn` / `recordSignOut` (`modules/auth/sign-in-events.ts`: code,
+  magic link, passkey, social), and the per-tenant janus `events` listener (`events/janus-listener.ts`:
+  second factor, recovery codes, passkeys; no address). A new type goes in `AUTH_EVENT_TYPES` (closed).
+  OAuth events (M4 E3, D14): `createClavixOAuthIssuers({ eventsFor })` gives each tenant's issuer its own janus-oauth `events` listener (`events/oauth-listener.ts`, built per tenant and dropping an event of another issuer; wired in `config/oauth.ts`): `consent.granted` / `.denied`, `grant.revoked`, `refreshToken.reused`, `device.approved` / `.denied`, `token.exchanged`, `client.registered`, with client and user, no address, no client name; `oauth.client.loginFailed` is not recorded (telemetry's).
+  Reads: console `authEvents` (`edit`, an admin: addresses) and `adminEvents` (`view`), and by id
+  `authEvent(tenantId, id)` / `adminEvent(tenantId, id)` (same permissions; `null` for an unknown or
+  another tenant's id, `find` on the reader and the service),
+  `platformAdminEvents` (operators). The full IP stays in `authEvents` only (D15). Retention
+  (`modules/audit/retention.ts`, queue `audit-retention`, 04:17 UTC, `config/audit-retention.ts`) cuts by the
+  tenant's current plan (`Plan.auditRetentionDays`) as `system:audit:retention`, with no event per deletion.
+- **Export (M4 E2, D17)**: `GET /console/audit/export` (`src/console/audit-export/`: `export.ts` handler, `params.ts`, `columns.ts`, `body.ts`, `serveAuditExport`, mounted
+  by `createApp` beside `/console/graphql`, in the Caddyfile `@api` matcher) authenticates like the GraphQL API
+  (`authenticated` in `plugin.ts`, the DPoP proof's `htu` being the export path), then a verified e-mail, `view`
+  for `log=admin`, `edit` for `log=auth` (through `permitted`, so the platform's `edit` on the `clavix` tenant). The range is cut to the plan's retention, at most 100 000 rows
+  (`ConsoleDeps.auditExport` overrides it in a spec; `exceeds` reads at most one row past the limit, no full count), a per-tenant budget (`throttle.ts`, limit `auditExport`, `CLAVIX_EXPORT_TENANT_*`, 429; Redis only, down: allowed and logged), streamed with `reader.stream` / `authEventsService.stream`
+  (`modules/audit/stream.ts`, 500 rows per batch, one row per pull). `auditLog.export` is recorded, awaited,
+  before the first byte. CSV cells go through `csvCell` (formula guard). `ConsoleDirectory.tenantsByIds` carries the `plan`.
 - `adminEvents` is a platform collection: its `tenantId` says which tenant an event is about, so it
   is listed in `platformCollections` (`src/tenancy/owned.ts`) and left out of the tenant-owned
   guards. It is reached only through `AdminEventRecorder.record` (`src/config/admin-events.ts`); a
   source scan in `src/tenancy/guards.spec.ts` refuses any other access or export. Indexes (`tenantId, at` and `actor, at`,
-  newest first) are the definition's, created by `db:sync`. No reader and no SDL until the viewer
-  (M4). `ConsoleDeps.adminEvents` takes another recorder in a spec.
+  newest first) are the definition's, created by `db:sync`. Read through `AdminEventReader`
+  (`src/console/admin-events/reader.ts`, `ConsoleExtras.activity.admin`: `adminEvents`, `platformAdminEvents`,
+  the retention's `deleteBefore`). `ConsoleDeps.adminEvents` takes another recorder in a spec.
 - The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
   never used.
 
@@ -480,7 +546,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 - **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
-  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, `requestEmailVerification`, `confirmEmailVerification`, the passkey sign-in,
+  `requestSignInCode`, `verifySignInCode`, `requestMagicLink`, `confirmMagicLink`, `requestEmailVerification`, `confirmEmailVerification`, the passkey sign-in, `requestSecondFactorPasskeyOptions`,
   `socialSignInStart`, `socialSignInComplete`, `acceptInvitation` (on the tenant's own host: an end-user invitation of a suspended tenant is refused before the code is read),
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
@@ -489,7 +555,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
 - **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
   (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
-  of the access token, so refreshes count) and an `acceptInvitation` that signs the new account in (#176); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
+  of a user's access token, so refreshes count; a client_credentials token, whose `sub` is its client id, counts nobody) and an `acceptInvitation` that signs the new account in (#176); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
   `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
@@ -558,11 +624,116 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
 - A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
 - **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
   domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
-  when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
+  when Redis is down: refused, with a warning, `tlsAskGate`; **spent after the lookup**, by known hosts only, so a flood of unknown names
+  cannot use up the budget real domains need, #328), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
   The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). The passkey layer accepts the same origins (`relatedOriginsOf`, `src/modules/domains/well-known.ts`).
+
+## Webhooks (`src/modules/webhooks`, `src/console/modules/webhooks`, `src/config/webhooks.ts`)
+
+A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
+- `webhookEndpoints` is tenant-owned: reached only through `WebhookEndpointsService`
+  (`scopeToTenant`; the files allowed in `guards.spec.ts` are `src/modules/webhooks/` and
+  `src/config/webhook-endpoints.ts`). Its quota is `webhooks` (free 2, pro 10, enterprise 50),
+  checked on create under `ctx.exclusive("console:webhooks:<tenantId>")`.
+- One process-wide `webhooks()` (`delivery.ts`, wired in `src/config/webhooks.ts`) serves every
+  tenant: its endpoint resolver reads the endpoints of `event.data.tenantId` at each attempt, so a
+  rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
+  reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
+  prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
+- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/modules/webhooks/delivery.ts`, applied in `src/config/webhooks.ts`) gives both
+  queues (Redis and memory) `maxInFlight` (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, 4), `maxPending`
+  (`CLAVIX_WEBHOOKS_MAX_PENDING`, 5000) and `groupOf`. **Assumed, not answered**: the caps are per tenant, not
+  per endpoint, because janus-webhooks counts per group once `groupOf` is set (one queue cannot cap both). So the
+  queue's endpoint name is `<tenantId>.<endpointId>` (`queueEndpointId`, `webhookGroupOf`, `endpointIdOf` in
+  `delivery.ts`): the resolver adds the prefix and every callback strips it before it touches a store. The
+  claim also rotates over endpoints, so one endpoint of a tenant does not take the tenant's whole share.
+- **Console budgets (`src/console/budgets.ts`, #328)**: `ctx.budgets` (`ConsoleDeps.budgets`; undefined without Redis) holds the
+  `@softistx/redis` limits of the console mutations that act outside the platform. `sendTestWebhook` spends
+  `budgets.testWebhook` (5/min per endpoint, then 20/min per tenant, `CLAVIX_WEBHOOK_TEST_*`) once the endpoint is found
+  and enabled, before the address check and the queue. `inviteUser` / `inviteAdmin` spend `budgets.invitation` (200/h per
+  tenant, both together, `CLAVIX_INVITE_TENANT_*`) just before the invitation is issued, and the per-caller budget
+  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@alxia/graphql`'s `fieldRateLimit` (`useInviteBudget`, first in the
+  console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
+  `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
+  that sends a mail or queues outbound work gets its budget here, never a counter of its own.
+- The catalogue (D22, `events.ts`) is janus's 16 user events (without `user.apiKeyCreated` / `user.apiKeyRevoked`, which never fire until API keys are adopted, and `user.passwordReset` / `user.passwordChanged`, which cannot fire while password sign-in is unavailable; #336) plus `session.signedIn`; `data` holds ids
+  only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
+  top-level field for it. Console admin events are not delivered. `webhook.test` is outside the
+  catalogue and goes to one endpoint, whatever its types.
+- Secrets (D19): `whsec_`, sealed with `webhookSecretBox` (its own subkey label) with the context
+  `<tenantId>:<endpointId>`, returned once by `createWebhookEndpoint` and `rollWebhookSecret`. A roll with
+  `keepPrevious` keeps the old secret signing for 24 h (both signatures sent); without it, it is dropped
+  at once. `webhookSecretsPrune` (daily 04:37) removes expired ones; they are ignored at send time anyway.
+- URL policy (D21, `url-policy.ts`): `https`, no credentials, public addresses only, checked on save
+  and again by `guardedFetch` on every send (a DNS rebinding is refused; redirects are never followed).
+  `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` lifts the address check for development and is refused in production.
+  A check and the connection resolve the name separately (documented in `url-policy.ts`).
+- Auto-disable (D20): 5 given-up deliveries in a row (`retriesRanOut` only; a 2xx resets the run)
+  switch the endpoint off, record the admin event `webhook.disable` (actor `system:webhooks:disable`)
+  and e-mail the owners (`notice.ts`, origin only). An admin switches it on again with
+  `updateWebhookEndpoint(enabled: true)`, which re-checks the address.
+- Deliveries log (W2): `onAttempt` writes `webhookDeliveries` through `WebhookDeliveriesService`
+  (tenant-owned, same allowed files): event id and type, attempt, status or failure name, duration,
+  `delivered`, `willRetry`, `at`; never the URL, a header or a body. A TTL index on `at` (7 days) and a trim
+  to the newest 100 per endpoint on each write; a failed write is only logged. `WebhookEndpoint.deliveries(first:)`
+  reads them (parent `WebhookEndpointParent` carries the tenant id); deleting an endpoint deletes its attempts.
+- Admin events: `webhook.create|update|delete|rollSecret|test`; none carries a secret.
+
+## Enterprise OIDC connections (`src/modules/connections`, `src/console/modules/connections`, `src/config/connections.ts`)
+
+- A tenant registers upstream OIDC identity providers (F1 of M4, Part of #19). `connections` is
+  tenant-owned (`src/modules/collections.ts`, allowed files in `src/tenancy/guards.spec.ts`):
+  `connectionId` unique per tenant, `domains[]` (`domain`, `txtToken`, `verifiedAt`), and a partial
+  unique index on a verified-and-enabled domain per tenant.
+- The client secret is sealed (`connectionSecretBox`, label `connection-secrets`, context
+  `<tenantId>:<connectionId>`), never returned, logged or put in an admin event.
+- Every admin input goes through janus-social's `checkConnection` (`connections.record.ts`): its
+  `checkConnection:` TypeError becomes `BAD_USER_INPUT` with the field names, no values. Ids `google`,
+  `github`, `microsoft` are refused (they are the static apps). `emailTrust` offers `claimAndDomain`
+  and `domain` only. `upstreamMfa.acr` is enforced (D6): it becomes the connection's `stepUp.acrValues`, so an ID token without that `acr` is `SOCIAL_STEP_UP_UNMET`.
+- `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `tenant-janus.ts` wires it as
+  `social.resolveProvider` through `oidcConnections` (one redirect URI per connection:
+  `<issuer>/sign-in/social/<id>/callback`, the hosted UI's callback route). Every tenant's janus instance carries it, so the static-social
+  gate in `sign-in-methods` also checks the tenant's offered providers.
+- Domain ownership: `addConnectionDomain` returns a TXT name `_clavix-sso.<domain>` and token;
+  `verifyConnectionDomain` reads the TXT (60 s cooldown) and can be asked again. A domain is claimed
+  by one enabled connection per tenant (`DOMAIN_TAKEN`).
+- Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
+  A connection with linked users is not deleted (`CONNECTION_IN_USE`).
+- **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
+  (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
+  (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
+  whenever the metadata advertises it). Each connection has its own redirect URI
+  (`ssoCallbackUrlOf(issuer, id)`: janus-social's function form, nxgt-janus#975), and `socialResolvers`'s
+  `bindCallback` (janus-graphql 0.35, nxgt-janus#987; `sign-in-methods/index.ts`) binds the callback to the
+  connection whose URL received it (`bindSsoCallback`), so an identity provider cannot pass a visitor's flow to another
+  one even without `iss`. The id is the path of `callbackUrl` (`connectionIdOfCallbackUrl`) and must equal the
+  `x-sso-connection` header the BFF sets from its own `:provider` route parameter (it forwards no browser header);
+  a missing or disagreeing pair binds nothing, which a connection's flow refuses (fail closed). Register
+  `<issuer>/sign-in/social/<id>/callback` with each identity provider.
+- Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
+- **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
+  enabled connection owning the address's verified domain (`ownerOf`: two claimants answer none), else null; it
+  spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods/sso-throttle.ts`,
+  `CLAVIX_SSO_*`, refusal `MAIL_THROTTLED`), never the mail-sending `signInThrottle` (#328: a flood of lookups must not close
+  a tenant's sign-in codes), and is `no-store`. The federated sign-in is janus's
+  `socialSignInStart` / `socialSignInComplete` with the connection id as `provider` (an unknown or disabled one is
+  `SIGN_IN_METHOD_DISABLED`); the session is `amr: ["fed"]`. JIT (D4): a new user is created only when the
+  connection's `jit` is on, whatever the tenant's `signUp` (`SIGN_UP_DISABLED` otherwise); an existing user is linked.
+- **`SSO_REQUIRED` (D3)**: when the owning connection has `requireSso`, `requestSignInCode` and `requestMagicLink`
+  refuse (403), and `verifySignInCode`, `confirmMagicLink` and the answer to a second-factor challenge (`confirmSecondFactor`, `recoverSecondFactor`, `confirmSecondFactorWithPasskey`) revoke the session janus just
+  opened (by id for a code or link, whose cookie is then never set; for the second-factor answer every non-federated session opened
+  since the attempt began, janus-graphql having queued a cookie that now names a revoked session). `signInWithPasskey`
+  is refused by janus-graphql's `passkeyResolvers({ signInGuard })` before any session, token or cookie exists. Each runs inside
+  `recordingSignIn` so it is a failed sign-in (`sso-gate.ts`). Limits: a static social app (Google, GitHub) and
+  `acceptInvitation`'s sign-in are not gated. `login_hint` waits for J2; the callback route is F3.
+- `domainOfEmail` is janus-social's (exported since 0.9); `federation.spec.ts` injects `resolveHost`. janus has no
+  API to mark `mfa` amr from a federated step-up proof for tenant connections (`oidcConnections` takes no `federatedAmr`
+  by design): D6 uses the acr check, and `trustingUpstreamMfa` (`tenant-janus.ts`) wraps the resolved provider with
+  `federatedAmr` for a connection whose `stepUp.acrValues` is set, so such a session is `["fed", "mfa"]` (acr `mfa`).
 
 ## OAuth clients
 
@@ -571,7 +742,7 @@ in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through t
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's
 `mintOAuthSecret`, shown once and stored as `hashOAuthSecret`. Tenants are read through
-`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is stored on the client (`grantTypes`, shown by the console) and enforced by janus-oauth 0.13, which takes an explicit list as written: the script offers four grants (code, refresh, device, token exchange), and a list must name one of `authorization_code`, the device URN or the token-exchange URN (`refresh_token` alone is refused), plus `refresh_token` for a client that refreshes. The migration `2026-11-15-client-grants` (`db:migrate`) repairs stored lists written before 0.13. A client keeps its type: re-running a
+`tenantBySlug` (`src/config/tenancy.ts`). `--grants` is stored on the client (`grantTypes`, shown by the console) and enforced by janus-oauth 0.13, which takes an explicit list as written: the script offers five grants (code, refresh, device, token exchange, client_credentials), and a list must name one of `authorization_code`, the device URN, the token-exchange URN or `client_credentials` (`refresh_token` alone is refused), plus `refresh_token` for a client that refreshes. The migration `2026-11-15-client-grants` (`db:migrate`) repairs stored lists written before 0.13. A client keeps its type: re-running a
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 
@@ -579,8 +750,7 @@ one is refused (docs/troubleshooting.md).
 
 `bun run verify` = `generate`, `check:ci` (Biome), `typecheck` (`bun check`), `test`; CI
 (`.github/workflows/ci.yml`, on pull requests into `develop` only) runs it, then `build`.
-The `@softistx/*` packages come from npm.softistx.com: `export NPM_REGISTRY_TOKEN` (read token, set by ~/.zshenv)
-before `bun install`; CI uses the `NPM_REGISTRY_TOKEN` secret.
+The `@softistx/*` packages come from npmjs (public): `bun install` needs no token.
 
 ## Tests and the machine
 

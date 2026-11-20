@@ -84,17 +84,20 @@ export const admins: Resolvers = {
       const tenant = await liveTenant(ctx.directory, tenantId);
       const known = await ctx.directory.findUserByEmail(email);
       if (known !== null) await assertNotMember(ctx.access, tenantId, known.id);
+      await ctx.budgets?.invitation({ tenantId });
       const inviter = await ctx.directory.findUser(ctx.principal.userId);
-      const invitation = await ctx.admins.invite({
-        tenantId,
-        tenantName: tenant.name,
-        email,
-        role: ROLE_OF[role],
-        invitedBy: {
-          id: ctx.principal.userId,
-          name: inviter?.name ?? inviter?.email,
-        },
-      });
+      const invitation = await refusing(() =>
+        ctx.admins.invite({
+          tenantId,
+          tenantName: tenant.name,
+          email,
+          role: ROLE_OF[role],
+          invitedBy: {
+            id: ctx.principal.userId,
+            name: inviter?.name ?? inviter?.email,
+          },
+        }),
+      );
       // The invitation's id, never the address or the code.
       await ctx.audit("membership.invite", {
         type: "invitation",

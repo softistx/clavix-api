@@ -25,16 +25,27 @@ class OwnershipMoved extends Error {
 }
 
 /**
- * Disabling or deleting a `clavix` user who holds a platform role or a role on
+ * What a write does to its target, for the owner rule: `disable`, `delete`
+ * and `unverify` take the account out of the console (an unproved e-mail is
+ * refused everywhere, ADR-0041), so they also count the owners left; `touch`
+ * (enable, sign out, reset the second factor, mark the e-mail proved) only
+ * needs the right caller.
+ */
+export type OwnerChange = "disable" | "delete" | "unverify" | "touch";
+
+/**
+ * Changing the account of a `clavix` user who holds a platform role or a role on
  * a tenant is a membership change: for an owner it needs `manage` on the
- * platform, not the `edit` the field asks (an admin must not remove an
- * owner). It also never orphans a tenant: when no other owner who can sign in
+ * platform, not the `edit` the field asks (an admin must not remove, lock out
+ * or weaken an owner, nor bring back one an owner disabled). Every `kind` is
+ * held to it. `disable`, `delete` and `unverify` also never orphan a tenant:
+ * when no other owner who can sign in
  * would be left on a tenant the user owns, or on the platform when the user
  * is a platform owner, `LAST_OWNER` (the one owner rule, `otherLiveOwners`).
- * Disabling a user who is already disabled changes nothing, so it is never
- * refused (`kind` "disable").
+ * Disabling a user who is already disabled, or un-verifying one who is
+ * already unproved, changes nothing, so it is never refused.
  *
- * `work` (the disable or the delete) runs inside the platform owners lock and
+ * `work` (the change) runs inside the platform owners lock and
  * the members lock of every tenant the user holds a role on, where the owners are counted, so a
  * concurrent change of the memberships cannot slip between the check and the
  * work; the roles are read again under the locks, and the whole step starts
@@ -50,7 +61,7 @@ export async function keepOwners<T>(
   tenant: { slug: string },
   userId: string,
   work: () => Promise<T>,
-  kind: "disable" | "delete",
+  kind: OwnerChange,
   userLock: string,
 ): Promise<T> {
   if (tenant.slug !== PLATFORM_TENANT_SLUG) {
@@ -74,10 +85,13 @@ export async function keepOwners<T>(
     // Checked again here: a user who became an owner during a retry still
     // needs `manage`.
     await guard(owned.length > 0);
-    // Disabling twice: the user no longer counts, nothing is lost.
+    // Nothing is lost: the change keeps every owner (`touch`), or the user
+    // already does not count (disabled twice, un-verified twice).
     const already =
-      kind === "disable" &&
-      (await ctx.directory.findUser(userId))?.active !== true;
+      kind === "touch" ||
+      (kind === "disable" &&
+        (await ctx.directory.findUser(userId))?.active !== true) ||
+      (kind === "unverify" && !(await ctx.directory.emailVerified(userId)));
     if (!already) {
       for (const { tenantId: owns } of owned) {
         const owners = await ctx.access.owners(owns);

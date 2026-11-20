@@ -1,4 +1,5 @@
 import {
+  CLIENT_CREDENTIALS_GRANT,
   DEVICE_GRANT,
   redirectUriProblem,
   TOKEN_EXCHANGE_GRANT,
@@ -19,11 +20,30 @@ export const clientIdOf = (name: string): string =>
     .slice(0, 64)
     .replace(/-+$/g, "");
 
+/** A scope list (deduplicated, in order) of non-empty tokens with no space; `undefined` when not given. */
+function scopeList(
+  label: string,
+  scopes: readonly string[] | undefined,
+): string[] | undefined {
+  if (scopes === undefined) return undefined;
+  const clean = [...new Set(scopes.map((scope) => scope.trim()))];
+  for (const scope of clean) {
+    if (scope === "" || /\s/.test(scope)) {
+      throw new CliInputError(
+        `${label}: "${scope}" is not a scope (a non-empty token with no space)`,
+      );
+    }
+  }
+  return clean;
+}
+
 export function validate(input: RegisterClientInput): {
   name: string;
   clientId: string;
   redirectUris: string[];
   grantTypes: OfferedGrant[] | undefined;
+  allowedScopes: string[] | undefined;
+  defaultScopes: string[] | undefined;
 } {
   const name = input.name.trim();
   if (name === "") throw new CliInputError("a client needs a name");
@@ -54,15 +74,25 @@ export function validate(input: RegisterClientInput): {
     input.grants !== undefined &&
     !input.grants.includes("authorization_code") &&
     !input.grants.includes(DEVICE_GRANT) &&
-    !input.grants.includes(TOKEN_EXCHANGE_GRANT)
+    !input.grants.includes(TOKEN_EXCHANGE_GRANT) &&
+    !input.grants.includes(CLIENT_CREDENTIALS_GRANT)
   ) {
     throw new CliInputError(
-      `--grants must include authorization_code, ${DEVICE_GRANT} or ${TOKEN_EXCHANGE_GRANT}: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)`,
+      `--grants must include authorization_code, ${DEVICE_GRANT}, ${TOKEN_EXCHANGE_GRANT} or ${CLIENT_CREDENTIALS_GRANT}: a client with only refresh_token has no way to get a first token (add refresh_token beside it for a client that refreshes)`,
     );
   }
   const grantTypes =
     input.grants === undefined
       ? undefined
       : OFFERED_GRANTS.filter((grant) => input.grants?.includes(grant));
-  return { name, clientId, redirectUris, grantTypes };
+  const allowedScopes = scopeList("allowed scopes", input.allowedScopes);
+  const defaultScopes = scopeList("default scopes", input.defaultScopes);
+  return {
+    name,
+    clientId,
+    redirectUris,
+    grantTypes,
+    allowedScopes,
+    defaultScopes,
+  };
 }

@@ -1,7 +1,10 @@
-import type { OAuthPrincipal } from "@softistx/janus-oauth";
+import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
+import type { ExportThrottle } from "./audit-export/throttle";
+import type { ConsoleBudgets } from "./budgets";
 import type {
+  ConsoleActivity,
   ConsoleAdmins,
   ConsoleDirectory,
   ConsoleExtras,
@@ -27,7 +30,9 @@ export interface ConsoleDPoPRefusal {
  */
 export type ConsoleAuthenticate = (
   request: Request,
-) => Promise<OAuthPrincipal | ConsoleDPoPRefusal | null>;
+  /** The path the client called when it is not the GraphQL one (a DPoP proof's `htu` names it). */
+  path?: string,
+) => Promise<OAuthUserPrincipal | ConsoleDPoPRefusal | null>;
 
 /** The `WWW-Authenticate` of a refused DPoP request, and its nonce header. */
 function dpopChallenge({ refused }: ConsoleDPoPRefusal): HeadersInit {
@@ -54,11 +59,22 @@ export interface ConsoleDeps {
   admins: ConsoleAdmins;
   users: ConsoleUsers;
   exclusive: Exclusive;
+  /** The budgets of the test webhooks and the invitations (`budgets.ts`); none without Redis. */
+  budgets?: ConsoleBudgets | undefined;
   /** Where `ctx.audit` appends its events. */
   adminEvents: AdminEventRecorder;
+  /** The readers of the activity logs. */
+  activity: ConsoleActivity;
+  /** The audit export's limits; the real ones (100 000 rows, the clock) by default. */
+  auditExport?: {
+    maxRows?: number;
+    now?: () => Date;
+    /** Per-tenant export budget; none without Redis. */
+    throttle?: ExportThrottle;
+  };
 }
 
-const refusal = (
+export const refusal = (
   status: number,
   code: string,
   message: string,
@@ -77,6 +93,51 @@ const refusal = (
   );
 
 /**
+ * Verifies the request's token: the principal, or the response that refuses it
+ * (no token, a forged, expired or other-audience one: 401 with its challenge;
+ * the store down: 503). Shared by the GraphQL API and the audit export.
+ */
+export async function authenticated(
+  authenticate: ConsoleAuthenticate,
+  request: Request,
+  path?: string,
+): Promise<OAuthUserPrincipal | Response> {
+  let principal: OAuthUserPrincipal | ConsoleDPoPRefusal | null;
+  try {
+    principal = await authenticate(request, path);
+  } catch (error) {
+    console.error("console: token verification failed", error);
+    return refusal(503, "SERVICE_UNAVAILABLE", "Try again later");
+  }
+  if (principal !== null && "refused" in principal) {
+    return refusal(
+      401,
+      "UNAUTHENTICATED",
+      "A valid console token is required",
+      dpopChallenge(principal),
+    );
+  }
+  if (principal === null) {
+    const presented =
+      request.headers
+        .get("authorization")
+        ?.toLowerCase()
+        .startsWith("bearer ") === true;
+    return refusal(
+      401,
+      "UNAUTHENTICATED",
+      "A valid console token is required",
+      {
+        "www-authenticate": presented
+          ? 'Bearer realm="clavix-console", error="invalid_token"'
+          : 'Bearer realm="clavix-console"',
+      },
+    );
+  }
+  return principal;
+}
+
+/**
  * The console's Yoga plugin: the bearer token is verified before anything is
  * parsed (no token, a forged, expired or other-audience one: 401; the store
  * down: 503), then `principal`, `can`, `canPlatform` and `audit` ride on the context.
@@ -90,9 +151,11 @@ export function useConsole({
   admins,
   users,
   exclusive,
+  budgets,
   adminEvents,
+  activity,
 }: ConsoleDeps) {
-  const principals = new WeakMap<Request, OAuthPrincipal>();
+  const principals = new WeakMap<Request, OAuthUserPrincipal>();
   // Ours, one per HTTP request: a client's `x-request-id` is never believed.
   const requestIds = new WeakMap<Request, string>();
   const requestIdOf = (request: Request) => {
@@ -113,38 +176,9 @@ export function useConsole({
     }) {
       // Called server to server: no CORS, so a preflight (no credential) is refused too.
       // Outside `useSameOriginJson` on purpose: a bearer header is no ambient credential.
-      let principal: OAuthPrincipal | ConsoleDPoPRefusal | null;
-      try {
-        principal = await authenticate(request);
-      } catch (error) {
-        console.error("console: token verification failed", error);
-        endResponse(refusal(503, "SERVICE_UNAVAILABLE", "Try again later"));
-        return;
-      }
-      if (principal !== null && "refused" in principal) {
-        endResponse(
-          refusal(
-            401,
-            "UNAUTHENTICATED",
-            "A valid console token is required",
-            dpopChallenge(principal),
-          ),
-        );
-        return;
-      }
-      if (principal === null) {
-        const presented =
-          request.headers
-            .get("authorization")
-            ?.toLowerCase()
-            .startsWith("bearer ") === true;
-        endResponse(
-          refusal(401, "UNAUTHENTICATED", "A valid console token is required", {
-            "www-authenticate": presented
-              ? 'Bearer realm="clavix-console", error="invalid_token"'
-              : 'Bearer realm="clavix-console"',
-          }),
-        );
+      const principal = await authenticated(authenticate, request);
+      if (principal instanceof Response) {
+        endResponse(principal);
         return;
       }
       principals.set(request, principal);
@@ -165,6 +199,8 @@ export function useConsole({
         admins,
         users,
         exclusive,
+        budgets,
+        activity,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),
         canPlatform: (permission) =>

@@ -4,6 +4,7 @@ import {
   type PendingInvitation,
   toPending,
 } from "./invitation-source";
+import { DEFAULT_MAX_PENDING, guardInvite } from "./invite-guards";
 import {
   RESEND_COOLDOWN_MS,
   type ResendInput,
@@ -36,12 +37,21 @@ export interface InviteInput {
 export interface InvitationsOptions {
   /** The clock; tests move it. */
   now?: () => number;
+  /** Least time before a pending invitation of an address is replaced or resent (60 s). */
   cooldownMs?: number;
+  /** Most pending invitations per scope (500); a new address past it is refused. */
+  maxPending?: number;
 }
 
 /** The invitations of one tenant's user pool: issue and mail, resend, list, revoke. */
 export interface TenantInvitations {
-  /** Issues the invitation (a pending one of the same scope and address is replaced) and mails its link. */
+  /**
+   * Issues the invitation (a pending one of the same scope and address is
+   * replaced) and mails its link. Throws `ResendRefusedError`:
+   * `INVITE_TOO_SOON` (the address's pending invitation is younger than the
+   * cooldown) or `PENDING_INVITATIONS_LIMIT` (the scope holds `maxPending`).
+   * Not atomic: concurrent invites may pass both checks.
+   */
   invite(input: InviteInput): Promise<PendingInvitation>;
   /**
    * Sends a pending invitation again — lapsed or not — with a new code and a
@@ -73,7 +83,11 @@ export class TenantUnavailableError extends Error {
  */
 export function createTenantInvitations(
   source: () => Promise<InvitationSource | null>,
-  { now = Date.now, cooldownMs = RESEND_COOLDOWN_MS }: InvitationsOptions = {},
+  {
+    now = Date.now,
+    cooldownMs = RESEND_COOLDOWN_MS,
+    maxPending = DEFAULT_MAX_PENDING,
+  }: InvitationsOptions = {},
 ): TenantInvitations {
   const need = async () => {
     const found = await source();
@@ -83,6 +97,7 @@ export function createTenantInvitations(
   return {
     async invite({ scope, organization, email, role, invitedBy }) {
       const { auth, mail, link } = await need();
+      await guardInvite(auth, { now, cooldownMs, maxPending }, scope, email);
       const issued = await auth.invitations.issue({
         scope,
         email,

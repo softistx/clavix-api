@@ -5,6 +5,7 @@ import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ConsoleContext } from "../../context";
+import { refusing } from "../admins/errors";
 import { idArg, liveTenant, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
 import { keepOwners } from "./operators";
@@ -21,16 +22,19 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
         extensions: { code: "USER_EXISTS", http: { status: 409 } },
       });
     }
+    await ctx.budgets?.invitation({ tenantId });
     const inviter = await ctx.directory.findUser(ctx.principal.userId);
-    const invitation = await ctx.users.invite({
-      tenantId,
-      tenantName: tenant.name,
-      email,
-      invitedBy: {
-        id: ctx.principal.userId,
-        name: inviter?.name ?? inviter?.email,
-      },
-    });
+    const invitation = await refusing(() =>
+      ctx.users.invite({
+        tenantId,
+        tenantName: tenant.name,
+        email,
+        invitedBy: {
+          id: ctx.principal.userId,
+          name: inviter?.name ?? inviter?.email,
+        },
+      }),
+    );
     await ctx.audit(
       "user.invite",
       target("invitation", invitation.id, tenantId),
@@ -61,7 +65,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const user = await ctx.users.rename(tenantId, userId, name);
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.update", target("user", userId, tenantId));
-    return shape(user);
+    return shape(user, tenantId);
   },
   disableUser: (_, { tenantId, userId }, ctx) =>
     setActive(ctx, tenantId, userId, false),
@@ -97,8 +101,15 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   revokeUserSessions: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await liveTenant(ctx.directory, tenantId);
-    const ended = await ctx.users.revokeSessions(tenantId, userId);
+    const tenant = await liveTenant(ctx.directory, tenantId);
+    const ended = await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () => ctx.users.revokeSessions(tenantId, userId),
+      "touch",
+      userKey(tenantId, userId),
+    );
     await ctx.audit("user.revokeSessions", target("user", userId, tenantId));
     return ended;
   },
@@ -109,11 +120,36 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   ) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await liveTenant(ctx.directory, tenantId);
-    const user = await ctx.users.setEmailVerified(tenantId, userId, verified);
+    const tenant = await liveTenant(ctx.directory, tenantId);
+    // Un-verifying locks the account out of the console (ADR-0041): an
+    // owner's is the owners' business, and the last one keeps theirs.
+    const user = await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () => ctx.users.setEmailVerified(tenantId, userId, verified),
+      verified ? "touch" : "unverify",
+      userKey(tenantId, userId),
+    );
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.setEmailVerified", target("user", userId, tenantId));
-    return shape(user);
+    return shape(user, tenantId);
+  },
+  resetUserSecondFactor: async (_, { tenantId: given, userId }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    idArg(userId, "userId");
+    const tenant = await liveTenant(ctx.directory, tenantId);
+    const user = await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () => ctx.users.resetSecondFactor(tenantId, userId),
+      "touch",
+      userKey(tenantId, userId),
+    );
+    if (user === null) throw denial("NOT_FOUND", "No such user");
+    await ctx.audit("user.resetSecondFactor", target("user", userId, tenantId));
+    return shape(user, tenantId);
   },
   revokeGrant: async (_, { tenantId: given, userId, grantId }, ctx) => {
     const tenantId = tenantIdOf(given);
@@ -137,22 +173,21 @@ async function setActive(
   const tenantId = tenantIdOf(given);
   idArg(userId, "userId");
   const tenant = await liveTenant(ctx.directory, tenantId);
-  const user = await (active
-    ? ctx.users.setActive(tenantId, userId, true)
-    : keepOwners(
-        ctx,
-        tenant,
-        userId,
-        // Under the user lock (taken by `keepOwners`) like the accept hooks:
-        // an owner role is not granted to an account disabled meanwhile.
-        () => ctx.users.setActive(tenantId, userId, false),
-        "disable",
-        userKey(tenantId, userId),
-      ));
+  // Under the user lock (taken by `keepOwners`) like the accept hooks: an
+  // owner role is not granted to an account disabled meanwhile. Enabling goes
+  // through it too: an operator an owner disabled is the owners' to bring back.
+  const user = await keepOwners(
+    ctx,
+    tenant,
+    userId,
+    () => ctx.users.setActive(tenantId, userId, active),
+    active ? "touch" : "disable",
+    userKey(tenantId, userId),
+  );
   if (user === null) throw denial("NOT_FOUND", "No such user");
   await ctx.audit(
     active ? "user.enable" : "user.disable",
     target("user", userId, tenantId),
   );
-  return shape(user);
+  return shape(user, tenantId);
 }

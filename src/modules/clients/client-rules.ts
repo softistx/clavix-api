@@ -5,6 +5,7 @@ import type { ClientView } from "./client-listing";
 const MAX_NAME = 100;
 const MAX_REDIRECT_URIS = 20;
 const MAX_DETAIL_TYPES = 50;
+const MAX_SCOPES = 100;
 export const MAX_QUERY = 100;
 export const MAX_CURSOR = 200;
 
@@ -12,7 +13,18 @@ export function checkSizes(input: {
   name?: string | undefined;
   redirectUris?: readonly string[] | undefined;
   detailTypes?: readonly string[] | undefined;
+  allowedScopes?: readonly string[] | undefined;
+  defaultScopes?: readonly string[] | undefined;
 }) {
+  if (
+    (input.allowedScopes?.length ?? 0) > MAX_SCOPES ||
+    (input.defaultScopes?.length ?? 0) > MAX_SCOPES
+  ) {
+    throw new CatalogError(
+      "BAD_USER_INPUT",
+      `a client lists at most ${MAX_SCOPES} allowed scopes and ${MAX_SCOPES} default scopes`,
+    );
+  }
   if ((input.detailTypes?.length ?? 0) > MAX_DETAIL_TYPES) {
     throw new CatalogError(
       "BAD_USER_INPUT",
@@ -50,6 +62,8 @@ export function sameClient(
     dpopBound?: boolean | undefined;
     detailTypes?: readonly string[] | undefined;
     grants?: readonly string[] | undefined;
+    allowedScopes?: readonly string[] | undefined;
+    defaultScopes?: readonly string[] | undefined;
   },
 ) {
   const wanted = new Set(input.redirectUris);
@@ -58,6 +72,16 @@ export function sameClient(
     (input.grants === undefined ||
       (stored.grantTypes.length === wantedGrants.size &&
         stored.grantTypes.every((grant) => wantedGrants.has(grant)))) &&
+    (input.allowedScopes === undefined ||
+      sameSet(
+        stored.allowedScopes,
+        input.allowedScopes.map((s) => s.trim()),
+      )) &&
+    (input.defaultScopes === undefined ||
+      sameSet(
+        stored.defaultScopes,
+        input.defaultScopes.map((s) => s.trim()),
+      )) &&
     stored.name === input.name.trim() &&
     stored.type === input.type &&
     (input.requirePar === undefined ||

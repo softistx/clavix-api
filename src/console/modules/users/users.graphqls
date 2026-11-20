@@ -7,6 +7,16 @@ type TenantUser {
   "False once a console admin disabled the user: no sign-in."
   active: Boolean!
   createdAt: DateTime!
+  "Whether the user holds a TOTP second factor (tenant viewer). Never the secret or the codes."
+  secondFactor: UserSecondFactor!
+}
+
+"A user's TOTP second factor, as an admin may know it."
+type UserSecondFactor {
+  "True once the factor is active: the user's sign-in by code, link or social asks for it."
+  enabled: Boolean!
+  "The recovery codes not yet used; null without an active factor."
+  recoveryCodesLeft: Int
 }
 
 """
@@ -116,7 +126,8 @@ extend type Mutation {
   Invites an e-mail address into the tenant's user pool (tenant admin). The
   invitee accepts on the tenant's hosted `/invitation` page, which makes the
   account (e-mail proved), even when sign-up is closed. A pending invitation of
-  the same address is replaced (a new mail goes out). Errors: USER_EXISTS (409)
+  the same address is replaced (a new mail goes out, after 60 s: INVITE_TOO_SOON 429 with `retryAfter` inside it;
+  PENDING_INVITATIONS_LIMIT 409 past the pending cap for a new address). Errors: USER_EXISTS (409)
   when the address already has an account in the tenant, NOT_FOUND for an
   unknown tenant.
   """
@@ -171,4 +182,11 @@ extend type Mutation {
   user's (or does not exist).
   """
   revokeGrant(tenantId: ID!, userId: ID!, grantId: ID!): Boolean!
+  """
+  Removes the user's TOTP second factor and recovery codes (tenant admin), for
+  a user who lost the phone and the codes. Their sessions stay; the next
+  sign-in no longer asks for a code. True or not, it is recorded; NOT_FOUND for
+  an unknown user.
+  """
+  resetUserSecondFactor(tenantId: ID!, userId: ID!): TenantUser!
 }

@@ -77,14 +77,21 @@ export async function createResource(
 export async function updateResource(
   own: OwnResources,
   resourceId: string,
-  input: { name: string },
+  input: {
+    name?: string | undefined;
+    allowClientCredentials?: boolean | undefined;
+  },
 ): Promise<StoredResourceDoc> {
   const existing = await findResource(own, resourceId);
   if (existing === undefined) {
     throw new CatalogError("NOT_FOUND", "No such resource");
   }
-  const name = cleanName(input.name);
-  return own.update(existing._id, { name });
+  return own.update(existing._id, {
+    name: input.name === undefined ? existing.name : cleanName(input.name),
+    ...(input.allowClientCredentials === undefined
+      ? {}
+      : { allowClientCredentials: input.allowClientCredentials }),
+  });
 }
 
 /** Deletes the resource and its scopes; `false` when it was not there. */

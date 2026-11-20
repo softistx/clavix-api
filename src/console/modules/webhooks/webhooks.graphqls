@@ -1,0 +1,138 @@
+"""
+Why an endpoint is switched off. GIVEN_UP: 5 deliveries in a row were given up
+after their retries (the owners are mailed, the console records
+`webhook.disable`); MANUAL: someone switched it off. Switch it on again with
+`updateWebhookEndpoint(enabled: true)`.
+"""
+enum WebhookDisabledReason {
+  GIVEN_UP
+  MANUAL
+}
+
+"""
+One signing secret, without its value (shown once, when minted). The current
+secret has no `expiresAt`; a rolled one signs until then.
+"""
+type WebhookSecret {
+  createdAt: DateTime!
+  expiresAt: DateTime
+}
+
+"""
+Where a tenant's events are posted (D19-D22): signed with the Standard
+Webhooks scheme (HMAC-SHA256, `webhook-id`, `webhook-timestamp`,
+`webhook-signature`), at least once, so a receiver dedupes on `webhook-id`.
+"""
+type WebhookEndpoint {
+  id: ID!
+  "`https` only, no credentials, a public address. Checked when saved and on every send."
+  url: String!
+  description: String!
+  "The event types it receives; empty means every type (`webhookEventTypes`)."
+  types: [String!]!
+  enabled: Boolean!
+  disabledReason: WebhookDisabledReason
+  "Deliveries given up in a row; 5 switches the endpoint off."
+  consecutiveGiveUps: Int!
+  "Newest first: the current secret, then the rolled ones still signing."
+  secrets: [WebhookSecret!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  "The latest request attempts, newest first (at most 100, kept 7 days): why an endpoint fails. `first` is capped at 100."
+  deliveries(first: Int = 50): [WebhookDelivery!]!
+}
+
+"""
+One request of a delivery (the last 100 per endpoint, kept 7 days). No body,
+URL or header is kept: only what the receiver answered.
+"""
+type WebhookDelivery {
+  id: ID!
+  "The event's id: the `webhook-id` the receiver saw."
+  eventId: ID!
+  "The event's type, `webhook.test` for a test."
+  type: String!
+  "1-based: the request's rank among those of this delivery."
+  attempt: Int!
+  "The response's HTTP status; null when there was none."
+  status: Int
+  "The failure's name (`TimeoutError`, `TypeError`), null when the receiver answered."
+  error: String
+  durationMs: Int!
+  "A 2xx answer."
+  delivered: Boolean!
+  "False once delivered or given up: another attempt is scheduled when true."
+  willRetry: Boolean!
+  at: DateTime!
+}
+
+"An endpoint with its new secret. The secret is returned this once and never again."
+type WebhookEndpointWithSecret {
+  endpoint: WebhookEndpoint!
+  "`whsec_...`. Store it now."
+  secret: String!
+}
+
+input CreateWebhookEndpointInput {
+  url: String!
+  description: String
+  "Empty or absent: every type."
+  types: [String!]
+}
+
+"Fields left out stay as they are."
+input UpdateWebhookEndpointInput {
+  url: String
+  description: String
+  types: [String!]
+  "Switching on clears `disabledReason` and the given-up count."
+  enabled: Boolean
+}
+
+type Query {
+  "Needs `view` on the tenant. Oldest first."
+  webhookEndpoints(tenantId: ID!): [WebhookEndpoint!]!
+  "One endpoint of the tenant; null when there is none with this id or it belongs to another tenant. Needs `view` on the tenant."
+  webhookEndpoint(tenantId: ID!, id: ID!): WebhookEndpoint
+  "The event types an endpoint can subscribe to: janus's 16 user events (not the API key or password ones) and `session.signedIn`. Needs `view` on the tenant."
+  webhookEventTypes(tenantId: ID!): [String!]!
+}
+
+type Mutation {
+  """
+  Adds an endpoint and mints its secret. Needs `edit` on the tenant. Errors:
+  BAD_USER_INPUT (400, `extensions.field` `url` or `types`: not https, holds
+  credentials, does not resolve to a public address, an unknown type),
+  QUOTA_EXCEEDED (409, `extensions.field` `webhooks`).
+  """
+  createWebhookEndpoint(
+    tenantId: ID!
+    input: CreateWebhookEndpointInput!
+  ): WebhookEndpointWithSecret!
+  "Needs `edit`. Errors: NOT_FOUND (404), BAD_USER_INPUT (400)."
+  updateWebhookEndpoint(
+    tenantId: ID!
+    id: ID!
+    input: UpdateWebhookEndpointInput!
+  ): WebhookEndpoint!
+  "Removes the endpoint; what waits for it is given up. `false` when it was already gone."
+  deleteWebhookEndpoint(tenantId: ID!, id: ID!): Boolean!
+  """
+  Mints a new secret, returned once. With `keepPrevious` the current one keeps
+  signing for 24 hours beside it (both signatures are sent, so a receiver
+  moves without loss); without it every older secret is dropped at once.
+  Errors: NOT_FOUND (404).
+  """
+  rollWebhookSecret(
+    tenantId: ID!
+    id: ID!
+    keepPrevious: Boolean!
+  ): WebhookEndpointWithSecret!
+  """
+  Sends a `webhook.test` event to this endpoint alone, signed like any other,
+  and returns its event id (the `webhook-id` the receiver sees). The address
+  is checked again first. Errors: NOT_FOUND (404), BAD_USER_INPUT (400: the
+  endpoint is switched off or no longer points to a public address).
+  """
+  sendTestWebhook(tenantId: ID!, id: ID!): ID!
+}

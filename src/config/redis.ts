@@ -1,7 +1,18 @@
-import { bindUniqueCounter, defineRedis, openRedis } from "@softistx/redis";
+import {
+  bindUniqueCounter,
+  defineRedis,
+  openRedis,
+  type RedisConnection,
+} from "@softistx/redis";
 import { RedisClient } from "bun";
+import {
+  type ExportLimitConfig,
+  exportLimits,
+} from "@/console/audit-export/throttle";
+import { consoleLimits } from "@/console/budgets";
 import { keyRotation } from "@/keys/queue";
 import { agentsPrune } from "@/modules/agents/prune.queue";
+import { auditRetention } from "@/modules/audit/retention.queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
 import {
   type VerificationLimitConfig,
@@ -11,14 +22,17 @@ import {
   type DeviceLimitConfig,
   deviceLimits,
 } from "@/modules/consent/device-throttle";
+import { grantsRevoke } from "@/modules/consent/revoke.queue";
 import { domainRecheck } from "@/modules/domains/recheck.queue";
 import { tlsAskLimit } from "@/modules/domains/tls-limit";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
+import { ssoLimits } from "@/modules/sign-in-methods/sso-throttle";
 import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
+import { webhookSecretsPrune } from "@/modules/webhooks/secrets-prune.queue";
 import {
   type MetadataLimitConfig,
   metadataLimits,
@@ -77,6 +91,10 @@ export async function openAppRedis(
     tenantLimit: env.CLAVIX_METADATA_TENANT_LIMIT,
     tenantWindowSeconds: env.CLAVIX_METADATA_TENANT_WINDOW_SECONDS,
   },
+  auditExport: ExportLimitConfig = {
+    limit: env.CLAVIX_EXPORT_TENANT_LIMIT,
+    windowSeconds: env.CLAVIX_EXPORT_TENANT_WINDOW_SECONDS,
+  },
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -87,7 +105,15 @@ export async function openAppRedis(
       client,
       prefix: "clavix",
       caches: { tenantHost: tenantHostCache },
-      queues: { keyRotation, tenantPurge, domainRecheck, agentsPrune },
+      queues: {
+        keyRotation,
+        tenantPurge,
+        domainRecheck,
+        agentsPrune,
+        grantsRevoke,
+        auditRetention,
+        webhookSecretsPrune,
+      },
       limits: {
         ...signInLimits(limits),
         ...passkeyLimits(passkeys),
@@ -95,6 +121,22 @@ export async function openAppRedis(
         ...deviceLimits(device),
         ...registerLimits(register),
         ...metadataLimits(metadata),
+        ...exportLimits(auditExport),
+        ...ssoLimits({
+          ipLimit: env.CLAVIX_SSO_IP_LIMIT,
+          ipWindowSeconds: env.CLAVIX_SSO_IP_WINDOW_SECONDS,
+          tenantLimit: env.CLAVIX_SSO_TENANT_LIMIT,
+          tenantWindowSeconds: env.CLAVIX_SSO_TENANT_WINDOW_SECONDS,
+        }),
+        ...consoleLimits({
+          testEndpointLimit: env.CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT,
+          testTenantLimit: env.CLAVIX_WEBHOOK_TEST_TENANT_LIMIT,
+          testWindowSeconds: env.CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS,
+          inviteCallerLimit: env.CLAVIX_INVITE_CALLER_LIMIT,
+          inviteCallerWindowSeconds: env.CLAVIX_INVITE_CALLER_WINDOW_SECONDS,
+          inviteTenantLimit: env.CLAVIX_INVITE_TENANT_LIMIT,
+          inviteTenantWindowSeconds: env.CLAVIX_INVITE_TENANT_WINDOW_SECONDS,
+        }),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {
@@ -103,8 +145,25 @@ export async function openAppRedis(
       },
     }),
   );
+  // The connection the webhook queue takes (`createRedisWebhookQueue`): it
+  // reads `client` only, and the client is closed by `close` below.
+  const connection: RedisConnection = {
+    client,
+    ping: async () => {
+      const started = performance.now();
+      try {
+        await client.send("PING", []);
+        return { ok: true, latencyMs: performance.now() - started };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    },
+    close: async () => {},
+    [Symbol.asyncDispose]: async () => {},
+  };
   return {
     ...redis,
+    connection,
     // Active users of the month per tenant (usage, quotas).
     mau: bindUniqueCounter(client, monthlyActiveUsers),
     close: async () => {

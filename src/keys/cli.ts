@@ -12,8 +12,21 @@ Emergency rotation: retires the tenant's current signing key now and makes a new
 
 export const RESEAL_USAGE = `Usage: bun run keys:reseal
 
-Re-seals every tenant's stored signing keys under the first key of CLAVIX_KEYS_MASTER_KEY.
-Prints the counts as JSON; exits 1 while records were skipped or a tenant failed: run it again.`;
+Seals again, under the first key of CLAVIX_KEYS_MASTER_KEY, everything stored under the keyring,
+for every tenant (suspended and trashed included), and prints the counts as JSON:
+  tenants                              how many tenants the run went over
+  resealed, current, skipped, failed   the signing keys (failed counts tenants, any store)
+  secondFactor                         the users' TOTP secrets (janus secondFactor.reseal, in batches)
+  webhookSecrets                       the webhook endpoints' signing secrets, rolled ones included
+  connectionSecrets                    the enterprise connections' client secrets
+  socialSecrets                        the social providers' client secrets
+  oldKeyNeededBy                       every count that still needs the old key; empty when it can go
+
+Exits 1 while anything was skipped (changed meanwhile: run it again), a tenant failed, a secret is
+unreadable (no key of the list opens it: put the missing key back, or enter that secret again) or
+"behind" (still under an older key after the pass). Recovery codes are hashes and cannot be sealed
+again: they do not fail the run, but keep the old key until their users have new ones
+(secondFactor.recoveryCodesBehind). Drop the old key only when oldKeyNeededBy is empty.`;
 
 export type RotateTarget =
   | { all: true; dropOld: boolean }

@@ -30,6 +30,8 @@ export interface TenantRecord {
   /** Set once the purge claimed the tenant: it resolves nowhere from then on. */
   purgeStartedAt?: Date | undefined;
   version: number;
+  /** A tenant stored before plans existed has none: `free`. */
+  plan?: ResolvedTenant["plan"] | undefined;
   signIn: ResolvedTenant["signIn"];
   oauth: ResolvedTenant["oauth"];
 }
@@ -90,6 +92,7 @@ function toResolved(
             : issuerOfHost(primaryHost, config),
         slugIssuer: issuerOf(tenant.slug, config),
         relatedOrigins: relatedOriginsOf(verifiedHosts, config),
+        plan: tenant.plan ?? "free",
         partition: partitionOf(tenant._id),
         version: tenant.version,
         signIn: tenant.signIn,

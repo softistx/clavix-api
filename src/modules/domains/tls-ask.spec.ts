@@ -105,19 +105,43 @@ describe("tlsAsk", () => {
     expect(asked).toBe(0);
   });
 
-  test("429 past the limit, before any lookup", async () => {
-    let asked = 0;
+  test("a known host past the limit is 429", async () => {
     const handler = ask({
       limit: async () => false,
-      allowed: async () => {
-        asked++;
-        return true;
-      },
+      allowed: async () => true,
     });
     expect(
       (await get(handler, `token=${SECRET}&domain=auth.acme.com`)).status,
     ).toBe(429);
-    expect(asked).toBe(0);
+  });
+
+  // G2-11: any client can make the proxy ask for any name. A flood of unknown
+  // names must not spend the budget the first handshake of a real host needs.
+  test("a flood of unknown hosts spends nothing, so a known host still gets its certificate", async () => {
+    let budget = 3;
+    const handler = ask({
+      limit: async () => budget-- > 0,
+      allowed: async (host) => host === "auth.acme.com",
+      allowedPlatformHost: async (host) => host === "acme.clavix.test",
+    });
+    for (let i = 0; i < 50; i += 1) {
+      expect(
+        (await get(handler, `token=${SECRET}&domain=flood${i}.example.com`))
+          .status,
+      ).toBe(404);
+      expect(
+        (await get(handler, `token=${SECRET}&domain=flood${i}.clavix.test`))
+          .status,
+      ).toBe(404);
+    }
+    expect(budget).toBe(3);
+    expect(
+      (await get(handler, `token=${SECRET}&domain=auth.acme.com`)).status,
+    ).toBe(200);
+    expect(
+      (await get(handler, `token=${SECRET}&domain=acme.clavix.test`)).status,
+    ).toBe(200);
+    expect(budget).toBe(1);
   });
 
   test("malformed asks are refused without spending a limit slot", async () => {
@@ -137,7 +161,7 @@ describe("tlsAsk", () => {
       404,
     );
     expect(spent).toBe(0);
-    // a well-formed ask does spend one
+    // a well-formed ask of a known host does spend one
     expect(
       (await get(handler, `token=${SECRET}&domain=auth.acme.com`)).status,
     ).toBe(200);

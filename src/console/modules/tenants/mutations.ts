@@ -23,6 +23,8 @@ function overridesOrFail(
         clients?: number | null;
         domains?: number | null;
         agents?: number | null;
+        webhooks?: number | null;
+        connections?: number | null;
       }
     | null
     | undefined,

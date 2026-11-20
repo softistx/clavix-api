@@ -52,7 +52,8 @@ extend type Mutation {
   origin or relying party, a user not verified, a spent, lapsed or unknown
   challenge, an inactive user, a malformed response) is the same
   PASSKEY_INVALID, 401. The challenge is spent by the first try: ask for new
-  options.
+  options. SSO_REQUIRED (403), with no session, when the user's domain requires
+  single sign-on.
   """
   signInWithPasskey(challenge: String!, response: String!): SignedIn!
   """

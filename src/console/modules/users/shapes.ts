@@ -1,7 +1,22 @@
 import { GraphQLError } from "graphql";
 import type { TenantUserView, UserGrantView } from "../../context";
 
-export const shape = (user: TenantUserView) => ({
+/** A user as the console resolvers pass it on: its tenant too, for the fields read afterwards (`secondFactor`). */
+export interface TenantUserParent {
+  tenantId: string;
+  id: string;
+  email: string;
+  name: string | null;
+  emailVerified: boolean;
+  active: boolean;
+  createdAt: Date;
+}
+
+export const shape = (
+  user: TenantUserView,
+  tenantId: string,
+): TenantUserParent => ({
+  tenantId,
   id: user.id,
   email: user.email,
   name: user.name ?? null,

@@ -64,6 +64,12 @@ mutation ($tenantId: ID!) {
 }
 ```
 
+### Bring an enterprise connection
+
+An enterprise OIDC connection has its own redirect URI, built from its id:
+`https://<tenant host>/sign-in/social/<connection id>/callback`, which the console returns as `Connection.redirectUri`. Register that URL, and only that one, with the
+customer's identity provider. The sign-in refuses a callback received on another connection's URL.
+
 ### Bring a social app
 
 1. Read the provider's `callbackUrl` after a first `setSocialProvider` (on the tenant's issuer host, its primary custom domain when set; or build it:
@@ -99,23 +105,123 @@ mutation ($tenantId: ID!, $secret: String!) {
 - **Microsoft**: an account's e-mail counts as verified only when the ID token carries the
   `xms_edov` claim. Add it as an optional claim of the app registration (Token configuration);
   without it every sign-up is refused `EMAIL_UNVERIFIED`.
-- Each mutation records an admin event (`signInPolicy.update`, `socialProvider.set`,
+- Each mutation records an admin event (`signInPolicy.update`, `mfaPolicy.update`, `socialProvider.set`,
   `socialProvider.remove`): the actor, the tenant and the provider, never the client id or secret.
 - A new user is created from a provider account only when the tenant's sign-up is open; otherwise
   the account's verified e-mail must already belong to a user of the tenant.
 
+### Two-factor sign-in (TOTP)
+
+`signInPolicy.mfa` holds `mode` (`PASSKEY_SUFFICIENT`, the default, or `REQUIRED`) and `totp`
+(off by default). `updateMfaPolicy(tenantId, input: { mode, totp })` changes what it sends and needs
+`edit`; it records `mfaPolicy.update`.
+
+```graphql
+mutation ($tenantId: ID!) {
+  updateMfaPolicy(tenantId: $tenantId, input: { totp: true }) {
+    mfa {
+      mode
+      totp
+    }
+  }
+}
+```
+
+With `totp` on, a signed-in user of the tenant starts a factor on the hosted `/graphql`:
+`enrollSecondFactor` answers the secret and an `otpauth://` URI, `activateSecondFactor(code)` checks the
+first code and answers ten recovery codes, once. The session must have proved who it is in the last ten
+minutes (`STEP_UP_REQUIRED` otherwise). With `totp` off, enrolment is refused (`SECOND_FACTOR_DISABLED`,
+403); a user who already holds a factor keeps it and can still disable it or renew the codes.
+
+From then on `verifySignInCode`, `confirmMagicLink` and `socialSignInComplete` answer a union: the
+session as before, or a `SecondFactorChallenge` (no cookie yet).
+
+```graphql
+mutation ($challenge: String!, $code: String!) {
+  verifySignInCode(challenge: $challenge, code: $code) {
+    __typename
+    ... on SignedIn {
+      user {
+        id
+      }
+      expiresAt
+    }
+    ... on SecondFactorChallenge {
+      challenge
+      methods
+    }
+  }
+}
+mutation ($challenge: String!, $code: String!) {
+  confirmSecondFactor(challenge: $challenge, code: $code) {
+    user {
+      id
+    }
+    newDevice
+  }
+}
+```
+
+`recoverSecondFactor(challenge, recoveryCode)` answers it with a recovery code instead. A passkey
+sign-in is multi-factor and still answers `SignedIn`. When `methods` holds `passkey`, the challenge
+carries `passkeyOptions` (JSON text for `navigator.credentials.get`, bound to the challenge), and
+`confirmSecondFactorWithPasskey(challenge, assertion)` answers it with the browser's result
+(`credential.toJSON()` as a JSON string), keeping the original sign-in's context:
+
+```graphql
+mutation ($challenge: String!, $assertion: String!) {
+  confirmSecondFactorWithPasskey(challenge: $challenge, assertion: $assertion) {
+    user {
+      id
+    }
+    newDevice
+    recoveryCodesLeft
+  }
+}
+```
+
+A page keeps only the `challenge`, not `passkeyOptions`: the options grow with the user's passkeys
+(a dozen of them overflow a 4 KB cookie). `requestSecondFactorPasskeyOptions(challenge)` answers the
+same options again, anonymously (the sign-in is), with `Cache-Control: no-store`:
+
+```graphql
+mutation ($challenge: String!) {
+  requestSecondFactorPasskeyOptions(challenge: $challenge) {
+    options # JSON text for navigator.credentials.get({ publicKey })
+  }
+}
+```
+
+It only reads the challenge: no attempt is counted and nothing is spent, so it may be called on every
+render of the second-factor page, and `confirmSecondFactorWithPasskey` redeems the challenge with the
+assertion built on those options. An unknown (another tenant's too), spent or lapsed challenge is
+`TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED`; a user who holds no passkey is
+`SECOND_FACTOR_NOT_ENROLLED` (409); a tenant that turned passkeys off is `SIGN_IN_METHOD_DISABLED`. It
+shares the per client address and per tenant limits of `passkeySignInOptions`: past them it is
+`PASSKEY_THROTTLED` (429, `Retry-After`).
+
+It shares the challenge's five attempts with the code: an assertion that does not verify, or names
+another user's passkey, is `CODE_INVALID` with `attemptsLeft`; an unknown (another tenant's too),
+spent or lapsed challenge is `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED`. On success it sets
+the session cookie, records `session.signIn` by `passkey`, and `recoveryCodesLeft` is null. An admin removes a user's factor with
+`resetUserSecondFactor(tenantId, userId)` (`edit`, event `user.resetSecondFactor`); `TenantUser.secondFactor`
+shows `enabled` and `recoveryCodesLeft`.
+
 ### Errors
 
-| Code                          | HTTP | When                                                                                    |
-| ----------------------------- | ---- | --------------------------------------------------------------------------------------- |
-| `FORBIDDEN`                   |      | the caller lacks the permission on that tenant                                          |
-| `NOT_FOUND`                   | 404  | a platform operator names an unknown or inactive tenant                                 |
-| `CONFLICT`                    | 409  | other changes to the tenant kept winning; nothing stored, read and retry                |
-| `NO_SIGN_IN_METHOD`           | 409  | the change would leave no enabled method and no enabled provider                        |
-| `PLATFORM_FIRST_PARTY_METHOD` | 409  | the change would leave the platform tenant with neither `PASSKEY` nor `EMAIL_CODE`      |
-| `SIGN_IN_METHOD_UNAVAILABLE`  | 409  | enabling a method with `available: false` (`PASSWORD`)                                  |
-| `SOCIAL_SECRET_REQUIRED`      | 400  | a provider set for the first time without `clientSecret`                                |
-| `BAD_USER_INPUT`              | 400  | a type given twice; a new provider without `clientId`; an empty or >512-character value |
+| Code                          | HTTP | When                                                                                       |
+| ----------------------------- | ---- | ------------------------------------------------------------------------------------------ |
+| `FORBIDDEN`                   |      | the caller lacks the permission on that tenant                                             |
+| `NOT_FOUND`                   | 404  | a platform operator names an unknown or inactive tenant                                    |
+| `CONFLICT`                    | 409  | other changes to the tenant kept winning; nothing stored, read and retry                   |
+| `NO_SIGN_IN_METHOD`           | 409  | the change would leave no enabled method and no enabled provider                           |
+| `PLATFORM_FIRST_PARTY_METHOD` | 409  | the change would leave the platform tenant with neither `PASSKEY` nor `EMAIL_CODE`         |
+| `SIGN_IN_METHOD_UNAVAILABLE`  | 409  | enabling a method with `available: false` (`PASSWORD`)                                     |
+| `SOCIAL_SECRET_REQUIRED`      | 400  | a provider set for the first time without `clientSecret`                                   |
+| `BAD_USER_INPUT`              | 400  | a type given twice; a new provider without `clientId`; an empty or >512-character value    |
+| `SECOND_FACTOR_DISABLED`      | 403  | hosted `enrollSecondFactor` or `activateSecondFactor` while the tenant's `mfa.totp` is off |
+| `STEP_UP_REQUIRED`            | 403  | hosted `enrollSecondFactor`: the session proved who it is more than ten minutes ago        |
+| `TENANT_SUSPENDED`            | 403  | `confirmSecondFactor` or `recoverSecondFactor` on a suspended tenant; no session opened    |
 
 The platform tenant (the one that signs the console's operators in) is stricter than the others: it
 always keeps a first-party method, `PASSKEY` or `EMAIL_CODE`, enabled, because a social provider
@@ -143,7 +249,10 @@ Every mutation is idempotent: the same call again changes nothing, and `version`
 
 Public, by host; an unknown host is `NOT_FOUND`. It lists only what is enabled, and never a client
 id or a secret. A provider whose secret was sealed under another master key is left out until its
-secret is entered again. Show a button per entry and nothing else: an operation of a method that is off
+secret is entered again. The tenant's enabled enterprise connections that have `showButton: true` follow
+the providers, with the connection's id as `id` and its name as `label`; a disabled connection, one
+without `showButton`, one without a verified domain, or one whose secret cannot be opened is not listed (and `socialSignInStart` refuses it) (the visitor reaches it through the e-mail home-realm lookup). An
+entry's `id` is the `provider` of `socialSignInStart` either way. Show a button per entry and nothing else: an operation of a method that is off
 answers 404 `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) before anything is
 counted or mailed.
 
@@ -168,6 +277,7 @@ mutation {
 mutation ($callbackUrl: String!, $flow: String!) {
   socialSignInComplete(callbackUrl: $callbackUrl, flow: $flow) {
     created
+    replaced
     returnTo
     expiresAt
     user {
@@ -182,6 +292,13 @@ mutation ($callbackUrl: String!, $flow: String!) {
 
 The `__Host-clavix-session` cookie is set on the response; forward it to the browser, then go to
 `returnTo`.
+
+`replaced` is true when this sign-in took over an account that held the e-mail **without ever proving
+it** (for example one made by someone else's sign-up): the provider's proof becomes the first proof of the
+address, and that account's password, passkeys, second factor, links and sessions are gone, and so are its OAuth grants and refresh tokens (Clavix revokes them; if the revocation fails, it is retried in the background with backoff, and the sign-in still succeeds once the retry is stored). This happens only
+for the tenant's own Google, GitHub or Microsoft app, and only when the provider reports the e-mail as
+verified; an enterprise connection never replaces a holder (`EMAIL_NOT_VERIFIED_FOR_LINK`), and a verified
+user is only linked (`replaced: false`). The sign-in log's `session.signIn` carries `reason: "replaced"`.
 
 | Code                                                               | HTTP        | When                                                                     |
 | ------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------ |

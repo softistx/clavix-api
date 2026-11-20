@@ -122,6 +122,81 @@ describe("createTenantInvitations", () => {
     ]);
   });
 
+  describe("invite guards", () => {
+    const input = {
+      scope: "s",
+      organization: "Acme",
+      email: "1@inv.test",
+      role: "member",
+      invitedBy: { id: "u1", name: "Ann" },
+    };
+    // The fixtures were last written on day 1.
+    const clock = (seconds: number) => () => at(1).getTime() + seconds * 1000;
+
+    test("re-inviting an address inside the cooldown is refused, with the seconds left, and mails nothing", async () => {
+      const { source, mails } = fakeSource();
+      const invitations = createTenantInvitations(async () => source, {
+        now: clock(45),
+      });
+      const refused = await invitations.invite(input).catch((e) => e);
+      expect(refused).toBeInstanceOf(ResendRefusedError);
+      expect(refused).toMatchObject({
+        code: "INVITE_TOO_SOON",
+        retryAfter: 15,
+      });
+      // The address is compared case-insensitively.
+      expect(
+        await invitations
+          .invite({ ...input, email: "1@INV.test" })
+          .catch((e) => e.code),
+      ).toBe("INVITE_TOO_SOON");
+      expect(mails).toEqual([]);
+    });
+
+    test("re-inviting after the cooldown replaces the pending invitation and mails", async () => {
+      const { source, mails } = fakeSource();
+      const invitations = createTenantInvitations(async () => source, {
+        now: clock(61),
+      });
+      await invitations.invite(input);
+      expect(mails.map(({ to }) => to)).toEqual(["1@inv.test"]);
+    });
+
+    test("another address, or another scope's invitation of the address, is not held by the cooldown", async () => {
+      const { source, mails } = fakeSource();
+      const invitations = createTenantInvitations(async () => source, {
+        now: clock(1),
+      });
+      await invitations.invite({ ...input, email: "new@inv.test" });
+      await invitations.invite({ ...input, scope: "other" });
+      expect(mails).toHaveLength(2);
+    });
+
+    test("the pending cap refuses a new address, mails nothing, and still allows replacing one after the cooldown", async () => {
+      const { source, mails } = fakeSource();
+      const invitations = createTenantInvitations(async () => source, {
+        now: clock(120),
+        maxPending: 3,
+      });
+      const refused = await invitations
+        .invite({ ...input, email: "new@inv.test" })
+        .catch((e) => e);
+      expect(refused).toBeInstanceOf(ResendRefusedError);
+      expect(refused.code).toBe("PENDING_INVITATIONS_LIMIT");
+      expect(mails).toEqual([]);
+      // Replacing an address already pending does not grow the count.
+      await invitations.invite(input);
+      expect(mails).toHaveLength(1);
+      // Below the cap the next one goes through.
+      const roomy = createTenantInvitations(async () => source, {
+        now: clock(120),
+        maxPending: 4,
+      });
+      await roomy.invite({ ...input, email: "new@inv.test" });
+      expect(mails).toHaveLength(2);
+    });
+  });
+
   test("pending reads every page of its scope only", async () => {
     const { source } = fakeSource(2);
     const invitations = createTenantInvitations(async () => source);

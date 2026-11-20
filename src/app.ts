@@ -1,4 +1,5 @@
 import { graphql } from "@alxia/graphql";
+import type { Telemetry } from "@softistx/telemetry";
 import { agentsFor } from "./config/agent-clients";
 import { serveLogo } from "./config/branding";
 import {
@@ -7,19 +8,25 @@ import {
   TLS_ASK_PATH,
   WEBAUTHN_WELL_KNOWN,
 } from "./config/domains-routes";
+import { env } from "./config/env";
 import { readyz } from "./config/ready";
 import { detailTextsFor, scopeTextsFor } from "./config/resources";
 import {
   deviceThrottle,
+  homeRealmThrottle,
   passkeyThrottle,
   signInThrottle,
+  ssoStartThrottle,
   verifyThrottle,
 } from "./config/throttle";
-import { CONSOLE_PATH } from "./console/identity";
+import { serveAuditExport } from "./console/audit-export/export";
+import { useInviteBudget } from "./console/budgets";
+import { CONSOLE_EXPORT_PATH, CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
+import { useNoIntrospection } from "./http/introspection";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
@@ -52,6 +59,10 @@ export function createApp(
     signInThrottle?: Throttle | undefined;
     // The same for `passkeySignInOptions`.
     passkeyThrottle?: Throttle | undefined;
+    // The same for `hostedHomeRealm`, apart from the sign-in code budget.
+    homeRealmThrottle?: Throttle | undefined;
+    // The same for `socialSignInStart` (social and enterprise).
+    ssoStartThrottle?: Throttle | undefined;
     // The same for `requestEmailVerification` (per user too).
     verifyThrottle?: VerificationThrottle | undefined;
     // The same for the device verification page's code lookups.
@@ -65,20 +76,39 @@ export function createApp(
     detailTexts?: DetailTextsFor;
     // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
     agents?: AgentsFor;
+    // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
+    telemetry?: Telemetry;
     // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
     ready?: () => Promise<ReadyReport>;
+    // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
+    ide?: boolean;
   } = {},
 ) {
-  const base = createBase(undefined, {
-    signInThrottle:
-      "signInThrottle" in options ? options.signInThrottle : signInThrottle,
-    passkeyThrottle:
-      "passkeyThrottle" in options ? options.passkeyThrottle : passkeyThrottle,
-    verifyThrottle:
-      "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
-    deviceThrottle:
-      "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
-  })
+  const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
+  const base = createBase(
+    undefined,
+    {
+      signInThrottle:
+        "signInThrottle" in options ? options.signInThrottle : signInThrottle,
+      passkeyThrottle:
+        "passkeyThrottle" in options
+          ? options.passkeyThrottle
+          : passkeyThrottle,
+      homeRealmThrottle:
+        "homeRealmThrottle" in options
+          ? options.homeRealmThrottle
+          : homeRealmThrottle,
+      ssoStartThrottle:
+        "ssoStartThrottle" in options
+          ? options.ssoStartThrottle
+          : ssoStartThrottle,
+      verifyThrottle:
+        "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
+      deviceThrottle:
+        "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
+    },
+    options.telemetry,
+  )
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
     .all("/readyz", async ({ request }) => {
@@ -99,8 +129,9 @@ export function createApp(
   ).plugin((app) =>
     graphql(app, {
       schema,
-      ide: "apollo-sandbox",
+      ide: ide ? "apollo-sandbox" : false,
       plugins: [
+        ...(ide ? [] : [useNoIntrospection()]),
         useSameOriginJson(),
         useWithoutQuotedValues(),
         janusPlugin(),
@@ -121,15 +152,27 @@ export function createApp(
   const consoleOptions = options.console;
   return consoleOptions === undefined
     ? mounted
-    : mounted.plugin((app) =>
-        graphql(app, {
-          schema: consoleOptions.schema ?? consoleSchema,
-          path: CONSOLE_PATH,
-          ide: false,
-          plugins: [useWithoutQuotedValues(), useConsole(consoleOptions)],
-          maskedErrors: janusMasking,
-        }),
-      );
+    : mounted
+        .plugin((app) =>
+          graphql(app, {
+            schema: consoleOptions.schema ?? consoleSchema,
+            path: CONSOLE_PATH,
+            ide: false,
+            plugins: [
+              // First: aliased invitations are counted before anything runs.
+              ...(consoleOptions.budgets === undefined
+                ? []
+                : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
+              useWithoutQuotedValues(),
+              useConsole(consoleOptions),
+            ],
+            maskedErrors: janusMasking,
+          }),
+        )
+        // The audit export (D17): a stream, so a route beside the GraphQL one.
+        .all(CONSOLE_EXPORT_PATH, ({ request }) =>
+          serveAuditExport(request, consoleOptions),
+        );
 }
 
 // The app the server runs.

@@ -1,0 +1,93 @@
+# Staging overlay: Clavix behind the shared VPS's Traefik v3 (nxgt-docker/traefik),
+# on the external `proxy` network. Used with compose.yml by deploy/deploy.ts:
+#
+#   docker compose -f compose.yml -f compose.traefik.yml --env-file .env ...
+#
+# - Traefik terminates TLS. The `letsencrypt` resolver (Cloudflare DNS-01) asks
+#   for `${CLAVIX_DOMAIN}` and `*.${CLAVIX_DOMAIN}`: the `*.softistx.com` wildcard
+#   of traefik does not cover the two-level tenant hosts <slug>.clavix.softistx.com.
+# - Caddy is not started (profile `standalone`, for a host of its own). On-demand
+#   TLS for custom domains is off: a custom domain is not served in staging.
+# - The api gets the routes Caddy gave it (the authorization server, the GraphQL
+#   APIs, JWKS, userinfo, the logo, /healthz); the ui gets the rest. /internal
+#   and /readyz have no router to the api: the ui answers 404.
+# - Images are built here from the two checkouts (no registry): the api from `..`,
+#   the ui from CLAVIX_UI_CONTEXT (../../clavix-ui, the sibling checkout).
+# - CLAVIX_DOMAIN_RE is the regex of the tenant hosts, derived from CLAVIX_DOMAIN
+#   by deploy.ts (domainRegex in lib.ts); it is not in the env file.
+# - Containers are named, and reach each other by name (`clavix-api`): the
+#   service names `api` and `ui` would also be aliases on the shared `proxy`.
+
+services:
+  api:
+    image: ${CLAVIX_API_IMAGE:?set CLAVIX_API_IMAGE in deploy/.env}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: clavix-api
+    networks: [default, proxy]
+    environment:
+      # Two hops: traefik, then the Cloudflare edge it trusts.
+      CLAVIX_TRUSTED_PROXIES: "2"
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.clavix-api.entrypoints: websecure
+      traefik.http.routers.clavix-api.priority: "100"
+      traefik.http.routers.clavix-api.rule: >-
+        (Host(`${CLAVIX_DOMAIN}`) || HostRegexp(`${CLAVIX_DOMAIN_RE:?set by deploy.ts}`))
+        && (Path(`/authorize`) || Path(`/par`) || Path(`/device_authorization`)
+        || Path(`/token`) || Path(`/register`) || Path(`/revoke`) || Path(`/introspect`)
+        || Path(`/jwks.json`) || Path(`/userinfo`) || Path(`/graphql`)
+        || Path(`/console/graphql`) || Path(`/console/audit/export`) || Path(`/branding/logo`) || Path(`/healthz`)
+        || Path(`/.well-known/oauth-authorization-server`)
+        || Path(`/.well-known/openid-configuration`) || Path(`/.well-known/webauthn`))
+      traefik.http.routers.clavix-api.service: clavix-api
+      # Public requests never carry the BFF-only header (docs/operations.md).
+      traefik.http.middlewares.clavix-api-strip.headers.customrequestheaders.x-sso-connection: ""
+      traefik.http.routers.clavix-api.middlewares: clavix-api-strip
+      traefik.http.routers.clavix-api.tls: "true"
+      traefik.http.routers.clavix-api.tls.certresolver: letsencrypt
+      traefik.http.routers.clavix-api.tls.domains[0].main: ${CLAVIX_DOMAIN}
+      traefik.http.routers.clavix-api.tls.domains[0].sans: "*.${CLAVIX_DOMAIN}"
+      traefik.http.services.clavix-api.loadbalancer.server.port: "3000"
+
+  ui:
+    image: ${CLAVIX_UI_IMAGE:?set CLAVIX_UI_IMAGE in deploy/.env}
+    build:
+      context: ${CLAVIX_UI_CONTEXT:-../../clavix-ui}
+      dockerfile: Dockerfile
+    container_name: clavix-ui
+    networks: [default, proxy]
+    environment:
+      API_URL: http://clavix-api:3000/graphql
+      TRUSTED_PROXIES: "2"
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.clavix-ui.entrypoints: websecure
+      traefik.http.routers.clavix-ui.priority: "10"
+      traefik.http.routers.clavix-ui.rule: >-
+        Host(`${CLAVIX_DOMAIN}`) || HostRegexp(`${CLAVIX_DOMAIN_RE:?set by deploy.ts}`)
+      traefik.http.routers.clavix-ui.service: clavix-ui
+      traefik.http.routers.clavix-ui.tls: "true"
+      traefik.http.routers.clavix-ui.tls.certresolver: letsencrypt
+      traefik.http.routers.clavix-ui.tls.domains[0].main: ${CLAVIX_DOMAIN}
+      traefik.http.routers.clavix-ui.tls.domains[0].sans: "*.${CLAVIX_DOMAIN}"
+      traefik.http.services.clavix-ui.loadbalancer.server.port: "3001"
+
+  mongo:
+    labels:
+      traefik.enable: "false"
+
+  redis:
+    labels:
+      traefik.enable: "false"
+
+  # Staging terminates TLS in traefik: no caddy, no on-demand certificates.
+  caddy:
+    profiles: ["standalone"]
+
+networks:
+  proxy:
+    external: true

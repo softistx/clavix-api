@@ -6,6 +6,7 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoSigningKeys } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
+import type { KeyGenerations } from "./generations";
 
 const masterKeys = (key: Uint8Array | readonly Uint8Array[]) =>
   key instanceof Uint8Array ? key : ([...key] as [Uint8Array, ...Uint8Array[]]);
@@ -17,6 +18,8 @@ export interface TenantKeysOptions {
    * non-empty list is a keyring for a rotation: the first seals, any opens.
    */
   masterKey: Uint8Array | readonly Uint8Array[];
+  /** Bumped for a tenant each time one of its keys is inserted, promoted or retired. */
+  generations?: KeyGenerations;
 }
 
 /**
@@ -25,7 +28,11 @@ export interface TenantKeysOptions {
  * listed nor decrypted through another's store. Stores are stateless and kept
  * per tenant only to avoid rebuilding them.
  */
-export function createTenantKeys({ db, masterKey }: TenantKeysOptions) {
+export function createTenantKeys({
+  db,
+  masterKey,
+  generations,
+}: TenantKeysOptions) {
   const stores = new Map<string, SigningKeyStore>();
 
   /** The tenant's store: signing (`findCurrentKey`), rotation and JWKS. */
@@ -39,6 +46,8 @@ export function createTenantKeys({ db, masterKey }: TenantKeysOptions) {
         partition: tenantId,
       });
       assertSigningKeyStore(store, `signing keys of tenant ${tenantId}`);
+      if (generations !== undefined)
+        store = observed(store, tenantId, generations);
       stores.set(tenantId, store);
     }
     return store;
@@ -50,6 +59,29 @@ export function createTenantKeys({ db, masterKey }: TenantKeysOptions) {
   }
 
   return { signingKeysFor, jwksFor };
+}
+
+// The store with every write that changes the published set counted.
+function observed(
+  store: SigningKeyStore,
+  tenantId: string,
+  generations: KeyGenerations,
+): SigningKeyStore {
+  const counted =
+    <A extends unknown[]>(write: (...args: A) => Promise<boolean>) =>
+    async (...args: A) => {
+      const changed = await write(...args);
+      if (changed) generations.bump(tenantId);
+      return changed;
+    };
+  return {
+    findKeys: (now) => store.findKeys(now),
+    findCurrentKey: (now) => store.findCurrentKey(now),
+    findPublicKeys: (now) => store.findPublicKeys(now),
+    insertKey: counted((key) => store.insertKey(key)),
+    promote: counted((kid, at, until) => store.promote(kid, at, until)),
+    retire: counted((kid, at, until) => store.retire(kid, at, until)),
+  };
 }
 
 export type TenantKeys = ReturnType<typeof createTenantKeys>;

@@ -22,7 +22,7 @@ let tenantA = "";
 let tenantB = "";
 
 const SCOPE = "id name description { fr en } resourceId claims";
-const RESOURCE = `id uri name createdAt scopes { ${SCOPE} }`;
+const RESOURCE = `id uri name createdAt allowClientCredentials scopes { ${SCOPE} }`;
 const CREATE = `mutation($tenantId: ID!, $input: CreateResourceInput!) {
   createResource(tenantId: $tenantId, input: $input) { ${RESOURCE} }
 }`;
@@ -152,6 +152,47 @@ describe("resources", () => {
         }),
       ),
     ).toBe("NOT_FOUND");
+  });
+
+  test("allowClientCredentials is off by default, set by an update, and the name is kept", async () => {
+    const before = one(
+      await admin(GET, { tenantId: tenantA, id: api }),
+      "resource",
+    );
+    expect(before["allowClientCredentials"]).toBe(false);
+    const on = one(
+      await admin(UPDATE, {
+        tenantId: tenantA,
+        id: api,
+        input: { allowClientCredentials: true },
+      }),
+      "updateResource",
+    );
+    expect(on).toMatchObject({
+      name: before["name"],
+      allowClientCredentials: true,
+    });
+    const renamed = one(
+      await admin(UPDATE, {
+        tenantId: tenantA,
+        id: api,
+        input: { name: "Orders API" },
+      }),
+      "updateResource",
+    );
+    expect(renamed).toMatchObject({
+      name: "Orders API",
+      allowClientCredentials: true,
+    });
+    const off = one(
+      await admin(UPDATE, {
+        tenantId: tenantA,
+        id: api,
+        input: { allowClientCredentials: false },
+      }),
+      "updateResource",
+    );
+    expect(off["allowClientCredentials"]).toBe(false);
   });
 
   test("resource reads one, null when unknown", async () => {
@@ -684,6 +725,16 @@ describe("the console's own resource", () => {
     expect(
       one(await operator(GET, { tenantId, id: found.id }), "resource").id,
     ).toBe(found.id);
+    // It never takes the client credentials grant: no user behind the token.
+    expect(
+      codeOf(
+        await operator(UPDATE, {
+          tenantId,
+          id: found.id,
+          input: { allowClientCredentials: true },
+        }),
+      ),
+    ).toBe("BAD_USER_INPUT");
   });
 });
 

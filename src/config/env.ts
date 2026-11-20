@@ -84,6 +84,29 @@ export const env = defineEnv({
     .transform((value) => (value === "" ? undefined : Number(value)))
     .pipe(z.int().min(1).max(65535).optional())
     .optional(),
+  // Webhook endpoints may point at private or loopback addresses (D21), for a
+  // local receiver in development; refused in production, where only public
+  // addresses are reached.
+  CLAVIX_WEBHOOKS_ALLOW_PRIVATE: z
+    .enum(production ? ["false"] : ["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  // The durable webhook queue's caps (G2-03), counted per tenant (the queue's
+  // group) across every process: requests in flight at once, and deliveries
+  // held. A tenant's flood waits or is refused alone; the other tenants'
+  // endpoints keep being claimed. A delivery refused past the second is not
+  // queued and not retried.
+  CLAVIX_WEBHOOKS_MAX_IN_FLIGHT: z.coerce.number().int().min(1).default(4),
+  CLAVIX_WEBHOOKS_MAX_PENDING: z.coerce.number().int().min(1).default(5000),
+  // The GraphQL IDE (Apollo Sandbox) on the hosted `/graphql`, and the
+  // schema's introspection with it. The page runs a third-party script on the
+  // origin that holds the session cookie, so it is a development tool only:
+  // on under `bun dev` (NODE_ENV=development), off elsewhere, and `true` is
+  // refused in production.
+  CLAVIX_GRAPHQL_IDE: z
+    .enum(production ? ["false"] : ["true", "false"])
+    .default(Bun.env.NODE_ENV === "development" ? "true" : "false")
+    .transform((value) => value === "true"),
   // Sign-in code requests (`requestSignInCode`), on top of janus's 5 per address
   // per 10 min. Per client address and tenant, and per tenant. They need
   // Redis (REDIS_URL): without it there is no such limit.
@@ -156,6 +179,53 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Single sign-on starts that send no mail (`hostedHomeRealm`, and
+  // `socialSignInStart`, each with its own buckets): per client address and
+  // tenant, and per tenant, apart from the sign-in code budget above.
+  // Redis only, as above.
+  CLAVIX_SSO_IP_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_SSO_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_SSO_TENANT_LIMIT: z.coerce.number().int().min(1).default(2000),
+  CLAVIX_SSO_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // Console `sendTestWebhook`: per endpoint and per tenant, over one window
+  // (a test event holds a slot of the shared delivery queue). Redis only.
+  CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT: z.coerce.number().int().min(1).default(5),
+  CLAVIX_WEBHOOK_TEST_TENANT_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(60),
+  // Console `inviteUser` / `inviteAdmin` (each sends a mail): per caller and
+  // mutation (every aliased selection of one POST counts), and per tenant,
+  // both mutations together. Redis only.
+  CLAVIX_INVITE_CALLER_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_INVITE_CALLER_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  CLAVIX_INVITE_TENANT_LIMIT: z.coerce.number().int().min(1).default(200),
+  CLAVIX_INVITE_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // Pending invitations one tenant (or the admin list of one tenant) may
+  // hold; a new address past it is refused (`PENDING_INVITATIONS_LIMIT`).
+  // Read from the store, so it needs no Redis.
+  CLAVIX_INVITE_PENDING_LIMIT: z.coerce.number().int().min(1).default(500),
+  // Audit exports (GET /console/audit/export): starts per tenant, Redis only.
+  CLAVIX_EXPORT_TENANT_LIMIT: z.coerce.number().int().min(1).default(10),
+  CLAVIX_EXPORT_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Client ID Metadata Document fetches (`/authorize`, `/par` with a URL
   // `client_id`, agents): each is an outbound request an anonymous caller
   // chose. Per client address and tenant, and per tenant; janus advises about
@@ -168,12 +238,35 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(60),
+  // The ports a Client ID Metadata Document may be served on (janus-oauth
+  // `allowPorts`): the document's URL names the port the server connects to.
+  // Comma-separated; 443 by default, add a port only for a client that needs it.
+  CLAVIX_METADATA_PORTS: z
+    .string()
+    .default("443")
+    .transform((value) => {
+      const ports = value
+        .split(",")
+        .map((port) => Number(port.trim()))
+        .filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535);
+      return ports.length === 0 ? [443] : ports;
+    }),
   // The tenants whose clients may list authorization detail types (RFC 9396) on
   // a flow with a consent page (code or device): slugs separated by commas, or `*` for every tenant. Janus
   // approves every detail it validated and the consent pages that show them are
   // not built yet, so until they are no code or device client may opt in.
   // Temporary, removed with the consent page (M3b V4). Default: none.
   CLAVIX_RAR_CONSENT_READY: z.string().default(""),
+  // Traces and logs (D24): the OTLP/HTTP collector's base URL (`/v1/traces` and
+  // `/v1/logs` are appended). Unset, nothing is exported. An empty value is unset.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z
+    .string()
+    .transform((value) => value || undefined)
+    .pipe(z.url().optional())
+    .optional(),
+  // Headers sent to the collector, `key=value` pairs separated by commas (the
+  // OpenTelemetry variable of the same name), e.g. an API key.
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
   // Caddy's on-demand TLS "ask" (`GET /internal/tls/ask?token=<this>&domain=`,
   // custom domains, A4): the shared secret of that URL, at least 32 characters.
   // Unset, the endpoint does not exist. The route is internal: never expose

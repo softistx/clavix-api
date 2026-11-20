@@ -1,7 +1,11 @@
-import type { OAuthPrincipal } from "@softistx/janus-oauth";
+import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { YogaInitialContext } from "graphql-yoga";
+import type { AuthEventsService } from "@/modules/audit/auth-events.service";
+import type { PlanId } from "@/modules/tenants/plan.schema";
 import type { Access } from "./access";
+import type { AdminEventReader } from "./admin-events/reader";
 import type { Audit } from "./audit";
+import type { ConsoleBudgets } from "./budgets";
 import type { Exclusive } from "./exclusive";
 import type { Permission, Role } from "./model";
 
@@ -33,6 +37,8 @@ export interface ConsoleDirectory {
       slug: string;
       name: string;
       status: "active" | "suspended";
+      /** The plan, which sets how long the activity logs are kept (D16). */
+      plan: PlanId;
     }[]
   >;
 }
@@ -119,6 +125,12 @@ export interface UserInvitationView {
   expiresAt: Date;
 }
 
+/** A user's TOTP factor as the console may know it: never the secret or the codes. */
+export interface UserSecondFactorView {
+  enabled: boolean;
+  recoveryCodesLeft: number | null;
+}
+
 /**
  * The end users of the tenants (their janus partition), their invitations and
  * grants. Every call names a tenant that is not in the trash (active or suspended) by id (the caller checked it);
@@ -165,6 +177,25 @@ export interface ConsoleUsers {
     id: string,
     verified: boolean,
   ): Promise<TenantUserView | null>;
+  /** The user's TOTP factor; `enabled: false` for a user with none (or an unknown one). */
+  secondFactor(tenantId: string, id: string): Promise<UserSecondFactorView>;
+  /**
+   * `secondFactor` for several users of one tenant, in the order of `ids`:
+   * one read of the records, then the recovery codes of the holders only
+   * (the `TenantUser.secondFactor` loader of a page).
+   */
+  secondFactors(
+    tenantId: string,
+    ids: readonly string[],
+  ): Promise<UserSecondFactorView[]>;
+  /**
+   * Removes the user's TOTP factor and recovery codes (a lost phone and lost
+   * codes); the user as written, or `null` when unknown. Idempotent.
+   */
+  resetSecondFactor(
+    tenantId: string,
+    id: string,
+  ): Promise<TenantUserView | null>;
   /** Ends every session; answers how many. */
   revokeSessions(tenantId: string, id: string): Promise<number>;
   /** The user's standing sessions, newest first; empty for an unknown user. */
@@ -198,7 +229,7 @@ export interface ConsoleUsers {
 /** What the console's plugin puts on every context, for a request whose bearer token was accepted. */
 export interface ConsoleExtras {
   /** Who the token belongs to (the user, the client, its scopes). */
-  readonly principal: OAuthPrincipal;
+  readonly principal: OAuthUserPrincipal;
   /** Whether the caller has `permission` on the tenant; a denial is `false`. */
   can(permission: Permission, tenantId: string): Promise<boolean>;
   /** Whether the caller has `permission` on the platform itself. */
@@ -215,6 +246,16 @@ export interface ConsoleExtras {
   readonly users: ConsoleUsers;
   /** One at a time per key (a tenant's memberships). */
   readonly exclusive: Exclusive;
+  /** What the test webhooks and the invitations spend; `undefined`: no budget (no Redis). */
+  readonly budgets: ConsoleBudgets | undefined;
+  /** The readers of the two logs (D12): the console's activity and the tenants' sign-ins. */
+  readonly activity: ConsoleActivity;
+}
+
+/** What the audit module reads: both logs, through their own services. */
+export interface ConsoleActivity {
+  readonly admin: AdminEventReader;
+  readonly auth: AuthEventsService;
 }
 
 /** A console resolver's context. The generated `Resolvers` takes it (codegen.console.ts). */

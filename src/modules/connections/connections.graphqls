@@ -1,0 +1,18 @@
+"The enterprise identity provider that signs an address in."
+type HomeRealm {
+  "The connection's id: the `provider` of `socialSignInStart`."
+  connectionId: String!
+  "What the button says (the company's name for its identity provider)."
+  name: String!
+}
+
+type Query {
+  """
+  Home-realm discovery: the connection that owns the domain of `email`, or
+  null for an address that is not one, a domain nobody has verified, or a
+  connection that is turned off. Public, and it reveals that a domain has
+  single sign-on, so it spends the sign-in limits (MAIL_THROTTLED, 429).
+  The address's domain only is read; it is never stored or logged.
+  """
+  hostedHomeRealm(email: String!): HomeRealm
+}

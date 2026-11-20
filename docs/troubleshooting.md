@@ -30,8 +30,10 @@ openssl rand -base64 32   # a value for CLAVIX_KEYS_MASTER_KEY
 ## `CLAVIX_KEYS_MASTER_KEY: not 32 bytes in base64 ...` / `the same key appears twice in the keyring`
 
 The variable is one key or a comma-separated keyring of 32-byte base64 keys, none repeated. Fix the list and
-redeploy. If signing fails after a rotation, the old key was dropped before `bun run keys:reseal` answered
-`resealed: 0, skipped: 0, failed: 0` (or it exits 1): put the old key back after the new one and run it again.
+redeploy. If signing fails after a rotation, or webhooks stop arriving, an enterprise connection or a social
+provider disappears from the sign-in page, or users cannot pass their second factor (TOTP or an old recovery
+code), the old key was dropped before `bun run keys:reseal` exited 0 with
+`"oldKeyNeededBy": []`: put the old key back after the new one and run it again.
 See `docs/operations.md`, "Signing keys".
 
 ## `CLAVIX_TRUSTED_PROXIES is required in production: set the number of reverse proxies in front of the app (0 if none)`
@@ -52,6 +54,19 @@ CLAVIX_TRUSTED_PROXIES=0   # none: ctx.ip is the connection's address
 With `0`, `ctx.ip` is the connection address; with `n > 0` it is read from the forwarded chain. A number
 too high lets a client choose its own IP; too low rate-limits the proxy itself. See "Sign-in code limits"
 in the README.
+
+## `CLAVIX_GRAPHQL_IDE: Invalid option: expected "false"` at start-up, or no IDE on `/graphql`
+
+**When:** the API refuses to start in production with `CLAVIX_GRAPHQL_IDE=true`; or a browser that opens
+`/graphql` gets no page, and a tool's introspection query is answered
+`GraphQL introspection has been disabled, but the requested query contained the field "__schema".`
+
+**Why:** the IDE (Apollo Sandbox) loads a third-party script on the origin that holds every tenant's
+session cookie, so it is a development tool only. It is on under `bun dev` (`NODE_ENV=development`),
+off elsewhere, and cannot be switched on in production; introspection follows the same switch.
+
+**Fix:** remove the variable from the production environment. To explore the schema, run the API locally
+(`bun dev`, or `CLAVIX_GRAPHQL_IDE=true` outside production), or read `src/modules/**/*.graphqls`.
 
 ## Client registration refusals (`clients:create`)
 
@@ -101,8 +116,8 @@ bun run clients:create --tenant acme --name "Back office" \
 ### `grant "<grant>" is not offered: ...`
 
 **When:** a grant outside the ones janus-oauth offers (the message lists them).
-**Why:** every client gets the same grants.
-**Fix:** drop the grant; the default is the offered set.
+**Why:** the offered grants are the authorization code, refresh token, device, token exchange and `client_credentials` (its own refusals are in the next section).
+**Fix:** drop the grant; the default is the authorization code and refresh token.
 
 ### `redirect URI "<uri>": <problem>` and `a client needs at least one redirect URI`
 
@@ -221,6 +236,10 @@ The CLI prints the same message as `clients:create: …`.
 The tenant already has a type of that name, on this resource or another (a name is unique in the tenant).
 Choose another name, or update the existing type.
 
+## `SSO_REQUIRED` (403) on a hosted sign-in
+
+The address belongs to a verified domain of an enabled enterprise connection with `requireSso`. Why: the tenant's admin requires its users to sign in through the company's identity provider. Fix: call `hostedHomeRealm(email)` and start `socialSignInStart(provider: connectionId)`; or turn `requireSso` off on the connection. `socialSignInStart` answers `SIGN_IN_METHOD_DISABLED` for a connection id that is unknown, not the tenant's or turned off, and a connection with `jit` off refuses a first sign-in of an unknown user (`SIGN_UP_DISABLED`).
+
 ## Resource registration refusals (`resources:create`)
 
 ### `resource URI "<uri>" is not in canonical form: write it as <canonical>`
@@ -320,6 +339,36 @@ or mailed, and a link mailed earlier is not spent.
 without a restart. The `CLAVIX_MAGIC_LINK` variable no longer exists and is ignored. The hosted page
 reads `hostedSignInMethods` and hides its "e-mail me a link" button when `MAGIC_LINK` is not listed.
 
+## `SECOND_FACTOR_DISABLED` (403) on `enrollSecondFactor` or `activateSecondFactor`
+
+**When:** the hosted `/graphql` answers HTTP 403 with
+`"extensions":{"code":"SECOND_FACTOR_DISABLED"}` when a signed-in user starts or activates an
+authenticator app.
+
+**Why:** the tenant does not offer TOTP: its sign-in policy's `mfa.totp` is off, which is the default.
+Nothing was started. A user who already holds a factor keeps it, is still asked for it at sign-in, and can
+still disable it or renew the recovery codes.
+
+**Fix:** a tenant admin turns it on with the console's
+`updateMfaPolicy(tenantId, input: { totp: true })` (`edit` on the tenant); it applies at once, without a
+restart. A hosted page that offers the setup should treat this code as "not offered here" and hide the step.
+
+## `webhooks: delivery <id> refused, tenant <tenantId> holds <n>` in the log
+
+**When:** a tenant already holds `CLAVIX_WEBHOOKS_MAX_PENDING` deliveries in the queue (an endpoint that is down while the tenant's events keep coming), so the queue refuses the next ones.
+
+**Why:** the caps are per tenant, so one flooding tenant cannot starve another. The refused delivery is not sent and not retried; the log line carries ids only.
+
+**Fix:** repair or switch off the tenant's failing endpoint so the queue drains (an endpoint that fails 5 deliveries in a row is switched off by itself), or raise `CLAVIX_WEBHOOKS_MAX_PENDING` on every instance.
+
+## `STORE_FAILED` (`NOPERM`) from the webhook queue
+
+**When:** after upgrading to janus-webhooks-redis 0.13 with a Redis user restricted by ACL.
+
+**Why:** 0.13 runs `ZREMRANGEBYSCORE`, `HDEL`, `GET` and `SET`, which an ACL written for 0.12 does not grant; without `GET`, the orphan claims fail.
+
+**Fix:** grant the commands listed under "Redis ACL" in `operations.md` on `~clavix:webhooks:*` before the upgrade. The compose Redis uses the default user and needs nothing.
+
 ## `SIGN_IN_METHOD_DISABLED` (404) on a sign-in operation
 
 **When:** `requestSignInCode`, `verifySignInCode`, `passkeySignInOptions`, `signInWithPasskey`,
@@ -418,6 +467,21 @@ is left unspent for its owner). All look alike on purpose.
 **Fix:** offer a new link with `requestEmailVerification` and tell the user to open the latest
 e-mail while signed in to the account the link was sent for.
 
+## `MAIL_THROTTLED` (429) on `hostedHomeRealm` or `socialSignInStart`
+
+**When:** a sign-in page looks up the home realm of an address, or starts a social or enterprise
+sign-in, and the answer is HTTP 429 with `extensions.code: "MAIL_THROTTLED"`.
+
+**Why:** these two anonymous operations send no mail, and each has its own budget, apart from the
+sign-in code one: 60 per 10 minutes per client address and tenant, 2000 per hour per tenant
+(`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`, `CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`; the same values, counted separately for the lookup and for the start). The code is
+the one `requestSignInCode` answers, so a page handles one throttled error. Spending one of the three
+budgets never closes the other two: a flood of lookups leaves sign-in codes and SSO starts open.
+
+**Fix:** wait `Retry-After` seconds and try again. Many users behind one address (an office NAT)
+hitting it: raise `CLAVIX_SSO_IP_LIMIT`. Behind a proxy, check `CLAVIX_TRUSTED_PROXIES` first: set
+too low, every user counts as the proxy's address.
+
 ## `EMAIL_VERIFICATION_THROTTLED` (429) on `requestEmailVerification`
 
 **When:** the account asked for too many verification e-mails.
@@ -460,6 +524,13 @@ The caller's role does not give the permission the field needs (a viewer cannot 
 admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
 role `bun run operators:grant --email <address> --role <role>`.
 
+Two cases ask for more than the tenant role on the `clavix` tenant:
+- a write there, and the sign-in log (`authEvents`, `GET /console/audit/export?log=auth`), need the
+  **platform** role (`edit`: a platform admin or owner); a tenant-level role on `clavix` only reads;
+- changing the account of a `clavix` user who holds a platform role or owns a tenant (`disableUser`,
+  `enableUser`, `deleteUser`, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`)
+  needs a platform **owner** (`manage`): a platform admin cannot lock out, weaken or bring back an owner.
+
 ### `EMAIL_UNVERIFIED` (403) on any console operation
 
 **When:** every console call but `me { user platformRole emailVerified }` is answered with HTTP 403 and
@@ -493,6 +564,27 @@ call `rotateClientSecret` if it was lost. `createRole` answers `CONFLICT` only w
 description differs, `createResource` when the name differs, `createScope` when the description or
 the claims differ.
 
+### `client_credentials` refusals
+
+[Guide](guide/client-credentials.md). At registration (`clients:create`, `createClient`, `updateClient`):
+- `the client credentials grant needs a confidential client (--confidential)`: a public client cannot hold it.
+- `the client credentials grant needs at least one allowed scope`: janus answers `invalid_scope` to every
+  request of a client with no `allowedScopes`; give `--allowed-scopes`.
+- `default scopes must be allowed scopes: ...`: a default outside the ceiling.
+- `--allowed-scopes and --default-scopes belong to the client_credentials grant ...`: scopes without the grant.
+- `BAD_USER_INPUT` on `updateResource` with `allowClientCredentials: true` for the console's own resource.
+
+At `/token`:
+- `unsupported_grant_type` (400): no resource of the tenant has opted in. Turn `allowClientCredentials` on in
+  the resource's edit section.
+- `invalid_target` (400): no `resource` in the request (the default resource is userinfo and never opts in), or
+  the resource has not opted in.
+- `invalid_scope` (400): a scope outside the client's `allowedScopes`.
+- `unauthorized_client` (400): the client does not list the grant (`updateClient`).
+- `invalid_client` (401): wrong secret or a public client; send the secret with HTTP Basic.
+- A token that still works after the grant was turned off: tokens live until they expire, and revoking one does
+  not stop new requests; delete the client, drop the grant or rotate its secret.
+
 ### `BAD_USER_INPUT` on a client, resource or scope mutation
 
 The message says which: a redirect URI or a resource URI janus refuses (HTTPS, no fragment), a
@@ -500,14 +592,56 @@ scope name with a space or a quote, a scope without `resourceId` that is not `op
 or `email`, an empty name, or `rotateClientSecret` on a public client (`A public client has no
 secret to rotate`).
 
-### `LAST_OWNER` (409) on `changeMembership`, `removeMembership`, `disableUser` or `deleteUser`
+### `LAST_OWNER` (409) on `changeMembership`, `removeMembership`, `disableUser`, `deleteUser` or `setUserEmailVerified`
 
-The change would leave the tenant with no owner. For `disableUser` and `deleteUser` on a `clavix`
-user, the user is the only owner who can sign in of a tenant they own, or the only live platform
+The change would leave the tenant with no owner. For `disableUser`, `deleteUser` and
+`setUserEmailVerified(verified: false)` on a `clavix` user (an unproved e-mail is refused everywhere in
+the console), the user is the only owner who can sign in of a tenant they own, or the only live platform
 owner. One rule everywhere: a disabled or deleted owner does not count, so with owners X (disabled)
-and Y, Y cannot step down or be removed. Disabling a user who is already disabled is never refused.
+and Y, Y cannot step down or be removed. Disabling a user who is already disabled, or un-verifying one who is already unproved, is never refused.
 Name, invite or enable another owner first, then demote or remove this one. Of two owners removed at the same moment, the second is refused. `CONFLICT` (409)
 on the same two mutations means the user's roles kept changing during the call: retry.
+
+### `RATE_LIMITED` (429) on `inviteUser` or `inviteAdmin`
+
+**When:** an invitation is refused with HTTP 429, `extensions.code: "RATE_LIMITED"` and
+`extensions.retryAfter` (seconds, also the `Retry-After` header).
+
+**Why:** each invitation sends a mail from the platform's address, so two budgets bound them:
+
+| Budget                                              | Default      | Variables                                                           |
+| --------------------------------------------------- | ------------ | ------------------------------------------------------------------- |
+| per caller, for each of the two mutations           | 60 per hour  | `CLAVIX_INVITE_CALLER_LIMIT`, `CLAVIX_INVITE_CALLER_WINDOW_SECONDS` |
+| per tenant, `inviteUser` and `inviteAdmin` together | 200 per hour | `CLAVIX_INVITE_TENANT_LIMIT`, `CLAVIX_INVITE_TENANT_WINDOW_SECONDS` |
+
+The caller's budget counts every selection of the mutation in the request, aliases included: one
+POST with 80 aliased `inviteUser` costs 80, is refused whole with the message
+`Too many attempts, try again later`, and no invitation of it is issued. What was counted stays
+spent. The tenant's budget is counted invitation by invitation as each one runs (message
+`Too many requests`): in one request of several aliases, the ones before the limit are issued and
+the rest carry the error.
+
+**Fix:** wait `retryAfter` seconds. To invite a long list, send it in batches under the caller's
+budget, or raise the two limits for the import and put them back. Without `REDIS_URL` (development)
+there is no budget; with Redis down the invitation goes through and
+`redis unavailable: console budgets skipped` is logged.
+
+### `INVITE_TOO_SOON` (429) or `PENDING_INVITATIONS_LIMIT` (409) on `inviteUser` or `inviteAdmin`
+
+`INVITE_TOO_SOON`: the address already has a pending invitation in this scope that was sent less
+than 60 seconds ago. Inviting again replaces it (new code, new mail), so it waits out the same
+cooldown as `resendAdminInvitation`. Nothing was issued and no mail went out.
+`extensions.retryAfter` (and `Retry-After`) is the seconds to wait; the address is compared
+without case.
+
+`PENDING_INVITATIONS_LIMIT`: the tenant (for `inviteAdmin`, the managed tenant's admin list) holds
+`CLAVIX_INVITE_PENDING_LIMIT` pending invitations (default 500) and the address is a new one.
+Revoke stale ones (`revokeInvitation`, `revokeAdminInvitation`; lapsed ones do not count) or raise
+the limit. Re-inviting an address already pending is not refused by the cap.
+
+Both checks read the stored invitations, so they need no Redis and still hold when Redis is down,
+unlike the `RATE_LIMITED` budgets above, which fail open (the invitation goes through). They are
+not atomic: concurrent invitations may overshoot the cap by a few.
 
 ### `ALREADY_MEMBER` (409) on `inviteAdmin`
 
@@ -584,8 +718,14 @@ one in the trash.
 runs the console itself. `updateOAuthPolicy` on that tenant is accepted: the console pushes (PAR) and proves (DPoP), and the
 `clavix` tenant requires both since migration `2026-11-17-console-par-dpop`.
 
-**`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain) would pass the plan's limit
-(`extensions.field` names the quota: `clients` or `domains`). Change the plan or the override with `setTenantPlan`.
+**Enterprise connections** (console): `DOMAIN_TAKEN` (409), another enabled connection of the tenant already holds the
+domain; `DOMAIN_NOT_VERIFIED`, the domain's TXT record `_clavix-sso.<domain>` is missing or wrong, add the token
+and verify again; `VERIFY_COOLDOWN` (429, `retryAfter` in seconds), wait before verifying again (60 s);
+`CONNECTION_IN_USE`, users are linked to the connection, so it is disabled, not deleted; `ISSUER_REFUSED`
+(the issuer's discovery is refused: https, public address, matching issuer) and `ISSUER_UNREACHABLE` (it did not answer).
+
+**`QUOTA_EXCEEDED` (409)**: a creation (a client, a domain, a connection) would pass the plan's limit
+(`extensions.field` names the quota: `clients`, `domains` or `connections`). Change the plan or the override with `setTenantPlan`.
 Monthly active users never block: `usage` only reports `exceeded`.
 
 **`TENANT_SUSPENDED` (403)**: on the tenant's sign-in operations, on every console write of a tenant's own admins (clients, resources, roles, users, admins, domains, branding, sign-in methods, `updateTenant`: the console stays readable on a suspended tenant, platform operators can still write), and as `access_denied` JSON on
@@ -712,8 +852,27 @@ code), or an approved scope was not asked by the device.
 **`DEVICE_CODE_THROTTLED` (429)**: too many code lookups by this user, address or tenant. Wait the `Retry-After`
 seconds; operators tune `CLAVIX_DEVICE_*`. Every lookup counts, hit or miss.
 
-**`STEP_UP_REQUIRED`** on approve: the session is older than 5 minutes. Sign in again; the request is
+**`STEP_UP_REQUIRED`** on approve: the session is older than 5 minutes. Sign in again, or prove again with `requestPasskeyStepUp` / `requestStepUp` and their `confirm*`; the request is
 still pending. Reading and denying a request do not ask for a fresh session.
+
+**`UNMET_AUTHENTICATION_REQUIREMENTS`** (403, `extensions.missing`) on approve: the session does not meet the request's
+`acr_values`, `max_age` or `prompt=login`, or the tenant's `required` mode. `missing` says what: `SECOND_FACTOR` (prove with a
+step-up), `FRESH_PROOF` (prove again), `ENROLMENT` (the user holds no second factor; enrol one first). An empty `missing` means
+the request names only an `acr` Clavix does not issue: nothing can meet it, so the request is denied and the client is
+redirected with `error=unmet_authentication_requirements` (`approveOAuthRequest` answers that `redirectTo`). In the other
+cases the request stays pending for the step-up.
+
+**`CODE_INVALID`** on `confirmStepUp` (with `attemptsLeft`) is a wrong code; **`PASSKEY_INVALID`** on `confirmPasskeyStepUp` is a failed
+assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: the passkey step-up is not available to the user (no passkey, or `passkeys.firstFactor` off); it needs no authenticator app.
+
+**The second-factor sign-in fails once a user holds a dozen passkeys**: the page kept `passkeyOptions`
+beside the `challenge` in a cookie, and the options grow with each passkey past the 4 KB a cookie
+holds. Keep only the `challenge` and read the options when the page renders with
+`requestSecondFactorPasskeyOptions(challenge)`; it counts no attempt and spends nothing. On it,
+`TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED` mean sign in again, `SECOND_FACTOR_NOT_ENROLLED` (409)
+that the user holds no passkey (offer the app's code), `SIGN_IN_METHOD_DISABLED` that the tenant turned
+passkeys off, and `PASSKEY_THROTTLED` (429) that the address or tenant is over the passkey limits
+(wait the `Retry-After` seconds).
 
 **`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
 
@@ -728,7 +887,7 @@ still pending. Reading and denying a request do not ask for a fresh session.
 
 **429 `temporarily_unavailable`**: past `CLAVIX_REGISTER_IP_LIMIT` or `CLAVIX_REGISTER_TENANT_LIMIT`; wait `Retry-After` seconds (see "Agent registration throttle" in operations.md).
 
-**`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet.
+**`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet. **A metadata document on a non-standard port is refused** (`port_not_allowed` in the server logs only): the `client_id` URL names a port outside `CLAVIX_METADATA_PORTS` (default `443`, a URL without a port is on 443); serve the document on 443, or list the port.
 
 **An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` or `METADATA` agent recorded more than 7 days ago that holds no standing grant (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is recorded again at its next use. The job runs only with `REDIS_URL`.
 
@@ -840,9 +999,11 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 - **The TLS ask always answers 404**: `CLAVIX_TLS_ASK_SECRET` is unset or Caddy's `token` differs;
   the request went through a proxy (`X-Forwarded-*`, `X-Real-IP` and `Forwarded` are refused: Caddy must call the app directly);
   the domain is pending, unverified, unknown, or its tenant is suspended or in the trash. **429**:
-  past `CLAVIX_TLS_ASK_LIMIT` asks per minute, **or Redis is down**: the limit fails closed
-  (every ask is refused and `tls ask: rate limit unavailable, refusing` is logged). Restore Redis;
-  Caddy retries and certificates already issued keep serving.
+  the host is one a certificate may be issued for, and more than `CLAVIX_TLS_ASK_LIMIT` such asks
+  were answered this minute, **or Redis is down**: the limit fails closed
+  (every ask for a known host is refused and `tls ask: rate limit unavailable, refusing` is logged). Restore Redis;
+  Caddy retries and certificates already issued keep serving. An ask for an unknown host is a 404
+  and spends nothing of the limit, so a flood of random names cannot make a real domain answer 429.
 - Caddy: `on_demand_tls { ask http://api:3000/internal/tls/ask?token=<secret> }` (Caddy
   appends `&domain=<host>`). Never route `/internal/` from the public listener.
 - **`NOT_FOUND` on a domain mutation**: the tenant is unknown or in the trash, or the id belongs to
@@ -853,8 +1014,40 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 The address already has an account in that tenant's pool. Find the user with `users(tenantId, email:)` and
 manage them there; an invitation is only for an address with no account.
 
+### `RATE_LIMITED` (429) on `sendTestWebhook`
+
+**When:** a test event is refused with HTTP 429, `extensions.code: "RATE_LIMITED"` and
+`extensions.retryAfter` (seconds, also the `Retry-After` header).
+
+**Why:** a test event takes a place in the delivery queue every tenant shares, so it is budgeted:
+5 per minute per endpoint and 20 per minute per tenant, all its endpoints together
+(`CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT`, `CLAVIX_WEBHOOK_TEST_TENANT_LIMIT`,
+`CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS`). Nothing was queued and no admin event was recorded. A call
+refused for another reason (unknown or switched-off endpoint) spends nothing.
+
+**Fix:** wait `retryAfter` seconds; the budget refills evenly (one test per 12 s per endpoint at
+the defaults). To see why an endpoint fails, read its `deliveries` rather than sending more tests.
+Without `REDIS_URL` (development) there is no budget; with Redis down the test goes through and
+`redis unavailable: console budgets skipped` is logged.
+
 ### `503 SERVICE_UNAVAILABLE: Try again later` on a membership write or on accepting an admin invitation
 
 The tenant's membership lock is held by another API process past its wait, or Redis is down. Nothing
 changed (an invitation being accepted is released): ask again, with the same link for an invitation.
 The token-store 503 with the same message has another cause (see above).
+
+### `PROVIDER_ERROR` on `socialSignInComplete` for an enterprise connection
+
+**When:** the visitor comes back from the identity provider and the sign-in is refused, with no request to the provider.
+
+**Why:** the callback is bound to the connection whose URL received it, and must match the flow's connection. It is refused when the identity provider returned the visitor to another connection's URL, when the BFF sent no `x-sso-connection` header, or when the header disagrees with the callback URL's path. A provider still registered with the old shared `/sign-in/sso/callback` lands on a path that names no connection.
+
+**Fix:** register `https://<tenant host>/sign-in/social/<connection id>/callback` with the identity provider, and make sure the BFF sends the callback route's `:provider` as `x-sso-connection`.
+
+## `tsyringe requires a reflect polyfill` when the bundle starts
+
+**When:** `bun dist/server.js` stops at start, with a stack through `@peculiar/x509` and `@simplewebauthn/server`. The specs do not show it, they do not run the bundle.
+
+**Why:** Bun's bundler emits the ESM inits of `@simplewebauthn/server` before its CommonJS require of `reflect-metadata`, so `@peculiar/x509` loads `tsyringe` first.
+
+**Fix:** keep `import "reflect-metadata"` first in `src/server.ts`.

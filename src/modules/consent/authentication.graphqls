@@ -1,0 +1,36 @@
+"What a pending request can still be missing before it can be approved."
+enum AuthenticationGap {
+  "A second factor (a passkey or the authenticator app) the user holds, to prove now: `requestStepUp` and `requestPasskeyStepUp`."
+  SECOND_FACTOR
+  "The last proof is older than the request allows (`max_age`, `prompt=login`): prove again."
+  FRESH_PROOF
+  "The user holds no second factor: enrol a passkey first, then the authenticator app."
+  ENROLMENT
+}
+
+"""
+What the request asks of the user's authentication and whether the session meets
+it now (the tenant's multi-factor mode and the client's `acr_values`, `max_age`
+and `prompt=login`). `approveOAuthRequest` and `approveOAuthDeviceRequest` are
+refused with `UNMET_AUTHENTICATION_REQUIREMENTS` (403) while `met` is false.
+"""
+type OAuthAuthentication {
+  "The `acr` the request needs, null when it asks none."
+  acr: String
+  "The `acr` the session has reached: the value the approval will state."
+  current: String!
+  "The longest time since the last proof, in seconds (0 for `prompt=login`); null when none."
+  maxAge: Int
+  "Whether the session meets every demand."
+  met: Boolean!
+  "What to do about it; empty when met, or when nothing the user can do would meet it."
+  missing: [AuthenticationGap!]!
+}
+
+extend type OAuthRequest {
+  authentication: OAuthAuthentication!
+}
+
+extend type OAuthDeviceRequest {
+  authentication: OAuthAuthentication!
+}

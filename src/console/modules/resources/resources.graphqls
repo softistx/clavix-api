@@ -48,6 +48,14 @@ type Resource {
   when the tenant's host does not resolve.
   """
   protectedResourceMetadata: String
+  """
+  Whether the resource accepts access tokens of the client credentials grant
+  (RFC 6749 section 4.4): a client with `CLIENT_CREDENTIALS` may ask for a
+  token whose audience is this resource, with no user behind it. Default
+  false. The API must also accept such a token (a client-only token is
+  refused by default).
+  """
+  allowClientCredentials: Boolean!
   createdAt: DateTime!
 }
 
@@ -157,9 +165,11 @@ input CreateScopeInput {
   claims: [String!]
 }
 
-"The URI never changes: tokens carry it as their audience."
+"Fields left out stay as they are. The URI never changes: tokens carry it as their audience."
 input UpdateResourceInput {
-  name: String!
+  name: String
+  "Let clients with `CLIENT_CREDENTIALS` ask for tokens for this resource; turning it off refuses new token requests at once. Refused on the console's own resource."
+  allowClientCredentials: Boolean
 }
 
 "Fields left out stay as they are. The name and the resource never change."

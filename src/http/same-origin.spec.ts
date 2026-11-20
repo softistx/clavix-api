@@ -26,7 +26,7 @@ const REQUEST_CODE = {
 };
 const VERIFY_CODE = {
   query:
-    'mutation { verifySignInCode(challenge: "x", code: "000000") { expiresAt } }',
+    'mutation { verifySignInCode(challenge: "x", code: "000000") { __typename } }',
 };
 const CONSENT = {
   query: 'mutation { denyOAuthRequest(id: "x") { redirectTo } }',

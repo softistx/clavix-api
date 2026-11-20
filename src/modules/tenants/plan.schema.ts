@@ -4,8 +4,15 @@ import { z } from "zod";
 export const PLAN_IDS = ["free", "pro", "enterprise"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
-/** What a quota may be put on. `mau` is soft, `clients`, `domains` and `agents` are hard. */
-export const QUOTA_KEYS = ["mau", "clients", "domains", "agents"] as const;
+/** What a quota may be put on. `mau` is soft, `clients`, `domains`, `agents`, `webhooks` and `connections` are hard. */
+export const QUOTA_KEYS = [
+  "mau",
+  "clients",
+  "domains",
+  "agents",
+  "webhooks",
+  "connections",
+] as const;
 export type QuotaKey = (typeof QUOTA_KEYS)[number];
 
 /** A limit per quota; `null` means no limit. */
@@ -24,6 +31,8 @@ export const planFields = {
       clients: override,
       domains: override,
       agents: override,
+      webhooks: override,
+      connections: override,
     })
     .default({}),
 };
@@ -34,23 +43,52 @@ export interface Plan {
   id: PlanId;
   name: string;
   quotas: Quotas;
+  /** How long a tenant's sign-in log and console activity are kept (D16). */
+  auditRetentionDays: number;
 }
+
+/** How long the platform's own events (`tenantId: null`) are kept (D16). */
+export const PLATFORM_RETENTION_DAYS = 400;
 
 export const PLANS: readonly Plan[] = [
   {
     id: "free",
     name: "Free",
-    quotas: { mau: 1_000, clients: 3, domains: 1, agents: 100 },
+    quotas: {
+      mau: 1_000,
+      clients: 3,
+      domains: 1,
+      agents: 100,
+      webhooks: 2,
+      connections: 1,
+    },
+    auditRetentionDays: 30,
   },
   {
     id: "pro",
     name: "Pro",
-    quotas: { mau: 10_000, clients: 20, domains: 5, agents: 1_000 },
+    quotas: {
+      mau: 10_000,
+      clients: 20,
+      domains: 5,
+      agents: 1_000,
+      webhooks: 10,
+      connections: 5,
+    },
+    auditRetentionDays: 90,
   },
   {
     id: "enterprise",
     name: "Enterprise",
-    quotas: { mau: null, clients: null, domains: null, agents: null },
+    quotas: {
+      mau: null,
+      clients: null,
+      domains: null,
+      agents: null,
+      webhooks: 50,
+      connections: null,
+    },
+    auditRetentionDays: 365,
   },
 ];
 
@@ -66,6 +104,8 @@ export const overridesOf = (overrides: QuotaOverrides): Quotas => ({
   clients: overrides.clients ?? null,
   domains: overrides.domains ?? null,
   agents: overrides.agents ?? null,
+  webhooks: overrides.webhooks ?? null,
+  connections: overrides.connections ?? null,
 });
 
 /** What applies to a tenant: its plan's quotas with its overrides on top. */
@@ -79,5 +119,7 @@ export function effectiveQuotas(tenant: {
     clients: tenant.quotaOverrides.clients ?? quotas.clients,
     domains: tenant.quotaOverrides.domains ?? quotas.domains,
     agents: tenant.quotaOverrides.agents ?? quotas.agents,
+    webhooks: tenant.quotaOverrides.webhooks ?? quotas.webhooks,
+    connections: tenant.quotaOverrides.connections ?? quotas.connections,
   };
 }

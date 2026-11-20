@@ -3,6 +3,8 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
+import { recordingSignIn } from "@/modules/auth/sign-in-events";
+import { requireNoSsoForUser } from "@/modules/connections/sso-gate";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import {
@@ -29,7 +31,18 @@ async function authOf(ctx: Context) {
   return auth;
 }
 
-const janusPasskeys = passkeyResolvers({ auth: authOf, firstFactor: true });
+// D3: `signInGuard` runs once the assertion verified and before any session,
+// token or cookie exists: a user who must use single sign-on is refused with
+// nothing to revoke.
+const janusPasskeys = passkeyResolvers({
+  auth: authOf,
+  firstFactor: true,
+  signInGuard: async (user, ctx) => {
+    const [auth, tenant] = await Promise.all([authOf(ctx), ctx.tenant()]);
+    if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+    await requireNoSsoForUser(auth, tenant.tenantId, user.id);
+  },
+});
 const signInOptions = janusPasskeys.Query.passkeySignInOptions;
 const passkeySignIn = janusPasskeys.Mutation.passkeySignIn;
 
@@ -60,11 +73,21 @@ export const passkeys: Resolvers = {
       if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
       requireLive(tenant);
       requireMethod(tenant, "passkey");
-      const signedIn = await asPasskeyInvalid(() =>
-        passkeySignIn(_, { challenge, assertion: response }, ctx),
+      const auth = await authOf(ctx);
+      const signedIn = await recordingSignIn(
+        ctx,
+        tenant.tenantId,
+        "passkey",
+        async () => {
+          // D3: the sign-in guard refuses a user who must use single sign-on
+          // before any session or cookie exists; the attempt is a failure.
+          return asPasskeyInvalid(() =>
+            passkeySignIn(_, { challenge, assertion: response }, ctx),
+          );
+        },
+        (done) => done.userId,
       );
       // janus types `signedIn.user` as an id and a type only: read the profile.
-      const auth = await authOf(ctx);
       const user = await auth.findUser(signedIn.userId);
       if (user === null) throw passkeyInvalid();
       await usageService.recordActive(tenant.tenantId, user.id);

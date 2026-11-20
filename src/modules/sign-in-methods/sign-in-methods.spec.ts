@@ -9,21 +9,49 @@ import {
   test,
 } from "bun:test";
 import { createApp } from "@/app";
+import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { createGrantsRevoke, grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
+import {
+  type RevokeJob,
+  startGrantsRevoke,
+} from "@/modules/consent/revoke-job";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { SignInPolicyService } from "./service";
 
-const app = createApp();
+// The OAuth issuers are mounted: the replacement revokes the former holder's grants through them.
+const flow = createFlow();
+// `revokeAll` can be made to reject, to see the failure path of the replacement (#353).
+const revokeDown = { on: false, calls: 0 };
+const issuers = {
+  ...flow.issuers,
+  serverFor: async (request: Request) => {
+    const server = await flow.issuers.serverFor(request);
+    if (server === null || !revokeDown.on) return server;
+    return {
+      ...server,
+      grants: {
+        ...server.grants,
+        revokeAll: async () => {
+          revokeDown.calls += 1;
+          throw new Error("store down");
+        },
+      },
+    };
+  },
+};
+const app = createApp({ oauth: issuers });
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -48,12 +76,14 @@ async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   cookie?: string,
+  headers: Record<string, string> = {},
 ): Promise<Answer> {
   const response = await app.request(`${issuerOf(slug, origin)}/graphql`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "x-forwarded-for": "198.51.100.23",
+      ...headers,
       ...(cookie === undefined ? {} : { cookie }),
     },
     body: JSON.stringify({ query, variables }),
@@ -76,7 +106,7 @@ const START = `mutation ($p: String!, $r: String) {
 }`;
 const COMPLETE = `mutation ($u: String!, $f: String!) {
   socialSignInComplete(callbackUrl: $u, flow: $f) {
-    created returnTo expiresAt user { id email name emailVerified }
+    ... on SocialSignedIn { created replaced returnTo expiresAt user { id email name emailVerified } }
   }
 }`;
 const REQUEST_CODE = `mutation { requestSignInCode(email: "ada@example.com") { expiresAt } }`;
@@ -84,6 +114,7 @@ const PASSKEY_OPTIONS = "mutation { passkeySignInOptions { challenge } }";
 
 let social = "";
 let other = "";
+let grants = "";
 
 beforeAll(async () => {
   await createTenantParOff(tenants, { slug: "sih-open", name: "Open" });
@@ -107,6 +138,13 @@ beforeAll(async () => {
     provider: "github",
     clientId: "gh-client-other",
     clientSecret: `${SECRET}-other`,
+  });
+  // A tenant with a signing key and a client, for the grants of a replaced holder.
+  grants = (await flow.setUp("sih-grants")).tenantId;
+  await policy.setSocial(grants, {
+    provider: "github",
+    clientId: "gh-client-grants",
+    clientSecret: `${SECRET}-grants`,
   });
 });
 
@@ -156,6 +194,125 @@ describe("hostedSignInMethods", () => {
     await policy.setSocial(other, { provider: "github", enabled: true });
   });
 
+  describe("enterprise connections", () => {
+    // A connection is offered only when it can be opened: a verified domain
+    // and a secret the box opens (what `ConnectionsService.build` checks).
+    const connect = async (
+      id: string,
+      name: string,
+      extra: {
+        showButton?: boolean;
+        enabled?: boolean;
+        verified?: boolean;
+      } = {},
+    ) => {
+      const { verified = true, ...rest } = extra;
+      const created = await connectionsService.create(
+        social,
+        {
+          id,
+          name,
+          issuer: "https://idp.sih-social.test",
+          clientId: "sih-client",
+          clientSecret: "sih-conn-secret",
+          ...rest,
+        },
+        null,
+      );
+      if (verified) {
+        const now = new Date();
+        await mongo.db.connections.raw.updateOne(
+          { connectionId: id },
+          {
+            $set: {
+              domains: [
+                {
+                  domain: `${id}.sih.test`,
+                  txtToken: "t",
+                  verifiedAt: now,
+                  checkedAt: now,
+                },
+              ],
+            },
+          },
+        );
+      }
+      return created;
+    };
+    const offered = async () => {
+      const answer = await gql("sih-social", HOSTED);
+      const hosted = answer.data?.["hostedSignInMethods"] as
+        | { social: { id: string; label: string }[] }
+        | undefined;
+      return hosted?.social ?? [];
+    };
+
+    afterEach(async () => {
+      for (const doc of await connectionsService.list(social)) {
+        await connectionsService.delete(social, doc.connectionId);
+      }
+    });
+
+    test("an enabled connection with showButton follows the static providers", async () => {
+      await connect("acme", "Acme SSO", { showButton: true });
+      const answer = await gql("sih-social", HOSTED);
+      expect(await offered()).toEqual([
+        { id: "github", label: "GitHub" },
+        { id: "acme", label: "Acme SSO" },
+      ]);
+      expect(answer.text).not.toContain("sih-conn-secret");
+    });
+
+    test("a connection without a verified domain is not offered, and cannot start", async () => {
+      await connect("unverified", "Unverified SSO", {
+        showButton: true,
+        verified: false,
+      });
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+      const answer = await gql("sih-social", START, {
+        p: "unverified",
+        r: null,
+      });
+      expect(codeOf(answer)).toBe("SIGN_IN_METHOD_DISABLED");
+    });
+
+    test("a connection whose secret cannot be opened is not offered", async () => {
+      await connect("sealed", "Sealed SSO", { showButton: true });
+      await mongo.db.connections.raw.updateOne(
+        { connectionId: "sealed" },
+        { $set: { secret: { v: 1, kid: "dropped-key", iv: "x", ct: "x" } } },
+      );
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+    });
+
+    test("a connection without showButton stays out", async () => {
+      await connect("quiet", "Quiet SSO");
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+    });
+
+    test("a disabled connection with showButton stays out", async () => {
+      await connect("off", "Off SSO", { showButton: true, enabled: false });
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+    });
+
+    test("another tenant's connection is never offered", async () => {
+      await connect("acme", "Acme SSO", { showButton: true });
+      expect(
+        (await gql("sih-other", HOSTED)).data?.["hostedSignInMethods"],
+      ).toEqual({
+        methods: ["PASSKEY", "EMAIL_CODE"],
+        social: [{ id: "github", label: "GitHub" }],
+      });
+    });
+
+    test("a tenant with only a shown connection offers it alone", async () => {
+      await connect("solo", "Solo SSO", { showButton: true });
+      await policy.setSocial(social, { provider: "github", enabled: false });
+      expect(await offered()).toEqual([{ id: "solo", label: "Solo SSO" }]);
+      await policy.setSocial(social, { provider: "github", enabled: true });
+    });
+  });
+
   test("an unknown host is NOT_FOUND", async () => {
     const answer = await gql("sih-nobody", HOSTED);
     expect(codeOf(answer)).toBe("NOT_FOUND");
@@ -181,7 +338,7 @@ describe("a method the tenant turned off", () => {
     await policy.updateMethods(social, [{ type: "emailCode", enabled: false }]);
     const code = await gql(
       "sih-social",
-      `mutation { verifySignInCode(challenge: "c", code: "000000") { expiresAt } }`,
+      `mutation { verifySignInCode(challenge: "c", code: "000000") { __typename } }`,
     );
     expect(codeOf(code)).toBe("SIGN_IN_METHOD_DISABLED");
     await policy.updateMethods(social, [{ type: "emailCode", enabled: true }]);
@@ -338,6 +495,215 @@ describe("social sign-in", () => {
     });
   });
 
+  test("a built-in app's proof replaces an unverified holder of the address: replaced, and recorded in the sign-in log (nxgt-janus #978)", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-social", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-social");
+    const holder = await auth.create({ email: "squat@social.example" });
+    const start = await startOn("sih-social");
+    const { run } = github("squat@social.example");
+    const answer = await run(() =>
+      gql("sih-social", COMPLETE, {
+        u: callbackOf("sih-social", start.state),
+        f: start.flow,
+      }),
+    );
+    expect(answer.errors).toBeUndefined();
+    const done = answer.data?.["socialSignInComplete"] as {
+      created: boolean;
+      replaced: boolean;
+      user: { id: string; emailVerified: boolean };
+    };
+    expect(done).toMatchObject({ created: false, replaced: true });
+    expect(done.user).toMatchObject({ id: holder.id, emailVerified: true });
+    const events = await mongo.db.authEvents.raw
+      .find({ userId: holder.id, type: "session.signIn" })
+      .toArray();
+    expect(events.map((event) => event["reason"])).toEqual(["replaced"]);
+  });
+
+  test("replacing an unverified holder revokes their OAuth grants and refresh token; a verified user's stand (clavix-api #346)", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-grants", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-grants");
+    const holder = await auth.create({ email: "grants@social.example" });
+    const held = await flow.tokensOf("sih-grants", "openid", {
+      userId: holder.id,
+    });
+    expect(held.refresh_token ?? "").not.toBe("");
+    const client = flow.clients["sih-grants"] ?? { id: "", secret: "" };
+    const refresh = (token: string) =>
+      flow.post(
+        "sih-grants",
+        "/token",
+        { grant_type: "refresh_token", refresh_token: token },
+        flow.basic(client.id, client.secret),
+      );
+    const signIn = async () => {
+      const start = await startOn("sih-grants");
+      const { run } = github("grants@social.example");
+      const answer = await run(() =>
+        gql("sih-grants", COMPLETE, {
+          u: callbackOf("sih-grants", start.state),
+          f: start.flow,
+        }),
+      );
+      expect(answer.errors).toBeUndefined();
+      return answer.data?.["socialSignInComplete"] as {
+        replaced: boolean;
+        user: { id: string };
+      };
+    };
+    const replaced = await signIn();
+    expect(replaced).toMatchObject({ replaced: true, user: { id: holder.id } });
+    const refused = await refresh(held.refresh_token ?? "");
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toBe(
+      "invalid_grant",
+    );
+
+    // A grant the (now verified) user makes afterwards survives a plain sign-in.
+    const kept = await flow.tokensOf("sih-grants", "openid", {
+      userId: holder.id,
+    });
+    expect((await signIn()).replaced).toBe(false);
+    expect((await refresh(kept.refresh_token ?? "")).status).toBe(200);
+  });
+
+  test("a revocation that fails at a replace is queued and retried until the refresh token is refused (clavix-api #353)", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-grants", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-grants");
+    const holder = await auth.create({ email: "retry@social.example" });
+    const held = await flow.tokensOf("sih-grants", "openid", {
+      userId: holder.id,
+    });
+    const client = flow.clients["sih-grants"] ?? { id: "", secret: "" };
+    const refresh = () =>
+      flow.post(
+        "sih-grants",
+        "/token",
+        {
+          grant_type: "refresh_token",
+          refresh_token: held.refresh_token ?? "",
+        },
+        flow.basic(client.id, client.secret),
+      );
+    const signIn = async () => {
+      const start = await startOn("sih-grants");
+      const { run } = github("retry@social.example");
+      return run(() =>
+        gql("sih-grants", COMPLETE, {
+          u: callbackOf("sih-grants", start.state),
+          f: start.flow,
+        }),
+      );
+    };
+    const jobs: RevokeJob[] = [];
+    let handler: ((job: { data: RevokeJob }) => Promise<unknown>) | undefined;
+    const previous = grantsRevokeQueue.current;
+    grantsRevokeQueue.current = {
+      add: async (data) => {
+        jobs.push(data);
+      },
+    };
+    startGrantsRevoke(createGrantsRevoke(flow.issuers.serverFor), {
+      work: (fn) => {
+        handler = fn;
+        return { on: () => {} };
+      },
+    });
+    revokeDown.on = true;
+    revokeDown.calls = 0;
+    try {
+      const answer = await signIn();
+      // The sign-in succeeded: the job is stored, the grants still stand.
+      expect(answer.errors).toBeUndefined();
+      expect(answer.data?.["socialSignInComplete"]).toMatchObject({
+        replaced: true,
+      });
+      expect(revokeDown.calls).toBe(1);
+      expect(jobs).toEqual([{ tenantId: grants, userId: holder.id }]);
+      expect((await refresh()).status).toBe(200);
+    } finally {
+      revokeDown.on = false;
+    }
+    // The first run of the job fails (the store is still down for it), the retry succeeds.
+    revokeDown.on = true;
+    const down = createGrantsRevoke(issuers.serverFor);
+    await expect(down(jobs[0] as RevokeJob)).rejects.toThrow("store down");
+    revokeDown.on = false;
+    await handler?.({ data: jobs[0] as RevokeJob });
+    const refused = await refresh();
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toBe(
+      "invalid_grant",
+    );
+    grantsRevokeQueue.current = previous;
+  });
+
+  test("a revocation that cannot be queued fails the sign-in, as before", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-grants", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-grants");
+    await auth.create({ email: "noqueue@social.example" });
+    const previous = grantsRevokeQueue.current;
+    grantsRevokeQueue.current = {
+      add: async () => {
+        throw new Error("redis down");
+      },
+    };
+    revokeDown.on = true;
+    try {
+      const start = await startOn("sih-grants");
+      const { run } = github("noqueue@social.example");
+      const answer = await run(() =>
+        gql("sih-grants", COMPLETE, {
+          u: callbackOf("sih-grants", start.state),
+          f: start.flow,
+        }),
+      );
+      expect(answer.errors?.length).toBe(1);
+      expect(answer.data?.["socialSignInComplete"] ?? null).toBeNull();
+    } finally {
+      revokeDown.on = false;
+      grantsRevokeQueue.current = previous;
+    }
+  });
+
+  test("a verified user is linked, never replaced: replaced is false and no reason is recorded", async () => {
+    const first = await startOn("sih-social");
+    const { run } = github("kept@social.example");
+    const created = await run(() =>
+      gql("sih-social", COMPLETE, {
+        u: callbackOf("sih-social", first.state),
+        f: first.flow,
+      }),
+    );
+    expect(created.errors).toBeUndefined();
+    const again = await startOn("sih-social");
+    const answer = await run(() =>
+      gql("sih-social", COMPLETE, {
+        u: callbackOf("sih-social", again.state),
+        f: again.flow,
+      }),
+    );
+    const done = answer.data?.["socialSignInComplete"] as {
+      created: boolean;
+      replaced: boolean;
+      user: { id: string };
+    };
+    expect(done).toMatchObject({ created: false, replaced: false });
+    const events = await mongo.db.authEvents.raw
+      .find({ userId: done.user.id, type: "session.signIn" })
+      .toArray();
+    expect(events.map((event) => event["reason"])).toEqual([null, null]);
+  });
+
   test("returnTo must be a path of the site: no open redirect", async () => {
     for (const r of [
       "https://evil.example/x",
@@ -436,6 +802,38 @@ describe("social sign-in", () => {
     const answer = await gql("sih-social", START, { p: "github" });
     expect(codeOf(answer)).toBe("SIGN_IN_METHOD_DISABLED");
     expect(answer.text).not.toContain("github");
+  });
+
+  test("a built-in app completes through the bound callback path: the BFF's x-sso-connection names it, nothing refuses it (nxgt-janus#987)", async () => {
+    const tenant = await createTenantParOff(tenants, {
+      slug: "sih-bound",
+      name: "Bound",
+      signUp: true,
+    });
+    await policy.setSocial(tenant.id, {
+      provider: "github",
+      clientId: "gh-client-bound",
+      clientSecret: SECRET,
+    });
+    const start = await startOn("sih-bound");
+    const { run } = github("bound@social.example");
+    const answer = await run(() =>
+      gql(
+        "sih-bound",
+        COMPLETE,
+        { u: callbackOf("sih-bound", start.state), f: start.flow },
+        undefined,
+        { "x-sso-connection": "github" },
+      ),
+    );
+    expect(answer.errors).toBeUndefined();
+    expect(
+      (
+        answer.data?.["socialSignInComplete"] as
+          | { created: boolean }
+          | undefined
+      )?.created,
+    ).toBe(true);
   });
 });
 

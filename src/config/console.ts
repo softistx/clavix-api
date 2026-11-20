@@ -1,4 +1,6 @@
+import { createExportThrottle } from "@/console/audit-export/throttle";
 import { createConsoleAuthenticator } from "@/console/auth";
+import { createConsoleBudgets } from "@/console/budgets";
 import {
   CONSOLE_PATH,
   consoleAudience,
@@ -10,10 +12,12 @@ import type { ConsoleDeps } from "@/console/plugin";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
-import { adminEventRecorder } from "./admin-events";
+import { adminEventReader, adminEventRecorder } from "./admin-events";
+import { authEventsService } from "./audit";
 import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
+import { redis } from "./redis";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
@@ -75,7 +79,14 @@ export function createConsoleDeps(
       invitationsOf: (id) => invitationsOf(() => resolveById(id)),
     }),
     exclusive,
+    budgets:
+      redis === undefined ? undefined : createConsoleBudgets(redis.limits),
+    auditExport:
+      redis === undefined
+        ? {}
+        : { throttle: createExportThrottle(redis.limits.auditExport) },
     adminEvents: adminEventRecorder,
+    activity: { admin: adminEventReader, auth: authEventsService },
     directory: {
       findUser: async (id) => {
         const tenant = await clavixTenant();
@@ -108,6 +119,7 @@ export function createConsoleDeps(
           slug: tenant.slug,
           name: tenant.name,
           status: tenant.status,
+          plan: tenant.plan,
         })),
     },
   };

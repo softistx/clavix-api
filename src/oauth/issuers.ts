@@ -1,13 +1,20 @@
 import type { Clock } from "@softistx/janus";
-import { createOAuthIssuers, type OAuthIssuers } from "@softistx/janus-oauth";
+import {
+  createOAuthIssuers,
+  type OAuthEventListener,
+  type OAuthIssuers,
+} from "@softistx/janus-oauth";
 import {
   createOidcProvider,
   type OidcClaims,
   type OidcSubject,
 } from "@softistx/janus-oidc";
+import { instrumentOAuth } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
+import { tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
+import { SUPPORTED_ACR } from "./authentication-level";
 import { buildIssuer, userinfoOf } from "./building";
 import type {
   AgentCheckFor,
@@ -58,6 +65,13 @@ export interface ClavixOAuthOptions {
   agentCheckFor?: AgentCheckFor;
   /** The transport of the Client ID Metadata Documents fetch; for specs. Default: janus's own. */
   metadataTransport?: MetadataTransport;
+  /** The ports a metadata document may be served on (`CLAVIX_METADATA_PORTS`). Default: 443. */
+  metadataPorts?: readonly number[];
+  /**
+   * The listener of a tenant's OAuth events, built per tenant so its events
+   * can only reach that tenant's log (D12, D14). Absent: none is reported.
+   */
+  eventsFor?: (tenant: ResolvedTenant) => OAuthEventListener;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock?: Clock;
@@ -95,6 +109,9 @@ export function createClavixOAuthIssuers(
     // `openid` releases nothing else (`sub` aside), so roles go with every
     // OpenID Connect token, in the id_token as well as at userinfo.
     scopeClaims: { openid: ["roles"] },
+    // D9: the `acr` values a client may ask for (`acr_values`, enforced at
+    // approval, `authentication-level.ts`).
+    acrValuesSupported: SUPPORTED_ACR,
     idToken: { includeClaims: true },
   });
   const withRoles = async (
@@ -119,6 +136,8 @@ export function createClavixOAuthIssuers(
     exchangeRulesFor: options.exchangeRulesFor,
     agentCheckFor: options.agentCheckFor,
     metadataTransport: options.metadataTransport,
+    metadataPorts: options.metadataPorts,
+    eventsFor: options.eventsFor,
   });
   const issuers = createOAuthIssuers<Keyed>({
     resolve: resolveIssuer(resolver, resourcesFor),
@@ -126,6 +145,10 @@ export function createClavixOAuthIssuers(
       tenantOf.set(keyed.tenant.issuer, keyed.tenant);
       return build(keyed);
     },
+    // Traced (D24): a span per endpoint, the refused client authentications as
+    // warnings; the tenant's id and plan on each, never a token, secret or address.
+    instrument: (server, { tenant }) =>
+      instrumentOAuth(server, { attributes: () => tenantAttributes(tenant) }),
     endpoints: ({ resources }) => ({
       consentUrl: options.consentUrl ?? "/consent",
       // Same-tenant confidential clients introspect the tokens of the

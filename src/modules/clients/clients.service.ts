@@ -164,6 +164,10 @@ export class ClientsService {
       detailTypes?: readonly string[] | undefined;
       /** Default: `authorization_code` and `refresh_token`. */
       grants?: readonly string[] | undefined;
+      /** The `client_credentials` scope ceiling (needs that grant, and a confidential client). */
+      allowedScopes?: readonly string[] | undefined;
+      /** The `client_credentials` default scopes, within `allowedScopes`. */
+      defaultScopes?: readonly string[] | undefined;
     },
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
     checkSizes(input);
@@ -195,6 +199,12 @@ export class ClientsService {
       ...(input.detailTypes === undefined
         ? {}
         : { detailTypes: input.detailTypes }),
+      ...(input.allowedScopes === undefined
+        ? {}
+        : { allowedScopes: input.allowedScopes }),
+      ...(input.defaultScopes === undefined
+        ? {}
+        : { defaultScopes: input.defaultScopes }),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -213,6 +223,8 @@ export class ClientsService {
       dpopBound?: boolean | undefined;
       detailTypes?: readonly string[] | undefined;
       grants?: readonly string[] | undefined;
+      allowedScopes?: readonly string[] | undefined;
+      defaultScopes?: readonly string[] | undefined;
     },
   ): Promise<ClientView> {
     await refuseAgent(this.options.agents, tenant, clientId);
@@ -232,6 +244,13 @@ export class ClientsService {
       ...(input.detailTypes === undefined
         ? {}
         : { detailTypes: input.detailTypes }),
+      // Left out, `registerClient` keeps the stored scopes (dropped with the grant).
+      ...(input.allowedScopes === undefined
+        ? {}
+        : { allowedScopes: input.allowedScopes }),
+      ...(input.defaultScopes === undefined
+        ? {}
+        : { defaultScopes: input.defaultScopes }),
     });
     return this.require(tenant, clientId);
   }

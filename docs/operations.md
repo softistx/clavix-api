@@ -2,10 +2,12 @@
 
 Run Clavix on one host with Docker Compose: the API, the UI, MongoDB (a one-node
 replica set), Redis and Caddy for TLS. Nothing here is deployed by CI. The files
-are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`
-and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/offsite.ts`).
+are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`,
+`scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/offsite.ts`) and, for the load test, `load/`.
 
 ## What runs
+
+> Staging on the shared VPS differs (traefik instead of Caddy, images built on the host): see "Staging".
 
 | Service | Image                                 | Reachable from             | Notes                                            |
 | ------- | ------------------------------------- | -------------------------- | ------------------------------------------------ |
@@ -28,6 +30,10 @@ Caddy sends the authorization server (`/authorize`, `/token`, `/par`, `/device_a
 and `/healthz` to the API (a proxy of your own must route `/device_authorization` too), and everything else to the UI. The tenant is chosen
 by the `Host` header, which Caddy passes untouched.
 
+The edge strips `x-sso-connection` from every request it forwards to the API (Caddy `header_up -X-Sso-Connection`, the traefik
+`clavix-api-strip` middleware). Only the UI sets that header, on the private network (`clavix-api:3000`), to bind an enterprise
+connection's callback to the route that received it; a public client could otherwise send it together with a callback URL.
+
 ## Health
 
 - `GET /healthz` is liveness: 200 `{ status, version }`, no dependency is
@@ -45,11 +51,10 @@ by the `Host` header, which Caddy passes untouched.
    `*.<domain>` (so `console.<domain>` and every `<slug>.<domain>` resolve), and
    ports 80 and 443 open.
 2. Build and publish the images yourself. Both repositories build with their
-   `Dockerfile`; the API one needs the npm.softistx.com read token (`NPM_REGISTRY_TOKEN`) as a build secret:
+   `Dockerfile`; `@softistx/*` comes from public npmjs, so no token is needed:
 
    ```sh
-   export NPM_REGISTRY_TOKEN   # read token, from ~/.zshenv
-   docker build --secret id=npm_registry_token,env=NPM_REGISTRY_TOKEN -t registry.example.com/clavix-api:0.1.0 .
+   docker build -t registry.example.com/clavix-api:0.1.0 .
    ```
 
 3. `cp deploy/.env.example deploy/.env` and fill it (never commit it). Generate
@@ -68,9 +73,12 @@ by the `Host` header, which Caddy passes untouched.
    ```sh
    alias dc='docker compose -f deploy/compose.yml --env-file deploy/.env'
    dc up -d mongo redis
-   dc run --rm api bun run db:sync       # collections, indexes, validators
+   dc run --rm api bun run db:sync       # collections, indexes, validators (the clients `source` index of `countClients` included)
    dc run --rm api bun run db:migrate    # prints the console client secret once: save it
    ```
+
+   Run it with `CLAVIX_PUBLIC_SCHEME=https` (the default): the console client's redirect URI must be
+   https, so `db:migrate` fails under `http`, which only a local stack uses.
 
    Put that secret in `deploy/.env` as `CONSOLE_CLIENT_SECRET` (the example holds
    the placeholder `pending-db-migrate`). Lost? Mint another:
@@ -114,33 +122,44 @@ by the `Host` header, which Caddy passes untouched.
 The variables of the API are in the README ("Environment") and `.env.example`.
 Beyond them, the deployment reads, in `deploy/.env`:
 
-| Variable                                                                 | Read by                     | Meaning                                                                                                                                                         |
-| ------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`                                    | compose                     | the images to run                                                                                                                                               |
-| `CLAVIX_DOMAIN`                                                          | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                     |
-| `ACME_EMAIL`                                                             | caddy                       | the ACME account address                                                                                                                                        |
-| `REDIS_PASSWORD`                                                         | redis, api                  | the password in `REDIS_URL`                                                                                                                                     |
-| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used only by the mongo container to initiate the replica set at start-up                   |
-| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                 |
-| `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                             |
-| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                     |
-| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                          |
-| `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                               |
-| `CONSOLE_CLIENT_SECRET`                                                  | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                   |
-| `CONSOLE_SESSION_SECRET`                                                 | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                           |
-| `CONSOLE_ISSUER`                                                         | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                 |
-| `CONTACT_EMAIL`                                                          | ui                          | the public contact address                                                                                                                                      |
-| `BACKUP_DIR`, `BACKUP_KEEP`                                              | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14)  |
-| `BACKUP_OFFSITE_S3_BUCKET`                                               | backup, restore             | opt-in off-host copy: the bucket. Empty = no copy. See "Off-host copies"                                                                                        |
-| `BACKUP_OFFSITE_S3_ENDPOINT`, `BACKUP_OFFSITE_S3_REGION`                 | backup, restore             | the S3-compatible service (`https://...`; empty = AWS) and its region                                                                                           |
-| `BACKUP_OFFSITE_S3_ACCESS_KEY_ID`, `BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY` | backup, restore             | the credentials; required with a bucket. Give the backup a key that may write, list and delete under the prefix only                                            |
-| `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                            |
-| `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                           |
-| `NPM_REGISTRY_TOKEN`                                                     | compose build               | read token of `npm.softistx.com`, a build secret of the backup tools image (it bundles `@softistx/s3`); export it in the shell that runs `docker compose build` |
+| Variable                                                                 | Read by                     | Meaning                                                                                                                                                        |
+| ------------------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_API_IMAGE`, `CLAVIX_UI_IMAGE`                                    | compose                     | the images to run                                                                                                                                              |
+| `CLAVIX_DOMAIN`                                                          | api, ui, caddy              | the apex; tenants live at `<slug>.<domain>`                                                                                                                    |
+| `ACME_EMAIL`                                                             | caddy                       | the ACME account address                                                                                                                                       |
+| `REDIS_PASSWORD`                                                         | redis, api                  | the password in `REDIS_URL`                                                                                                                                    |
+| `MONGO_ROOT_USER`, `MONGO_ROOT_PASSWORD`                                 | mongo                       | the server's root user (default `root`), created on the first start; used only by the mongo container to initiate the replica set at start-up                  |
+| `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                |
+| `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                            |
+| `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                    |
+| `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`              | api                         | optional: where traces and logs go, see "Telemetry"                                                                                                            |
+| `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                              |
+| `CONSOLE_CLIENT_SECRET`                                                  | ui                          | required for the console: the secret of the `console` OAuth client, from `db:migrate` or `clients:create --client-id console`                                  |
+| `CONSOLE_SESSION_SECRET`                                                 | ui                          | required for the console: signs the session cookie, 32 characters or more (`openssl rand -base64 48`)                                                          |
+| `CONSOLE_ISSUER`                                                         | ui                          | ui, optional: the console's issuer, default `https://clavix.<CLAVIX_DOMAIN>`; it must equal the API's `iss` exactly (see below)                                |
+| `CONTACT_EMAIL`                                                          | ui                          | the public contact address                                                                                                                                     |
+| `BACKUP_DIR`, `BACKUP_KEEP`                                              | backup                      | archive folder on the host (default `backups/` at the repository root; a relative value is relative to `deploy/`, prefer an absolute path), archives kept (14) |
+| `BACKUP_OFFSITE_S3_BUCKET`                                               | backup, restore             | opt-in off-host copy: the bucket. Empty = no copy. See "Off-host copies"                                                                                       |
+| `BACKUP_OFFSITE_S3_ENDPOINT`, `BACKUP_OFFSITE_S3_REGION`                 | backup, restore             | the S3-compatible service (`https://...`; empty = AWS) and its region                                                                                          |
+| `BACKUP_OFFSITE_S3_ACCESS_KEY_ID`, `BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY` | backup, restore             | the credentials; required with a bucket. Give the backup a key that may write, list and delete under the prefix only                                           |
+| `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                           |
+| `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                          |
+
+The GraphQL IDE (Apollo Sandbox) and the introspection of the hosted `/graphql` are off in production:
+`CLAVIX_GRAPHQL_IDE` is `false` there and the API refuses to start with `true`. Leave it out of `deploy/.env`.
+A browser that opens `https://<tenant host>/graphql` gets no page, and a `__schema` or `__type` query is
+refused; the hosted pages and the OAuth clients are unaffected. The schema is in the repository
+(`src/modules/**/*.graphqls`); to explore it, run the API locally with `bun dev`.
 
 The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVICE_IP_LIMIT`,
 `CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
 Redis; with Redis down the lookups go through unthrottled and a line is logged.
+
+The anonymous SSO start and home-realm lookup limits (`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`,
+`CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`) and the console's test-webhook
+(`CLAVIX_WEBHOOK_TEST_*`) and invitation (`CLAVIX_INVITE_*`, except `CLAVIX_INVITE_PENDING_LIMIT`) budgets are read by the API and kept in Redis too, defaults
+in the README. With Redis down they let the call through and log a line. The pending-invitation cap and the 60 s invite cooldown read the stored invitations, so they hold without Redis.
 
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
@@ -314,7 +333,115 @@ logs say `agents: could not prune <client> of <tenant>` for each failure. Every 
 `agent.prune` (actor `system:agents:prune`); to check the job ran, look for that event or for the absence of old
 `DYNAMIC` agents in `clients(kind: [DYNAMIC])`. Two instances running the same tick do no harm (deleting is idempotent).
 
+## Audit retention
+
+The queue `audit-retention` (daily, 04:17 UTC, 3 attempts) cuts every tenant's sign-in log (`authEvents`) and
+console activity (`adminEvents`) at the retention of its current plan (`Plan.auditRetentionDays`: free 30
+days, pro 90, enterprise 365), and the platform's own events (`tenantId: null`) at 400 days. Tenants in the
+trash or already purged are covered too, so a purged tenant's console activity ends with its retention. It
+needs Redis (`REDIS_URL`): without it nothing runs. A tick that leaves a tenant unfinished fails and the
+queue retries it; the logs say `audit: retention failed for <tenant> (...)`. It deletes in batches of
+1,000 and writes no event per deletion (actor `system:audit:retention`). A plan change applies at the next run.
+
+
+## Grant revocation retries
+
+When a social sign-in replaces an unverified holder and revoking their OAuth grants fails, the revocation is
+queued (`grants-revoke`, Redis) and the sign-in succeeds. The job retries up to 8 times, backing off from 1 minute
+doubling to 1 hour. Without `REDIS_URL`, or when the job cannot be stored, the sign-in fails instead. Watch the logs
+`grants: revocation queued after a failure`, `grants: revocation not queued` and `grants: no OAuth server for <slug>`
+(check `CLAVIX_PUBLIC_SCHEME`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_PORT`). A job that exhausts its attempts stays in the
+failed set for 30 days and the user's grants stay live: revoke them from the console (connected apps).
+
+## Webhooks
+
+A tenant's events are posted to its endpoints (`https` only, public addresses only, checked when saved and
+on every send; redirects are not followed). With `REDIS_URL` the delivery queue is Redis
+(`clavix:webhooks:*`), so what waits survives a restart and runs on any instance; without it the queue is in
+memory and a restart loses what waits. A delivery is retried on the Standard Webhooks schedule, 10 s timeout,
+2xx only. An endpoint that fails 5 deliveries in a row is switched off, its tenant's owners are e-mailed and
+the console records `webhook.disable` (actor `system:webhooks:disable`); an admin switches it on again.
+
+Every request attempt is logged in `webhookDeliveries` (event id and type, attempt rank, response status or the
+failure's name, duration, whether it was delivered or will be retried; never the URL, a header or a body):
+the newest 100 per endpoint, dropped after 7 days by a TTL index on `at` (`bun run db:sync` creates it).
+`WebhookEndpoint.deliveries(first:)` in the console API reads them, newest first; deleting an endpoint deletes
+its attempts, and a tenant purge empties them.
+
+| Variable                        | Meaning                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production.    |
+| `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT` | requests in flight at once per tenant, all instances together; default 4.                                        |
+| `CLAVIX_WEBHOOKS_MAX_PENDING`   | deliveries one tenant may hold (waiting, claimed or waiting for a retry); default 5000. The next one is refused. |
+
+**Caps per tenant (G2-03).** The queue names an endpoint `<tenantId>.<endpointId>` and groups by the tenant, so
+both caps count per tenant, not per endpoint (janus-webhooks counts per group once `groupOf` is set): a tenant
+whose endpoint floods or answers slowly holds at most `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT` requests, and a claim skips
+it for the other tenants' endpoints; claims also start from another endpoint in turn. A delivery refused by
+`CLAVIX_WEBHOOKS_MAX_PENDING` is not queued and never retried: the log has one line,
+`webhooks: delivery <id> refused, tenant <tenantId> holds <n>`, with ids only. Size it well above what a healthy
+tenant holds: a dead endpoint keeps about 28 hours of its events in retry. Both caps apply to the in-memory queue
+too (no `REDIS_URL`).
+
+**Upgrading to the capped queue.**
+- Run janus-webhooks-redis 0.13 or later on **every** instance before setting a cap, and the same values on all
+  of them: an older instance claims without counting, so the cap is exceeded by what it claims. Roll the
+  instances in one go.
+- A running deployment must drain the webhook queue before this upgrade: queue entries now name their endpoint
+  `<tenantId>.<endpointId>`, so deliveries waiting under the old bare names would be given up as `endpointRemoved`.
+- **Redis ACL.** A Redis user restricted by ACL needs `+@scripting` and the commands the queue scripts run:
+  `HSET HGET HGETALL HINCRBY EXISTS DEL ZADD ZREM ZRANGEBYSCORE ZREMRANGEBYSCORE ZCARD SADD SREM SISMEMBER
+  SMEMBERS HDEL GET SET` on `~clavix:webhooks:*`. Version 0.13 needs the new ones: `ZREMRANGEBYSCORE` (with the
+  in-flight cap), `HDEL` (with `groupOf`, which Clavix always sets) and `GET`/`SET` (the orphan claim). Grant them
+  **before** upgrading: without `GET`, those claims fail with `STORE_FAILED` (`NOPERM`). The compose Redis uses
+  the default user with `requirepass` and needs nothing.
+
+Endpoint secrets (`whsec_...`) are sealed in MongoDB with a subkey of `CLAVIX_KEYS_MASTER_KEY` (label
+`webhook-secrets`); losing the key leaves endpoints with no way to sign, and they are skipped, never sent
+unsigned. The queue `webhook-secrets-prune` (daily, 04:37 UTC) removes rolled secrets whose 24 hours are over.
+A master-key rotation seals them again (`bun run keys:reseal`, "Rotating the master key" below).
+
+Enterprise connection client secrets are sealed with another subkey of `CLAVIX_KEYS_MASTER_KEY` (label
+`connection-secrets`); losing the key makes them unreadable and those sign-ins fail until an admin sets the
+secret again; a master-key rotation seals them again (`bun run keys:reseal`). A connection's domain is proved by a TXT record `_clavix-sso.<domain>` holding the token the
+console shows; verification reads DNS at most once a minute per connection. Each connection has its own redirect URI,
+`https://<tenant host>/sign-in/social/<connection id>/callback` (the console's `Connection.redirectUri`): register that URL (and only that one) with the
+customer's identity provider. The earlier shared `/sign-in/sso/callback` is no longer used.
+
+A receiver verifies the Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`,
+HMAC-SHA256 over `id.timestamp.body`, every `v1,` signature of the header is tried during a roll) and dedupes
+on `webhook-id` (delivery is at least once). The body is `{ "type", "timestamp", "data" }`; `data` holds
+`tenantId` and ids only (`userId`, `userType`, `provider` on the social events), never an address or an e-mail.
+
+## Telemetry
+
+Traces and logs go to an OpenTelemetry collector over OTLP/HTTP, through `@softistx/telemetry` (no OpenTelemetry SDK).
+
+| Variable                      | Meaning                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the collector's base URL (`/v1/traces` and `/v1/logs` are appended). Unset (or empty): nothing is exported and nothing is sent |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | optional, `key=value` pairs separated by commas, sent on every export (an API key)                                             |
+
+Both are read from `deploy/.env` like the others (compose hands the file to `api`).
+- **What is traced.** One server span per request (`@alxia/telemetry`, named `POST /graphql` or `query <Name>`; `/healthz`, `/readyz`
+  and `/internal/*` are skipped), a span per sign-in, passkey, session and invitation flow with its security events as logs
+  (`@softistx/janus-telemetry`, `janus.signIn`, `janus.signIn.refused`, `janus.signIn.throttled`, ...), and a client span per MongoDB
+  command (`@softistx/telemetry-mongo`), and a span per OAuth endpoint of each issuer (`oauth.authorize`, `oauth.token`, `oauth.par`,
+  `oauth.introspect`, `oauth.revoke`, `oauth.device`, `oauth.register`; `instrumentOAuth`). A refused client authentication is an
+  `oauth.client.refused` warning inside its span, a refused DPoP proof an `oauth.dpop.refused` one. The MongoDB command monitoring is switched on only when an endpoint is set.
+- **Attributes.** `clavix.tenant.id` and `clavix.tenant.plan` are on the server span and, inherited, on every span and log under
+  it, once the request's host names a tenant. The OAuth spans add `oauth.client.id`, `oauth.grant_type`, `oauth.resource`, `oauth.dpop`,
+  `oauth.par` and, for a refusal, `oauth.error` (the OAuth error code); they carry the tenant's attributes themselves.
+- **Never written:** tokens, codes, secrets, e-mail addresses, logins or IPs. The server span is built with `clientAddress: false`, so it
+  carries no `client.address`.
+- **Sampling.** In production 10 % of traces are kept (decided once per trace, at its root); elsewhere all. Logs are never sampled.
+- **Stopping.** The server awaits `telemetry.close()` after the HTTP server drained, so the last batch is shipped.
+- **Check it.** With the endpoint set, `bun run start` and one `POST /graphql` give a trace in the collector within a second or two;
+  an export failure is logged to stderr and never fails a request.
+
 ## TLS
+
+> Staging terminates TLS in traefik, with a wildcard certificate and no on-demand TLS: see "Staging".
 
 Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the
 Caddyfile). Caddy's automatic HTTPS adds that redirect only for host names
@@ -328,9 +455,10 @@ The answer is 200 for
 - the apex, `console.<domain>`, and `<slug>.<domain>` of a live tenant,
 
 and a bare 404 for everything else (an unknown, pending, lapsed or suspended
-domain, a deleted tenant, a wrong token); 429 past `CLAVIX_TLS_ASK_LIMIT`
-asks a minute (a flood of random names sent to your IP can use that budget up
-and make legitimate asks answer 429 for a minute; raise the limit if it happens). So a stranger pointing a name at your IP gets no certificate.
+domain, a deleted tenant, a wrong token); 429 once `CLAVIX_TLS_ASK_LIMIT`
+asks a minute were answered 200 (the host is looked up first: an ask for an
+unknown name is a 404 that spends nothing, so a flood of random names sent to
+your IP cannot make a real domain wait). So a stranger pointing a name at your IP gets no certificate.
 
 **The endpoint is not reachable from outside**, three ways at once:
 the API publishes no port, so only `caddy` and `ui` reach it on the compose
@@ -347,6 +475,7 @@ it. Custom domains stay on demand.
 
 ## Upgrade
 
+> Staging redeploys with `bun deploy/deploy.ts` (it builds, there is no `dc pull`): see "Staging".
 1. Build and tag the new images; set the new tags in `deploy/.env`.
 2. Take a backup first (below).
 3. `dc pull` (or load the images), then
@@ -422,6 +551,71 @@ Rollback: set the previous tags and `dc up -d api ui`. This rolls back the
 images, not the schema or data: if a migration changed data, restore the backup
 taken in step 2 (below).
 
+## Staging
+
+Staging runs on the shared VPS behind its Traefik v3 (the `proxy` network of nxgt-docker),
+not behind Caddy. `deploy/compose.traefik.yml` is an overlay of `compose.yml`; `deploy/deploy.ts`
+drives both.
+
+| Host                          | Served by                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `clavix.softistx.com`         | platform pages, console, landing (the ui); the api for its OAuth and GraphQL paths                             |
+| `console.clavix.softistx.com` | the console (redirect URI `https://console.clavix.softistx.com/console/auth/callback`; check `/healthz` there) |
+| `<slug>.clavix.softistx.com`  | the tenant's hosted pages and issuer (the `clavix` tenant's is `clavix.clavix.softistx.com`)                   |
+- **TLS** is traefik's, from its `letsencrypt` resolver (Cloudflare DNS-01). The routers ask for
+  `clavix.softistx.com` and `*.clavix.softistx.com` together, because the
+  `*.softistx.com` wildcard of traefik does not cover two levels. DNS has an `A` record for both names.
+- **Caddy is not started** (its profile is `standalone`) and **custom domains are off**: on-demand
+  TLS needs Caddy, so a tenant's own domain is not served in staging.
+- The hosts come from `CLAVIX_DOMAIN` in `deploy/.env`; nothing is hard-coded in the overlay. The api gets the
+  paths the Caddyfile gave it, the ui everything else; `/internal` and `/readyz` have no route to the api.
+- The api and ui are named `clavix-api` and `clavix-ui` and the ui calls `http://clavix-api:3000`:
+  the service names `api` and `ui` would be aliases on the shared `proxy` network.
+- Every service keeps its `deploy.resources.limits`; the healthchecks are the light ones of
+  "What runs" (every 30 s, no Bun or `mongosh` process).
+
+### Deploy and redeploy
+
+On the VPS, with the two checkouts side by side (`clavix-api/`, `clavix-ui/`) and traefik up:
+
+```sh
+cd clavix-api
+cp deploy/.env.example deploy/.env && chmod 600 deploy/.env   # first time; fill it (see "First boot")
+bun deploy/deploy.ts
+```
+
+In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
+(`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
+no registry token (the `@softistx` packages come from public npmjs). The script refuses to run when the file is missing, readable by
+others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
+
+One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
+and ui images on the host (no registry), starts `mongo` and `redis`, runs `db:sync` and `db:migrate`
+in a one-shot api container, `up -d --wait` for the whole stack (`--timeout <s>`, default 300), then
+cleans: the images the build replaced (and any other id under the two image names), dangling images
+(`docker image prune -f`) and the build cache older than 24 hours
+(`docker builder prune -f --filter until=24h`). It never runs `docker system prune`, and never
+touches volumes. A rerun with nothing new rebuilds from cache, migrates nothing and recreates no container.
+
+A **redeploy** is the same command. The first run prints the console client secret once (`db:migrate`):
+follow "First boot", steps 5 and 6, then run it again.
+
+To check the merged files without deploying:
+
+```sh
+CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' docker compose \
+  -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env config -q
+```
+
+Rollback in staging: the cleanup removes the images the new build replaced, so the generic "previous tags" rollback does not apply. Check out the old commit (api and ui) and run `bun deploy/deploy.ts --no-pull`.
+
+### Backup and restore in staging
+
+The `backup` and `restore` tools (profile `tools`) work as in "Backup" and "Restore", with both files in the
+alias: `dc='docker compose -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env'`
+(and `CLAVIX_DOMAIN_RE` exported as above). To restore, follow "Restore" (stop `api ui`, restore, start
+them) and "Off-host copies" for `offsite:latest`.
+
 ## Backup
 
 ```sh
@@ -434,7 +628,7 @@ as that user first (`mkdir -p backups`), and export
 `BACKUP_UID=$(id -u) BACKUP_GID=$(id -g)` when your user is not 1000. Archives an
 earlier run left owned by root: `sudo chown -R "$(id -u):$(id -g)" backups`.
 
-The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies; the build needs `NPM_REGISTRY_TOKEN` exported in the shell, as the API image does) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
+The scripts are TypeScript run by Bun; the compose `tools` profile builds an image (`deploy/tools.Dockerfile`: `mongo:8` plus Bun, the two scripts bundled with their dependencies) that holds both. After a change to `scripts/`, rebuild it: `dc --profile tools build backup`. By hand: `MONGO_URI=... KEEP=14 bun scripts/mongo-backup.ts [out-dir]` (`BACKUP_KEEP` is its compose spelling).
 
 `scripts/mongo-backup.ts` runs `mongodump --gzip` against `MONGO_URI`, writes
 `clavix-<UTC timestamp>.archive.gz` with a `.sha256` next to it (mode 600), and
@@ -595,6 +789,72 @@ tenant-owned collections), so do not restore a backup into production just to re
 tenant. In the scratch database of the drill, check that a tenant in the trash (`deletedAt` set) is
 listed with its `purgeAt`, and that the `tenant-purge` queue still ticks at 03:17 UTC.
 
+### Full drill on a fresh host (v1 gate G3)
+
+The drill above restores into a scratch database. The v1 gate also rehearses the whole
+recovery: a new host, a restore, the API on it, then a master-key rotation. It ran on a
+throwaway stack on 2026-11-20 (MongoDB 8 as a one-node replica set without authentication,
+Redis 7, the `deploy/tools.Dockerfile` image, the API from the repository) over a database of
+29 documents in 34 collections: the `clavix` tenant plus one tenant with a client, a verified
+user, a webhook endpoint and a Google social provider.
+1. **Seed.** `bun run db:sync`, `bun run db:migrate` (with `CLAVIX_PUBLIC_SCHEME=https`),
+   `bun run tenants:create --slug drill --name Drill`,
+   `bun run clients:create --tenant drill --name Machine --client-id machine --confidential --redirect-uri http://localhost:9/cb`,
+   then, from a throwaway script on the app's wiring: `webhookEndpoints.create(tenantId, {url, types: [], description}, null)`,
+   `signInPolicyService.setSocial(tenantId, {provider: "google", clientId, clientSecret, enabled: true})`,
+   and on the tenant's janus instance `auth.create({email})` then `auth.verifyEmail.confirm(...)`. Sign a
+   token with the tenant's current signing key (`signingKeysFor(tenantId).findCurrentKey`) and keep the JWKS.
+2. **Back up**, the same job as "Backup" (here by hand, on the stack's network):
+   `docker run --rm --network <net> -e MONGO_URI=mongodb://mongo:27017/clavix?directConnection=true -v $PWD/backups:/backups --entrypoint bun <tools-image> /scripts/mongo-backup.js /backups`.
+   It runs against the live database.
+3. **Lose the host**: stop the API, remove MongoDB and Redis. Start a fresh MongoDB
+   (`mongo:8 --replSet rs0`, then `rs.initiate`) and an empty Redis.
+4. **Restore**, the same job as "Restore" (`dc stop api ui` first, `dc up -d api ui` after):
+   `docker run --rm ... -e CONFIRM=yes -e MONGO_URI=<fresh uri> ... /scripts/mongo-restore.js /backups/<archive>`,
+   then `bun run db:sync` (do not skip it) and start the API.
+5. **Check**: `/readyz` is `ok` with the empty Redis, the discovery document is served, `/jwks.json`
+   is byte for byte the one from before (same `kid`), the token signed before the loss verifies against
+   it, and the collection counts equal those taken before the backup. A `POST /token` with a wrong
+   client secret answers `invalid_client`; with the right secret and a made-up refresh token it answers
+   `invalid_grant`, which shows the client's secret still verifies.
+6. **Rotate the master key** on the restored database (see "Rotating the master key"):
+   `CLAVIX_KEYS_MASTER_KEY=<new>,<old>` then `keys:reseal` (exit 0, `oldKeyNeededBy: []`: the signing keys
+   of the 2 tenants, 1 webhook secret and 1 social secret sealed again), then the API on `<new>` alone:
+   the JWKS and the old token are unchanged, a token is signed with the new key only, and the webhook
+   secret and the social client secret open (the social secret's `kid` changed). The old key alone
+   no longer opens the webhook secret (`webhooks: a secret of endpoint <id> could not be opened`).
+
+| Step                                              | Time  |
+| ------------------------------------------------- | ----- |
+| Build of the tools image (layers cached)          | 11 s  |
+| Backup (`mongodump --gzip`, 11 KB archive)        | < 1 s |
+| Fresh MongoDB, replica set initiated, empty Redis | 5 s   |
+| Restore (checksum, `mongorestore --drop`)         | 1 s   |
+| `db:sync` and API ready on the restore            | 6 s   |
+| `keys:reseal`                                     | 1 s   |
+
+**RPO: 24 hours** (nightly backup plus the off-host copy; a write between two backups is lost, see
+"Point-in-time recovery"). **RTO: 4 hours is the target** (an owner objective, D27); the recovery path
+measured about 12 s from a stopped host to a serving API (fresh MongoDB, restore, `db:sync`, API ready),
+about 25 s for the whole drill with the image build and the reseal, on a small database. The time grows
+with the dump (restore and index builds) and the archive fetch from the bucket; the 4 hours leave room
+for what the drill does not measure: provisioning the host, DNS, pulling the images and fetching the
+master key from the secret manager. Redis is not backed up and is lost with the host: the restored API
+starts on an empty Redis (cold cache, rate-limit counters at zero, the month's active-user counts reset)
+and loses the queued jobs, the pending webhook deliveries among them.
+
+What the drill showed about the setup:
+- The restored database opens only with the same master key, or a keyring that holds it ("Backup").
+  `restore` refuses an archive without its `.sha256`, and takes the target database from `MONGO_URI`.
+- The OAuth server accepts an `http:` issuer only on exactly `localhost`, so a local stack with tenant
+  subdomains needs an `https` front for `<slug>.<domain>` (a self-signed proxy to the API port, with
+  `CLAVIX_PUBLIC_SCHEME=https`, `CLAVIX_PUBLIC_PORT` the proxy's port, and, for development only,
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` for the API's own requests). `db:migrate` also needs
+  `CLAVIX_PUBLIC_SCHEME=https`: the console client's redirect URI must be https.
+- The backup is taken against the live database: no stop is needed.
+- The drill does not exercise a `client_credentials` token (it needs a resource that opted in and a confidential
+  client), so the token checked after the restore is one signed with the tenant's key.
+
 ## Signing keys
 
 Each tenant's ES256 keys rotate by themselves: a key signs for 90 days, the next
@@ -612,24 +872,76 @@ record another instance sealed under the new one):
 1. Deploy `CLAVIX_KEYS_MASTER_KEY=<old>,<new>`: the old key still seals, the new
    one already opens. Wait until every instance runs it.
 2. Deploy `CLAVIX_KEYS_MASTER_KEY=<new>,<old>`: the new key seals.
-3. Re-seal what is still under the old key, from any instance with the same
+3. Seal again what is still under the old key, from any instance with the same
    environment: `bun run keys:reseal`. It goes over every tenant (suspended and
-   trashed included), prints `{ tenants, resealed, current, skipped, failed }`
-   and **exits 1 while `skipped` or `failed` is above 0**: run it again. A
-   record is `skipped` when someone changed it meanwhile; a tenant is `failed`
-   when no key of the list opens one of its records (the message names the
-   tenant).
-4. When a run answers `resealed: 0, skipped: 0, failed: 0`, deploy
-   `CLAVIX_KEYS_MASTER_KEY=<new>` alone.
+   trashed included) and over **every store sealed under the keyring**:
 
-Dropping the old key before step 4 makes the unsealed records unreadable: signing
-fails for those tenants (the JWKS still serves) until the old key is back in the
-list.
+   | In the report                              | What it is                                                      |
+   | ------------------------------------------ | --------------------------------------------------------------- |
+   | `tenants`                                  | how many tenants the run went over                              |
+   | `resealed`, `current`, `skipped`, `failed` | the tenants' signing keys (`failed` counts tenants, any store)  |
+   | `secondFactor`                             | the users' TOTP secrets, and their recovery-code hashes         |
+   | `webhookSecrets`                           | the webhook endpoints' signing secrets, rolled ones included    |
+   | `connectionSecrets`                        | the enterprise connections' client secrets                      |
+   | `socialSecrets`                            | the social providers' client secrets (tenants in the trash too) |
+   | `oldKeyNeededBy`                           | every count that still needs the old key; `[]` when it can go   |
 
-The tenants' social client secrets (sign-in methods) use a subkey of the same
-master key. With a keyring they are still opened under any key of the list, but
-`keys:reseal` does not re-wrap them (clavix-api#49): **keep the old key in the
-list while any social secret is sealed under it**, or enter those secrets again.
+   Each of the nested stores (`secondFactor`, `webhookSecrets`,
+   `connectionSecrets`, `socialSecrets`) reports `scanned`, `resealed`,
+   `current`, `skipped`, `unreadable` and `behind`; the signing keys have the
+   top-level counts only. The run prints `keys: keep the old master key ...`
+   on stderr whenever `oldKeyNeededBy` is not empty, and **exits 1** while any
+   store has:
+   - `skipped` above 0: a record changed meanwhile. Run it again.
+   - `failed` above 0: a step threw for a tenant. The log line is
+     `keys: reseal failed for tenant <id> (<step>): <message>`, the step being
+     `signing keys`, `second factor`, `webhookSecrets`, `connectionSecrets` or
+     `socialSecrets`. For the signing keys it means no key of the list opens
+     one of its records.
+   - `unreadable` above 0: no key of the list opens that secret. The log names
+     the record, never the value:
+     `webhooks: a secret of endpoint <id> could not be sealed again`,
+     `connections: the secret of <id> (tenant <tenant>) could not be sealed again`,
+     `sign-in: the <provider> secret of tenant <tenant> could not be sealed again`.
+     The TOTP secrets are counted by janus and not logged per user. A re-run
+     does not clear it: put the missing key back in the list, or enter the
+     secret again (roll the endpoint's secret, set the connection's or the
+     provider's client secret, `resetUserSecondFactor` for a user's TOTP).
+   - `behind` above 0: counted again after the pass, the secrets still under an
+     older key.
+4. **Only when a run exits 0 and prints `"oldKeyNeededBy": []`**, deploy
+   `CLAVIX_KEYS_MASTER_KEY=<new>` alone. `resealed: 0` on the signing keys is
+   not enough: read `oldKeyNeededBy`. The one entry no run can clear is
+   `secondFactor.recoveryCodesBehind` (an exit 0 that still lists it): see the
+   recovery codes below before dropping the key with it.
+
+Dropping the old key while `oldKeyNeededBy` still names a store makes those
+secrets unreadable until the old key is back in the list:
+- signing keys: signing fails for those tenants (the JWKS still serves);
+- webhook secrets: the endpoint is left out of delivery (never sent unsigned),
+  with only a log line `webhooks: a secret of endpoint <id> could not be opened`;
+- connection client secrets: the connection is off and its domains cannot sign
+  in through SSO (`connections: <id> of tenant <tenant> is off`);
+- social client secrets: the provider is no longer offered on the sign-in page;
+- TOTP secrets: those users cannot pass the second factor.
+
+The users' TOTP secrets (second factor) are sealed under a subkey of the same
+master key (HKDF, info `second-factor`). `keys:reseal` seals them again with janus's
+`secondFactor.reseal` (batches of 100, resumable, idempotent), including the users who
+do not sign in, and reports `secondFactor: { scanned, resealed, current, skipped,
+unreadable, sealed, behind, recoveryCodesBehind }`. `sealed` and `behind` count the
+secrets only (not the recovery codes). The recovery codes are hashes and cannot be
+hashed again: their old hashes keep working while the old key is in the list, and new
+ones (a user's `regenerateRecoveryCodes`) are hashed under the first key. They do not
+make the run exit 1 (no run can move them), but `oldKeyNeededBy` lists
+`secondFactor.recoveryCodesBehind`: **keep the old key in the list while it is above
+0**, or accept that those users' remaining recovery codes stop working (an admin's
+`resetUserSecondFactor` lets them enrol again).
+
+After a master key **leaked**, do the same four steps at once, then treat every
+secret that was sealed under it as exposed to whoever also holds a copy of the
+database: roll the webhook secrets, replace the connection and social client
+secrets at their providers, and rotate the signing keys (below).
 
 ### Emergency rotation (a signing key leaked)
 
@@ -641,12 +953,18 @@ a tenant failed.
 - By default the retired key stays published for 24 h (the normal retirement
   window), so tokens already issued keep verifying.
 - If the **private key itself leaked**, add `--drop-old`: the retired key is
-  unpublished at once, so the tokens it signed stop verifying and the leak buys
-  nothing. Users sign in again; tell the relying parties.
+  unpublished from the store at once, so the tokens it signed stop verifying and the
+  leak buys nothing. The running API instances serve their cached JWKS for up to
+  60 s (the in-memory cache of `withPublicDocuments`; the CLI is another process, so
+  it cannot clear it), and a client that honours `max-age=300` may keep it 5 min
+  more. Restart the API instances to empty the cache when 60 s is too long. Users
+  sign in again; tell the relying parties.
 - If a `next` key was already published, it takes over at once; otherwise a new
   key is created and signs immediately. Relying parties that cached the JWKS
-  and have not fetched it since may fail to verify the new key until they do
-  (typically a few minutes, depending on the client).
+  and have not fetched it since may fail to verify the new key until they do:
+  every API instance shows the rotation within 60 s (the cache TTL, since the CLI
+  runs in its own process), and a client may keep the document `max-age=300` (5 min)
+  longer, so about 6 minutes at worst.
 - If the **master key** leaked, rotate it first (above), then run
   `keys:rotate --all --drop-old`: a new master key alone does not change the
   signing keys.
@@ -658,6 +976,119 @@ Check afterwards with `https://<slug>.<domain>/jwks.json`.
 A **lost** master key cannot be recovered by rotation: the stored keys are
 unreadable. Drop the tenants' `oauthSigningKeys` documents and restart the API so
 the start pass creates new keys (README, "Signing keys").
+
+## Load test
+
+`load/` holds the k6 scripts and the harness of the v1 load test (D26). It runs on one machine against
+the production image and `deploy/compose.yml` as they are (production mode, the resource limits, a one-node
+replica set, Redis with a password), under the compose project `clavix-load`: `mongo`, `redis` and `api`.
+Caddy and the ui are not started: k6 joins the compose network and sends what Caddy would add (the tenant's
+`Host`, `X-Forwarded-For` from a pool of 250 addresses, `X-Forwarded-Proto: https`). Nothing is published on
+the host, and the whole run is torn down with its volumes. Staging hardware is the better judge of the
+numbers: D26 asks for another machine, and a laptop shares its cores.
+
+| File                     | Role                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| `load/run.ts`            | `build`, `up`, `seed`, `k6 <out> <script>`, `down`, or `all`; writes a throwaway `deploy/.env`  |
+| `load/seed.ts`           | 50 tenants, 2 public clients each, one real user per tenant, one refresh-token chain per client |
+| `load/token.js`          | `POST /token`, refresh grant, 200 req/s, 60 s                                                   |
+| `load/jwks-discovery.js` | `GET /jwks.json` and `GET /.well-known/openid-configuration`, 1 000 req/s each, 60 s            |
+| `load/lib.js`            | the target, the tenants, the headers, the arrival-rate scenarios                                |
+
+```sh
+bun load/run.ts build                     # docker build -t clavix-api:load .
+bun load/run.ts up                        # mongo, redis, db:sync, db:migrate
+bun load/run.ts seed                      # tenants, clients, chains; (re)starts the api; run it again before every token run
+bun load/run.ts k6 "$PWD/load/out" jwks-discovery.js
+bun load/run.ts k6 "$PWD/load/out" token.js
+bun load/run.ts down                      # containers, volumes, the generated deploy/.env
+```
+
+The k6 image is `grafana/k6` (any other tool image is never pulled). Each script runs open-model
+(`constant-arrival-rate`), so a slow server shows as latency and dropped iterations, never as a lower
+request rate. `jwks-discovery.js` warms for 10 s (not measured); `token.js` warms each tenant with one
+discovery request in `setup` instead, because its VUs hold state.
+
+Method notes:
+- **`client_credentials`**: the seed opts the load resource in (`allowClientCredentials`) and registers a
+  confidential client per tenant, whose id and secret go under `confidential` in `seed.json`. `token.js` probes
+  the grant once in `setup` and measures it beside the refresh grant (Basic authentication, `resource` and
+  `scope=read`). `CLIENT_CREDENTIALS=0` skips the scenario, for a `seed.json` made before the grant shipped.
+- **D26** (the v1 load test decision): `/token` p95 under 150 ms at 200 req/s with 0 errors; JWKS and discovery
+  p95 under 20 ms at 2 000 req/s; run against a staging-like compose, not production.
+- **Prerequisites**: Docker with Compose 2.20+, the `grafana/k6` image, `openssl` and `bun` on the host, and a Docker
+  VM with about 10 GiB. `load/out/` (git-ignored) receives `seed.json`, `*.summary.json` and `*.log`.
+- **Knobs**: `RATE`, `VUS`, `DURATION` and `WARMUP` (env of `run.ts k6`, passed to k6; the lower-rate rows below are
+  `RATE=300 VUS=60 DURATION=30s WARMUP=5s` and `RATE=150 ...`), `LOAD_TENANTS` and `LOAD_CHAINS` (env of the seed,
+  defaults 50 and 4).
+- **A refresh chain is one VU's.** Refresh tokens rotate and a reused one revokes the grant, so each VU walks
+  its own chain (the seed makes 100 chains; a think time of 250 ms keeps about 50 VUs busy at 200 req/s, so about 50 chains over as many tenants are used).
+  `seed.ts` mints the chains through the real `/par`, `/authorize`, approval and code exchange of the real issuers
+  (the approval is called directly, in place of the hosted sign-in, for the tenant's real user); the seed must run again before each token run.
+- **Thresholds** are in the scripts: refresh p95 under 150 ms with 0 failures; JWKS and discovery p95 under 20 ms
+  with 0 failures; no dropped iteration (a saturated api cannot pass on the latency of the few requests it served). `k6` exits non-zero when one is crossed.
+
+### Results (2026-11-20)
+
+Machine: Apple M5 Pro, 18 cores; the Docker VM has 18 CPUs and 9.7 GiB. The laptop was shared with other
+sessions: the 1-minute load average was 3.5 to 6.1 during the runs (5-minute 4.0 to 5.0). Containers keep
+the limits of `compose.yml` (api 1 CPU, mongo 1 CPU, redis 0.25 CPU); k6 ran in a container with no limit.
+`@softistx/janus-oauth` as locked in `bun.lock`. The two cache rows were run together (2 000 req/s in all).
+
+| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                                                                                                                 |
+| --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                                                                                                                   |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                                                 |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                                                 |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                                                  |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                                                  |
+| `client_credentials`                    | 200 req/s, 60 s   | 33.6     | 209.5    | 0      | p95 under 150 ms | pass on latency (run beside the refresh grant: 400 req/s in all); 29 iterations dropped on a shared machine, see the quiet rerun below |
+
+### Rerun on a quiet machine (2026-11-20)
+
+The first run above dropped 29 `client_credentials` iterations on a shared laptop. `bun load/run.ts all`
+was run again, unchanged (same scripts, same thresholds), at 05:29 to 05:32 EST on the same machine, with
+the cache. Load average before the run: 2.60 (1 min), 1.90 (5 min), 2.43 (15 min); at the end 5.94 / 3.97 / 3.18
+(the run itself: k6, api, mongo and redis). No other heavy job was running. `k6` exited 0 for both scripts.
+
+| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Dropped | Result |
+| --------------------------------------- | ----------------- | -------- | -------- | ------ | ------- | ------ |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.74     | 3.30     | 0      | 0       | pass   |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.73     | 3.24     | 0      | 0       | pass   |
+| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 24.5     | 95.9     | 0      | 0       | pass   |
+| `client_credentials`                    | 200 req/s, 60 s   | 29.2     | 92.6     | 0      | 0       | pass   |
+
+`dropped_iterations` is 0 on both scripts (120 002 JWKS and discovery requests and 24 002 `/token` requests in the measured phase, 0 failed): the
+29 drops of the first run did not recur on a quiet machine, which points to the shared machine rather than the api or the VU pool. All D26 thresholds hold.
+
+Before the cache, the 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
+(1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,
+to find where it stopped meeting the threshold (before the cache):
+
+| JWKS and discovery together (before the cache) | JWKS p95 (ms) | Discovery p95 (ms) | Threshold (20 ms)        |
+| ---------------------------------------------- | ------------- | ------------------ | ------------------------ |
+| 300 req/s (150 each)                           | 3.3           | 4.2                | pass                     |
+| 600 req/s (300 each)                           | 13.4          | 18.0               | pass, with little margin |
+| 2 000 req/s (1 000 each)                       | 175.9         | 232.6              | miss                     |
+
+Cause of the miss (measured): every JWKS and discovery request read Mongo. With the profiler on, one
+`/jwks.json` made 7 queries: `resources`, `scopes` and `detailTypes` twice each (the tenant's resource catalogue,
+read while the tenant's server is resolved) and one `oauthSigningKeys` read. At 1 000 req/s each that is about
+14 000 Mongo reads a second behind a 1 CPU api.
+
+Fix (`withPublicDocuments`, `src/oauth/public-documents.ts`): the JWKS and the two discovery documents are served
+from memory, as the serialized body with an `ETag`, keyed by `<tenantId>.<tenant version>.<keys generation>.<issuer>` per host
+and path, and answer 304 to a matching `If-None-Match`; janus's `Cache-Control: public, max-age=300` is kept. A hit
+reads nothing but the tenant resolver's own cache. The keys generation is bumped by every insert, promote or retire
+of the tenant's signing keys in this process (`createTenantKeys`), a tenant write changes the version, and a
+60 s TTL bounds what the key cannot see: a rotation made by another instance, a retired key reaching its
+`publishUntil`, and a resource or scope change reaching `scopes_supported` in discovery (token flows still serve
+those at once). The cache table above was rerun after it, 2 000 req/s in all (1 000 each), same machine and limits,
+no dropped iteration.
+
+Side finding fixed in this PR: the production bundle (`bun dist/server.js`) did not start, `tsyringe requires a
+reflect polyfill` (the passkey verification pulls it in), because nothing imported `reflect-metadata`. The
+specs never hit it, they do not run the bundle. `src/server.ts` now imports it first and it is a direct dependency.
 
 ## Troubleshooting
 
@@ -678,6 +1109,7 @@ Application errors and their causes: [troubleshooting.md](troubleshooting.md).
 
 ## Not covered yet
 
+- JWKS and discovery miss the D26 target (p95 20 ms at 2 000 req/s on one API CPU; see "Load test"): the cache decision is open.
 - TLS on Redis (the connection is authenticated, on the private network).
 - Image publishing and any deploy pipeline (workflows are off).
 - Point-in-time recovery (oplog): designed, not built (see "Point-in-time recovery").

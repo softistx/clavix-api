@@ -8,6 +8,11 @@ import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { type AgentsFor, agentMarksReader, markOf } from "./agent-marker";
 import {
+  assessment,
+  authenticationOf,
+  unmetAuthentication,
+} from "./authentication";
+import {
   type DetailTexts,
   type DetailTextsFor,
   reviewDetails,
@@ -18,18 +23,19 @@ import {
   type ScopeTextsFor,
   textOf,
 } from "./scope-labels";
+import { denyUnreachable, isUnreachable } from "./unmet";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
 
 // The OAuth servers the app serves: put on every context by `oauthContext`,
 // read by the resolvers, which pick the request host's server.
-const SERVERS = "oauthServers" as const;
-type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
+export const SERVERS = "oauthServers" as const;
+export type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
 const TEXTS = "scopeTextsFor" as const;
 const DETAIL_TEXTS = "detailTextsFor" as const;
 const AGENTS = "agentsFor" as const;
-type WithServers = {
+export type WithServers = {
   [SERVERS]?: ServerSource;
   [TEXTS]?: ScopeTextsFor;
   [DETAIL_TEXTS]?: DetailTextsFor;
@@ -175,25 +181,57 @@ const janusResolvers = oauthResolvers({
   beforeApprove: async ({ request, authorizationDetails: selection }, ctx) => {
     // All or nothing (D4): a selection of details is refused, in both flows.
     if (selection !== undefined) throw refuseIncomplete();
+    // D7 and D10: the tenant's mode and the request's `acr_values`, `max_age`
+    // and `prompt=login`, in both flows (the device request asks none).
+    const authentication = await assessment(ctx as unknown as Context, request);
+    if (!authentication.met) throw unmetAuthentication(authentication.missing);
     if (request.authorizationDetails === undefined) return;
     const json = JSON.stringify(request.authorizationDetails);
     const { complete } = await reviewed(json, ctx as WithServers);
     if (!complete) throw refuseIncomplete();
   },
-  oauth: async (ctx) => {
-    // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
-    const request = requestOf(ctx);
-    const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
-    if (server === null || server === undefined) throw denial("NOT_FOUND");
-    // A code is not minted for a suspended or deleted tenant.
-    requireLive(
-      await (
-        ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
-      ).tenant(),
+  // How the viewer authenticated (D9): the session's methods as `amr`, its
+  // level as `acr`, the time of its last proof as `auth_time`.
+  approveOptions: async ({ request }, ctx) => {
+    const { amr, acr, authTime } = await assessment(
+      ctx as unknown as Context,
+      request,
     );
-    return server;
+    return { amr, acr, authTime };
   },
+  oauth: (ctx) => serverOf(ctx),
 });
+
+export async function serverOf(ctx: unknown) {
+  // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
+  const request = requestOf(ctx);
+  const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
+  if (server === null || server === undefined) throw denial("NOT_FOUND");
+  // A code is not minted for a suspended or deleted tenant.
+  requireLive(
+    await (
+      ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
+    ).tenant(),
+  );
+  return server;
+}
+
+const approveOrDenyUnmet = async (
+  parent: unknown,
+  args: { id: string },
+  ctx: unknown,
+  info: unknown,
+) => {
+  const approve = janusResolvers.Mutation?.["approveOAuthRequest"] as (
+    ...rest: unknown[]
+  ) => Promise<{ redirectTo: string }>;
+  try {
+    return await approve(parent, args, ctx, info);
+  } catch (error) {
+    if (!isUnreachable(error)) throw error;
+    return denyUnreachable(await serverOf(ctx), args.id);
+  }
+};
 
 /**
  * The consent API of the hosted `/consent` page, on `/graphql`. Both the OAuth
@@ -201,16 +239,32 @@ const janusResolvers = oauthResolvers({
  * so a request id or a session of another tenant is unknown there.
  * `approveOAuthRequest` needs a session younger than five minutes
  * (`STEP_UP_REQUIRED`); `authTime` is the session's sign-in time; janus-oauth's
- * resolvers pass no `amr` or `acr`.
+ * resolvers state the session's `amr`, `acr` and `auth_time` through `approveOptions`
+ * (`authentication.ts`), and refuse an approval the session's authentication does
+ * not meet (`UNMET_AUTHENTICATION_REQUIREMENTS`).
  */
 export const consentResolvers: IResolvers = {
   ...janusResolvers,
+  Mutation: {
+    ...janusResolvers.Mutation,
+    approveOAuthRequest: approveOrDenyUnmet,
+  },
   // The label of a scope is the tenant's description of it (console, `Scope`),
   // in the viewer's language (`Accept-Language`); janus's own (the scope's
   // name) when the tenant wrote none. janus-oauth's `scopeLabels` is one
   // static map, not per tenant, resource and language, hence these two fields.
-  OAuthRequest: { scopes: labelled, details: detailed, detailsComplete },
-  OAuthDeviceRequest: { scopes: labelled, details: detailed, detailsComplete },
+  OAuthRequest: {
+    scopes: labelled,
+    details: detailed,
+    detailsComplete,
+    authentication: authenticationOf,
+  },
+  OAuthDeviceRequest: {
+    scopes: labelled,
+    details: detailed,
+    detailsComplete,
+    authentication: authenticationOf,
+  },
   OAuthConnectedApp: { scopes: labelled },
   // Whether the client is an agent of the tenant, and since when.
   OAuthClient: {

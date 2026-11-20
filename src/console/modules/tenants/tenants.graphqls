@@ -21,6 +21,10 @@ type Quotas {
   domains: Int
   "Agents (clients that registered themselves, or that a metadata document describes). Hard: `/register` answers 403 `access_denied` when it is reached."
   agents: Int
+  "Webhook endpoints. Hard: creating one more is QUOTA_EXCEEDED."
+  webhooks: Int
+  "Enterprise OIDC connections. Hard: creating one more is QUOTA_EXCEEDED."
+  connections: Int
 }
 
 "A plan of the platform: a name and the quotas it grants."
@@ -29,6 +33,8 @@ type Plan {
   id: ID!
   name: String!
   quotas: Quotas!
+  "How many days the tenant's sign-in log and console activity are kept: 30 on free, 90 on pro, 365 on enterprise."
+  auditRetentionDays: Int!
 }
 
 extend type Tenant {
@@ -75,6 +81,10 @@ type Usage {
   domains: UsageMeter!
   "Agents now, whatever the month. They do not count in `clients`."
   agents: UsageMeter!
+  "Webhook endpoints now, enabled or not."
+  webhooks: UsageMeter!
+  "Enterprise OIDC connections now, enabled or not."
+  connections: UsageMeter!
 }
 
 input CreateTenantInput {
@@ -99,6 +109,8 @@ input QuotaOverridesInput {
   clients: Int
   domains: Int
   agents: Int
+  webhooks: Int
+  connections: Int
 }
 
 "The plan and the whole set of overrides (a replacement, so repeating a call changes nothing)."

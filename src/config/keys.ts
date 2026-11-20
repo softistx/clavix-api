@@ -1,5 +1,9 @@
 import { hkdfSync } from "node:crypto";
-import { createTenantKeys, ensureSigningKey } from "@/keys";
+import {
+  createKeyGenerations,
+  createTenantKeys,
+  ensureSigningKey,
+} from "@/keys";
 import { createSecretBox } from "@/modules/sign-in-methods/secrets";
 import { mongo } from "./db";
 import { env } from "./env";
@@ -14,13 +18,26 @@ export const masterKeys = parseMasterKeys(env.CLAVIX_KEYS_MASTER_KEY) as [
   ...Uint8Array[],
 ];
 
+/** Counts the changes to each tenant's published keys; the public documents cache keys on it. */
+export const keyGenerations = createKeyGenerations();
+
 export const { signingKeysFor, jwksFor } = createTenantKeys({
   db: mongo.db,
   masterKey: masterKeys,
+  generations: keyGenerations,
 });
 
 /** Seals and opens the tenants' social client secrets, under a subkey of the master key (label `social-secrets`); with a keyring the first seals and every key opens. */
 export const secretBox = createSecretBox(masterKeys);
+
+/** Seals and opens the webhook endpoints' signing secrets (D19), under its own subkey (label `webhook-secrets`). */
+export const webhookSecretBox = createSecretBox(masterKeys, "webhook-secrets");
+
+/** Seals and opens the client secrets of the tenants' enterprise OIDC connections, under their own subkey (label `connection-secrets`). */
+export const connectionSecretBox = createSecretBox(
+  masterKeys,
+  "connection-secrets",
+);
 
 /** A tenant's first (or replacement) key; `TenantsService.create` calls it. */
 export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {

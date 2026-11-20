@@ -13,6 +13,7 @@ const tenant = {
   issuer: "https://acme.clavix.test",
   slugIssuer: "https://acme.clavix.test",
   relatedOrigins: [],
+  plan: "free" as const,
   partition: "t1",
   version: 1,
   signIn: signInPolicySchema.parse(undefined),

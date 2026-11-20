@@ -5,8 +5,10 @@
 export { oauthSigningKeys } from "@softistx/janus-oauth-mongo";
 export { adminEvents } from "../console/admin-events/admin-events.model";
 export { agentClients } from "./agents/agent-clients.model";
+export { authEvents } from "./audit/auth-events.model";
 export { branding } from "./branding/branding.model";
 export { clientPolicies } from "./client-policies/client-policies.model";
+export { connections } from "./connections/connections.model";
 export { domains } from "./domains/domains.model";
 export { detailTypes } from "./resources/detail-types/detail-types.model";
 export { resources } from "./resources/resources.model";
@@ -14,3 +16,5 @@ export { scopes } from "./resources/scopes.model";
 export { roleAssignments, roles } from "./roles/roles.model";
 export { tenants } from "./tenants/tenants.model";
 export { usageCounters } from "./usage/usage.model";
+export { webhookDeliveries } from "./webhooks/webhook-deliveries.model";
+export { webhookEndpoints } from "./webhooks/webhook-endpoints.model";

@@ -12,7 +12,11 @@ import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, forTenant } from "@/config/users";
-import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
+import {
+  CONSOLE_CLIENT_ID,
+  CONSOLE_EXPORT_PATH,
+  CONSOLE_PATH,
+} from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
@@ -219,7 +223,7 @@ describe("platform owners", () => {
     expect((await platformOwner(t.disableUser)).errors).toBeUndefined();
   });
 
-  test("a platform admin cannot disable or delete a tenant owner either, but can enable", async () => {
+  test("a platform admin cannot disable, delete or enable a tenant owner either", async () => {
     const admin = await mkOperator("padmin2@pw.test");
     await access.grantPlatform(admin, "admin");
     const tenantOwner = await mkOperator("towner@pw.test");
@@ -229,7 +233,100 @@ describe("platform owners", () => {
     expect(codeOf(await asAdmin(t.disableUser))).toBe("FORBIDDEN");
     expect(codeOf(await asAdmin(t.deleteUser))).toBe("FORBIDDEN");
     const enable = `mutation { enableUser(tenantId: "${clavix}", userId: "${tenantOwner}") { active } }`;
-    expect((await asAdmin(enable)).errors).toBeUndefined();
+    expect(codeOf(await asAdmin(enable))).toBe("FORBIDDEN");
+    expect((await platformOwner(enable)).errors).toBeUndefined();
+  });
+
+  // G2-08: `edit` on the platform is not enough to lock out or weaken an owner.
+  const ownerWrites = (u: string) => ({
+    unverify: `mutation { setUserEmailVerified(tenantId: "${clavix}", userId: "${u}", verified: false) { id } }`,
+    verify: `mutation { setUserEmailVerified(tenantId: "${clavix}", userId: "${u}", verified: true) { id } }`,
+    resetUserSecondFactor: `mutation { resetUserSecondFactor(tenantId: "${clavix}", userId: "${u}") { id } }`,
+    revokeUserSessions: `mutation { revokeUserSessions(tenantId: "${clavix}", userId: "${u}") }`,
+    enableUser: `mutation { enableUser(tenantId: "${clavix}", userId: "${u}") { id } }`,
+  });
+
+  test("a platform admin cannot un-verify, reset the second factor of, sign out or re-enable a platform owner", async () => {
+    const admin = await mkOperator("padmin4@pw.test");
+    await access.grantPlatform(admin, "admin");
+    const asAdmin = as(() => admin);
+    const owner3 = await mkOperator("owner3@pw.test");
+    await access.grantPlatform(owner3, "owner");
+    for (const [name, query] of Object.entries(ownerWrites(owner3))) {
+      expect([name, codeOf(await asAdmin(query))]).toEqual([name, "FORBIDDEN"]);
+    }
+    // Nothing was changed: the owner still gets in.
+    expect(
+      (
+        await as(() => owner3)(
+          `{ users(tenantId: "${clavix}") { totalCount } }`,
+        )
+      ).errors,
+    ).toBeUndefined();
+    // An owner disabled by an owner stays disabled for the admin.
+    expect(
+      (await platformOwner(writes(clavix, owner3).disableUser)).errors,
+    ).toBeUndefined();
+    expect(codeOf(await asAdmin(ownerWrites(owner3).enableUser))).toBe(
+      "FORBIDDEN",
+    );
+    // A platform owner may do all of it.
+    for (const [name, query] of Object.entries(ownerWrites(owner3))) {
+      expect([name, (await platformOwner(query)).errors]).toEqual([
+        name,
+        undefined,
+      ]);
+    }
+  });
+
+  test("a platform admin still manages a clavix user with no role", async () => {
+    const admin = await mkOperator("padmin5@pw.test");
+    await access.grantPlatform(admin, "admin");
+    const plain = await mkOperator("plain@pw.test");
+    for (const [name, query] of Object.entries(ownerWrites(plain))) {
+      expect([name, (await as(() => admin)(query)).errors]).toEqual([
+        name,
+        undefined,
+      ]);
+    }
+  });
+});
+
+describe("the sign-in log export of the clavix tenant", () => {
+  // G2-07: the route follows the GraphQL guard, a tenant-level role on
+  // `clavix` does not read every operator's sign-ins.
+  const exportOf = (who: string, log: string, tenant = clavix) =>
+    app.request(
+      `http://localhost${CONSOLE_EXPORT_PATH}?tenantId=${tenant}&log=${log}`,
+      { headers: { authorization: `Bearer ${who}` } },
+    );
+
+  test("a tenant-level owner of clavix is FORBIDDEN on log=auth, as on authEvents", async () => {
+    const response = await exportOf(ADMIN, "auth");
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      errors: [{ extensions: { code: "FORBIDDEN" } }],
+    });
+    expect(
+      codeOf(
+        await tenantAdmin(
+          `{ authEvents(tenantId: "${clavix}") { totalCount } }`,
+        ),
+      ),
+    ).toBe("FORBIDDEN");
+  });
+
+  test("a platform owner exports it", async () => {
+    expect((await exportOf(OWNER, "auth")).status).toBe(200);
+  });
+
+  test("log=admin stays tenant-level (view)", async () => {
+    expect((await exportOf(VIEWER, "admin")).status).toBe(200);
+  });
+
+  test("another tenant's log=auth keeps the tenant-level edit", async () => {
+    expect((await exportOf(ADMIN, "auth", other)).status).toBe(200);
+    expect((await exportOf(VIEWER, "auth", other)).status).toBe(403);
   });
 });
 

@@ -86,7 +86,7 @@ Two ways. The first is the recommended one: the application keeps its embedded j
 
 ### 3a. With the Clavix preset of `@softistx/janus-social`
 
-`@softistx/janus-social` 0.3.0 and later (on the npm.softistx.com registry) has
+`@softistx/janus-social` 0.3.0 and later (on npmjs) has
 `oidcStepUp()` (`clavix()` still works as a deprecated alias). It does the redirect, PKCE, the code exchange and the ID token checks of
 [step 2](#2-the-redirect-flow), and plugs into the app's embedded janus as a social provider:
 
@@ -108,8 +108,9 @@ and the preset's own page,
 [`docs/guide/oidc-step-up.md`](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus-social/docs/guide/oidc-step-up.md).
 The preset asks for `openid email profile`. The identity it hands janus is `accountId` = the
 ID token's `sub`, `email`, `emailVerified`, `name`, `picture`. Its optional `acrValues` and
-`maxAge` need MFA and step-up on the tenant, which are **not built** yet (see the [roadmap](../roadmap.md)): leave
-them out for now.
+`maxAge` use the tenant's MFA and step-up, which are shipped (see the [roadmap](../roadmap.md)): a client asks
+for `acr_values`, `max_age` or `prompt=login` and the ID token and JWT access token carry `acr`, `amr` and
+`auth_time`; a passkey step-up needs no authenticator app.
 
 The app keeps its own janus session cookie after `complete` answers `signedIn`.
 
@@ -219,9 +220,10 @@ Nothing maps an old janus id to the new `sub`, which is why a mapping column is 
   registers a passkey, or signs in by e-mail code.
 - **The console**: tenants, clients, resources, scopes and users are managed in the console
   API (or by script).
-- **Social federation** (Google, GitHub, upstream OIDC; planned): the
-  tenant offers passkey and e-mail code only.
-- Also later: MFA and step-up, permissions and access rules.
+- Also later: permissions and access rules.
+
+MFA, step-up and social federation (Google, GitHub, enterprise OIDC connections) are shipped: see the
+[roadmap](../roadmap.md).
 
 ## Gaps
 
@@ -234,8 +236,7 @@ For the Clavix maintainers to decide or file an issue on clavix-api, nothing her
    which gives the token for an application's own API that
    [step 4](#4-verify-access-tokens-on-the-api) verifies.
 4. **No end-session endpoint** and no "sign out everywhere".
-5. **Per-client grants and `client_credentials`** are not available (janus-oauth enforces a client's
-   grant types, which Clavix limits to code and refresh, and has no `client_credentials`), so a back end calling the API as itself cannot yet use a Clavix
-   token.
-6. **`@softistx/janus-social` is on the npm.softistx.com registry only** (not npmjs); an application needs
-   its read token (`NPM_REGISTRY_TOKEN`), as in the README's Run section.
+5. **`client_credentials` is opt-in**: a back end calling the API as itself needs a confidential client
+   with the grant and `allowedScopes`, and a resource that opted in (`allowClientCredentials`). See the
+   [client credentials guide](client-credentials.md).
+6. **`@softistx/janus-social` is on npmjs** (public): `bun install` needs no token.

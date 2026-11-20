@@ -15,6 +15,16 @@ const startsWithTenantId = (index: { key: IndexDescription["key"] }) =>
     ? [...index.key.keys()][0]
     : Object.keys(index.key)[0]) === "tenantId";
 
+// A TTL index is single-field (MongoDB refuses a compound one) and only the
+// server's expiry reads it; no query goes through it. Nothing else is exempt.
+const keysOf = (index: { key: IndexDescription["key"] }) =>
+  index.key instanceof Map ? [...index.key.keys()] : Object.keys(index.key);
+const isTtlIndex = (index: {
+  key: IndexDescription["key"];
+  expireAfterSeconds?: unknown;
+}) =>
+  typeof index.expireAfterSeconds === "number" && keysOf(index).length === 1;
+
 describe("tenant-owned collections", () => {
   // `isTenantOwned` reads `schema.shape`: a definition whose schema has none
   // (a wrapped or non-object schema) would be dropped from the guards without
@@ -41,12 +51,27 @@ describe("tenant-owned collections", () => {
   test("every index starts with tenantId", () => {
     const offenders = owned.flatMap((c) =>
       c.indexes
-        .filter((index) => !startsWithTenantId(index))
+        .filter((index) => !startsWithTenantId(index) && !isTtlIndex(index))
         .map(
           (index) => `${c.name}: ${index.name ?? JSON.stringify(index.key)}`,
         ),
     );
     expect(offenders).toEqual([]);
+  });
+
+  test("only a single-field numeric TTL index is exempt from the tenantId prefix", () => {
+    expect(isTtlIndex({ key: { at: 1 }, expireAfterSeconds: 0 })).toBe(true);
+    expect(isTtlIndex({ key: { at: 1 }, expireAfterSeconds: 60 })).toBe(true);
+    expect(isTtlIndex({ key: { text: 1 } })).toBe(false);
+    expect(
+      isTtlIndex({ key: { text: 1 }, expireAfterSeconds: undefined }),
+    ).toBe(false);
+    expect(isTtlIndex({ key: { text: 1 }, expireAfterSeconds: null })).toBe(
+      false,
+    );
+    expect(
+      isTtlIndex({ key: { text: 1, at: 1 }, expireAfterSeconds: 60 }),
+    ).toBe(false);
   });
 
   test("the index check refuses an index that does not start with tenantId", () => {
@@ -60,6 +85,8 @@ describe("tenant-owned collections", () => {
 const allowed = [
   "src/tenancy/",
   "src/migrations/",
+  // Key rotation walks every tenant's partition of janus's own collections.
+  "src/keys/reseal.ts",
   "src/modules/tenants/",
   "src/modules/resources/",
   "src/config/resources.ts",
@@ -68,12 +95,18 @@ const allowed = [
   "src/config/roles.ts",
   "src/config/branding.ts",
   "src/modules/usage/",
+  "src/modules/audit/",
+  "src/config/audit.ts",
   "src/config/usage.ts",
   "src/config/purge.ts",
   "src/modules/client-policies/",
   "src/config/client-policies.ts",
   "src/modules/agents/",
   "src/config/agent-clients.ts",
+  "src/modules/webhooks/",
+  "src/config/webhook-endpoints.ts",
+  "src/modules/connections/",
+  "src/config/connections.ts",
 ];
 // Where a platform collection with a `tenantId` (owned.ts) may be reached:
 // `adminEvents` by its recorder and the recorder's wiring, nowhere else.
@@ -82,6 +115,8 @@ const platformAllowed = [
   "src/config/admin-events.ts",
   "src/modules/domains/",
   "src/config/domains.ts",
+  // Key rotation walks every tenant's partition of janus's own collections.
+  "src/keys/reseal.ts",
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.

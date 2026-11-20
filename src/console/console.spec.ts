@@ -8,6 +8,7 @@ import {
 } from "@softistx/janus-oauth";
 import { getCollection } from "@softistx/mongo";
 import { generateKeyPair, SignJWT } from "jose";
+import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { registerClient } from "@/clients/register-client";
 import { access } from "@/config/access";
@@ -31,6 +32,7 @@ import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
 import {
   CONSOLE_CLIENT_ID,
+  CONSOLE_EXPORT_PATH,
   CONSOLE_PATH,
   consoleAudience,
   consoleOrigin,
@@ -376,6 +378,40 @@ describe("the console's DPoP token", () => {
     expect(result.data?.["me"]).toMatchObject({ user: { id: ada } });
   });
 
+  test("the audit export checks the proof against its own path, not the GraphQL one", async () => {
+    const key = await createDpopKey();
+    const token = await tokenFor(
+      ada,
+      AUDIENCE,
+      "console openid email",
+      CLIENT,
+      key,
+    );
+    const exportUrl = `${consoleOrigin(origin)}${CONSOLE_EXPORT_PATH}`;
+    const call = (proof: string) =>
+      app.request(
+        `http://localhost${CONSOLE_EXPORT_PATH}?tenantId=${new ObjectId().toHexString()}&log=admin`,
+        { headers: { authorization: `DPoP ${token}`, dpop: proof } },
+      );
+    // The first proof has no nonce: the server asks for one, naming the export's own htu.
+    const asked = await call(
+      await key.proof("GET", exportUrl, { accessToken: token }),
+    );
+    expect(asked.status).toBe(401);
+    const nonce = asked.headers.get("dpop-nonce") ?? "";
+    expect(nonce).not.toBe("");
+    // A proof for the GraphQL URL is refused, the export's own passes authentication
+    // (the caller then has no role on that tenant: 403, not 401).
+    const wrong = await call(
+      await key.proof("GET", PUBLIC_URL, { accessToken: token, nonce }),
+    );
+    expect(wrong.status).toBe(401);
+    const right = await call(
+      await key.proof("GET", exportUrl, { accessToken: token, nonce }),
+    );
+    expect(right.status).toBe(403);
+  });
+
   test("a bound token sent as Bearer is refused", async () => {
     const key = await createDpopKey();
     const token = await tokenFor(
@@ -497,8 +533,8 @@ describe("the console's bearer token", () => {
   });
 
   test("a client_credentials token is refused at the token endpoint", async () => {
-    // The console client has no user behind a client_credentials token: the
-    // token endpoint offers authorization_code and refresh_token only.
+    // The grant is on only for a tenant with a resource that opted in; the
+    // platform tenant has none (the console's own resource cannot opt in).
     const issuer = issuerOf(PLATFORM_TENANT_SLUG, origin);
     const response = await issuers.handle(
       new Request(`${issuer}/token`, {

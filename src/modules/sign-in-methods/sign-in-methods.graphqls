@@ -18,7 +18,8 @@ enum HostedSignInMethod {
 What the hosted sign-in page of the tenant the host names offers. Public; it
 says nothing about who may sign in. `methods` lists the enabled methods only,
 in the enum's order (PASSWORD never appears yet); `social` the enabled
-providers. Never both empty.
+providers, then the enabled enterprise connections with `showButton` (id: the
+connection's id, label: its name). Never both empty.
 """
 type HostedSignInMethods {
   methods: [HostedSignInMethod!]!
@@ -44,9 +45,17 @@ type SocialSignedIn {
   expiresAt: DateTime!
   "Whether a user was made for this account."
   created: Boolean!
+  """
+  Whether this sign-in took over an account that held the e-mail without
+  ever proving it: its credentials, links and sessions are gone.
+  """
+  replaced: Boolean!
   "The path the flow was started with, or null."
   returnTo: String
 }
+
+"A social sign-in that opened a session, or a second-factor challenge to answer first."
+union SocialSignInResult = SocialSignedIn | SecondFactorChallenge
 
 type Query {
   "The methods the tenant of this host offers; 404 for a host that names no tenant."
@@ -55,19 +64,21 @@ type Query {
 
 type Mutation {
   """
-  Begins a sign-in with the tenant's own app of `provider`. `returnTo` is a
-  path of this site. SIGN_IN_METHOD_DISABLED (404) when the tenant does not
-  offer that provider; the sign-in limits apply (MAIL_THROTTLED, 429).
+  Begins a sign-in with the tenant's own app of `provider`, or with one of its
+  enterprise connections (`provider` is the `connectionId` of `hostedHomeRealm`).
+  `returnTo` is a path of this site. SIGN_IN_METHOD_DISABLED (404) when the
+  tenant does not offer that provider or the connection is off or unknown; the
+  sign-in limits apply (MAIL_THROTTLED, 429).
   """
   socialSignInStart(provider: String!, returnTo: String): SocialFlowStart!
   """
   Completes the flow with the provider's callback URL and the `flow`
   `socialSignInStart` answered, and opens the session (the cookie is set on the
   response). Refusals are janus's codes: FLOW_EXPIRED, FLOW_MISMATCH,
-  PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, the tenant closed sign-up and no
-  user holds the address), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
+  PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, no user holds the address and the
+  tenant closed sign-up, or the connection's just-in-time creation is off), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
   (409), USER_INACTIVE (403), SOCIAL_STEP_UP_UNMET (403, the provider's
   acr or max_age requirement was not met; the flow is spent).
   """
-  socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignedIn!
+  socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignInResult!
 }

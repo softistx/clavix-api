@@ -4,7 +4,8 @@ import type { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
-import { adminEventRecorder } from "@/config/admin-events";
+import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
+import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -67,6 +68,7 @@ const as = async (
       }),
       access,
       adminEvents: adminEventRecorder,
+      activity: { admin: adminEventReader, auth: authEventsService },
       admins: {} as ConsoleAdmins,
       users: {} as ConsoleUsers,
       exclusive: createExclusive(),
@@ -618,7 +620,9 @@ describe("the social providers", () => {
     const janus = await janusIssuers.forRequest(
       new Request(issuerOf("sim-a", origin)),
     );
-    expect(janus === null ? "none" : socialOf(janus)).toBeNull();
+    // Every tenant's instance now carries the connection resolver (it is
+    // social-capable with no static provider): the rebuild is what is checked.
+    expect(janus).not.toBeNull();
   });
 });
 
@@ -693,5 +697,66 @@ describe("concurrent changes", () => {
       code: "CONFLICT",
       http: { status: 409 },
     });
+  });
+});
+
+describe("the multi-factor policy", () => {
+  const MFA = `mutation ($t: ID!, $i: MfaPolicyInput!) {
+    updateMfaPolicy(tenantId: $t, input: $i) { tenantId version mfa { mode totp } }
+  }`;
+  const READ = `query ($t: ID!) { signInPolicy(tenantId: $t) { mfa { mode totp } } }`;
+  type Mfa = { version: number; mfa: { mode: string; totp: boolean } };
+  const mfaOf = (result: Result) =>
+    result.data?.["updateMfaPolicy"] as unknown as Mfa | undefined;
+
+  test("off by default; an admin turns TOTP on and the tenant's janus follows; a left-out field keeps its value", async () => {
+    const read = await as(ADMIN_A, READ, { t: a });
+    expect(read.data?.["signInPolicy"]).toEqual({
+      mfa: { mode: "PASSKEY_SUFFICIENT", totp: false },
+    } as never);
+    const before = (await stored(a)).version;
+    const on = mfaOf(await as(ADMIN_A, MFA, { t: a, i: { totp: true } }));
+    expect(on?.mfa).toEqual({ mode: "PASSKEY_SUFFICIENT", totp: true });
+    expect(on?.version).toBeGreaterThan(before);
+    expect((await stored(a)).signIn.mfa).toEqual({
+      mode: "passkeySufficient",
+      totp: true,
+    });
+    const required = mfaOf(
+      await as(ADMIN_A, MFA, { t: a, i: { mode: "REQUIRED" } }),
+    );
+    expect(required?.mfa).toEqual({ mode: "REQUIRED", totp: true });
+  });
+
+  test("the same values again write nothing", async () => {
+    const before = (await stored(a)).version;
+    const again = mfaOf(
+      await as(ADMIN_A, MFA, { t: a, i: { mode: "REQUIRED", totp: true } }),
+    );
+    expect(again?.version).toBe(before);
+  });
+
+  test("a viewer is FORBIDDEN, another tenant's admin cannot reach it", async () => {
+    const before = (await stored(a)).version;
+    expect(codeOf(await as(VIEWER_A, MFA, { t: a, i: { totp: false } }))).toBe(
+      "FORBIDDEN",
+    );
+    expect(
+      codeOf(await as(ADMIN_B, MFA, { t: a, i: { totp: false } })),
+    ).toBeDefined();
+    expect((await stored(a)).version).toBe(before);
+    expect((await stored(b)).signIn.mfa.totp).toBe(false);
+  });
+
+  test("the change is recorded, and nothing else is", async () => {
+    const events = (await eventsOf(a)).filter(
+      (event) => event.action === "mfaPolicy.update",
+    );
+    expect(events).toContainEqual({
+      actor: ADMIN_A,
+      action: "mfaPolicy.update",
+      target: { type: "mfaPolicy", id: a },
+    });
+    expect(events.some((event) => event.actor === VIEWER_A)).toBe(false);
   });
 });

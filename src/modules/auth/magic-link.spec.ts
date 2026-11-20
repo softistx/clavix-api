@@ -66,7 +66,7 @@ const REQUEST = `mutation ($email: EmailAddress!) {
   requestMagicLink(email: $email) { expiresAt }
 }`;
 const CONFIRM = `mutation ($token: String!) {
-  confirmMagicLink(token: $token) { expiresAt user { id email emailVerified } }
+  confirmMagicLink(token: $token) { ... on SignedIn { expiresAt user { id email emailVerified } } }
 }`;
 const ME = "{ currentUser { email emailVerified } }";
 const codeOf = (answer: Answer) => answer.errors?.[0]?.extensions?.["code"];

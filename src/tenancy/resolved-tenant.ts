@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { PLAN_IDS } from "@/modules/tenants/plan.schema";
 
 /**
  * What a host resolves to: plain data, so it can sit in Redis. `issuer` and
@@ -30,6 +31,9 @@ export const resolvedTenant = z.object({
   // entry, so it follows verification and removal. An entry cached before the
   // field existed has none until it expires (60 s).
   relatedOrigins: z.array(z.string()).default([]),
+  // D24: the plan, for the telemetry attributes. An entry cached before the
+  // field existed reads as `free` until it expires (60 s).
+  plan: z.enum(PLAN_IDS).default("free"),
   partition: z.string(),
   version: z.number(),
   // M3: an entry cached before the field existed reads every requirement off.

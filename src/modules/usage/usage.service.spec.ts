@@ -36,6 +36,8 @@ const sources = {
   clients: async () => 2,
   domains: async () => 0,
   agents: async () => 0,
+  webhooks: async () => 0,
+  connections: async () => 0,
 };
 const at = new Date("2026-11-12T12:00:00Z");
 const make = (mau: Counter) =>

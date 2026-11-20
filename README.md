@@ -16,27 +16,31 @@ Today it serves:
 
 ## Documentation
 
-| Page                                                                                       | What is in it                                                                 |
-| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| This README                                                                                | run, environment, and each feature below                                      |
-| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                           |
-| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document |
-| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                             |
-| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                               |
-| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health                                 |
-| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes                                |
-| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                                           |
-| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                                             |
+| Page                                                                                       | What is in it                                                                          |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| This README                                                                                | run, environment, and each feature below                                               |
+| [docs/guide/migrating-from-embedded-janus.md](docs/guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                                    |
+| [docs/guide/client-credentials.md](docs/guide/client-credentials.md)                       | the client credentials grant: the resource opt-in, a machine client, the token request |
+| [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document          |
+| [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                                      |
+| [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                                        |
+| [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health                                          |
+| [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes                                         |
+| [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                                                    |
+| [AGENTS.md](AGENTS.md)                                                                     | rules for contributors and agents                                                      |
 
 ## Run
 
 ```sh
-export NPM_REGISTRY_TOKEN   # read token for npm.softistx.com (the @softistx packages)
 bun install
 cp .env.example .env
 bun run generate   # GraphQL types, gitignored; also run by build and verify
 bun dev            # http://localhost:3000/graphql and /healthz
 ```
+
+Under `bun dev` a browser that opens `/graphql` gets the GraphQL IDE (Apollo Sandbox) and the schema
+can be introspected. Both are off everywhere else (`CLAVIX_GRAPHQL_IDE`), and production refuses to
+start with the IDE on: the hosted `/graphql` is the origin of every tenant's session cookie.
 
 ## Scripts
 
@@ -63,7 +67,7 @@ one needs on top:
 | `tenants:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`           | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
-| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`)                                                                                                                      |
+| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`); `REDIS_URL` when set, for `keys:reseal` to drop the tenant cache                                                    |
 | `operators:grant`            | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users; `--create` also needs `CLAVIX_SMTP_URL`)                                                                            |
 | `start`                      | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
@@ -95,10 +99,25 @@ one needs on top:
 | `CLAVIX_REGISTER_IP_LIMIT` / `CLAVIX_REGISTER_IP_WINDOW_SECONDS`         | `/register` calls per client address and tenant: 20 per 3600 s (see "Agent registration throttle" in docs/operations.md)                                                                                                                       |
 | `CLAVIX_REGISTER_TENANT_LIMIT` / `CLAVIX_REGISTER_TENANT_WINDOW_SECONDS` | `/register` calls per tenant: 500 per 3600 s                                                                                                                                                                                                   |
 | `CLAVIX_METADATA_IP_LIMIT` / `CLAVIX_METADATA_IP_WINDOW_SECONDS`         | metadata-document fetches (`/authorize`, `/par`) per client address and tenant: 30 per 60 s                                                                                                                                                    |
+| `CLAVIX_METADATA_PORTS`                                                  | ports a client metadata document may be served on (janus-oauth `allowPorts`), comma-separated: `443` by default (a `client_id` URL names the port the server connects to); invalid entries are ignored                                         |
 | `CLAVIX_METADATA_TENANT_LIMIT` / `CLAVIX_METADATA_TENANT_WINDOW_SECONDS` | metadata-document fetches per tenant: 300 per 60 s                                                                                                                                                                                             |
+| `CLAVIX_EXPORT_TENANT_LIMIT` / `CLAVIX_EXPORT_TENANT_WINDOW_SECONDS`     | audit exports (`/console/audit/export`) started per tenant: 10 per 3600 s (429 with `Retry-After`; Redis only)                                                                                                                                 |
 | `CLAVIX_TLS_ASK_SECRET`                                                  | optional, at least 32 characters: the token of Caddy's `ask` URL; unset, `/internal/tls/ask` answers 404 to everyone (see "Custom domains")                                                                                                    |
-| `CLAVIX_TLS_ASK_LIMIT`                                                   | asks per minute, all callers together, default 120; past it 429                                                                                                                                                                                |
+| `CLAVIX_SSO_IP_LIMIT` / `CLAVIX_SSO_IP_WINDOW_SECONDS`                   | `hostedHomeRealm` lookups, and `socialSignInStart` calls (counted apart), per client address and tenant: 60 per 600 s (see "Sign-in code limits")                                                                                              |
+| `CLAVIX_SSO_TENANT_LIMIT` / `CLAVIX_SSO_TENANT_WINDOW_SECONDS`           | the same two, per tenant: 2000 per 3600 s                                                                                                                                                                                                      |
+| `CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT`                                     | console `sendTestWebhook` per endpoint: 5 per `CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS` (60 s); past it `RATE_LIMITED` 429 (Redis only)                                                                                                             |
+| `CLAVIX_WEBHOOK_TEST_TENANT_LIMIT`                                       | console `sendTestWebhook` per tenant, all its endpoints together: 20 per the same window                                                                                                                                                       |
+| `CLAVIX_INVITE_CALLER_LIMIT` / `CLAVIX_INVITE_CALLER_WINDOW_SECONDS`     | console `inviteUser` and `inviteAdmin`, each, per caller: 60 per 3600 s, every aliased selection counted; past it `RATE_LIMITED` 429 (Redis only)                                                                                              |
+| `CLAVIX_INVITE_TENANT_LIMIT` / `CLAVIX_INVITE_TENANT_WINDOW_SECONDS`     | console invitations per tenant, both mutations together: 200 per 3600 s                                                                                                                                                                        |
+| `CLAVIX_INVITE_PENDING_LIMIT`                                            | pending invitations one tenant (or one tenant's admin list) may hold: 500; a new address past it is `PENDING_INVITATIONS_LIMIT` (409); stored data, no Redis needed                                                                            |
+| `CLAVIX_TLS_ASK_LIMIT`                                                   | asks answered 200 per minute, all callers together, default 120; past it 429 (an ask for an unknown host is a 404 and spends nothing)                                                                                                          |
+| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE`                                          | `true` lets webhook endpoints reach private addresses (local receiver); default `false`, refused in production                                                                                                                                 |
+| `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`                                          | webhook requests in flight at once per tenant, all instances together: 4. One tenant's flood cannot starve another tenant's endpoints                                                                                                          |
+| `CLAVIX_WEBHOOKS_MAX_PENDING`                                            | webhook deliveries one tenant may hold in the queue: 5000. One more is refused (logged with ids, never retried)                                                                                                                                |
+| `CLAVIX_GRAPHQL_IDE`                                                     | `true` serves the GraphQL IDE (Apollo Sandbox) on `GET /graphql` and allows introspection of the hosted schema; default `true` under `bun dev` (`NODE_ENV=development`), `false` elsewhere, and `true` is refused in production                |
 | `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                                            | optional: the OTLP/HTTP collector of traces and logs (D24); unset, nothing is exported (see operations, "Telemetry")                                                                                                                           |
+| `OTEL_EXPORTER_OTLP_HEADERS`                                             | optional: `key=value` pairs separated by commas, sent to the collector                                                                                                                                                                         |
 
 ## Sign-in code limits
 
@@ -118,6 +137,12 @@ They stop anyone sending codes to many addresses through the shared no-reply sen
   Keys carry the tenant id, so a tenant's traffic never spends another's budget, and one address has
   one bucket per tenant. The IP is counted first: a refused address does not spend the tenant's budget.
 - **The anonymous `passkeySignInOptions` follows the same rules** with its own buckets and variables (see "Passkey sign-in and registration").
+- **`hostedHomeRealm` and `socialSignInStart` send no mail and do not spend this budget**: each has its own
+  pair of buckets (`clavix:home-realm-ip:…`, `clavix:home-realm-tenant:…`, `clavix:sso-start-ip:…`,
+  `clavix:sso-start-tenant:…`), 60 per 10 min per client IP and tenant and 2000 per hour per tenant
+  (`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`, `CLAVIX_SSO_TENANT_LIMIT`,
+  `CLAVIX_SSO_TENANT_WINDOW_SECONDS`). Past one they answer the same `MAIL_THROTTLED` 429, so a page handles one
+  error; a flood of lookups cannot stop a tenant's sign-in codes, nor the reverse.
 - **They need `REDIS_URL`** (required in production). Without it (development) only janus's per-address
   limit applies. If Redis is down or slow (250 ms), the request is let through and a warning is logged;
   janus's per-address limit still holds.
@@ -151,7 +176,8 @@ Clavix adds no `jose`.
   the database. To recover, drop the tenants' `oauthSigningKeys` documents and let the rotation
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
   them. Changing a master key you still hold is not a loss: it rotates without downtime
-  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`).
+  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`
+  seals every stored secret again: signing keys, TOTP, webhook, connection and social secrets).
 - **Rotating** the master key and the **emergency rotation** of the signing keys
   (`bun run keys:rotate <tenant>|--all [--drop-old]`) are in `docs/operations.md`, "Signing keys".
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
@@ -214,10 +240,13 @@ already a member is `ALREADY_MEMBER` (409); a second invitation to a pending add
 lifetime, a new mail naming the caller, the old code stops working, a lapsed invitation is allowed.
 It is `NOT_FOUND` (404) for an id that is not this tenant's, `INVITATION_NOT_PENDING` (409) once
 accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60 s of the last send of
-that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
+that invitation. Inviting an address that already has a pending invitation younger than 60 s is `INVITE_TOO_SOON` (429, `retryAfter`), and a new address past `CLAVIX_INVITE_PENDING_LIMIT` (500) pending invitations of the scope is `PENDING_INVITATIONS_LIMIT` (409). Invitations expose `invitedBy { id name }`, the operator who first invited (null when
 a script did); a resend keeps it. The
 last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
-removed, nor disabled or deleted, on a tenant or on the platform: `LAST_OWNER` (409). An `owner`
+removed, nor disabled or deleted, nor have their e-mail un-verified, on a tenant or on the platform:
+`LAST_OWNER` (409). Any change to the account of a `clavix` user who holds a platform role or owns a
+tenant (disable, enable, delete, sign out, `setUserEmailVerified`, `resetUserSecondFactor`) needs
+`manage` on the platform (a platform owner), not the `edit` the field asks: `FORBIDDEN`. An `owner`
 invitation is refused once its inviter is deleted or disabled. Role changes of one
 tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
 within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
@@ -281,9 +310,11 @@ grant or invitation id of another tenant is unknown, never touched.
 | `userSessions(tenantId, userId)` / `revokeUserSession(tenantId, userId, sessionId)` | The user's standing sessions, newest first: `id`, `device` (the User-Agent of the sign-in, cut at 256 characters; `null` on an older session or a sign-in without one), `createdAt`, `authenticatedAt`, `lastUsedAt` (moves at most once a day, `null` on an older session) and `expiresAt`; never the token. There is no `current` flag: the console reads another pool. `revokeUserSession` is true when it ended the session, false for one that is not this user's, is already ended or does not exist; an unknown user has no sessions. |
 | `userGrants(tenantId, userId)` / `revokeGrant(tenantId, userId, grantId)`           | The OAuth grants the user gave (standing only, with the client's name), and taking one back with the tokens it opened. `revokeGrant` is true also when already revoked, false for a grant that is not this user's.                                                                                                                                                                                                                                                                                                                           |
 | `deleteUser(tenantId, userId)`                                                      | Revokes the user's grants (and tokens), ends their sessions, removes their role assignments, deletes the user. True also when already gone.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `resetUserSecondFactor(tenantId, userId)`                                           | Removes the user's TOTP factor and recovery codes; the next sign-in opens a session without a challenge. Idempotent; unknown user `NOT_FOUND`. On the `clavix` tenant, an operator who owns a tenant or holds a platform role needs a platform owner (see above).                                                                                                                                                                                                                                                                            |
+| `TenantUser.secondFactor`                                                           | `enabled` and `recoveryCodesLeft` (`null` without an active factor); never the secret or the codes. Read for a whole page of `users` in one batch.                                                                                                                                                                                                                                                                                                                                                                                           |
 
 Each mutation records an admin event, repeats included (`user.invite`, `user.revokeInvitation`,
-`user.update`, `user.setEmailVerified`, `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeSession`, `user.revokeGrant`; target: the
+`user.update`, `user.setEmailVerified`, `user.resetSecondFactor`, `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeSession`, `user.revokeGrant`; target: the
 user, session, invitation or grant id, never an address).
 
 ```sh
@@ -325,20 +356,20 @@ mutations need `edit` (`owner` or `admin`); a viewer, or an admin of another ten
 `BAD_USER_INPUT`, `FORBIDDEN`. An id of another tenant is unknown: a query answers `null`, an
 update `NOT_FOUND`, a delete `false`. Deleting twice answers `true` then `false`.
 
-| Field                                                      | What it does                                                                                                                                                                                                                                                                                                                                             |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clients(tenantId, q, kind, after, first)`                 | a page of clients in id order (`q` matches the name or the id; `kind` is a list of `CONSOLE`, `DYNAMIC`, `METADATA`, the `registration` of a client, agents being the last two), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                           |
-| `client(tenantId, id)`                                     | one client (a metadata-document agent too, read-only), or `null`                                                                                                                                                                                                                                                                                         |
-| `createClient(tenantId, input)`                            | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` (confidential only), and `updateClient` takes `grantTypes`. An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
-| `updateClient(tenantId, id, input)`                        | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                    |
-| `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients`, `anySubjectClient`, `subjectAgents`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                               |
-| `rotateClientSecret(tenantId, id)`                         | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                          |
-| `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; an agent (dynamic or metadata document) is deleted too, with its agent record (the `agents` quota is freed); any other record is left untouched (`false`)                                                                                                                                    |
-| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`, `metadataUrl` and `protectedResourceMetadata` (the RFC 9728 document, [guide](docs/guide/mcp.md#the-document-an-mcp-server-serves-rfc-9728))                                                                                                                                                                  |
-| `createResource`, `updateResource`, `deleteResource`       | a resource keeps its URI; deleting it deletes its scopes                                                                                                                                                                                                                                                                                                 |
-| `scopes(tenantId, resourceId)`                             | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                      |
-| `createScope`, `updateScope`, `deleteScope`                | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                  |
-| `createDetailType`, `updateDetailType`, `deleteDetailType` | an authorization detail type of a resource (`Resource.detailTypes`, see "Authorization details"); the type name never changes; audited as `detailType.create`, `.update`, `.delete`                                                                                                                                                                      |
+| Field                                                      | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clients(tenantId, q, kind, after, first)`                 | a page of clients in id order (`q` matches the name or the id; `kind` is a list of `CONSOLE`, `DYNAMIC`, `METADATA`, the `registration` of a client, agents being the last two), `nextCursor`, `totalCount` (all matches, whatever the cursor)                                                                                                                                                                                                                                                                                                                 |
+| `client(tenantId, id)`                                     | one client (a metadata-document agent too, read-only), or `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `createClient(tenantId, input)`                            | `{ client, clientSecret }`; the secret of a confidential client, shown once. `redirectUris` may be empty with `grantTypes: [DEVICE_CODE]` or `[TOKEN_EXCHANGE]` or `[CLIENT_CREDENTIALS]` (both confidential only; the latter needs `allowedScopes`, optional `defaultScopes`, [guide](docs/guide/client-credentials.md)), and `updateClient` takes `grantTypes`, `allowedScopes` and `defaultScopes` (`Client` reads them back). An id taken is `CONFLICT` (also when two calls race: one wins); past the plan's `clients` quota it is `QUOTA_EXCEEDED` (409) |
+| `updateClient(tenantId, id, input)`                        | the name, the redirect URIs, `requirePushedAuthorizationRequests`; a client keeps its id and its type                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `setClientTokenExchange(tenantId, id, input)`              | replaces the client's token exchange rules (`targetResources`, `subjectClients`, `anySubjectClient`, `subjectAgents`); confidential clients only; audited as `client.tokenExchange.set`. `Client.tokenExchange` reads them (`null` = none)                                                                                                                                                                                                                                                                                                                     |
+| `rotateClientSecret(tenantId, id)`                         | a new secret, shown once; the old one stops working; refused on a public client                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `deleteClient(tenantId, id)`                               | removes the client and revokes its grants and their tokens; an agent (dynamic or metadata document) is deleted too, with its agent record (the `agents` quota is freed); any other record is left untouched (`false`)                                                                                                                                                                                                                                                                                                                                          |
+| `resources(tenantId)`, `resource(tenantId, id)`            | the tenant's APIs, each with its `scopes`, `metadataUrl` and `protectedResourceMetadata` (the RFC 9728 document, [guide](docs/guide/mcp.md#the-document-an-mcp-server-serves-rfc-9728))                                                                                                                                                                                                                                                                                                                                                                        |
+| `createResource`, `updateResource`, `deleteResource`       | a resource keeps its URI; `updateResource` takes `name` and `allowClientCredentials` (`Resource.allowClientCredentials`, off by default: the opt-in of the client credentials grant, refused on the console's own resource); deleting it deletes its scopes                                                                                                                                                                                                                                                                                                    |
+| `scopes(tenantId, resourceId)`                             | every scope of the tenant, or those of one resource                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `createScope`, `updateScope`, `deleteScope`                | a scope keeps its name and its resource                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `createDetailType`, `updateDetailType`, `deleteDetailType` | an authorization detail type of a resource (`Resource.detailTypes`, see "Authorization details"); the type name never changes; audited as `detailType.create`, `.update`, `.delete`                                                                                                                                                                                                                                                                                                                                                                            |
 
 ```graphql
 mutation {
@@ -400,7 +431,7 @@ mutation {
   `q`, a page may hold fewer than `first` items (even none) and still give a `nextCursor`: follow
   it until it is `null`.
 - **`grantTypes`** on a client is what was recorded when it was registered (`authorization_code` and
-  `refresh_token` by default, or the script's `--grants` or the console's `grantTypes`, which may add `DEVICE_CODE` or `TOKEN_EXCHANGE`), and the token endpoint enforces it: a client that does not
+  `refresh_token` by default, or the script's `--grants` or the console's `grantTypes`, which may add `DEVICE_CODE`, `TOKEN_EXCHANGE` or `CLIENT_CREDENTIALS`), and the token endpoint enforces it: a client that does not
   list a grant gets `unauthorized_client` on it. A list that omits `refresh_token` cannot refresh.
 - **Deleting a client** signs its users out of it: the grants they gave it and the tokens those
   opened are revoked.
@@ -462,8 +493,49 @@ Every console mutation records what it did in the `adminEvents` collection (ADR-
 (the token's user), the action (`tenant.create`), the tenant it was about (`null` for the platform),
 the target's type and id, the time and the id of the request. Events are only ever added, and they
 hold identifiers alone: never a secret, a token or the old and new values of a field. `bun run
-db:sync` creates the collection and its two indexes (by tenant and by actor, newest first). Nothing
-reads it yet: the viewer and the export come with M4.
+db:sync` creates the collection and its two indexes (by tenant and by actor, newest first).
+
+The console reads it with `adminEvents(tenantId, filter, first, after)` (a tenant viewer or more;
+filter `from`, `to`, `action`, `actor`) and, for operators, `platformAdminEvents` across every tenant
+and the platform's own. Both answer `{ items, nextCursor, totalCount }`, newest first (`first`
+defaults to 25, at most 100), with each actor resolved to a name and an e-mail address in one batch.
+One event is read by id with `adminEvent(tenantId, id)` (a tenant viewer or more) and
+`authEvent(tenantId, id)` (a tenant admin or more, like the sign-in list); an unknown id, a malformed id
+or another tenant's event all answer `null`, so nothing tells them apart. An operator reads any console event with `platformAdminEvent(id)`.
+
+### Sign-in events
+
+What a tenant's users do to their own access is written to its own `authEvents` collection
+(tenant-owned, closed schema): `session.signIn` (by `emailCode`, `magicLink`, `passkey` or `social`,
+a refusal with its reason code; a social sign-in that took over an address held unverified carries `reason: "replaced"`) and `session.signOut` from the hosted sign-in, and the second-factor and
+passkey changes janus reports (`secondFactor.*`, `recoveryCode*`, `passkey.*`); `stepUp.confirm` is
+the step-up confirmation (passkey, app code or e-mailed code). Per-token events are not recorded. Each event holds the type, the time, the
+outcome, the actor, the user or client, the full address, a browser family (never the whole
+User-Agent) and the request id. The address is kept for the retention period only and never goes into a
+webhook or telemetry. A failed write is logged and counted, and never fails the sign-in.
+
+`authEvents(tenantId, filter: { from, to, types, userId, clientId, outcome }, first, after)` reads it
+(a tenant admin or more: a viewer reads the console activity only), with `totalCount`. A `types`
+entry outside the closed list is `BAD_USER_INPUT`.
+
+### Export
+
+`GET https://console.<domain>/console/audit/export?tenantId=<id>&log=admin|auth&format=csv|ndjson&from=&to=`
+streams a tenant's console activity (`log=admin`, a tenant viewer or more) or sign-in log (`log=auth`, an
+admin or more: it holds addresses; on the `clavix` tenant a platform admin or more, as for `authEvents`) as CSV (default) or NDJSON, with the console's own authentication
+(`Authorization: Bearer` or `DPoP`, verified e-mail). `from` and `to` are ISO 8601 dates; the range is cut
+to the tenant's retention. An export holds at most 100,000 rows, the newest: `x-clavix-export-truncated:
+true` says it was cut, `x-clavix-export-from` the range's start. A tenant may start 10 exports an hour (`CLAVIX_EXPORT_TENANT_LIMIT`; 429 with `Retry-After`).
+The body is read from the store a batch at a time, so memory stays flat. In CSV a cell that starts with
+`=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` so a spreadsheet reads it as text.
+Each export records the console activity `auditLog.export` (target: the log) before the first byte; a
+refused one records nothing. A body that ends early (the store failed mid-stream) is incomplete: retry. Columns carry ids (`actor`, `userId`), not names.
+
+Retention follows the tenant's plan (`Plan.auditRetentionDays`: free 30 days, pro 90, enterprise 365;
+the platform's own events 400). The daily job `audit.retention` (queue `audit-retention`, 04:17 UTC, needs
+`REDIS_URL`) deletes by the plan the tenant has that day, in batches, as `system:audit:retention`, and
+writes no event per deletion. A purged tenant's `authEvents` go with the purge; its console activity stays
+until its retention ends.
 
 A mutation declares its action beside its module's guards (the declaration is spread into `audits`
 in `src/console/modules/index.ts`) and records it once its change is stored; AGENTS.md "Admin
@@ -495,11 +567,24 @@ Each tenant chooses how its users sign in
   `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback` (the host is the tenant's issuer: its primary custom domain when set, else the slug host).
 - **At least one way in**: a change that would leave no enabled method and no enabled provider is
   refused, 409 `NO_SIGN_IN_METHOD`.
+- **Two-factor (TOTP)**: off by default. The console's `updateMfaPolicy(tenantId, input: { mode, totp })`
+  (`edit`, event `mfaPolicy.update`, idempotent) lets the tenant's users enrol an authenticator app;
+  with `totp` off, enrolment is 403 `SECOND_FACTOR_DISABLED` and a user who holds a factor keeps it.
+  The hosted operations on the tenant's `/graphql` are in the table below.
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
-  and it is never logged. Losing the master key, or dropping the old key from the keyring while a secret is still sealed under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
+  and it is never logged. Losing the master key, or dropping the old key from the keyring before `bun run keys:reseal` reports nothing left under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
+
+The second factor on the tenant's hosted `/graphql` (not the console API):
+
+| Operation                                                                               | Does                                                                                                                                                     |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secondFactor` / `sessionConfirmedUntil`                                                | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes). |
+| `enrollSecondFactor` / `activateSecondFactor(code)`                                     | Starts a factor (its secret and URI), then checks the first code and answers ten recovery codes, once. Needs a fresh session: `STEP_UP_REQUIRED`.        |
+| `confirmSecondFactor(challenge, code)` / `recoverSecondFactor(challenge, recoveryCode)` | Answers the `SecondFactorChallenge` of a sign-in by code, link or social provider and opens the session; `TENANT_SUSPENDED` on a suspended tenant.       |
+| `regenerateRecoveryCodes(code)` / `disableSecondFactor(code)`                           | Renews the recovery codes, or removes the factor, on a current app code.                                                                                 |
 
 ```sh
 curl -s https://api.clavix.example/console/graphql \
@@ -519,6 +604,24 @@ curl -s https://api.clavix.example/console/graphql \
   }
 }
 ```
+
+## Enterprise connections: home-realm discovery and single sign-on
+
+A tenant's enterprise OIDC connections (console API) sign its users in through their company's identity provider. The hosted pages' part, on `/graphql`:
+
+```graphql
+query {
+  hostedHomeRealm(email: "ada@acme.test") {
+    connectionId
+    name
+  }
+}
+```
+
+`hostedHomeRealm` answers the one enabled connection that owns the address's verified domain, or `null` (no connection, an unverified domain, two claimants). It has its own limits per client address and per tenant (`CLAVIX_SSO_*`, `MAIL_THROTTLED` 429 past them; `socialSignInStart` has the same, counted apart, and neither spends the sign-in code budget) and is `no-store`. The page then calls `socialSignInStart(provider: <connectionId>)` and `socialSignInComplete`, as for a social app; the session's `amr` is `["fed"]`.
+- **Just-in-time creation**: a user unknown to the tenant is created on the first federated sign-in only when the connection's `jit` is on, even where the tenant's sign-up is closed; otherwise `SIGN_UP_DISABLED` (403). A known user (same address, or the one already linked) is linked, never duplicated.
+- **`SSO_REQUIRED` (403)**: when the connection has `requireSso`, `requestSignInCode` and `requestMagicLink` refuse an address of its domain, and `verifySignInCode`, `confirmMagicLink` and `signInWithPasskey` end with it (no cookie for a code or link; the session a passkey opened is revoked). Static social apps and `acceptInvitation`'s sign-in are not gated yet.
+- **Upstream step-up**: a connection's `upstreamMfa.acr` makes the identity provider's ID token carry that `acr`, else `SOCIAL_STEP_UP_UNMET`.
 
 ## Pushed authorization requests
 
@@ -616,11 +719,11 @@ Discovery advertises `device_authorization_endpoint`.
 - **A device-only client has no redirect URI.** `--redirect-uri` and `redirectUris` are required only when the
   client lists `authorization_code` (the default grants, or an explicit `--grants authorization_code,urn:ietf:params:oauth:grant-type:device_code`).
   A re-run without `--grants` judges the client's stored grants, so a device-only client needs no URI then either.
-  A client's grants must include `authorization_code`, the device URN or the token-exchange URN.
+  A client's grants must include `authorization_code`, the device URN, the token-exchange URN or `client_credentials`.
 - **The user decides on the hosted page** `/device` (clavix-ui): they type the user code, see the client's name and
   host, the resource and the scopes with the tenant's own labels (`oauthDeviceRequest`), and approve or refuse
   (`approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, optionally with fewer scopes; approval is refused with `invalid_authorization_details` while `detailsComplete` is false, see "Authorization details"). The viewer must be signed in
-  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again, the request stays
+  to that tenant. Approving needs a session proved in the last 5 minutes (else `STEP_UP_REQUIRED`: sign in again or prove again with the step-up mutations, the request stays
   pending); refusing does not. A code of another tenant is `NOT_FOUND`.
 - **The device polls** with the janus answers: `authorization_pending`, `slow_down` (poll less often, the interval
   grows by 5 s), `access_denied`, `expired_token` (the code lived 10 minutes) and `invalid_grant`. A successful
@@ -903,18 +1006,19 @@ bun run clients:create --tenant acme --name "Web app" \
   --redirect-uri https://app.example.com/callback          # a public client, PKCE only
 ```
 
-| Flag                   | Meaning                                                                                                                                                                                                                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--tenant <slug>`      | required; an unknown slug or a suspended tenant is refused                                                                                                                                                                                                                               |
-| `--name <name>`        | required                                                                                                                                                                                                                                                                                 |
-| `--redirect-uri <uri>` | repeatable; required unless the client lists no `authorization_code` (device or token exchange only); exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed)                                                                                                           |
-| `--confidential`       | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                                                                                                                                                                                                                  |
-| `--client-id <id>`     | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                                                                                                                                                                                                |
-| `--grants <a,b>`       | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code`, `urn:ietf:params:oauth:grant-type:token-exchange`; default `authorization_code,refresh_token` (see below); the token-exchange URN is for a confidential client and needs rules set in the console |
-| `--require-par`        | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it)                                                                                                                                                                               |
-| `--detail-types <a,b>` | the authorization detail types the client may ask for (RFC 9396, see "Authorization details"): types of the tenant, and the client needs `--require-par`; an empty value clears them, no flag keeps them                                                                                 |
-| `--dpop-bound`         | the client's tokens are bound to a DPoP key (RFC 9449): its token requests must carry a proof (kept on a re-run; `--no-dpop-bound` clears it)                                                                                                                                            |
-| `--rotate-secret`      | a new secret for an existing confidential client                                                                                                                                                                                                                                         |
+| Flag                                                | Meaning                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--tenant <slug>`                                   | required; an unknown slug or a suspended tenant is refused                                                                                                                                                                                                                                                     |
+| `--name <name>`                                     | required                                                                                                                                                                                                                                                                                                       |
+| `--redirect-uri <uri>`                              | repeatable; required unless the client lists no `authorization_code` (device or token exchange only); exact match, janus's rules (HTTPS, no fragment, loopback `http` allowed)                                                                                                                                 |
+| `--confidential`                                    | `client_secret_basic`; default is a public client (`none`, PKCE `S256`)                                                                                                                                                                                                                                        |
+| `--client-id <id>`                                  | the client's id in the tenant (`a-z0-9-`); default: the name as `a-z0-9-`                                                                                                                                                                                                                                      |
+| `--grants <a,b>`                                    | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code`, `urn:ietf:params:oauth:grant-type:token-exchange`, `client_credentials`; default `authorization_code,refresh_token` (see below); the token-exchange URN is for a confidential client and needs rules set in the console |
+| `--allowed-scopes <a,b>` / `--default-scopes <a,b>` | the client credentials grant's ceiling (required with the grant) and what a request with no scope gets (each must be allowed); only with that grant                                                                                                                                                            |
+| `--require-par`                                     | the client must push its authorization requests to `/par` (kept on a re-run; `--no-require-par` clears it)                                                                                                                                                                                                     |
+| `--detail-types <a,b>`                              | the authorization detail types the client may ask for (RFC 9396, see "Authorization details"): types of the tenant, and the client needs `--require-par`; an empty value clears them, no flag keeps them                                                                                                       |
+| `--dpop-bound`                                      | the client's tokens are bound to a DPoP key (RFC 9449): its token requests must carry a proof (kept on a re-run; `--no-dpop-bound` clears it)                                                                                                                                                                  |
+| `--rotate-secret`                                   | a new secret for an existing confidential client                                                                                                                                                                                                                                                               |
 - **Idempotent on the client id**: a re-run replaces the name and the redirect URIs of the client
   and creates nothing new. The output (JSON) says `created: true | false`.
 - **A confidential client's secret is printed once**, in `clientSecret`; janus keeps only its
@@ -930,7 +1034,7 @@ bun run clients:create --tenant acme --name "Web app" \
   refresh. An explicit list is taken as written: it must name `authorization_code` or the device or token-exchange URN,
   and `refresh_token` for a client that refreshes (`--grants authorization_code` alone cannot
   refresh; `refresh_token` alone is refused). A client without `authorization_code` needs no redirect
-  URI. The token-exchange URN needs `--confidential`. Any other grant (client credentials) is refused.
+  URI. The token-exchange URN and `client_credentials` need `--confidential`; `client_credentials` also needs `--allowed-scopes` and a resource that opted in ([guide](docs/guide/client-credentials.md)). Any other grant is refused.
 
 ## OpenID Connect
 
@@ -1059,7 +1163,7 @@ The page sends the user agent to `redirectTo` (the client's redirect URI with `c
 `state` and `iss`). Errors carry `extensions.code`: `UNAUTHENTICATED` (401: sign in with the e-mail
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
-scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403).
+scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403) or `UNMET_AUTHENTICATION_REQUIREMENTS` (403, `extensions.missing`; see "Authentication level and step-up").
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
   are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
   enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
@@ -1071,13 +1175,36 @@ scope not asked for, or `invalid_authorization_details` on an approval while `de
 - **Freshness**: `approveOAuthRequest` needs a session that proved who it is in the last 5 minutes
   (janus-oauth's default `freshWithin`). An older one is `STEP_UP_REQUIRED`: the page signs the user in
   again with a new e-mail code (`requestSignInCode`, `verifySignInCode`), then repeats the mutation;
-  the request stays pending. `denyOAuthRequest` and the read do not ask. janus's `auth.stepUp.*`
-  mutations are not exposed.
+  the request stays pending. `denyOAuthRequest` and the read do not ask. To prove again without a new
+  sign-in, use the step-up mutations of "Authentication level and step-up" below.
 - **Same origin, JSON only**: this holds for every `/graphql` operation, not only consent (see "Same
   origin on /graphql" below).
-- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`). **No `amr` or
-  `acr`**: janus-oauth's resolvers pass none (`approve` takes them, the GraphQL surface does not), and
-  M1 needs neither.
+- **`auth_time`** of the id_token is the session's sign-in time (`authenticatedAt`, moved to now by a step-up).
+  `acr` and `amr` are on the ID token and on the JWT access token too (same values): see "Authentication level and step-up".
+
+### Authentication level and step-up
+
+- **`acr` values** (`acr_values_supported` in discovery): `urn:clavix:acr:1fa` (one factor), `urn:clavix:acr:mfa`
+  (a second factor) and `phr` (a user-verified passkey, which also meets `mfa`). `amr` carries RFC 8176 values
+  (`hwk`, `user`, `otp`, `rec` (a recovery code, in place of `otp`), `mfa`, `fed`); a lone e-mailed code is `email`.
+- **What is asked**: the tenant's `signIn.mfa.mode` (`required` asks `mfa` of every approval) and the client's
+  `acr_values` (essential, any one supported value met satisfies), `max_age` and `prompt=login` (= `max_age=0`,
+  read as a proof of the last 60 seconds).
+- **`OAuthRequest.authentication`** (and `OAuthDeviceRequest.authentication`; the device request has no
+  `acr_values` or `max_age`, only the tenant's mode) is `{ acr, current, maxAge, met, missing }`, `missing` listing
+  `SECOND_FACTOR` (prove a passkey or an app code now), `FRESH_PROOF` (prove again) and `ENROLMENT` (the user holds
+  no second factor). While `met` is false the approve mutations answer `UNMET_AUTHENTICATION_REQUIREMENTS` (403,
+  `extensions.missing`) and the request stays pending. When `missing` is empty (an `acr` Clavix does not issue) nothing
+  can meet it: the request is denied and the mutation answers a `redirectTo` with `error=unmet_authentication_requirements`,
+  `state` and `iss`.
+- **Step-up mutations**: `requestPasskeyStepUp` / `confirmPasskeyStepUp(challenge, response)` (passkey: `hwk`,
+  `user`, `mfa`, so `phr`), `requestStepUp` / `confirmStepUp(challenge, code)` (the app's code for a user who has
+  one, else an e-mailed code that renews the proof only). Each confirmation is a `stepUp.confirm` audit event.
+  Errors: the two `request*` mutations answer `UNAUTHENTICATED` (401) to an anonymous caller. `confirmStepUp` answers
+  `CODE_INVALID` (with `attemptsLeft`) for a wrong code and `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED` for a bad
+  challenge; `confirmPasskeyStepUp` answers `PASSKEY_INVALID` for a failed assertion and the same `TOKEN_*` codes.
+- **Federation**: a connection with `upstreamMfa.acr` (stored as the connection's `stepUp.acrValues`) marks its sessions `["fed", "mfa"]`.
+- **Tokens**: the ID token and the JWT access token carry `acr`, `amr` and `auth_time` (the approval's values; a refresh keeps them). A passkey step-up needs no authenticator app (`passkeys.firstFactor`).
 
 ## E-mail code sign-in
 
@@ -1092,11 +1219,17 @@ mutation {
 }
 mutation {
   verifySignInCode(challenge: "...", code: "123456") {
-    user {
-      id
-      email
+    ... on SignedIn {
+      user {
+        id
+        email
+      }
+      expiresAt
     }
-    expiresAt
+    ... on SecondFactorChallenge {
+      challenge
+      methods
+    }
   }
 }
 query {
@@ -1116,7 +1249,7 @@ A 6-digit code is mailed from `no-reply@<CLAVIX_DOMAIN>` (valid 10 minutes, 5 at
 address per 10 minutes). `verifySignInCode` sets the `__Host-clavix-session` cookie; a wrong, spent
 or foreign code is always `CODE_INVALID` (401). A tenant with `signUp: false` (the default, and
 `clavix`) answers an unknown address exactly like a known one and creates and sends nothing: users
-come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
+come in by invitation. `requestSignInCode.expiresAt` is the challenge's expiry, `verifySignInCode.expiresAt` the session's. The hosted pages (a BFF) keep the challenge and send it back with the code. `signOut` clears the cookie. A user who turned on the TOTP second factor (the tenant's `signIn.mfa.totp`, console `updateMfaPolicy`; the user's `enrollSecondFactor` then `activateSecondFactor`) gets a `SecondFactorChallenge` and no cookie: `confirmSecondFactor(challenge, code)` or `recoverSecondFactor(challenge, recoveryCode)` or, when the challenge offers `passkey`, `confirmSecondFactorWithPasskey(challenge, assertion)` (the answer to its `passkeyOptions`, which `requestSecondFactorPasskeyOptions(challenge)` gives again from the challenge alone, so a page need not keep them) opens the session; `confirmMagicLink` and `socialSignInComplete` answer the same way (docs/guide/sign-in-methods.md, "Two-factor sign-in"). An unknown host is `NOT_FOUND`; `MAIL_THROTTLED` is HTTP 429. Without `CLAVIX_SMTP_URL` (development, tests) mails are kept in memory.
 
 ## Magic-link sign-in
 
@@ -1251,7 +1384,7 @@ extend type Mutation {
   spends the user's earlier one. Signing in with an e-mailed code verifies the e-mail; a user whose e-mail is not yet
   verified gets `EMAIL_UNVERIFIED` (403; janus 0.57 refuses every factor enrolment while the e-mail is unproved, see
   [troubleshooting](docs/troubleshooting.md)). The session must have signed in within 10 minutes
-  (`STEP_UP_REQUIRED`, 403: sign in again with a code). Up to 10 passkeys per user.
+  (`STEP_UP_REQUIRED`, 403: prove again with `requestPasskeyStepUp` or `requestStepUp`). Up to 10 passkeys per user.
 - **List and remove**: `myPasskeys` (never the public key or the counter), `removePasskey(id)`
   (`true` when this call removed it, `false` for an id that is not the caller's; same freshness).
   A removed passkey no longer signs in. Registering and removing mail nothing yet.
@@ -1266,6 +1399,8 @@ extend type Mutation {
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
 - **Over http** (development): `http://<slug>.clavix.localhost` tenants have passkeys with their real
   rpId and origin (janus 0.55+ accepts `*.localhost` origins).
+  The OAuth server itself accepts an `http:` issuer only on exactly `localhost`, so http dev tenants
+  cannot do OAuth: use an https front for `<slug>.<domain>` (see docs/operations.md, "Restore drill").
 - **Rate limit**: `passkeySignInOptions` is anonymous and stores a token per call, so it is limited
   like `requestSignInCode`, with its own buckets and variables: per client IP and tenant
   (60 per 10 min, `CLAVIX_PASSKEY_IP_LIMIT`, `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`) and per tenant
@@ -1275,7 +1410,7 @@ extend type Mutation {
   (`clavix:passkey-ip:<tenantId>/<ip>`, `clavix:passkey-tenant:<tenantId>`), the address counted
   first, `CLAVIX_TRUSTED_PROXIES` for the client IP, and no limit without `REDIS_URL`; Redis down or
   slow: the request goes through and a warning is logged.
-- **Not yet**: the `amr`/`acr` claims stay unset.
+- `acr` and `amr` on the tokens: see "Authentication level and step-up".
 
 ## Same origin on /graphql
 

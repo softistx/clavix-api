@@ -9,8 +9,8 @@ import { enabledSocial, type SocialProviderId } from "./sign-in.schema";
  * issuer host (`/sign-in/social/:provider/callback`, clavix-ui). This is the
  * redirect URI the tenant registers in its own app.
  */
-export const callbackUrlOf = (issuer: string, provider: SocialProviderId) =>
-  `${issuer}/sign-in/social/${provider}/callback`;
+export const callbackUrlOf = (issuer: string, provider: string) =>
+  `${issuer}/sign-in/social/${encodeURIComponent(provider)}/callback`;
 
 const PRESETS = { google, github, microsoft } as const;
 

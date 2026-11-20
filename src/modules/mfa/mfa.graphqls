@@ -1,0 +1,166 @@
+"""
+The TOTP second factor of the signed-in user of the tenant the request's host
+names (an authenticator app and ten recovery codes), and the three answers that
+finish a sign-in that stopped at a `SecondFactorChallenge`. A tenant turns it on
+with `signIn.mfa.totp`; with it off, enrolment is refused and a user who already
+holds a factor keeps it (and can still disable it or renew the codes).
+"""
+type SecondFactorStatus {
+  "True once the factor is active: a sign-in then asks for a code. A factor started and never activated is not enabled."
+  enabled: Boolean!
+  "The recovery codes not yet used. Null without an active factor, 0 when all are spent."
+  recoveryCodesLeft: Int
+}
+
+"A factor started, not yet active. Never cached, never logged."
+type SecondFactorEnrolment {
+  "The TOTP secret in base32, for a user who types it in."
+  secret: String!
+  "The `otpauth://` URI to render as a QR code."
+  uri: String!
+}
+
+"Ten recovery codes, shown once: no call answers them again."
+type RecoveryCodes {
+  recoveryCodes: [String!]!
+}
+
+"A second-factor sign-in completed; the session cookie is set on the response."
+type SecondFactorSignedIn {
+  user: CurrentUser!
+  "When the session lapses if not used again; it slides."
+  expiresAt: DateTime!
+  "Whether the session was opened from a device the user had not used."
+  newDevice: Boolean!
+  "The recovery codes left after `recoverSecondFactor` spent one; null after `confirmSecondFactor` and `confirmSecondFactorWithPasskey`."
+  recoveryCodesLeft: Int
+}
+
+"The options of a second-factor sign-in's passkey, read again from its challenge."
+type SecondFactorPasskeyOptions {
+  "JSON text for `navigator.credentials.get({ publicKey })`, the same as `SecondFactorChallenge.passkeyOptions`."
+  options: String!
+}
+
+extend type Query {
+  "The signed-in user's second factor. UNAUTHENTICATED (401) when anonymous."
+  secondFactor: SecondFactorStatus!
+  "Until when the session counts as freshly confirmed (its sign-in or last step-up plus ten minutes); in the past once it no longer does."
+  sessionConfirmedUntil: DateTime
+}
+
+extend type Mutation {
+  """
+  Redeems the challenge of a sign-in with the authenticator app's code and
+  opens the session (cookie set). Five attempts per challenge: CODE_INVALID
+  with `attemptsLeft`.
+  """
+  confirmSecondFactor(challenge: String!, code: String!): SecondFactorSignedIn!
+  """
+  Redeems the challenge with a recovery code instead (a lost phone). The code
+  is spent and `recoveryCodesLeft` answers what remains. Refused like
+  `confirmSecondFactor`.
+  """
+  recoverSecondFactor(
+    challenge: String!
+    recoveryCode: String!
+  ): SecondFactorSignedIn!
+  """
+  Redeems the challenge with one of the user's passkeys, the browser's answer
+  to the challenge's `passkeyOptions` (`credential.toJSON()`, as a JSON
+  string), and opens the session (cookie set). The five attempts are the ones
+  of `confirmSecondFactor`: CODE_INVALID with `attemptsLeft` for an assertion
+  that does not verify or names another user's passkey; TOKEN_UNKNOWN,
+  TOKEN_SPENT, TOKEN_EXPIRED. `recoveryCodesLeft` is null.
+  """
+  confirmSecondFactorWithPasskey(
+    challenge: String!
+    assertion: String!
+  ): SecondFactorSignedIn!
+  """
+  Reads the passkey options of a sign-in challenge again (the same as
+  `SecondFactorChallenge.passkeyOptions`), so a page keeps only the challenge
+  and not the options, which grow with the user's passkeys. Anonymous, as the
+  sign-in is. It counts no attempt and spends nothing; `confirmSecondFactorWithPasskey`
+  answers it. TOKEN_UNKNOWN, TOKEN_SPENT, TOKEN_EXPIRED; SECOND_FACTOR_NOT_ENROLLED
+  (409) when the user holds no passkey; SIGN_IN_METHOD_DISABLED when the tenant
+  turned passkeys off; PASSKEY_THROTTLED (429, `Retry-After`) past the
+  per-address and per-tenant limits of `passkeySignInOptions`, whose budget it shares.
+  """
+  requestSecondFactorPasskeyOptions(
+    challenge: String!
+  ): SecondFactorPasskeyOptions!
+  """
+  Starts a factor and answers the secret and the URI to show as a QR code.
+  SECOND_FACTOR_DISABLED (403) when the tenant did not turn TOTP on;
+  SECOND_FACTOR_ACTIVE when one is active; STEP_UP_REQUIRED when the session
+  proved who it is more than ten minutes ago; EMAIL_UNVERIFIED (403) until the
+  address is proven.
+  """
+  enrollSecondFactor: SecondFactorEnrolment!
+  """
+  Checks the app's first code and makes the factor active; answers the recovery
+  codes, once. CODE_INVALID, SECOND_FACTOR_NOT_ENROLLED, SECOND_FACTOR_DISABLED.
+  """
+  activateSecondFactor(code: String!): RecoveryCodes!
+  "Replaces all the recovery codes with new ones, on a current code of the app."
+  regenerateRecoveryCodes(code: String!): RecoveryCodes!
+  "Turns the factor off, on a current code of the app."
+  disableSecondFactor(code: String!): Boolean!
+}
+
+"How the code of a step-up reaches the user."
+enum StepUpVia {
+  "A code e-mailed to the user's address (a user with no second factor)."
+  EMAIL
+  "The code of the user's authenticator app; nothing is sent."
+  SECOND_FACTOR
+}
+
+"A step-up under way: keep `challenge` (never in a URL) and give it to `confirmStepUp` with the code."
+type StepUpChallenge {
+  via: StepUpVia!
+  challenge: String!
+  expiresAt: DateTime!
+}
+
+"A passkey step-up under way: the options for `navigator.credentials.get`, and the challenge `confirmPasskeyStepUp` redeems."
+type PasskeyStepUpChallenge {
+  "JSON text for `navigator.credentials.get({ publicKey })`, after `PublicKeyCredential.parseRequestOptionsFromJSON`."
+  options: String!
+  challenge: String!
+  expiresAt: DateTime!
+}
+
+"The session proved who it is just now."
+type StepUpConfirmed {
+  confirmedAt: DateTime!
+  "Until when the session counts as freshly confirmed; null when no window is set."
+  confirmedUntil: DateTime
+}
+
+extend type Mutation {
+  """
+  Starts a step-up of the signed-in session: the authenticator app's code for a
+  user who has one, else a code e-mailed to the user. A code step-up renews the
+  proof (`max_age`, `prompt=login`) and an app code also reaches `mfa`.
+  UNAUTHENTICATED (401) when anonymous.
+  """
+  requestStepUp: StepUpChallenge!
+  """
+  Confirms the step-up with its code: the session is stamped, and the next
+  approval states what it proved (`amr`, `acr`). CODE_INVALID with
+  `attemptsLeft`, TOKEN_UNKNOWN, TOKEN_SPENT, TOKEN_EXPIRED.
+  """
+  confirmStepUp(challenge: String!, code: String!): StepUpConfirmed!
+  """
+  Starts a step-up by one of the user's passkeys. A passkey reaches `phr` and
+  `mfa`. UNAUTHENTICATED (401) when anonymous.
+  """
+  requestPasskeyStepUp: PasskeyStepUpChallenge!
+  """
+  Confirms it with the browser's answer (`credential.toJSON()`, as a JSON
+  string). PASSKEY_INVALID (401) for every refusal.
+  """
+  confirmPasskeyStepUp(challenge: String!, response: String!): StepUpConfirmed!
+}

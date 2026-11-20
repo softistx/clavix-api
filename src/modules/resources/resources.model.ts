@@ -17,6 +17,10 @@ export const resources = defineCollection({
     // `scopes` collection is the truth now; the 2026-11-13 migration moves
     // the strings there and removes this field.
     scopes: z.array(z.string()).optional(),
+    // Whether the resource accepts tokens of the client credentials grant
+    // (RFC 6749 section 4.4), which have no user behind them. Absent is
+    // `false`, so a stored resource needs no migration.
+    allowClientCredentials: z.boolean().optional(),
   }),
   indexes: [
     {

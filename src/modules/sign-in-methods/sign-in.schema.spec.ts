@@ -45,8 +45,20 @@ test("password is never on while it is not available, even stored on", () => {
   expect(hasSignInMethod(policy)).toBe(false);
 });
 
-test("an unknown field beside methods and social (a later mfa block) does not break the read", () => {
+test("a policy stored before the mfa block reads its defaults", () => {
+  const policy = signInPolicySchema.parse({ methods: [], social: [] });
+  expect(policy.mfa).toEqual({ mode: "passkeySufficient", totp: false });
+  expect(signInPolicySchema.parse(undefined).mfa).toEqual(policy.mfa);
+});
+
+test("an mfa block fills what it leaves out", () => {
+  const policy = signInPolicySchema.parse({
+    methods: [],
+    social: [],
+    mfa: { totp: true },
+  });
+  expect(policy.mfa).toEqual({ mode: "passkeySufficient", totp: true });
   expect(() =>
-    signInPolicySchema.parse({ methods: [], social: [], mfa: { totp: true } }),
-  ).not.toThrow();
+    signInPolicySchema.parse({ mfa: { mode: "sometimes" } }),
+  ).toThrow();
 });

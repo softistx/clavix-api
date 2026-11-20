@@ -158,6 +158,9 @@ export const storedResourcesFor =
           resource.uri,
           {
             scopes: byResource.get(key) ?? [],
+            ...(resource.allowClientCredentials === true
+              ? { clientCredentials: true as const }
+              : {}),
             ...(authorizationDetails === undefined
               ? {}
               : { authorizationDetails }),

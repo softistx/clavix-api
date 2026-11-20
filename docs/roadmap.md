@@ -14,23 +14,12 @@ nxgt-janus release says which.
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
-- **M4, federation, step-up and events** — on an integration branch, in five tracks
-  ([#24](https://github.com/softistx/clavix-api/issues/24)):
-  - **Federation** ([#19](https://github.com/softistx/clavix-api/issues/19)): enterprise OIDC
-    connections per tenant with domains proved by DNS, home-realm discovery by e-mail domain,
-    just-in-time provisioning and "require SSO". Waits on the nxgt-janus release of #509.
-  - **MFA and step-up** ([#20](https://github.com/softistx/clavix-api/issues/20)): a tenant MFA
-    policy, TOTP and recovery codes, then `acr_values`, `max_age` and `acr`/`amr` in tokens. The
-    step-up part waits on nxgt-janus releases.
-  - **Audit** ([#21](https://github.com/softistx/clavix-api/issues/21)): sign-in and OAuth events
-    beside admin events, readers for the console, CSV and NDJSON export, retention per plan.
-  - **Webhooks** ([#22](https://github.com/softistx/clavix-api/issues/22)): signed per-tenant
-    endpoints with retries, secret rotation, auto-disable and a deliveries log. Waits on
-    janus-webhooks supporting events beyond janus's own.
-  - **Telemetry** ([#23](https://github.com/softistx/clavix-api/issues/23)): traces with tenant
-    attributes and OAuth spans, no personal data.
-  - **v1 gate** ([#271](https://github.com/softistx/clavix-api/issues/271)): a load test of the
-    token and JWKS paths, a security review of the whole surface and a restore drill, last.
+- **Staging at v1** — Clavix runs on the shared VPS behind its Traefik v3, as the sibling apps do: one
+  command (`bun deploy/deploy.ts`) pulls, builds the images on the host, migrates, starts the stack,
+  waits for health and cleans the replaced images and the old build cache. Tenants are served at
+  `<slug>.clavix.softistx.com` with one wildcard certificate; custom domains stay off in staging
+  ([#339](https://github.com/softistx/clavix-api/issues/339)). The v1 gate
+  ([#271](https://github.com/softistx/clavix-api/issues/271)) has passed.
 
 ## Next
 
@@ -61,6 +50,64 @@ nxgt-janus release says which.
   the access rules refer to.
 
 ## Shipped
+
+- **MFA policy, TOTP and recovery codes** — a tenant offers an authenticator app
+  (`signIn.mfa.totp`, admin event `mfaPolicy.update`); a user who turned it on is asked for the code after
+  a sign-in by code, link or social account, or answers with a recovery code, and an admin can reset it
+  ([#20](https://github.com/softistx/clavix-api/issues/20)).
+- **Sign-in events and activity readers** — a tenant's sign-ins, sign-outs, second-factor and
+  passkey changes are kept in its own log, kept 30, 90 or 365 days by plan; the console reads that
+  log (admins) and the console activity (viewers), and operators read every tenant's and the
+  platform's ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **Audit export** — an admin downloads a tenant's sign-in log or console activity as CSV or
+  NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
+  ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **OAuth events in the sign-in log** — consents granted and denied, grant revocations, refresh-token
+  reuse, device decisions, token exchanges and client registrations of a tenant's issuer are kept in
+  its own log ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **`client_credentials` grant** — a back end gets tokens for itself with a confidential client that lists the
+  grant and its `allowedScopes`, against a resource that opted in (`allowClientCredentials`); the console sets
+  both and the load test measures it ([#362](https://github.com/softistx/clavix-api/issues/362),
+  [guide](guide/client-credentials.md)).
+- **Webhooks** — a tenant registers `https` endpoints in the console and receives its users'
+  events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
+  once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
+  an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
+  ([#22](https://github.com/softistx/clavix-api/issues/22)). A deliveries log (the last 100 attempts per
+  endpoint, 7 days: status, failure name, duration, never a body) shows an admin why an endpoint fails.
+  The queue is capped per tenant (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, `CLAVIX_WEBHOOKS_MAX_PENDING`), so one
+  tenant's flooding endpoint cannot starve another's (G2-03,
+  [#330](https://github.com/softistx/clavix-api/issues/330)).
+- **Step-up and authentication level** — a client asks for `acr_values`, `max_age` or `prompt=login`
+  and gets what it asked for or a clear refusal: a request no sign-in can meet is denied on the client's
+  redirect with `unmet_authentication_requirements`, and one the user can still meet (second factor,
+  fresh proof, enrolment) stays pending for the step-up. The ID token and the JWT access token carry
+  `acr`, `amr` (`rec` for a recovery code) and `auth_time`, and a passkey step-up needs no authenticator
+  app ([#20](https://github.com/softistx/clavix-api/issues/20)).
+- **Passkey second factor** — a user answers a second-factor challenge with a passkey as well as an
+  authenticator code or a recovery code, and a passkey step-up needs no authenticator app.
+- **Social replace and grant revocation** — when a social sign-in replaces the holder of an unverified
+  address, the previous holder's OAuth grants are revoked; the revocation is retried from a queue until it
+  succeeds.
+- **JWKS and discovery cache** — each tenant host serves its JWKS and discovery documents from an
+  in-process cache, so the paths stay fast under load.
+- **Throttle splits** — test webhooks, invitations and the SSO budgets have their own throttles, so one
+  cannot starve another, and the TLS ask is counted after its lookup.
+- **Invite guards** — an invitation is refused inside the per-address cooldown and past the cap of
+  pending invitations.
+- **Enterprise buttons** — `hostedSignInMethods` offers an enterprise connection as a button when its
+  `showButton` is on.
+- **Event and webhook lookups by id** — `webhookEndpoint` reads one endpoint and an activity query reads
+  one event by its id.
+- **Restore drill and load test** — a MongoDB restore drill and master-key check (see "Restore drill" in
+  operations.md), and a k6 load test of the token, JWKS and discovery paths under `load/` (refresh grant at
+  200 req/s passes; JWKS and discovery pass 20 ms p95 at 2 000 req/s, see operations.md "Load test").
+- **Enterprise OIDC connections and federated sign-in** — an admin registers an upstream OIDC provider
+  with a sealed secret and verified domains, with a per-plan quota
+  ([#19](https://github.com/softistx/clavix-api/issues/19)); home-realm discovery and federated sign-in
+  with JIT provisioning and `SSO_REQUIRED`.
+- **Telemetry** — traces, janus security events and MongoDB spans over OTLP, and OAuth spans
+  ([#23](https://github.com/softistx/clavix-api/issues/23)).
 
 - **Detail types and authorization-details consent** ([#17](https://github.com/softistx/clavix-api/issues/17)) —
   a tenant describes the authorization detail types of an API (a payment, a transfer) from the console;
@@ -197,7 +244,7 @@ nxgt-janus release says which.
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once
   ([#6](https://github.com/softistx/clavix-api/issues/6)). A client's grant types are
   recorded, shown and enforced by janus-oauth 0.13 (an explicit list must name every grant the
-  client uses); grants other than code and refresh are not offered yet.
+  client uses); the device, token-exchange and client credentials grants are offered too.
 - **Tenants created by script** — `bun run tenants:create` creates a tenant (slug rules,
   reserved and deleted slugs refused, first signing key) idempotently and prints its issuer
   ([#74](https://github.com/softistx/clavix-api/issues/74)).

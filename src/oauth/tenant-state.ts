@@ -27,7 +27,10 @@ export interface TenantStateOptions {
   onActive?: (tenantId: string, userId: string) => void | Promise<void>;
 }
 
-/** The `sub` of a JWT, or `undefined` (not a JWT, no subject). */
+/**
+ * The user (`sub`) of a JWT access token, or `undefined` (not a JWT, no
+ * subject, or a client-only token whose `sub` is its `client_id`).
+ */
 export function subjectOf(token: unknown): string | undefined {
   if (typeof token !== "string") return undefined;
   const payload = token.split(".")[1];
@@ -36,8 +39,13 @@ export function subjectOf(token: unknown): string | undefined {
     const claims: unknown = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8"),
     );
-    const sub = (claims as { sub?: unknown } | null)?.sub;
-    return typeof sub === "string" && sub !== "" ? sub : undefined;
+    const { sub, client_id: clientId } = (claims ?? {}) as {
+      sub?: unknown;
+      client_id?: unknown;
+    };
+    if (typeof sub !== "string" || sub === "") return undefined;
+    // A client_credentials token carries its client as `sub`: no user.
+    return sub === clientId ? undefined : sub;
   } catch {
     return undefined;
   }

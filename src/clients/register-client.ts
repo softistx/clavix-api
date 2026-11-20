@@ -1,4 +1,5 @@
 import {
+  CLIENT_CREDENTIALS_GRANT,
   DEVICE_GRANT,
   hashOAuthSecret,
   mintOAuthSecret,
@@ -69,6 +70,18 @@ export interface RegisterClientInput {
    * records, else none.
    */
   detailTypes?: readonly string[];
+  /**
+   * The scopes the client may ask for with the client credentials grant (the
+   * ceiling: a request is cut to them). Needs that grant; replaces the list.
+   * Default: what the client already records. A client with the grant needs
+   * at least one.
+   */
+  allowedScopes?: readonly string[];
+  /**
+   * The scopes a client credentials request with no `scope` gets, within
+   * `allowedScopes`. Default: what the client already records, else none.
+   */
+  defaultScopes?: readonly string[];
 }
 
 export interface RegisteredClient {
@@ -87,6 +100,10 @@ export interface RegisteredClient {
   dpopBound: boolean;
   /** The detail types the client may ask for. */
   detailTypes: readonly string[];
+  /** The client credentials scope ceiling; empty without that grant. */
+  allowedScopes: readonly string[];
+  /** The client credentials default scopes; empty without that grant. */
+  defaultScopes: readonly string[];
 }
 
 export interface RegisterClientOptions {
@@ -128,7 +145,14 @@ export async function registerClient(
   options: RegisterClientOptions,
   input: RegisterClientInput,
 ): Promise<RegisteredClient> {
-  const { name, clientId, redirectUris, grantTypes } = validate(input);
+  const {
+    name,
+    clientId,
+    redirectUris,
+    grantTypes,
+    allowedScopes,
+    defaultScopes,
+  } = validate(input);
   const type = input.type ?? "public";
   const tenant = await options.findTenant(input.tenant);
   if (tenant === undefined) throw new UnknownTenantError(input.tenant);
@@ -149,7 +173,7 @@ export async function registerClient(
     usesRedirect(grantTypes ?? existing?.grantTypes)
   ) {
     throw new CliInputError(
-      "a client needs at least one redirect URI (a device-only or token-exchange-only client, --grants without authorization_code, needs none)",
+      "a client needs at least one redirect URI (a device-only, token-exchange-only or client-credentials-only client, --grants without authorization_code, needs none)",
     );
   }
 
@@ -161,6 +185,42 @@ export async function registerClient(
   ) {
     throw new CliInputError(
       `the token exchange grant needs a confidential client (--confidential): "${clientId}" is not one`,
+    );
+  }
+  const machineGrant =
+    (grantTypes ?? existing?.grantTypes)?.includes(CLIENT_CREDENTIALS_GRANT) ===
+    true;
+  if (!confidential && machineGrant) {
+    throw new CliInputError(
+      `the client credentials grant needs a confidential client (--confidential): "${clientId}" is not one`,
+    );
+  }
+  // Only a client with the grant has scopes for it; without it they are dropped.
+  const machineScopes = machineGrant
+    ? {
+        allowed: allowedScopes ?? existing?.allowedScopes ?? [],
+        default: defaultScopes ?? existing?.defaultScopes ?? [],
+      }
+    : { allowed: [], default: [] };
+  if (
+    !machineGrant &&
+    ((allowedScopes?.length ?? 0) > 0 || (defaultScopes?.length ?? 0) > 0)
+  ) {
+    throw new CliInputError(
+      `--allowed-scopes and --default-scopes belong to the ${CLIENT_CREDENTIALS_GRANT} grant, which "${clientId}" does not list`,
+    );
+  }
+  if (machineGrant && machineScopes.allowed.length === 0) {
+    throw new CliInputError(
+      `the client credentials grant needs at least one allowed scope (--allowed-scopes): without one, every token request is invalid_scope`,
+    );
+  }
+  const outside = machineScopes.default.filter(
+    (scope) => !machineScopes.allowed.includes(scope),
+  );
+  if (outside.length > 0) {
+    throw new CliInputError(
+      `default scopes must be allowed scopes: ${outside.join(", ")} ${outside.length === 1 ? "is" : "are"} not`,
     );
   }
   const existingHash = existing?.secretHash;
@@ -211,6 +271,12 @@ export async function registerClient(
     ...(detailTypes.length > 0
       ? { authorizationDetailsTypes: detailTypes }
       : {}),
+    ...(machineScopes.allowed.length > 0
+      ? { allowedScopes: machineScopes.allowed }
+      : {}),
+    ...(machineScopes.default.length > 0
+      ? { defaultScopes: machineScopes.default }
+      : {}),
     ...(confidential && secretHash !== undefined
       ? {
           tokenEndpointAuthMethod: "client_secret_basic" as const,
@@ -230,5 +296,7 @@ export async function registerClient(
     requirePar,
     dpopBound,
     detailTypes,
+    allowedScopes: machineScopes.allowed,
+    defaultScopes: machineScopes.default,
   };
 }

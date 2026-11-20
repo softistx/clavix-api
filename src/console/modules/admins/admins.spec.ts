@@ -379,6 +379,19 @@ describe("inviting and accepting", () => {
     const email = "twice@adm.test";
     await invite(ownA, tenantA, email, "VIEWER");
     const first = codeMailedTo(email);
+    // Inside the cooldown a second invite is refused and mails nothing.
+    const early = await asConsole(
+      ownA,
+      `mutation { inviteAdmin(tenantId: "${tenantA}", email: "${email}", role: ADMIN) { id } }`,
+    );
+    expect(code(early)).toBe("INVITE_TOO_SOON");
+    expect(codeMailedTo(email)).toBe(first);
+    await oauthDb
+      .collection("partitionedInvitations")
+      .updateMany(
+        { email },
+        { $set: { updatedAt: new Date(Date.now() - 120_000) } },
+      );
     await invite(ownA, tenantA, email, "ADMIN");
     const listed = await asConsole(
       ownA,
