@@ -14,38 +14,6 @@ nxgt-janus release says which.
   and second-factor setup already are; the future e-mail change will need it too
   ([#179](https://github.com/softistx/clavix-api/issues/179)).
 
-- **MFA policy, TOTP and recovery codes** (M4) — a tenant offers an authenticator app
-  (`signIn.mfa.totp`, admin event `mfaPolicy.update`); a user who turned it on is asked for the code after
-  a sign-in by code, link or social account, or answers with a recovery code, and an admin can reset it
-  ([#20](https://github.com/softistx/clavix-api/issues/20)).
-- **Sign-in events and activity readers** (M4) — a tenant's sign-ins, sign-outs, second-factor and
-  passkey changes are kept in its own log, kept 30, 90 or 365 days by plan; the console reads that
-  log (admins) and the console activity (viewers), and operators read every tenant's and the
-  platform's ([#21](https://github.com/softistx/clavix-api/issues/21)).
-- **Audit export** (M4) — an admin downloads a tenant's sign-in log or console activity as CSV or
-  NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
-  ([#21](https://github.com/softistx/clavix-api/issues/21)).
-- **OAuth events in the sign-in log** (M4) — consents granted and denied, grant revocations, refresh-token
-  reuse, device decisions, token exchanges and client registrations of a tenant's issuer are kept in
-  its own log ([#21](https://github.com/softistx/clavix-api/issues/21)).
-
-- **Webhooks** (M4) — a tenant registers `https` endpoints in the console and receives its users'
-  events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
-  once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
-  an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
-  ([#22](https://github.com/softistx/clavix-api/issues/22)). A deliveries log (the last 100 attempts per
-  endpoint, 7 days: status, failure name, duration, never a body) shows an admin why an endpoint fails.
-  The queue is capped per tenant (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, `CLAVIX_WEBHOOKS_MAX_PENDING`), so one
-  tenant's flooding endpoint cannot starve another's (G2-03,
-  [#330](https://github.com/softistx/clavix-api/issues/330)).
-- **Step-up and authentication level** (M4) — a client asks for `acr_values`, `max_age` or `prompt=login`
-  and gets what it asked for or a clear refusal: a request no sign-in can meet is denied on the client's
-  redirect with `unmet_authentication_requirements`, and one the user can still meet (second factor,
-  fresh proof, enrolment) stays pending for the step-up. The ID token and the JWT access token carry
-  `acr`, `amr` (`rec` for a recovery code) and `auth_time`, and a passkey step-up needs no authenticator
-  app ([#20](https://github.com/softistx/clavix-api/issues/20)).
-  When this moves to Shipped, update the step-up sentence of `guide/migrating-from-embedded-janus.md` in the same change.
-
 - **Staging at v1** — Clavix runs on the shared VPS behind its Traefik v3, as the sibling apps do: one
   command (`bun deploy/deploy.ts`) pulls, builds the images on the host, migrates, starts the stack,
   waits for health and cleans the replaced images and the old build cache. Tenants are served at
@@ -71,28 +39,76 @@ nxgt-janus release says which.
   and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
   Waits on `@softistx/security` `remotePolicy`.
 
+- **`client_credentials` grant** — a back end gets tokens for itself with the client credentials grant, adopted from nxgt-janus once it ships it (today `/token` answers 400 `unsupported_grant_type`); the load test's skipped `client_credentials` scenario then turns on.
+
 ## Later
 
 **Follow-ups**
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
-**Federation, step-up and events**
-- Enterprise OIDC connections: an admin registers an upstream OIDC provider with a sealed secret and verified domains, with a per-plan quota (F1, [#19](https://github.com/softistx/clavix-api/issues/19)); home-realm discovery and federated sign-in with JIT and `SSO_REQUIRED` (F2, in progress).
-- Admin events and OAuth events: viewer, export and retention per plan ([#21](https://github.com/softistx/clavix-api/issues/21)); webhooks per tenant;
-  telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans, [#23](https://github.com/softistx/clavix-api/issues/23)).
-
 **Before v1**
-- A security review of the whole surface (the restore drill is done: see "Restore drill" in operations.md).
-- Load test of the token and JWKS paths: shipped under `load/` (refresh grant at 200 req/s passes; JWKS and
-  discovery served from an in-process cache pass 20 ms p95 at 2 000 req/s, see docs/operations.md "Load test");
-  `client_credentials` waits for the upstream grant.
+- A security review of the whole surface.
 
 **Authorization authoring**
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary
   the access rules refer to.
 
 ## Shipped
+
+- **MFA policy, TOTP and recovery codes** — a tenant offers an authenticator app
+  (`signIn.mfa.totp`, admin event `mfaPolicy.update`); a user who turned it on is asked for the code after
+  a sign-in by code, link or social account, or answers with a recovery code, and an admin can reset it
+  ([#20](https://github.com/softistx/clavix-api/issues/20)).
+- **Sign-in events and activity readers** — a tenant's sign-ins, sign-outs, second-factor and
+  passkey changes are kept in its own log, kept 30, 90 or 365 days by plan; the console reads that
+  log (admins) and the console activity (viewers), and operators read every tenant's and the
+  platform's ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **Audit export** — an admin downloads a tenant's sign-in log or console activity as CSV or
+  NDJSON, up to 100,000 rows inside the plan's retention, each download recorded
+  ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **OAuth events in the sign-in log** — consents granted and denied, grant revocations, refresh-token
+  reuse, device decisions, token exchanges and client registrations of a tenant's issuer are kept in
+  its own log ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **Webhooks** — a tenant registers `https` endpoints in the console and receives its users'
+  events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
+  once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
+  an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
+  ([#22](https://github.com/softistx/clavix-api/issues/22)). A deliveries log (the last 100 attempts per
+  endpoint, 7 days: status, failure name, duration, never a body) shows an admin why an endpoint fails.
+  The queue is capped per tenant (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, `CLAVIX_WEBHOOKS_MAX_PENDING`), so one
+  tenant's flooding endpoint cannot starve another's (G2-03,
+  [#330](https://github.com/softistx/clavix-api/issues/330)).
+- **Step-up and authentication level** — a client asks for `acr_values`, `max_age` or `prompt=login`
+  and gets what it asked for or a clear refusal: a request no sign-in can meet is denied on the client's
+  redirect with `unmet_authentication_requirements`, and one the user can still meet (second factor,
+  fresh proof, enrolment) stays pending for the step-up. The ID token and the JWT access token carry
+  `acr`, `amr` (`rec` for a recovery code) and `auth_time`, and a passkey step-up needs no authenticator
+  app ([#20](https://github.com/softistx/clavix-api/issues/20)).
+- **Passkey second factor** — a user answers a second-factor challenge with a passkey as well as an
+  authenticator code or a recovery code, and a passkey step-up needs no authenticator app.
+- **Social replace and grant revocation** — when a social sign-in replaces the holder of an unverified
+  address, the previous holder's OAuth grants are revoked; the revocation is retried from a queue until it
+  succeeds.
+- **JWKS and discovery cache** — each tenant host serves its JWKS and discovery documents from an
+  in-process cache, so the paths stay fast under load.
+- **Throttle splits** — test webhooks, invitations and the SSO budgets have their own throttles, so one
+  cannot starve another, and the TLS ask is counted after its lookup.
+- **Invite guards** — an invitation is refused inside the per-address cooldown and past the cap of
+  pending invitations.
+- **Enterprise buttons** — `hostedSignInMethods` offers an enterprise connection as a button when its
+  `showButton` is on.
+- **Event and webhook lookups by id** — `webhookEndpoint` reads one endpoint and an activity query reads
+  one event by its id.
+- **Restore drill and load test** — a MongoDB restore drill and master-key check (see "Restore drill" in
+  operations.md), and a k6 load test of the token, JWKS and discovery paths under `load/` (refresh grant at
+  200 req/s passes; JWKS and discovery pass 20 ms p95 at 2 000 req/s, see operations.md "Load test").
+- **Enterprise OIDC connections and federated sign-in** — an admin registers an upstream OIDC provider
+  with a sealed secret and verified domains, with a per-plan quota
+  ([#19](https://github.com/softistx/clavix-api/issues/19)); home-realm discovery and federated sign-in
+  with JIT provisioning and `SSO_REQUIRED`.
+- **Telemetry** — traces, janus security events and MongoDB spans over OTLP, and OAuth spans
+  ([#23](https://github.com/softistx/clavix-api/issues/23)).
 
 - **Detail types and authorization-details consent** ([#17](https://github.com/softistx/clavix-api/issues/17)) —
   a tenant describes the authorization detail types of an API (a payment, a transfer) from the console;

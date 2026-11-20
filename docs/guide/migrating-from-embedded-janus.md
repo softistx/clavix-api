@@ -108,8 +108,9 @@ and the preset's own page,
 [`docs/guide/oidc-step-up.md`](https://github.com/softistx/nxgt-janus/blob/develop/packages/janus-social/docs/guide/oidc-step-up.md).
 The preset asks for `openid email profile`. The identity it hands janus is `accountId` = the
 ID token's `sub`, `email`, `emailVerified`, `name`, `picture`. Its optional `acrValues` and
-`maxAge` need MFA and step-up on the tenant, which are in progress (see the [roadmap](../roadmap.md)): leave
-them out until they ship.
+`maxAge` use the tenant's MFA and step-up, which are shipped (see the [roadmap](../roadmap.md)): a client asks
+for `acr_values`, `max_age` or `prompt=login` and the ID token and JWT access token carry `acr`, `amr` and
+`auth_time`; a passkey step-up needs no authenticator app.
 
 The app keeps its own janus session cookie after `complete` answers `signedIn`.
 
@@ -219,9 +220,10 @@ Nothing maps an old janus id to the new `sub`, which is why a mapping column is 
   registers a passkey, or signs in by e-mail code.
 - **The console**: tenants, clients, resources, scopes and users are managed in the console
   API (or by script).
-- **Social federation** (Google, GitHub, upstream OIDC; planned): the
-  tenant offers passkey and e-mail code only.
-- Also later: MFA and step-up, permissions and access rules.
+- Also later: permissions and access rules.
+
+MFA, step-up and social federation (Google, GitHub, enterprise OIDC connections) are shipped: see the
+[roadmap](../roadmap.md).
 
 ## Gaps
 
