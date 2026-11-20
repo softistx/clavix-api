@@ -8,8 +8,10 @@ import { telemetry as appTelemetry } from "@/config/telemetry";
 import { tenantResolver } from "@/config/tenancy";
 import {
   deviceThrottle,
+  homeRealmThrottle,
   passkeyThrottle,
   signInThrottle,
+  ssoStartThrottle,
   verifyThrottle,
 } from "@/config/throttle";
 import type { ThrottleContext } from "@/http/throttle/context";
@@ -20,7 +22,8 @@ import type { TenantJanus } from "@/users/tenant-janus";
 
 // The base: what every resolver reads, decorated or derived here.
 // The throttles of the anonymous operations (`ctx.signInThrottle`,
-// `ctx.passkeyThrottle`, `ctx.verifyThrottle`, `ctx.deviceThrottle`; none: no extra limit) ride on the context, typed.
+// `ctx.passkeyThrottle`, `ctx.homeRealmThrottle`, `ctx.ssoStartThrottle`, `ctx.verifyThrottle`,
+// `ctx.deviceThrottle`; none: no extra limit) ride on the context, typed.
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for
 // the OAuth endpoints), resolved once per request, on first use.
 export function createBase(
@@ -28,6 +31,8 @@ export function createBase(
   throttles: ThrottleContext = {
     signInThrottle,
     passkeyThrottle,
+    homeRealmThrottle,
+    ssoStartThrottle,
     verifyThrottle,
     deviceThrottle,
   },

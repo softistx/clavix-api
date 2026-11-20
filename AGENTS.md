@@ -599,7 +599,8 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
 - A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
 - **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
   domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
-  when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
+  when Redis is down: refused, with a warning, `tlsAskGate`; **spent after the lookup**, by known hosts only, so a flood of unknown names
+  cannot use up the budget real domains need, #328), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
   The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
@@ -617,6 +618,15 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
   reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
   prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
+- **Console budgets (`src/console/budgets.ts`, #328)**: `ctx.budgets` (`ConsoleDeps.budgets`; undefined without Redis) holds the
+  `@softistx/redis` limits of the console mutations that act outside the platform. `sendTestWebhook` spends
+  `budgets.testWebhook` (5/min per endpoint, then 20/min per tenant, `CLAVIX_WEBHOOK_TEST_*`) once the endpoint is found
+  and enabled, before the address check and the queue. `inviteUser` / `inviteAdmin` spend `budgets.invitation` (200/h per
+  tenant, both together, `CLAVIX_INVITE_TENANT_*`) just before the invitation is issued, and the per-caller budget
+  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@alxia/graphql`'s `fieldRateLimit` (`useInviteBudget`, first in the
+  console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
+  `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
+  that sends a mail or queues outbound work gets its budget here, never a counter of its own.
 - The catalogue (D22, `events.ts`) is janus's 20 user events plus `session.signedIn`; `data` holds ids
   only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
   top-level field for it. Console admin events are not delivered. `webhook.test` is outside the
@@ -666,7 +676,9 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
 - **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
   enabled connection owning the address's verified domain (`ownerOf`: two claimants answer none), else null; it
-  spends the `signInThrottle` (IP and tenant) and is `no-store`. The federated sign-in is janus's
+  spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods/sso-throttle.ts`,
+  `CLAVIX_SSO_*`, refusal `MAIL_THROTTLED`), never the mail-sending `signInThrottle` (#328: a flood of lookups must not close
+  a tenant's sign-in codes), and is `no-store`. The federated sign-in is janus's
   `socialSignInStart` / `socialSignInComplete` with the connection id as `provider` (an unknown or disabled one is
   `SIGN_IN_METHOD_DISABLED`); the session is `amr: ["fed"]`. JIT (D4): a new user is created only when the
   connection's `jit` is on, whatever the tenant's `signUp` (`SIGN_UP_DISABLED` otherwise); an existing user is linked.

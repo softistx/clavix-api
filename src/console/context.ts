@@ -5,6 +5,7 @@ import type { PlanId } from "@/modules/tenants/plan.schema";
 import type { Access } from "./access";
 import type { AdminEventReader } from "./admin-events/reader";
 import type { Audit } from "./audit";
+import type { ConsoleBudgets } from "./budgets";
 import type { Exclusive } from "./exclusive";
 import type { Permission, Role } from "./model";
 
@@ -233,6 +234,8 @@ export interface ConsoleExtras {
   readonly users: ConsoleUsers;
   /** One at a time per key (a tenant's memberships). */
   readonly exclusive: Exclusive;
+  /** What the test webhooks and the invitations spend; `undefined`: no budget (no Redis). */
+  readonly budgets: ConsoleBudgets | undefined;
   /** The readers of the two logs (D12): the console's activity and the tenants' sign-ins. */
   readonly activity: ConsoleActivity;
 }

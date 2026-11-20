@@ -396,9 +396,10 @@ The answer is 200 for
 - the apex, `console.<domain>`, and `<slug>.<domain>` of a live tenant,
 
 and a bare 404 for everything else (an unknown, pending, lapsed or suspended
-domain, a deleted tenant, a wrong token); 429 past `CLAVIX_TLS_ASK_LIMIT`
-asks a minute (a flood of random names sent to your IP can use that budget up
-and make legitimate asks answer 429 for a minute; raise the limit if it happens). So a stranger pointing a name at your IP gets no certificate.
+domain, a deleted tenant, a wrong token); 429 once `CLAVIX_TLS_ASK_LIMIT`
+asks a minute were answered 200 (the host is looked up first: an ask for an
+unknown name is a 404 that spends nothing, so a flood of random names sent to
+your IP cannot make a real domain wait). So a stranger pointing a name at your IP gets no certificate.
 
 **The endpoint is not reachable from outside**, three ways at once:
 the API publishes no port, so only `caddy` and `ui` reach it on the compose

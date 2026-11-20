@@ -3,6 +3,10 @@ import { createVerificationThrottle } from "@/modules/auth/verification-throttle
 import { createDeviceThrottle } from "@/modules/consent/device-throttle";
 import { createPasskeyThrottle } from "@/modules/passkeys/throttle";
 import {
+  createHomeRealmThrottle,
+  createSsoStartThrottle,
+} from "@/modules/sign-in-methods/sso-throttle";
+import {
   createMetadataThrottle,
   createRegisterThrottle,
 } from "@/oauth/register-throttle";
@@ -14,6 +18,10 @@ export const signInThrottle =
   redis === undefined ? undefined : createSignInThrottle(redis.limits);
 export const passkeyThrottle =
   redis === undefined ? undefined : createPasskeyThrottle(redis.limits);
+export const homeRealmThrottle =
+  redis === undefined ? undefined : createHomeRealmThrottle(redis.limits);
+export const ssoStartThrottle =
+  redis === undefined ? undefined : createSsoStartThrottle(redis.limits);
 export const verifyThrottle =
   redis === undefined ? undefined : createVerificationThrottle(redis.limits);
 export const deviceThrottle =

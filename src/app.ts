@@ -12,11 +12,14 @@ import { readyz } from "./config/ready";
 import { detailTextsFor, scopeTextsFor } from "./config/resources";
 import {
   deviceThrottle,
+  homeRealmThrottle,
   passkeyThrottle,
   signInThrottle,
+  ssoStartThrottle,
   verifyThrottle,
 } from "./config/throttle";
 import { serveAuditExport } from "./console/audit-export/export";
+import { useInviteBudget } from "./console/budgets";
 import { CONSOLE_EXPORT_PATH, CONSOLE_PATH } from "./console/identity";
 import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
@@ -54,6 +57,10 @@ export function createApp(
     signInThrottle?: Throttle | undefined;
     // The same for `passkeySignInOptions`.
     passkeyThrottle?: Throttle | undefined;
+    // The same for `hostedHomeRealm`, apart from the sign-in code budget.
+    homeRealmThrottle?: Throttle | undefined;
+    // The same for `socialSignInStart` (social and enterprise).
+    ssoStartThrottle?: Throttle | undefined;
     // The same for `requestEmailVerification` (per user too).
     verifyThrottle?: VerificationThrottle | undefined;
     // The same for the device verification page's code lookups.
@@ -82,6 +89,14 @@ export function createApp(
         "passkeyThrottle" in options
           ? options.passkeyThrottle
           : passkeyThrottle,
+      homeRealmThrottle:
+        "homeRealmThrottle" in options
+          ? options.homeRealmThrottle
+          : homeRealmThrottle,
+      ssoStartThrottle:
+        "ssoStartThrottle" in options
+          ? options.ssoStartThrottle
+          : ssoStartThrottle,
       verifyThrottle:
         "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
       deviceThrottle:
@@ -137,7 +152,14 @@ export function createApp(
             schema: consoleOptions.schema ?? consoleSchema,
             path: CONSOLE_PATH,
             ide: false,
-            plugins: [useWithoutQuotedValues(), useConsole(consoleOptions)],
+            plugins: [
+              // First: aliased invitations are counted before anything runs.
+              ...(consoleOptions.budgets === undefined
+                ? []
+                : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
+              useWithoutQuotedValues(),
+              useConsole(consoleOptions),
+            ],
             maskedErrors: janusMasking,
           }),
         )
