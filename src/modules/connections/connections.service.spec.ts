@@ -264,3 +264,58 @@ describe("update, secret and delete", () => {
     );
   });
 });
+
+describe("the iss response parameter (RFC 9207, IdP mix-up)", () => {
+  const advertised = new Map<string, boolean | Error>();
+  const pinning = new ConnectionsService(collection, box, {
+    txt: { resolveTxt: async () => txt },
+    links: async () => 0,
+    advertisesIss: async (issuer) => {
+      const answer = advertised.get(issuer) ?? false;
+      if (answer instanceof Error) throw answer;
+      return answer;
+    },
+    now: () => clock,
+  });
+  const verified = async (id: string) => {
+    const added = await pinning.addDomain(A, id, `${id}.test`);
+    txt = { kind: "records", values: [added.domains[0]?.txtToken as string] };
+    await pinning.verifyDomain(A, id, `${id}.test`);
+  };
+
+  afterEach(() => advertised.clear());
+
+  test("an issuer that advertises it is pinned: the record the library reads requires iss", async () => {
+    advertised.set("https://login.acme.test", true);
+    expect((await pinning.create(A, input(), null)).requireIss).toBe(true);
+    await verified("acme");
+    const record = await pinning.sourceOf(A).findConnection("acme");
+    expect(record?.requireIssParameter).toBe(true);
+  });
+
+  test("an issuer that does not advertise it, or cannot be read, is not pinned", async () => {
+    expect((await pinning.create(A, input(), null)).requireIss).toBe(false);
+    advertised.set("https://login.down.test", new Error("unreachable"));
+    const down = await pinning.create(
+      A,
+      input({ id: "down", issuer: "https://login.down.test" }),
+      null,
+    );
+    expect(down.requireIss).toBe(false);
+    await verified("down");
+    const record = await pinning.sourceOf(A).findConnection("down");
+    expect(record?.requireIssParameter).toBeUndefined();
+  });
+
+  test("a new issuer is probed again, an unchanged one keeps its pin", async () => {
+    advertised.set("https://login.acme.test", true);
+    await pinning.create(A, input(), null);
+    advertised.set("https://login.acme.test", false);
+    const renamed = await pinning.update(A, "acme", { name: "Acme" });
+    expect(renamed.requireIss).toBe(true);
+    const moved = await pinning.update(A, "acme", {
+      issuer: "https://login.other.test",
+    });
+    expect(moved.requireIss).toBe(false);
+  });
+});

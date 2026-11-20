@@ -42,4 +42,12 @@ describe("registrationOf", () => {
     expect(docs.allowHosts).toContain("app.example");
     expect(docs.allowHosts.length).toBeGreaterThan(1);
   });
+
+  test("documents are served on the HTTPS port only, unless the ports are widened", () => {
+    const policy = { ...agentsOff(), metadataDocuments: true };
+    const ports = (registration: ReturnType<typeof registrationOf>) =>
+      (registration.metadataDocuments as { allowPorts: number[] }).allowPorts;
+    expect(ports(registrationOf(policy))).toEqual([443]);
+    expect(ports(registrationOf(policy, {}, [443, 8443]))).toEqual([443, 8443]);
+  });
 });

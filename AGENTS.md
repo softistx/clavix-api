@@ -38,7 +38,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
-  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
+  db:sync` also syncs the OAuth collections (the clients `source` index of `countClients`, which counts the quota's clients in `src/config/usage.ts`) (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
@@ -674,6 +674,13 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   by one enabled connection per tenant (`DOMAIN_TAKEN`).
 - Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
+- **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
+  (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
+  (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
+  whenever the metadata advertises it). The redirect URI stays the tenant's one shared URL: janus-social 0.10's
+  per-connection form (`redirectUri` as a function plus `connections.callback(id, parameters)`) needs the callback
+  to be bound, and `@softistx/janus-graphql`'s `socialSignInComplete` cannot bind yet (a connection's sign-in through
+  it is refused), so it waits for that resolver or for F3's own callback route.
 - Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
   (`src/config/connections.ts`); janus has no such API.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.

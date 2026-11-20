@@ -22,6 +22,8 @@ export interface RecordParts {
   domains: readonly string[];
   /** D6: the `acr` the identity provider must report on every sign-in through the connection; none when absent. */
   upstreamAcr?: string | null;
+  /** RFC 9207: the authorization response must carry `iss`. */
+  requireIss?: boolean;
   revision: number;
 }
 
@@ -62,6 +64,7 @@ export function checked(parts: RecordParts): OidcConnection {
       ? {}
       : { stepUp: { acrValues: [parts.upstreamAcr] } }),
     ...(Object.keys(claims).length === 0 ? {} : { claims }),
+    ...(parts.requireIss === true ? { requireIssParameter: true } : {}),
     revision: parts.revision,
   };
   try {
@@ -95,5 +98,6 @@ export const partsOf = (
   claims: doc.claims,
   domains,
   upstreamAcr: doc.upstreamMfa?.acr ?? null,
+  requireIss: doc.requireIss,
   revision: doc.revision,
 });

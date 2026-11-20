@@ -1,4 +1,8 @@
 import {
+  createMemoryConnections,
+  oidcConnections,
+} from "@softistx/janus-social";
+import {
   discoverIssuer,
   type IssuerChecker,
 } from "@/modules/connections/connections.discovery";
@@ -35,11 +39,18 @@ const linkCount = async (tenantId: string, connectionId: string) => {
   return withSocial.social.countLinks({ provider: connectionId });
 };
 
+/** Whether an issuer's discovery document advertises `iss` (read through janus's guarded fetch; the connection is a throwaway). */
+const advertisesIss = (issuer: string) =>
+  oidcConnections({
+    source: createMemoryConnections([]),
+    redirectUri: "https://clavix.invalid/sign-in/sso/callback",
+  }).advertisesIssParameter({ issuer });
+
 /** The enterprise OIDC connections of the tenants. The collection is tenant-owned: only this wiring and its module reach it. */
 export const connectionsService = new ConnectionsService(
   mongo.db.connections,
   connectionSecretBox,
-  { txt: systemTxtResolver(), links: linkCount },
+  { txt: systemTxtResolver(), links: linkCount, advertisesIss },
 );
 
 /** Reads an issuer's discovery document for the console's check (the network). */

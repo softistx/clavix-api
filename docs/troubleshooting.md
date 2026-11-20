@@ -810,7 +810,7 @@ assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: the passkey s
 
 **429 `temporarily_unavailable`**: past `CLAVIX_REGISTER_IP_LIMIT` or `CLAVIX_REGISTER_TENANT_LIMIT`; wait `Retry-After` seconds (see "Agent registration throttle" in operations.md).
 
-**`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet.
+**`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet. **A metadata document on a non-standard port is refused** (`port_not_allowed` in the server logs only): the `client_id` URL names a port outside `CLAVIX_METADATA_PORTS` (default `443`, a URL without a port is on 443); serve the document on 443, or list the port.
 
 **An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` or `METADATA` agent recorded more than 7 days ago that holds no standing grant (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is recorded again at its next use. The job runs only with `REDIS_URL`.
 
