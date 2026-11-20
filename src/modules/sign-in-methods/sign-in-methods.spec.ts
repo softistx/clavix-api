@@ -195,12 +195,19 @@ describe("hostedSignInMethods", () => {
   });
 
   describe("enterprise connections", () => {
-    const connect = (
+    // A connection is offered only when it can be opened: a verified domain
+    // and a secret the box opens (what `ConnectionsService.build` checks).
+    const connect = async (
       id: string,
       name: string,
-      extra: { showButton?: boolean; enabled?: boolean } = {},
-    ) =>
-      connectionsService.create(
+      extra: {
+        showButton?: boolean;
+        enabled?: boolean;
+        verified?: boolean;
+      } = {},
+    ) => {
+      const { verified = true, ...rest } = extra;
+      const created = await connectionsService.create(
         social,
         {
           id,
@@ -208,10 +215,30 @@ describe("hostedSignInMethods", () => {
           issuer: "https://idp.sih-social.test",
           clientId: "sih-client",
           clientSecret: "sih-conn-secret",
-          ...extra,
+          ...rest,
         },
         null,
       );
+      if (verified) {
+        const now = new Date();
+        await mongo.db.connections.raw.updateOne(
+          { connectionId: id },
+          {
+            $set: {
+              domains: [
+                {
+                  domain: `${id}.sih.test`,
+                  txtToken: "t",
+                  verifiedAt: now,
+                  checkedAt: now,
+                },
+              ],
+            },
+          },
+        );
+      }
+      return created;
+    };
     const offered = async () => {
       const answer = await gql("sih-social", HOSTED);
       const hosted = answer.data?.["hostedSignInMethods"] as
@@ -234,6 +261,28 @@ describe("hostedSignInMethods", () => {
         { id: "acme", label: "Acme SSO" },
       ]);
       expect(answer.text).not.toContain("sih-conn-secret");
+    });
+
+    test("a connection without a verified domain is not offered, and cannot start", async () => {
+      await connect("unverified", "Unverified SSO", {
+        showButton: true,
+        verified: false,
+      });
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+      const answer = await gql("sih-social", START, {
+        p: "unverified",
+        r: null,
+      });
+      expect(codeOf(answer)).toBe("SIGN_IN_METHOD_DISABLED");
+    });
+
+    test("a connection whose secret cannot be opened is not offered", async () => {
+      await connect("sealed", "Sealed SSO", { showButton: true });
+      await mongo.db.connections.raw.updateOne(
+        { connectionId: "sealed" },
+        { $set: { secret: { v: 1, kid: "dropped-key", iv: "x", ct: "x" } } },
+      );
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
     });
 
     test("a connection without showButton stays out", async () => {

@@ -20,13 +20,16 @@ const signIn = (patch: Partial<AuthEvent> = {}): AuthEvent => ({
 });
 
 describe("catalogue", () => {
-  test("is the 18 user events and session.signedIn", () => {
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(19);
+  test("is the 16 user events and session.signedIn", () => {
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(17);
     expect(isWebhookEventType("user.created")).toBe(true);
     expect(isWebhookEventType("session.signedIn")).toBe(true);
     expect(isWebhookEventType("domain.add")).toBe(false);
     expect(isWebhookEventType("user.apiKeyCreated")).toBe(false);
     expect(isWebhookEventType("user.apiKeyRevoked")).toBe(false);
+    // No password flow runs while password sign-in is unavailable (#336).
+    expect(isWebhookEventType("user.passwordReset")).toBe(false);
+    expect(isWebhookEventType("user.passwordChanged")).toBe(false);
   });
 });
 

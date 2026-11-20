@@ -41,9 +41,10 @@ export async function assessment(
     prompt: request.prompt ?? [],
     mode: tenant.signIn.mfa.mode,
   };
-  // The factors are read only for a session still at one factor.
+  // The factors are read only for a session short of the strongest level.
   let available = true;
-  if (acrOf(session.amr) === ACR.first) {
+  let passkey = true;
+  if (acrOf(session.amr) !== ACR.phishingResistant) {
     const auth = await janusIssuers.forRequest(ctx.request);
     if (auth === null) throw denial("NOT_FOUND");
     const [passkeys, codesLeft] = await Promise.all([
@@ -51,9 +52,10 @@ export async function assessment(
       auth.secondFactor.recoveryCodesLeft(user),
     ]);
     available = passkeys.length > 0 || codesLeft !== null;
+    passkey = passkeys.length > 0;
   }
   return {
-    ...assess(session, demands, { available }, now),
+    ...assess(session, demands, { available, passkey }, now),
     authTime: session.authenticatedAt,
   };
 }

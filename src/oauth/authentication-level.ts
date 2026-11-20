@@ -67,6 +67,8 @@ export interface Demands {
 export interface Factors {
   /** The user holds a registered passkey or an active authenticator app. */
   available: boolean;
+  /** The user holds a registered passkey: what `phr` needs, which an app code never gives. Defaults to `available`. */
+  passkey?: boolean;
 }
 
 export interface Assessment {
@@ -125,7 +127,12 @@ export function assess(
   const missing: Gap[] = [];
   const levelMet = !unsupportedOnly && reachedRank >= requiredRank;
   if (!levelMet && !unsupportedOnly) {
-    missing.push(factors.available ? "SECOND_FACTOR" : "ENROLMENT");
+    // `phr` needs a passkey: without one, the user enrols whatever else they hold.
+    const possible =
+      requiredRank >= (RANK[ACR.phishingResistant] ?? 2)
+        ? (factors.passkey ?? factors.available)
+        : factors.available;
+    missing.push(possible ? "SECOND_FACTOR" : "ENROLMENT");
   }
   if (!fresh) missing.push("FRESH_PROOF");
 

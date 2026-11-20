@@ -199,6 +199,17 @@ describe("domains", () => {
     expect(logged.join("\n")).not.toContain("s3cr3t-value");
   });
 
+  test("verifyDomain and removeDomain normalise the domain as the claim does", async () => {
+    await service.create(A, input(), null);
+    const added = await service.addDomain(A, "acme", "Acme.Test");
+    expect(added.domains[0]?.domain).toBe("acme.test");
+    txt = { kind: "records", values: [added.domains[0]?.txtToken as string] };
+    const out = await service.verifyDomain(A, "acme", "  ACME.test ");
+    expect(out.verified).toBe(true);
+    const after = await service.removeDomain(A, "acme", " Acme.TEST");
+    expect(after.domains).toEqual([]);
+  });
+
   test("removing a domain drops it", async () => {
     await service.create(A, input(), null);
     await service.addDomain(A, "acme", "acme.test");
@@ -224,6 +235,18 @@ describe("update, secret and delete", () => {
     linked = 0;
     expect(await service.delete(A, "acme")).toBe(true);
     expect(await service.delete(A, "acme")).toBe(false);
+  });
+
+  test("an update never opens the secret: a rename works under a dropped key", async () => {
+    await service.create(A, input(), null);
+    await collection.raw.updateMany(
+      {},
+      { $set: { secret: box.seal("x", "other-context") } },
+    );
+    const renamed = await service.update(A, "acme", { name: "Renamed" });
+    expect(renamed.name).toBe("Renamed");
+    const scopes = await service.update(A, "acme", { scopes: ["openid"] });
+    expect(scopes.scopes).toEqual(["openid"]);
   });
 
   test("a new secret replaces the sealed one", async () => {

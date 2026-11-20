@@ -39,6 +39,9 @@ export type LinkCounter = (
   connectionId: string,
 ) => Promise<number>;
 
+/** A domain as claim stores it: trimmed, lower case (janus's own normalisation of the rest). */
+const normalDomain = (domain: string) => domain.trim().toLowerCase();
+
 export interface ConnectionInput {
   id: string;
   name: string;
@@ -247,7 +250,10 @@ export class ConnectionsService {
     patch: ConnectionPatch,
   ): Promise<ConnectionDoc> {
     const current = await this.get(tenantId, connectionId);
-    const secret = this.openSecret(tenantId, current);
+    // A patch never carries the secret (`setSecret` replaces it), so it is
+    // not opened: a rename works under a dropped key. The placeholder only
+    // satisfies the record's shape check.
+    const secret = "unopened-secret";
     const next = {
       issuer: patch.issuer ?? current.issuer,
       clientId: patch.clientId ?? current.clientId,
@@ -474,6 +480,7 @@ export class ConnectionsService {
     domain: string,
   ): Promise<{ connection: ConnectionDoc; verified: boolean }> {
     const current = await this.get(tenantId, connectionId);
+    domain = normalDomain(domain);
     const entry = current.domains.find((item) => item.domain === domain);
     if (entry === undefined) {
       throw new ConnectionError(
@@ -518,6 +525,7 @@ export class ConnectionsService {
     domain: string,
   ): Promise<ConnectionDoc> {
     const current = await this.get(tenantId, connectionId);
+    domain = normalDomain(domain);
     if (!current.domains.some((entry) => entry.domain === domain)) {
       return current;
     }
@@ -613,6 +621,15 @@ export class ConnectionsService {
         return only === undefined ? null : this.build(tenantId, only);
       },
     };
+  }
+
+  /**
+   * Whether the connection can be opened now (`build` accepts it): what is
+   * offered on the sign-in page and what `socialSignInStart` accepts, one
+   * predicate so the two cannot drift.
+   */
+  isOffered(tenantId: string, doc: ConnectionDoc): boolean {
+    return this.build(tenantId, doc) !== null;
   }
 
   private build(tenantId: string, doc: ConnectionDoc): OidcConnection | null {
