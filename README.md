@@ -1397,6 +1397,8 @@ extend type Mutation {
   `UNAUTHENTICATED` (401) when the operation needs a session and has none.
 - **Over http** (development): `http://<slug>.clavix.localhost` tenants have passkeys with their real
   rpId and origin (janus 0.55+ accepts `*.localhost` origins).
+  The OAuth server itself accepts an `http:` issuer only on exactly `localhost`, so http dev tenants
+  cannot do OAuth: use an https front for `<slug>.<domain>` (see docs/operations.md, "Restore drill").
 - **Rate limit**: `passkeySignInOptions` is anonymous and stores a token per call, so it is limited
   like `requestSignInCode`, with its own buckets and variables: per client IP and tenant
   (60 per 10 min, `CLAVIX_PASSKEY_IP_LIMIT`, `CLAVIX_PASSKEY_IP_WINDOW_SECONDS`) and per tenant
