@@ -1062,7 +1062,7 @@ read while the tenant's server is resolved) and one `oauthSigningKeys` read. At 
 14 000 Mongo reads a second behind a 1 CPU api.
 
 Fix (`withPublicDocuments`, `src/oauth/public-documents.ts`): the JWKS and the two discovery documents are served
-from memory, as the serialized body with an `ETag`, keyed by `<tenantId>.<tenant version>.<keys generation>` per host
+from memory, as the serialized body with an `ETag`, keyed by `<tenantId>.<tenant version>.<keys generation>.<issuer>` per host
 and path, and answer 304 to a matching `If-None-Match`; janus's `Cache-Control: public, max-age=300` is kept. A hit
 reads nothing but the tenant resolver's own cache. The keys generation is bumped by every insert, promote or retire
 of the tenant's signing keys in this process (`createTenantKeys`), a tenant write changes the version, and a
@@ -1094,6 +1094,7 @@ Application errors and their causes: [troubleshooting.md](troubleshooting.md).
 
 ## Not covered yet
 
+- JWKS and discovery miss the D26 target (p95 20 ms at 2 000 req/s on one API CPU; see "Load test"): the cache decision is open.
 - TLS on Redis (the connection is authenticated, on the private network).
 - Image publishing and any deploy pipeline (workflows are off).
 - Point-in-time recovery (oplog): designed, not built (see "Point-in-time recovery").
