@@ -62,7 +62,7 @@ one needs on top:
 | `tenants:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`           | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
-| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`); `REDIS_URL` when set, for `keys:reseal` to drop the tenant cache                                                                                                                      |
+| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`); `REDIS_URL` when set, for `keys:reseal` to drop the tenant cache                                                    |
 | `operators:grant`            | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users; `--create` also needs `CLAVIX_SMTP_URL`)                                                                            |
 | `start`                      | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
