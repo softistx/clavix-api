@@ -339,6 +339,22 @@ or mailed, and a link mailed earlier is not spent.
 without a restart. The `CLAVIX_MAGIC_LINK` variable no longer exists and is ignored. The hosted page
 reads `hostedSignInMethods` and hides its "e-mail me a link" button when `MAGIC_LINK` is not listed.
 
+## `webhooks: delivery <id> refused, tenant <tenantId> holds <n>` in the log
+
+**When:** a tenant already holds `CLAVIX_WEBHOOKS_MAX_PENDING` deliveries in the queue (an endpoint that is down while the tenant's events keep coming), so the queue refuses the next ones.
+
+**Why:** the caps are per tenant, so one flooding tenant cannot starve another. The refused delivery is not sent and not retried; the log line carries ids only.
+
+**Fix:** repair or switch off the tenant's failing endpoint so the queue drains (an endpoint that fails 5 deliveries in a row is switched off by itself), or raise `CLAVIX_WEBHOOKS_MAX_PENDING` on every instance.
+
+## `STORE_FAILED` (`NOPERM`) from the webhook queue
+
+**When:** after upgrading to janus-webhooks-redis 0.13 with a Redis user restricted by ACL.
+
+**Why:** 0.13 runs `ZREMRANGEBYSCORE`, `HDEL`, `GET` and `SET`, which an ACL written for 0.12 does not grant; without `GET`, the orphan claims fail.
+
+**Fix:** grant the commands listed under "Redis ACL" in `operations.md` on `~clavix:webhooks:*` before the upgrade. The compose Redis uses the default user and needs nothing.
+
 ## `SIGN_IN_METHOD_DISABLED` (404) on a sign-in operation
 
 **When:** `requestSignInCode`, `verifySignInCode`, `passkeySignInOptions`, `signInWithPasskey`,

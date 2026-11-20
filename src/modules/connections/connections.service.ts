@@ -71,6 +71,7 @@ export type ConnectionPatch = Partial<
 
 /** How the guard resolves an identity provider's host; `node:dns` by default. */
 export type HostResolver = NonNullable<OidcConnectionsOptions["resolveHost"]>;
+export type ConnectionsFetch = NonNullable<OidcConnectionsOptions["fetch"]>;
 
 export interface ConnectionsOptions {
   txt: TxtResolver;
@@ -115,6 +116,7 @@ export class ConnectionsService {
   private readonly now: () => Date;
   private readonly log: (message: string) => void;
   private hostResolver: HostResolver | undefined;
+  private fetcher: ConnectionsFetch | undefined;
 
   constructor(
     private readonly collection: TypedCollection<typeof connections>,
@@ -572,6 +574,21 @@ export class ConnectionsService {
   /** Specs only: answers the addresses of a host with no real DNS. Production leaves it unset. */
   useHostResolver(resolver: HostResolver | undefined): void {
     this.hostResolver = resolver;
+  }
+
+  /**
+   * Specs only: replaces the transport of every request to an identity
+   * provider (janus-social 0.10 otherwise connects to the checked addresses
+   * itself, past the global `fetch`). Production leaves it unset: no production
+   * file calls it, which `spec-seams.spec.ts` enforces.
+   */
+  useFetch(fetcher: ConnectionsFetch | undefined): void {
+    this.fetcher = fetcher;
+  }
+
+  /** The transport `useFetch` set, read when a tenant's instance is built. */
+  fetch(): ConnectionsFetch | undefined {
+    return this.fetcher;
   }
 
   /** The resolver `useHostResolver` set, read when a tenant's instance is built. */

@@ -6,6 +6,7 @@ import {
   SocialError,
   type SocialProfile,
   type SocialProvider,
+  type SocialUnverifiedHolder,
   type StepUpPasskeyApi,
   type UserEventListener,
 } from "@softistx/janus";
@@ -75,6 +76,7 @@ export interface ConnectionsOf {
   sourceOf(tenantId: string): ConnectionSource;
   /** Specs only: the host resolver of the guard's address check; DNS when absent. */
   resolveHost?(): OidcConnectionsOptions["resolveHost"];
+  fetch?(): OidcConnectionsOptions["fetch"];
   /** Whether a connection may create a user at a first sign-in (D4); read on every sign-up. */
   jitAllowed(tenantId: string, connectionId: string): Promise<boolean>;
 }
@@ -207,9 +209,11 @@ function connectionsOfTenant(
   if (connections === undefined) return undefined;
   try {
     const resolveHost = connections.resolveHost?.();
+    const fetcher = connections.fetch?.();
     return oidcConnections({
       source: connections.sourceOf(tenant.tenantId),
       ...(resolveHost === undefined ? {} : { resolveHost }),
+      ...(fetcher === undefined ? {} : { fetch: fetcher }),
       redirectUri: ssoCallbackUrlOf(tenant.issuer),
     });
   } catch (error) {
@@ -285,6 +289,20 @@ function signUpOf(
   };
 }
 
+/**
+ * What a provider-verified sign-in does with a user who holds the e-mail and
+ * never proved it (janus `social.unverifiedHolder`; nxgt-janus #978). The
+ * built-in social apps (Google, GitHub, Microsoft) vouch for the addresses
+ * they hold: their proof replaces the holder. An enterprise connection is the
+ * tenant's own identity provider, which may vouch for an address it does not
+ * control: it is refused. janus asks only once the provider reported the
+ * e-mail as verified. Answered from this configuration, never from the request.
+ */
+export const unverifiedHolderOf =
+  (hasStatic: (provider: string) => boolean): SocialUnverifiedHolder =>
+  (_holder, profile) =>
+    hasStatic(profile.provider) ? "replace" : "refuse";
+
 /** The tenant's own social apps (ADR-0035) and enterprise connections. A new user: through a connection when its `jit` is on, through a static app only where sign-up is open. */
 function socialConfigOf(
   tenant: ResolvedTenant,
@@ -313,6 +331,9 @@ function socialConfigOf(
               connections.sourceOf(tenant.tenantId),
             ),
           }),
+      unverifiedHolder: unverifiedHolderOf((name) =>
+        Object.hasOwn(providers, name),
+      ),
       signUp:
         realms === undefined && !tenant.signUp
           ? (false as const)

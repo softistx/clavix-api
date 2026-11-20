@@ -44,6 +44,11 @@ type SocialSignedIn {
   expiresAt: DateTime!
   "Whether a user was made for this account."
   created: Boolean!
+  """
+  Whether this sign-in took over an account that held the e-mail without
+  ever proving it: its credentials, links and sessions are gone.
+  """
+  replaced: Boolean!
   "The path the flow was started with, or null."
   returnTo: String
 }

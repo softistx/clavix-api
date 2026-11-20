@@ -1,9 +1,11 @@
+import { createMemoryWebhookQueue } from "@softistx/janus-webhooks";
 import { createRedisWebhookQueue } from "@softistx/janus-webhooks-redis";
 import { senderAddress } from "@/mail/mailer";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import {
   createWebhookDelivery,
   DISABLE_ACTOR,
+  webhookQueueLimits,
 } from "@/modules/webhooks/delivery";
 import { disabledEndpointMail } from "@/modules/webhooks/notice";
 import { pruneWebhookSecrets } from "@/modules/webhooks/secrets-prune";
@@ -32,6 +34,12 @@ const findOwner = async (id: string) => {
     : ((await (await forTenant(tenant))?.findUser(id)) ?? null);
 };
 
+// The queue's caps (G2-03): per tenant, from the environment.
+const queueLimits = webhookQueueLimits({
+  maxInFlight: env.CLAVIX_WEBHOOKS_MAX_IN_FLIGHT,
+  maxPending: env.CLAVIX_WEBHOOKS_MAX_PENDING,
+});
+
 /**
  * The process-wide delivery (D20) over the real stores: the Redis queue when
  * Redis is configured (a retry then outlives the process), the memory one
@@ -43,13 +51,13 @@ export const webhookDelivery = createWebhookDelivery({
   endpoints: webhookEndpoints,
   deliveries: webhookDeliveries,
   fetch: guardedFetch(urlPolicy),
-  ...(redis === undefined
-    ? {}
-    : {
-        queue: createRedisWebhookQueue(redis.connection, {
+  queue:
+    redis === undefined
+      ? createMemoryWebhookQueue(queueLimits)
+      : createRedisWebhookQueue(redis.connection, {
           prefix: "clavix:webhooks:",
+          ...queueLimits,
         }),
-      }),
   onDisabled: async ({ tenantId, endpointId }) => {
     await adminEventRecorder.record({
       actor: DISABLE_ACTOR,

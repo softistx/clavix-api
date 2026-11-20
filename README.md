@@ -110,6 +110,8 @@ one needs on top:
 | `CLAVIX_INVITE_TENANT_LIMIT` / `CLAVIX_INVITE_TENANT_WINDOW_SECONDS`     | console invitations per tenant, both mutations together: 200 per 3600 s                                                                                                                                                                        |
 | `CLAVIX_TLS_ASK_LIMIT`                                                   | asks answered 200 per minute, all callers together, default 120; past it 429 (an ask for an unknown host is a 404 and spends nothing)                                                                                                          |
 | `CLAVIX_WEBHOOKS_ALLOW_PRIVATE`                                          | `true` lets webhook endpoints reach private addresses (local receiver); default `false`, refused in production                                                                                                                                 |
+| `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`                                          | webhook requests in flight at once per tenant, all instances together: 4. One tenant's flood cannot starve another tenant's endpoints                                                                                                          |
+| `CLAVIX_WEBHOOKS_MAX_PENDING`                                            | webhook deliveries one tenant may hold in the queue: 5000. One more is refused (logged with ids, never retried)                                                                                                                                |
 | `CLAVIX_GRAPHQL_IDE`                                                     | `true` serves the GraphQL IDE (Apollo Sandbox) on `GET /graphql` and allows introspection of the hosted schema; default `true` under `bun dev` (`NODE_ENV=development`), `false` elsewhere, and `true` is refused in production                |
 | `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`                                            | optional: the OTLP/HTTP collector of traces and logs (D24); unset, nothing is exported (see operations, "Telemetry")                                                                                                                           |
@@ -498,7 +500,7 @@ defaults to 25, at most 100), with each actor resolved to a name and an e-mail a
 
 What a tenant's users do to their own access is written to its own `authEvents` collection
 (tenant-owned, closed schema): `session.signIn` (by `emailCode`, `magicLink`, `passkey` or `social`,
-a refusal with its reason code) and `session.signOut` from the hosted sign-in, and the second-factor and
+a refusal with its reason code; a social sign-in that took over an address held unverified carries `reason: "replaced"`) and `session.signOut` from the hosted sign-in, and the second-factor and
 passkey changes janus reports (`secondFactor.*`, `recoveryCode*`, `passkey.*`); `stepUp.confirm` is
 the step-up confirmation (passkey, app code or e-mailed code). Per-token events are not recorded. Each event holds the type, the time, the
 outcome, the actor, the user or client, the full address, a browser family (never the whole

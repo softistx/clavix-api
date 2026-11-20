@@ -5,7 +5,10 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
-import { recordingSignIn } from "@/modules/auth/sign-in-events";
+import {
+  REPLACED_REASON,
+  recordingSignIn,
+} from "@/modules/auth/sign-in-events";
 import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
 import { socialOf } from "@/users/tenant-janus";
@@ -147,6 +150,10 @@ export const signInMethods: Resolvers = {
           ),
         (completed) =>
           completed.status === "signedIn" ? completed.userId : null,
+        (completed) =>
+          completed.status === "signedIn" && completed.replaced
+            ? REPLACED_REASON
+            : undefined,
       );
       ctx.set.headers.set("cache-control", "no-store");
       if (done.status === "secondFactor") {
@@ -172,6 +179,7 @@ export const signInMethods: Resolvers = {
         },
         expiresAt: done.expiresAt,
         created: done.created,
+        replaced: done.replaced,
         returnTo: done.returnTo,
       };
     },
