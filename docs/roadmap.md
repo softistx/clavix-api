@@ -18,8 +18,8 @@ nxgt-janus release says which.
   command (`bun deploy/deploy.ts`) pulls, builds the images on the host, migrates, starts the stack,
   waits for health and cleans the replaced images and the old build cache. Tenants are served at
   `<slug>.clavix.softistx.com` with one wildcard certificate; custom domains stay off in staging
-  ([#339](https://github.com/softistx/clavix-api/issues/339)). The first deploy waits on the v1 gate
-  ([#271](https://github.com/softistx/clavix-api/issues/271)).
+  ([#339](https://github.com/softistx/clavix-api/issues/339)). The v1 gate
+  ([#271](https://github.com/softistx/clavix-api/issues/271)) has passed.
 
 ## Next
 
@@ -44,9 +44,6 @@ nxgt-janus release says which.
 **Follow-ups**
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
-
-**Before v1**
-- A security review of the whole surface.
 
 **Authorization authoring**
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary
