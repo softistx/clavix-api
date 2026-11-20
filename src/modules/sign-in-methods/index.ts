@@ -77,7 +77,8 @@ const social = socialResolvers({
     // redirected the visitor to, and the BFF states the id of the route that
     // received it (`x-sso-connection`): both must agree. A missing or
     // disagreeing one binds to nothing, which a connection's flow refuses
-    // (an unbound callback fails closed); a static app's flow is not bound.
+    // (an unbound callback fails closed). A static app's callback is bound to its
+    // own name too, which its provider ignores.
     const named = connectionIdOfCallbackUrl(args.callbackUrl);
     const stated = ctx.request?.headers.get(SSO_CONNECTION_HEADER) ?? null;
     if (named === null || named !== stated) return callback;

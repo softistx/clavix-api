@@ -974,3 +974,11 @@ Without `REDIS_URL` (development) there is no budget; with Redis down the test g
 The tenant's membership lock is held by another API process past its wait, or Redis is down. Nothing
 changed (an invitation being accepted is released): ask again, with the same link for an invitation.
 The token-store 503 with the same message has another cause (see above).
+
+### `PROVIDER_ERROR` on `socialSignInComplete` for an enterprise connection
+
+**When:** the visitor comes back from the identity provider and the sign-in is refused, with no request to the provider.
+
+**Why:** the callback is bound to the connection whose URL received it, and must match the flow's connection. It is refused when the identity provider returned the visitor to another connection's URL, when the BFF sent no `x-sso-connection` header, or when the header disagrees with the callback URL's path. A provider still registered with the old shared `/sign-in/sso/callback` lands on a path that names no connection.
+
+**Fix:** register `https://<tenant host>/sign-in/social/<connection id>/callback` with the identity provider, and make sure the BFF sends the callback route's `:provider` as `x-sso-connection`.
