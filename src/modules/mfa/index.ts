@@ -95,6 +95,22 @@ export const mfa: Resolvers = {
         ),
       );
     },
+    requestSecondFactorPasskeyOptions: async (_, { challenge }, ctx) => {
+      // Read-only: no attempt counted, nothing spent. The tenant first, so a
+      // host that names none is NOT_FOUND before any throttle budget is spent.
+      const tenant = await ctx.tenant();
+      if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      requireLive(tenant);
+      requireMethod(tenant, "passkey");
+      await ctx.passkeyThrottle?.check({
+        tenantId: tenant.tenantId,
+        ip: ctx.ip,
+      });
+      const auth = await passkeyAuthOf(ctx);
+      const options = await auth.secondFactor.passkeyOptions(challenge);
+      ctx.set.headers.set("cache-control", "no-store");
+      return { options: JSON.stringify(options) };
+    },
     enrollSecondFactor: async (_, __, ctx) => {
       const out = await janus.Mutation.enrollSecondFactor(_, undefined, ctx);
       ctx.set.headers.set("cache-control", "no-store");

@@ -865,6 +865,15 @@ cases the request stays pending for the step-up.
 **`CODE_INVALID`** on `confirmStepUp` (with `attemptsLeft`) is a wrong code; **`PASSKEY_INVALID`** on `confirmPasskeyStepUp` is a failed
 assertion. `SECOND_FACTOR_NOT_ENROLLED` on `requestPasskeyStepUp`: the passkey step-up is not available to the user (no passkey, or `passkeys.firstFactor` off); it needs no authenticator app.
 
+**The second-factor sign-in fails once a user holds a dozen passkeys**: the page kept `passkeyOptions`
+beside the `challenge` in a cookie, and the options grow with each passkey past the 4 KB a cookie
+holds. Keep only the `challenge` and read the options when the page renders with
+`requestSecondFactorPasskeyOptions(challenge)`; it counts no attempt and spends nothing. On it,
+`TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED` mean sign in again, `SECOND_FACTOR_NOT_ENROLLED` (409)
+that the user holds no passkey (offer the app's code), `SIGN_IN_METHOD_DISABLED` that the tenant turned
+passkeys off, and `PASSKEY_THROTTLED` (429) that the address or tenant is over the passkey limits
+(wait the `Retry-After` seconds).
+
 **`TENANT_SUSPENDED` (403)** on `/device_authorization`: the tenant is suspended or in the trash.
 
 **`404` on `/device_authorization` from outside**: the reverse proxy does not route the path to the API; the
