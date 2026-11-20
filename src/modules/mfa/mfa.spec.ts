@@ -11,6 +11,7 @@ import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { resealAllTenants, resealExitCode } from "@/keys/reseal";
 import { settled } from "@/modules/auth/outbox";
+import { emptySecretResealCounts } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
@@ -345,11 +346,19 @@ describe("a keyring rotation", () => {
     const tenant = await tenantOf(SLUGS.a);
     const newMaster = new Uint8Array(32).fill(9);
     const ring = [newMaster, ...masterKeys] as [Uint8Array, ...Uint8Array[]];
+    // The tenant's own sealed stores are another spec's (src/keys/reseal.spec.ts).
+    const none = async () => emptySecretResealCounts();
+    const noStores = {
+      webhookSecrets: none,
+      connectionSecrets: none,
+      socialSecrets: none,
+    };
     const report = await resealAllTenants({
       db: mongo.db as never,
       masterKeys: ring,
       tenantIds: async () => [tenant.partition],
       log: () => {},
+      secretStores: noStores,
     });
     // The secret moved under the new first key, whoever signs in; the ten
     // recovery codes are hashes, they keep the old key until new ones are issued.
@@ -365,6 +374,7 @@ describe("a keyring rotation", () => {
       masterKeys: ring,
       tenantIds: async () => [tenant.partition],
       log: () => {},
+      secretStores: noStores,
     });
     expect(again.secondFactor).toMatchObject({ resealed: 0, skipped: 0 });
     expect(resealExitCode(again)).toBe(0);

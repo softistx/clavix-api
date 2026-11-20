@@ -62,7 +62,7 @@ one needs on top:
 | `tenants:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`           | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
-| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`)                                                                                                                      |
+| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`); `REDIS_URL` when set, for `keys:reseal` to drop the tenant cache                                                    |
 | `operators:grant`            | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users; `--create` also needs `CLAVIX_SMTP_URL`)                                                                            |
 | `start`                      | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
@@ -154,7 +154,8 @@ Clavix adds no `jose`.
   the database. To recover, drop the tenants' `oauthSigningKeys` documents and let the rotation
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
   them. Changing a master key you still hold is not a loss: it rotates without downtime
-  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`).
+  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`
+  seals every stored secret again: signing keys, TOTP, webhook, connection and social secrets).
 - **Rotating** the master key and the **emergency rotation** of the signing keys
   (`bun run keys:rotate <tenant>|--all [--drop-old]`) are in `docs/operations.md`, "Signing keys".
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
@@ -539,7 +540,7 @@ Each tenant chooses how its users sign in
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
-  and it is never logged. Losing the master key, or dropping the old key from the keyring while a secret is still sealed under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
+  and it is never logged. Losing the master key, or dropping the old key from the keyring before `bun run keys:reseal` reports nothing left under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
 
 ```sh

@@ -30,8 +30,10 @@ openssl rand -base64 32   # a value for CLAVIX_KEYS_MASTER_KEY
 ## `CLAVIX_KEYS_MASTER_KEY: not 32 bytes in base64 ...` / `the same key appears twice in the keyring`
 
 The variable is one key or a comma-separated keyring of 32-byte base64 keys, none repeated. Fix the list and
-redeploy. If signing fails after a rotation, the old key was dropped before `bun run keys:reseal` answered
-`resealed: 0, skipped: 0, failed: 0` (or it exits 1): put the old key back after the new one and run it again.
+redeploy. If signing fails after a rotation, or webhooks stop arriving, an enterprise connection or a social
+provider disappears from the sign-in page, or users cannot pass their second factor (TOTP or an old recovery
+code), the old key was dropped before `bun run keys:reseal` exited 0 with
+`"oldKeyNeededBy": []`: put the old key back after the new one and run it again.
 See `docs/operations.md`, "Signing keys".
 
 ## `CLAVIX_TRUSTED_PROXIES is required in production: set the number of reverse proxies in front of the app (0 if none)`

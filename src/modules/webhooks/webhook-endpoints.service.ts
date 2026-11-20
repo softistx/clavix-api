@@ -5,7 +5,11 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import type { SecretBox } from "@/modules/sign-in-methods/secrets";
+import {
+  emptySecretResealCounts,
+  type SecretBox,
+  type SecretResealCounts,
+} from "@/modules/sign-in-methods/secrets";
 import { assertWithinQuota } from "@/modules/usage/quota";
 import { isWebhookEventType } from "./events";
 import { checkWebhookUrl, type UrlPolicy, WebhookUrlError } from "./url-policy";
@@ -291,6 +295,55 @@ export class WebhookEndpointsService {
       });
     }
     return found;
+  }
+
+  /**
+   * Seals the tenant's endpoint secrets again under the keyring's first key
+   * (`keys:reseal`, a master-key rotation), the rolled ones included. Each
+   * envelope is replaced only if it is still the one read, so a roll made
+   * meanwhile is never overwritten (`skipped`: run again). One no key opens
+   * is left as it is and logged by endpoint id (`unreadable`).
+   */
+  async resealSecrets(tenantId: string): Promise<SecretResealCounts> {
+    const counts = emptySecretResealCounts();
+    const scoped = this.scoped(tenantId);
+    for (const doc of await scoped.findMany({})) {
+      const id = doc._id.toHexString();
+      for (const entry of doc.secrets) {
+        counts.scanned += 1;
+        if (entry.sealed.kid === this.box.kid) {
+          counts.current += 1;
+          continue;
+        }
+        let sealed: ReturnType<SecretBox["reseal"]>;
+        try {
+          sealed = this.box.reseal(entry.sealed, contextOf(tenantId, id));
+        } catch {
+          counts.unreadable += 1;
+          this.log(
+            `webhooks: a secret of endpoint ${id} could not be sealed again`,
+          );
+          continue;
+        }
+        const written = await scoped.updateMany(
+          {
+            _id: doc._id,
+            secrets: {
+              $elemMatch: { sid: entry.sid, "sealed.ct": entry.sealed.ct },
+            },
+          },
+          { $set: { "secrets.$.sealed": sealed } },
+        );
+        if (written > 0) counts.resealed += 1;
+        else counts.skipped += 1;
+      }
+    }
+    for (const doc of await scoped.findMany({})) {
+      counts.behind += doc.secrets.filter(
+        (entry) => entry.sealed.kid !== this.box.kid,
+      ).length;
+    }
+    return counts;
   }
 
   /** A delivery got a 2xx: the run of given-up deliveries ends (D20). */
