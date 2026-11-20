@@ -309,6 +309,8 @@ grant or invitation id of another tenant is unknown, never touched.
 | `userSessions(tenantId, userId)` / `revokeUserSession(tenantId, userId, sessionId)` | The user's standing sessions, newest first: `id`, `device` (the User-Agent of the sign-in, cut at 256 characters; `null` on an older session or a sign-in without one), `createdAt`, `authenticatedAt`, `lastUsedAt` (moves at most once a day, `null` on an older session) and `expiresAt`; never the token. There is no `current` flag: the console reads another pool. `revokeUserSession` is true when it ended the session, false for one that is not this user's, is already ended or does not exist; an unknown user has no sessions. |
 | `userGrants(tenantId, userId)` / `revokeGrant(tenantId, userId, grantId)`           | The OAuth grants the user gave (standing only, with the client's name), and taking one back with the tokens it opened. `revokeGrant` is true also when already revoked, false for a grant that is not this user's.                                                                                                                                                                                                                                                                                                                           |
 | `deleteUser(tenantId, userId)`                                                      | Revokes the user's grants (and tokens), ends their sessions, removes their role assignments, deletes the user. True also when already gone.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `resetUserSecondFactor(tenantId, userId)`                                           | Removes the user's TOTP factor and recovery codes; the next sign-in opens a session without a challenge. Idempotent; unknown user `NOT_FOUND`. On the `clavix` tenant, an operator who owns a tenant or holds a platform role needs a platform owner (see above).                                                                                                                                                                                                                                                                            |
+| `TenantUser.secondFactor`                                                           | `enabled` and `recoveryCodesLeft` (`null` without an active factor); never the secret or the codes. Read for a whole page of `users` in one batch.                                                                                                                                                                                                                                                                                                                                                                                           |
 
 Each mutation records an admin event, repeats included (`user.invite`, `user.revokeInvitation`,
 `user.update`, `user.setEmailVerified`, `user.resetSecondFactor`, `user.disable`, `user.enable`, `user.delete`, `user.revokeSessions`, `user.revokeSession`, `user.revokeGrant`; target: the
@@ -564,11 +566,24 @@ Each tenant chooses how its users sign in
   `callbackUrl` the console returns: `https://<tenant host>/sign-in/social/<provider>/callback` (the host is the tenant's issuer: its primary custom domain when set, else the slug host).
 - **At least one way in**: a change that would leave no enabled method and no enabled provider is
   refused, 409 `NO_SIGN_IN_METHOD`.
+- **Two-factor (TOTP)**: off by default. The console's `updateMfaPolicy(tenantId, input: { mode, totp })`
+  (`edit`, event `mfaPolicy.update`, idempotent) lets the tenant's users enrol an authenticator app;
+  with `totp` off, enrolment is 403 `SECOND_FACTOR_DISABLED` and a user who holds a factor keeps it.
+  The hosted operations on the tenant's `/graphql` are in the table below.
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
   and it is never logged. Losing the master key, or dropping the old key from the keyring before `bun run keys:reseal` reports nothing left under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
+
+The second factor on the tenant's hosted `/graphql` (not the console API):
+
+| Operation                                                                               | Does                                                                                                                                                     |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secondFactor` / `sessionConfirmedUntil`                                                | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes). |
+| `enrollSecondFactor` / `activateSecondFactor(code)`                                     | Starts a factor (its secret and URI), then checks the first code and answers ten recovery codes, once. Needs a fresh session: `STEP_UP_REQUIRED`.        |
+| `confirmSecondFactor(challenge, code)` / `recoverSecondFactor(challenge, recoveryCode)` | Answers the `SecondFactorChallenge` of a sign-in by code, link or social provider and opens the session; `TENANT_SUSPENDED` on a suspended tenant.       |
+| `regenerateRecoveryCodes(code)` / `disableSecondFactor(code)`                           | Renews the recovery codes, or removes the factor, on a current app code.                                                                                 |
 
 ```sh
 curl -s https://api.clavix.example/console/graphql \

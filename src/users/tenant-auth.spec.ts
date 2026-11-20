@@ -255,6 +255,49 @@ describe("the janus of a tenant", () => {
       await janusIssuers.forRequest(new Request(url("globex"))),
     ).not.toBeNull();
   });
+
+  // clavix-api#290: a slug freed by the purge and taken by a new tenant has
+  // the same issuer and, new, the same version as the cached instance of the
+  // old one. That instance kept the old partition, so the new tenant's
+  // sessions went there and were lost at its first write (a policy change).
+  test("a new tenant under a purged tenant's slug gets its own instance, and keeps its sessions across a write", async () => {
+    const slug = "reborn";
+    await createTenantParOff(tenants, { slug, name: slug });
+    const old = await tenantOf(slug);
+    const oldAuth = await janusOf(slug);
+    await mongo.db.tenants.raw.deleteOne({ slug });
+    await resolver.invalidate([`${slug}.${DOMAIN}`]);
+
+    await createTenantParOff(tenants, { slug, name: slug });
+    const reborn = await tenantOf(slug);
+    expect(reborn.tenantId).not.toBe(old.tenantId);
+    expect(reborn.version).toBe(old.version);
+    expect(await janusOf(slug)).not.toBe(oldAuth);
+
+    const { user, cookie } = await signedIn(slug, "reborn@example.test");
+    expect(await authFor(reborn).findUser(user.id)).toMatchObject({
+      id: user.id,
+    });
+    await tenants.updateSignIn(reborn.tenantId, (t) => ({
+      ...t.signIn,
+      mfa: { ...t.signIn.mfa, totp: !t.signIn.mfa.totp },
+    }));
+    const after = await janusOf(slug);
+    expect((await after.authenticate(requestWith(slug, cookie)))?.user.id).toBe(
+      user.id,
+    );
+  });
+
+  test("the OAuth issuer of a tenant reborn under a purged slug is rebuilt too", async () => {
+    const slug = "reborn-oauth";
+    await createTenantParOff(tenants, { slug, name: slug });
+    const before = await issuers.serverFor(new Request(url(slug)));
+    expect(before).not.toBeNull();
+    await mongo.db.tenants.raw.deleteOne({ slug });
+    await resolver.invalidate([`${slug}.${DOMAIN}`]);
+    await createTenantParOff(tenants, { slug, name: slug });
+    expect(await issuers.serverFor(new Request(url(slug)))).not.toBe(before);
+  });
 });
 
 describe("OAuth with the real authFor", () => {

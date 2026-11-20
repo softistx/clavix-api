@@ -339,6 +339,20 @@ or mailed, and a link mailed earlier is not spent.
 without a restart. The `CLAVIX_MAGIC_LINK` variable no longer exists and is ignored. The hosted page
 reads `hostedSignInMethods` and hides its "e-mail me a link" button when `MAGIC_LINK` is not listed.
 
+## `SECOND_FACTOR_DISABLED` (403) on `enrollSecondFactor` or `activateSecondFactor`
+
+**When:** the hosted `/graphql` answers HTTP 403 with
+`"extensions":{"code":"SECOND_FACTOR_DISABLED"}` when a signed-in user starts or activates an
+authenticator app.
+
+**Why:** the tenant does not offer TOTP: its sign-in policy's `mfa.totp` is off, which is the default.
+Nothing was started. A user who already holds a factor keeps it, is still asked for it at sign-in, and can
+still disable it or renew the recovery codes.
+
+**Fix:** a tenant admin turns it on with the console's
+`updateMfaPolicy(tenantId, input: { totp: true })` (`edit` on the tenant); it applies at once, without a
+restart. A hosted page that offers the setup should treat this code as "not offered here" and hide the step.
+
 ## `webhooks: delivery <id> refused, tenant <tenantId> holds <n>` in the log
 
 **When:** a tenant already holds `CLAVIX_WEBHOOKS_MAX_PENDING` deliveries in the queue (an endpoint that is down while the tenant's events keep coming), so the queue refuses the next ones.
