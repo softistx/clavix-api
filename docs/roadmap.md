@@ -83,7 +83,7 @@ nxgt-janus release says which.
   telemetry (T1: traces, janus security events and MongoDB spans over OTLP, [#23](https://github.com/softistx/clavix-api/issues/23); T2: OAuth spans, [#23](https://github.com/softistx/clavix-api/issues/23)).
 
 **Before v1**
-- A security review of the whole surface and a restore drill.
+- A security review of the whole surface (the restore drill is done: see "Restore drill" in operations.md).
 - Load test of the token and JWKS paths: shipped under `load/` (refresh grant at 200 req/s passes; JWKS and
   discovery miss 20 ms p95 at 2 000 req/s, see docs/operations.md "Load test"); `client_credentials` waits for
   the upstream grant.
