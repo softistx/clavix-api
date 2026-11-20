@@ -77,6 +77,9 @@ connection's callback to the route that received it; a public client could other
    dc run --rm api bun run db:migrate    # prints the console client secret once: save it
    ```
 
+   Run it with `CLAVIX_PUBLIC_SCHEME=https` (the default): the console client's redirect URI must be
+   https, so `db:migrate` fails under `http`, which only a local stack uses.
+
    Put that secret in `deploy/.env` as `CONSOLE_CLIENT_SECRET` (the example holds
    the placeholder `pending-db-migrate`). Lost? Mint another:
    `dc run --rm api bun run clients:create --tenant clavix --name Console --client-id console --confidential --redirect-uri https://console.<domain>/console/auth/callback --rotate-secret`
