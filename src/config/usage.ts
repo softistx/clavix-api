@@ -10,9 +10,6 @@ import { redis } from "./redis";
 import { domainStore } from "./tenancy";
 import { webhookEndpoints } from "./webhook-endpoints";
 
-// Agents that registered themselves are `source: "registered"` clients of the
-// janus store too (J4), but they do not count against the hard `clients` quota
-// (D9): the agents are subtracted.
 // The tenant's partition of the janus store counts its own registered clients
 // (`countClients({ source })`, on the `source` index `db:sync` creates).
 const countRegisteredClients = async (tenantId: string): Promise<number> => {
@@ -25,6 +22,9 @@ const countRegisteredClients = async (tenantId: string): Promise<number> => {
   return store.countClients({ source: "registered" });
 };
 
+// Agents that registered themselves are `source: "registered"` clients of the
+// janus store too (J4), but they do not count against the hard `clients` quota
+// (D9): the agents are subtracted.
 /**
  * The real usage meters. The `usageCounters` collection is tenant-owned: only
  * this wiring and its module reach it. Clients are counted in the tenant's

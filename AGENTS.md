@@ -666,7 +666,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
 - **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
   (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
-  (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned, the library still requires `iss`
+  (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
   whenever the metadata advertises it). The redirect URI stays the tenant's one shared URL: janus-social 0.10's
   per-connection form (`redirectUri` as a function plus `connections.callback(id, parameters)`) needs the callback
   to be bound, and `@softistx/janus-graphql`'s `socialSignInComplete` cannot bind yet (a connection's sign-in through
