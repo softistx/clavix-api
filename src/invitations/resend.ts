@@ -13,17 +13,22 @@ export interface ResendInput {
   by: { id: string; name?: string | undefined };
 }
 
-/** Why an invitation was not sent again. */
+/**
+ * Why an invitation was not sent: `resend` refuses the first three,
+ * `invite` the last two (`INVITE_TOO_SOON`, `PENDING_INVITATIONS_LIMIT`).
+ */
 export type ResendRefusal =
   | "NOT_FOUND"
   | "INVITATION_NOT_PENDING"
-  | "RESEND_TOO_SOON";
+  | "RESEND_TOO_SOON"
+  | "INVITE_TOO_SOON"
+  | "PENDING_INVITATIONS_LIMIT";
 
-/** `resend` refused: nothing was renewed and no mail went out. */
+/** `resend` or `invite` refused: nothing was written and no mail went out. */
 export class ResendRefusedError extends Error {
   constructor(
     readonly code: ResendRefusal,
-    /** `RESEND_TOO_SOON` only: whole seconds until it may be sent again. */
+    /** `RESEND_TOO_SOON` and `INVITE_TOO_SOON`: whole seconds until it may be sent again. */
     readonly retryAfter?: number,
   ) {
     super(code);

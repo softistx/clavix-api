@@ -215,6 +215,10 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Pending invitations one tenant (or the admin list of one tenant) may
+  // hold; a new address past it is refused (`PENDING_INVITATIONS_LIMIT`).
+  // Read from the store, so it needs no Redis.
+  CLAVIX_INVITE_PENDING_LIMIT: z.coerce.number().int().min(1).default(500),
   // Audit exports (GET /console/audit/export): starts per tenant, Redis only.
   CLAVIX_EXPORT_TENANT_LIMIT: z.coerce.number().int().min(1).default(10),
   CLAVIX_EXPORT_TENANT_WINDOW_SECONDS: z.coerce

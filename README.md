@@ -238,7 +238,7 @@ already a member is `ALREADY_MEMBER` (409); a second invitation to a pending add
 lifetime, a new mail naming the caller, the old code stops working, a lapsed invitation is allowed.
 It is `NOT_FOUND` (404) for an id that is not this tenant's, `INVITATION_NOT_PENDING` (409) once
 accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60 s of the last send of
-that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
+that invitation. Inviting an address that already has a pending invitation younger than 60 s is `INVITE_TOO_SOON` (429, `retryAfter`), and a new address past `CLAVIX_INVITE_PENDING_LIMIT` (500) pending invitations of the scope is `PENDING_INVITATIONS_LIMIT` (409). Invitations expose `invitedBy { id name }`, the operator who first invited (null when
 a script did); a resend keeps it. The
 last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
 removed, nor disabled or deleted, nor have their e-mail un-verified, on a tenant or on the platform:

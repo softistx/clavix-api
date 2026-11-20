@@ -4,6 +4,7 @@ import {
 } from "@/invitations/tenant-invitations";
 import { INVITATION_PATH } from "@/mail/tenant-mail";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { env } from "./env";
 import { tenantMail } from "./mail";
 import { forTenant } from "./users";
 
@@ -16,14 +17,17 @@ import { forTenant } from "./users";
 export const invitationsOf = (
   tenant: () => Promise<ResolvedTenant | null>,
 ): TenantInvitations =>
-  createTenantInvitations(async () => {
-    const resolved = await tenant();
-    const auth = resolved === null ? null : await forTenant(resolved);
-    if (resolved === null || auth === null) return null;
-    return {
-      auth,
-      mail: tenantMail(resolved),
-      link: (code) =>
-        `${resolved.issuer}${INVITATION_PATH}?code=${encodeURIComponent(code)}`,
-    };
-  });
+  createTenantInvitations(
+    async () => {
+      const resolved = await tenant();
+      const auth = resolved === null ? null : await forTenant(resolved);
+      if (resolved === null || auth === null) return null;
+      return {
+        auth,
+        mail: tenantMail(resolved),
+        link: (code) =>
+          `${resolved.issuer}${INVITATION_PATH}?code=${encodeURIComponent(code)}`,
+      };
+    },
+    { maxPending: env.CLAVIX_INVITE_PENDING_LIMIT },
+  );

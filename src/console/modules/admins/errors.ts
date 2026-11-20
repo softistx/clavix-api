@@ -8,15 +8,19 @@ const RESEND_STATUS = {
   NOT_FOUND: 404,
   INVITATION_NOT_PENDING: 409,
   RESEND_TOO_SOON: 429,
+  INVITE_TOO_SOON: 429,
+  PENDING_INVITATIONS_LIMIT: 409,
 } as const satisfies Record<ResendRefusal, number>;
 
 const RESEND_MESSAGE = {
   NOT_FOUND: "No such invitation",
   INVITATION_NOT_PENDING: "The invitation was accepted or revoked",
   RESEND_TOO_SOON: "The invitation was sent less than a minute ago",
+  INVITE_TOO_SOON: "This address was invited less than a minute ago",
+  PENDING_INVITATIONS_LIMIT: "Too many pending invitations; revoke some first",
 } as const satisfies Record<ResendRefusal, string>;
 
-// A resend's refusals as the contract's GraphQL errors.
+// A resend's or an invite's refusals as the contract's GraphQL errors.
 export async function refusing<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();

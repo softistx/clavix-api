@@ -5,6 +5,7 @@ import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { ConsoleContext } from "../../context";
+import { refusing } from "../admins/errors";
 import { idArg, liveTenant, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
 import { keepOwners } from "./operators";
@@ -23,15 +24,17 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     }
     await ctx.budgets?.invitation({ tenantId });
     const inviter = await ctx.directory.findUser(ctx.principal.userId);
-    const invitation = await ctx.users.invite({
-      tenantId,
-      tenantName: tenant.name,
-      email,
-      invitedBy: {
-        id: ctx.principal.userId,
-        name: inviter?.name ?? inviter?.email,
-      },
-    });
+    const invitation = await refusing(() =>
+      ctx.users.invite({
+        tenantId,
+        tenantName: tenant.name,
+        email,
+        invitedBy: {
+          id: ctx.principal.userId,
+          name: inviter?.name ?? inviter?.email,
+        },
+      }),
+    );
     await ctx.audit(
       "user.invite",
       target("invitation", invitation.id, tenantId),
