@@ -349,11 +349,11 @@ the newest 100 per endpoint, dropped after 7 days by a TTL index on `at` (`bun r
 `WebhookEndpoint.deliveries(first:)` in the console API reads them, newest first; deleting an endpoint deletes
 its attempts, and a tenant purge empties them.
 
-| Variable                         | Meaning                                                                                                                                  |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE`  | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production.                            |
-| `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`  | requests in flight at once per tenant, all instances together; default 4.                                                                |
-| `CLAVIX_WEBHOOKS_MAX_PENDING`    | deliveries one tenant may hold (waiting, claimed or waiting for a retry); default 5000. The next one is refused.                         |
+| Variable                        | Meaning                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production.    |
+| `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT` | requests in flight at once per tenant, all instances together; default 4.                                        |
+| `CLAVIX_WEBHOOKS_MAX_PENDING`   | deliveries one tenant may hold (waiting, claimed or waiting for a retry); default 5000. The next one is refused. |
 
 **Caps per tenant (G2-03).** The queue names an endpoint `<tenantId>.<endpointId>` and groups by the tenant, so
 both caps count per tenant, not per endpoint (janus-webhooks counts per group once `groupOf` is set): a tenant

@@ -5,7 +5,10 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
-import { REPLACED_REASON, recordingSignIn } from "@/modules/auth/sign-in-events";
+import {
+  REPLACED_REASON,
+  recordingSignIn,
+} from "@/modules/auth/sign-in-events";
 import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
 import { socialOf } from "@/users/tenant-janus";
