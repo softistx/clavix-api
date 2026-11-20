@@ -1035,14 +1035,31 @@ sessions: the 1-minute load average was 3.5 to 6.1 during the runs (5-minute 4.0
 the limits of `compose.yml` (api 1 CPU, mongo 1 CPU, redis 0.25 CPU); k6 ran in a container with no limit.
 `@softistx/janus-oauth` as locked in `bun.lock`. The two cache rows were run together (2 000 req/s in all).
 
-| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                                                                                             |
-| --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                                                                                               |
-| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                             |
-| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                             |
-| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                              |
-| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                              |
-| `client_credentials`                    | 200 req/s, 60 s   | 33.6     | 209.5    | 0      | p95 under 150 ms | pass (run beside the refresh grant: 400 req/s in all; 29 iterations dropped on one machine shared with other jobs) |
+| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                                                                                                                 |
+| --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                                                                                                                   |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                                                 |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                                                 |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                                                  |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                                                  |
+| `client_credentials`                    | 200 req/s, 60 s   | 33.6     | 209.5    | 0      | p95 under 150 ms | pass on latency (run beside the refresh grant: 400 req/s in all); 29 iterations dropped on a shared machine, see the quiet rerun below |
+
+### Rerun on a quiet machine (2026-11-20)
+
+The first run above dropped 29 `client_credentials` iterations on a shared laptop. `bun load/run.ts all`
+was run again, unchanged (same scripts, same thresholds), at 05:29 to 05:32 EST on the same machine, with
+the cache. Load average before the run: 2.60 (1 min), 1.90 (5 min), 2.43 (15 min); at the end 5.94 / 3.97 / 3.18
+(the run itself: k6, api, mongo and redis). No other heavy job was running. `k6` exited 0 for both scripts.
+
+| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Dropped | Result |
+| --------------------------------------- | ----------------- | -------- | -------- | ------ | ------- | ------ |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.74     | 3.30     | 0      | 0       | pass   |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.73     | 3.24     | 0      | 0       | pass   |
+| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 24.5     | 95.9     | 0      | 0       | pass   |
+| `client_credentials`                    | 200 req/s, 60 s   | 29.2     | 92.6     | 0      | 0       | pass   |
+
+`dropped_iterations` is 0 on both scripts (125 004 JWKS and discovery requests, 24 053 `/token` requests, 0 failed): the
+earlier 29 drops came from the shared machine, not from the api or the VU pool. All D26 thresholds hold.
 
 Before the cache, the 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
 (1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,
