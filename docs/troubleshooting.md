@@ -437,6 +437,21 @@ is left unspent for its owner). All look alike on purpose.
 **Fix:** offer a new link with `requestEmailVerification` and tell the user to open the latest
 e-mail while signed in to the account the link was sent for.
 
+## `MAIL_THROTTLED` (429) on `hostedHomeRealm` or `socialSignInStart`
+
+**When:** a sign-in page looks up the home realm of an address, or starts a social or enterprise
+sign-in, and the answer is HTTP 429 with `extensions.code: "MAIL_THROTTLED"`.
+
+**Why:** these two anonymous operations send no mail, and each has its own budget, apart from the
+sign-in code one: 60 per 10 minutes per client address and tenant, 2000 per hour per tenant
+(`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`, `CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`; the same values, counted separately for the lookup and for the start). The code is
+the one `requestSignInCode` answers, so a page handles one throttled error. Spending one of the three
+budgets never closes the other two: a flood of lookups leaves sign-in codes and SSO starts open.
+
+**Fix:** wait `Retry-After` seconds and try again. Many users behind one address (an office NAT)
+hitting it: raise `CLAVIX_SSO_IP_LIMIT`. Behind a proxy, check `CLAVIX_TRUSTED_PROXIES` first: set
+too low, every user counts as the proxy's address.
+
 ## `EMAIL_VERIFICATION_THROTTLED` (429) on `requestEmailVerification`
 
 **When:** the account asked for too many verification e-mails.
@@ -535,6 +550,30 @@ owner. One rule everywhere: a disabled or deleted owner does not count, so with 
 and Y, Y cannot step down or be removed. Disabling a user who is already disabled, or un-verifying one who is already unproved, is never refused.
 Name, invite or enable another owner first, then demote or remove this one. Of two owners removed at the same moment, the second is refused. `CONFLICT` (409)
 on the same two mutations means the user's roles kept changing during the call: retry.
+
+### `RATE_LIMITED` (429) on `inviteUser` or `inviteAdmin`
+
+**When:** an invitation is refused with HTTP 429, `extensions.code: "RATE_LIMITED"` and
+`extensions.retryAfter` (seconds, also the `Retry-After` header).
+
+**Why:** each invitation sends a mail from the platform's address, so two budgets bound them:
+
+| Budget                                              | Default      | Variables                                                           |
+| --------------------------------------------------- | ------------ | ------------------------------------------------------------------- |
+| per caller, for each of the two mutations           | 60 per hour  | `CLAVIX_INVITE_CALLER_LIMIT`, `CLAVIX_INVITE_CALLER_WINDOW_SECONDS` |
+| per tenant, `inviteUser` and `inviteAdmin` together | 200 per hour | `CLAVIX_INVITE_TENANT_LIMIT`, `CLAVIX_INVITE_TENANT_WINDOW_SECONDS` |
+
+The caller's budget counts every selection of the mutation in the request, aliases included: one
+POST with 80 aliased `inviteUser` costs 80, is refused whole with the message
+`Too many attempts, try again later`, and no invitation of it is issued. What was counted stays
+spent. The tenant's budget is counted invitation by invitation as each one runs (message
+`Too many requests`): in one request of several aliases, the ones before the limit are issued and
+the rest carry the error.
+
+**Fix:** wait `retryAfter` seconds. To invite a long list, send it in batches under the caller's
+budget, or raise the two limits for the import and put them back. Without `REDIS_URL` (development)
+there is no budget; with Redis down the invitation goes through and
+`redis unavailable: console budgets skipped` is logged.
 
 ### `ALREADY_MEMBER` (409) on `inviteAdmin`
 
@@ -883,9 +922,11 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 - **The TLS ask always answers 404**: `CLAVIX_TLS_ASK_SECRET` is unset or Caddy's `token` differs;
   the request went through a proxy (`X-Forwarded-*`, `X-Real-IP` and `Forwarded` are refused: Caddy must call the app directly);
   the domain is pending, unverified, unknown, or its tenant is suspended or in the trash. **429**:
-  past `CLAVIX_TLS_ASK_LIMIT` asks per minute, **or Redis is down**: the limit fails closed
-  (every ask is refused and `tls ask: rate limit unavailable, refusing` is logged). Restore Redis;
-  Caddy retries and certificates already issued keep serving.
+  the host is one a certificate may be issued for, and more than `CLAVIX_TLS_ASK_LIMIT` such asks
+  were answered this minute, **or Redis is down**: the limit fails closed
+  (every ask for a known host is refused and `tls ask: rate limit unavailable, refusing` is logged). Restore Redis;
+  Caddy retries and certificates already issued keep serving. An ask for an unknown host is a 404
+  and spends nothing of the limit, so a flood of random names cannot make a real domain answer 429.
 - Caddy: `on_demand_tls { ask http://api:3000/internal/tls/ask?token=<secret> }` (Caddy
   appends `&domain=<host>`). Never route `/internal/` from the public listener.
 - **`NOT_FOUND` on a domain mutation**: the tenant is unknown or in the trash, or the id belongs to
@@ -895,6 +936,22 @@ may hold fewer than `first` items, even none, with a `nextCursor`: follow it unt
 
 The address already has an account in that tenant's pool. Find the user with `users(tenantId, email:)` and
 manage them there; an invitation is only for an address with no account.
+
+### `RATE_LIMITED` (429) on `sendTestWebhook`
+
+**When:** a test event is refused with HTTP 429, `extensions.code: "RATE_LIMITED"` and
+`extensions.retryAfter` (seconds, also the `Retry-After` header).
+
+**Why:** a test event takes a place in the delivery queue every tenant shares, so it is budgeted:
+5 per minute per endpoint and 20 per minute per tenant, all its endpoints together
+(`CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT`, `CLAVIX_WEBHOOK_TEST_TENANT_LIMIT`,
+`CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS`). Nothing was queued and no admin event was recorded. A call
+refused for another reason (unknown or switched-off endpoint) spends nothing.
+
+**Fix:** wait `retryAfter` seconds; the budget refills evenly (one test per 12 s per endpoint at
+the defaults). To see why an endpoint fails, read its `deliveries` rather than sending more tests.
+Without `REDIS_URL` (development) there is no budget; with Redis down the test goes through and
+`redis unavailable: console budgets skipped` is logged.
 
 ### `503 SERVICE_UNAVAILABLE: Try again later` on a membership write or on accepting an admin invitation
 

@@ -84,6 +84,7 @@ export const admins: Resolvers = {
       const tenant = await liveTenant(ctx.directory, tenantId);
       const known = await ctx.directory.findUserByEmail(email);
       if (known !== null) await assertNotMember(ctx.access, tenantId, known.id);
+      await ctx.budgets?.invitation({ tenantId });
       const inviter = await ctx.directory.findUser(ctx.principal.userId);
       const invitation = await ctx.admins.invite({
         tenantId,
