@@ -11,7 +11,11 @@ import {
 } from "@/modules/auth/sign-in-events";
 import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
-import { socialOf } from "@/users/tenant-janus";
+import {
+  bindSsoCallback,
+  connectionIdOfCallbackUrl,
+  socialOf,
+} from "@/users/tenant-janus";
 import { methodDisabled } from "./gate";
 import {
   type MethodType,
@@ -19,6 +23,9 @@ import {
   offeredSocial,
   SOCIAL_LABELS,
 } from "./sign-in.schema";
+
+/** Set by the BFF from the path of its callback route (`/sign-in/social/:provider/callback`), never from the browser's own claim. */
+const SSO_CONNECTION_HEADER = "x-sso-connection";
 
 const HOSTED = {
   passkey: "PASSKEY",
@@ -59,6 +66,22 @@ const social = socialResolvers({
     if (ctx.request === undefined) return null;
     const auth = await authOf(ctx.request);
     return auth === null ? null : socialOf(auth);
+  },
+  // Each connection has its own callback URL (nxgt-janus#975/#987): the
+  // callback is bound to the connection whose URL received it, so an identity
+  // provider cannot pass a visitor's flow on to another one (RFC 9207 mix-up).
+  bindCallback: async (callback, { args, ctx }) => {
+    const auth = ctx.request === undefined ? null : await authOf(ctx.request);
+    if (auth === null) return callback;
+    // The id comes from the path of the callback URL the identity provider
+    // redirected the visitor to, and the BFF states the id of the route that
+    // received it (`x-sso-connection`): both must agree. A missing or
+    // disagreeing one binds to nothing, which a connection's flow refuses
+    // (an unbound callback fails closed); a static app's flow is not bound.
+    const named = connectionIdOfCallbackUrl(args.callbackUrl);
+    const stated = ctx.request?.headers.get(SSO_CONNECTION_HEADER) ?? null;
+    if (named === null || named !== stated) return callback;
+    return bindSsoCallback(auth, named, callback);
   },
 });
 

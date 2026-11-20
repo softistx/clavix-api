@@ -122,7 +122,11 @@ const realFetch = globalThis.fetch;
 
 const hostOf = (slug: string) => issuerOf(slug, origin);
 const url = (slug: string) => `${hostOf(slug)}/graphql`;
-const CALLBACK = `${hostOf("fedacme")}/sign-in/sso/callback`;
+const callbackOf = (slug: string, id: string) =>
+  `${hostOf(slug)}/sign-in/social/${id}/callback`;
+// One URL per connection (nxgt-janus#975): the IdP's client lists both.
+const CALLBACK = callbackOf("fedacme", "acme");
+const CALLBACK_BETA = callbackOf("fedacme", "beta");
 
 interface Answer {
   status: number;
@@ -135,12 +139,14 @@ async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   cookie?: string,
+  headers: Record<string, string> = {},
 ): Promise<Answer> {
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "x-forwarded-for": "198.51.100.77",
+      ...headers,
       ...(cookie === undefined ? {} : { cookie }),
     },
     body: JSON.stringify({ query, variables }),
@@ -177,6 +183,25 @@ const REQUEST = `mutation ($e: EmailAddress!) { requestSignInCode(email: $e) { c
 const VERIFY = `mutation ($c: String!, $k: String!) {
   verifySignInCode(challenge: $c, code: $k) { ... on SignedIn { user { id } } }
 }`;
+/**
+ * What the hosted UI's callback route does: the connection id is the route's
+ * `:provider` path segment, sent as `x-sso-connection` beside the callback URL.
+ */
+const bffComplete = (
+  slug: string,
+  callback: string,
+  flow: string,
+  via: string | null = /\/sign-in\/social\/([^/]+)\/callback/.exec(
+    new URL(callback).pathname,
+  )?.[1] ?? null,
+) =>
+  gql(
+    slug,
+    COMPLETE,
+    { u: callback, f: flow },
+    undefined,
+    via === null ? {} : { "x-sso-connection": via },
+  );
 const ME = "{ currentUser { email } }";
 
 const homeOf = async (email: string, slug = "fedacme") =>
@@ -221,7 +246,7 @@ async function federated(
   return {
     start,
     callback,
-    done: await gql(slug, COMPLETE, { u: callback, f: start.flow }),
+    done: await bffComplete(slug, callback, start.flow),
   } as const;
 }
 
@@ -273,7 +298,7 @@ beforeAll(async () => {
       tenant: "fedidp",
       name: "Clavix",
       clientId: "clavix",
-      redirectUris: [CALLBACK],
+      redirectUris: [CALLBACK, CALLBACK_BETA],
       type: "confidential",
     },
   );
@@ -529,16 +554,67 @@ describe("federated sign-in", () => {
     };
     const callback = await throughIdp(start.url, "ada");
     const calls = idpCalls.length;
-    const mixed = await gql("fedother", COMPLETE, {
-      u: callback,
-      f: start.flow,
-    });
+    const mixed = await bffComplete("fedother", callback, start.flow);
     expect(mixed.errors).toBeDefined();
     expect(mixed.cookies).toEqual([]);
     expect(idpCalls.length).toBe(calls);
     // The right tenant still completes it.
-    const real = await gql("fedacme", COMPLETE, { u: callback, f: start.flow });
+    const real = await bffComplete("fedacme", callback, start.flow);
     expect(real.errors).toBeUndefined();
+  });
+
+  test("each connection has its own callback URL, and a callback bound to another connection is refused before any request (nxgt-janus#987)", async () => {
+    await connectionsService.create(
+      acme,
+      {
+        id: "beta",
+        name: "Beta SSO",
+        issuer: IDP_ISSUER,
+        clientId: "clavix",
+        clientSecret: secret,
+      },
+      null,
+    );
+    // A refused callback spends its flow, so each case starts its own.
+    const trip = async () => {
+      const started = await gql("fedacme", START, { p: "acme" });
+      const start = started.data?.["socialSignInStart"] as {
+        url: string;
+        flow: string;
+      };
+      expect(new URL(start.url).searchParams.get("redirect_uri")).toBe(
+        CALLBACK,
+      );
+      return { flow: start.flow, callback: await throughIdp(start.url, "ada") };
+    };
+    const calls = idpCalls.length;
+    // The same code and state, delivered to the other connection's URL.
+    const crossing = await trip();
+    const crossed = crossing.callback.replace("/social/acme/", "/social/beta/");
+    expect(crossed).not.toBe(crossing.callback);
+    const refused = await bffComplete("fedacme", crossed, crossing.flow);
+    expect(codeOf(refused)).toBe("PROVIDER_ERROR");
+    expect(refused.cookies).toEqual([]);
+    // A header that disagrees with the URL's path, or none, binds nothing: refused too.
+    for (const via of ["beta", null]) {
+      const unbound = await trip();
+      const answer = await bffComplete(
+        "fedacme",
+        unbound.callback,
+        unbound.flow,
+        via,
+      );
+      expect(answer.errors).toBeDefined();
+      expect(answer.cookies).toEqual([]);
+    }
+    expect(
+      idpCalls.some((call, at) => at >= calls && call.includes("/token")),
+    ).toBe(false);
+    // The default path: the connection's own URL, its id stated, completes.
+    const own = await trip();
+    const real = await bffComplete("fedacme", own.callback, own.flow);
+    expect(real.errors).toBeUndefined();
+    await connectionsService.delete(acme, "beta");
   });
 
   test("a connection that is not the tenant's, or unknown, does not start", async () => {
@@ -610,7 +686,7 @@ describe("a connection turned off", () => {
     expect(codeOf(await gql("fedacme", START, { p: "acme" }))).toBe(
       "SIGN_IN_METHOD_DISABLED",
     );
-    const late = await gql("fedacme", COMPLETE, { u: callback, f: start.flow });
+    const late = await bffComplete("fedacme", callback, start.flow);
     expect(late.errors).toBeDefined();
     expect(late.cookies).toEqual([]);
     // Turned off, its domain no longer requires single sign-on: the code is offered again.
