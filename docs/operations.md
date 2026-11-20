@@ -141,6 +141,11 @@ The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVIC
 `CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
 Redis; with Redis down the lookups go through unthrottled and a line is logged.
 
+The anonymous SSO start and home-realm lookup limits (`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`,
+`CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`) and the console's test-webhook
+(`CLAVIX_WEBHOOK_TEST_*`) and invitation (`CLAVIX_INVITE_*`) budgets are read by the API and kept in Redis too, defaults
+in the README. With Redis down they let the call through and log a line.
+
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
 ignored by git. Compose hands the whole file to `api` only (so it also holds the two

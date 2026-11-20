@@ -17,7 +17,7 @@ export const connections: Resolvers = {
       }
       requireLive(tenant);
       ctx.set.headers.set("cache-control", "no-store");
-      await ctx.signInThrottle?.check({
+      await ctx.homeRealmThrottle?.check({
         tenantId: tenant.tenantId,
         ip: ctx.ip,
       });

@@ -21,6 +21,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
         extensions: { code: "USER_EXISTS", http: { status: 409 } },
       });
     }
+    await ctx.budgets?.invitation({ tenantId });
     const inviter = await ctx.directory.findUser(ctx.principal.userId);
     const invitation = await ctx.users.invite({
       tenantId,

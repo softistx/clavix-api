@@ -116,7 +116,7 @@ export const signInMethods: Resolvers = {
         }
       }
       const { resolvers } = await socialOfTenant(ctx);
-      await ctx.signInThrottle?.check({
+      await ctx.ssoStartThrottle?.check({
         tenantId: tenant.tenantId,
         ip: ctx.ip,
       });

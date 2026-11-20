@@ -429,7 +429,7 @@ sign-in, and the answer is HTTP 429 with `extensions.code: "MAIL_THROTTLED"`.
 
 **Why:** these two anonymous operations send no mail, and each has its own budget, apart from the
 sign-in code one: 60 per 10 minutes per client address and tenant, 2000 per hour per tenant
-(`CLAVIX_SSO_*`; the same values, counted separately for the lookup and for the start). The code is
+(`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`, `CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`; the same values, counted separately for the lookup and for the start). The code is
 the one `requestSignInCode` answers, so a page handles one throttled error. Spending one of the three
 budgets never closes the other two: a flood of lookups leaves sign-in codes and SSO starts open.
 
