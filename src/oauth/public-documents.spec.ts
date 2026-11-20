@@ -16,6 +16,7 @@ function setup(ttlSeconds = 60) {
   let version = 1;
   let clock = 1_000;
   let reads = 0;
+  let failing = false;
   const generations = createKeyGenerations();
   const resolver = {
     resolveRequest: async (request: Request) =>
@@ -28,7 +29,8 @@ function setup(ttlSeconds = 60) {
       handle: async (request: Request) => {
         reads += 1; // each call stands for the store reads of a miss
         const { pathname } = new URL(request.url);
-        if (pathname === "/nothing") return new Response("no", { status: 404 });
+        if (pathname === "/nothing" || failing)
+          return new Response("no", { status: 503 });
         return Response.json(
           { n: reads, pathname },
           { headers: { "cache-control": "public, max-age=300" } },
@@ -41,6 +43,9 @@ function setup(ttlSeconds = 60) {
     oauth,
     generations,
     reads: () => reads,
+    fail: (on: boolean) => {
+      failing = on;
+    },
     setVersion: (v: number) => {
       version = v;
     },
@@ -128,13 +133,23 @@ describe("public documents cache", () => {
     expect(new Set(await Promise.all(all.map((r) => r.text()))).size).toBe(1);
   });
 
-  test("a non-200 is not cached and another host has its own slot", async () => {
+  test("a non-200 document is not cached, even under concurrency", async () => {
     const t = setup();
-    const missing = "https://acme.clavix.test/.well-known/openid-configuration";
+    t.fail(true);
+    const all = await Promise.all(
+      Array.from({ length: 5 }, () => t.oauth.handle(new Request(JWKS))),
+    );
+    expect(t.reads()).toBe(1);
+    for (const r of all) {
+      expect(r.status).toBe(503);
+      expect(await r.text()).toBe("no");
+    }
     await t.oauth.handle(new Request(JWKS));
-    await t.oauth.handle(new Request("https://acme.clavix.test/nothing"));
     expect(t.reads()).toBe(2);
-    await t.oauth.handle(new Request(missing));
+    t.fail(false);
+    const ok = await t.oauth.handle(new Request(JWKS));
+    expect(ok.status).toBe(200);
+    await t.oauth.handle(new Request(JWKS));
     expect(t.reads()).toBe(3);
   });
 
