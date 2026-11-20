@@ -4,8 +4,9 @@
 #   docker compose -f compose.yml -f compose.traefik.yml --env-file .env ...
 #
 # - Traefik terminates TLS. The `letsencrypt` resolver (Cloudflare DNS-01) asks
-#   for `${CLAVIX_DOMAIN}` and `*.${CLAVIX_DOMAIN}`: the `*.softistx.com` wildcard
-#   of traefik does not cover the two-level tenant hosts <slug>.clavix.softistx.com.
+#   for `${CLAVIX_DOMAIN}` and `*.${CLAVIX_DOMAIN}` (staging: clavixid.com, a zone of
+#   its own). All HTTP reaches traefik through the Cloudflare Tunnel (to
+#   https://traefik:443); the VPS has no public 443.
 # - Caddy is not started (profile `standalone`, for a host of its own). On-demand
 #   TLS for custom domains is off: a custom domain is not served in staging.
 # - The api gets the routes Caddy gave it (the authorization server, the GraphQL

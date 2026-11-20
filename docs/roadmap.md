@@ -17,7 +17,7 @@ nxgt-janus release says which.
 - **Staging at v1** — Clavix runs on the shared VPS behind its Traefik v3, as the sibling apps do: one
   command (`bun deploy/deploy.ts`) pulls, builds the images on the host, migrates, starts the stack,
   waits for health and cleans the replaced images and the old build cache. Tenants are served at
-  `<slug>.clavix.softistx.com` with one wildcard certificate; custom domains stay off in staging
+  `<slug>.clavixid.com` with one wildcard certificate, on a zone of its own (`clavixid.com`) behind the Cloudflare Tunnel; custom domains stay off in staging
   ([#339](https://github.com/softistx/clavix-api/issues/339)). The v1 gate
   ([#271](https://github.com/softistx/clavix-api/issues/271)) has passed.
 

@@ -15,7 +15,7 @@ import {
 } from "./lib";
 
 const good = {
-  CLAVIX_DOMAIN: "clavix.softistx.com",
+  CLAVIX_DOMAIN: "clavixid.com",
   CLAVIX_API_IMAGE: "clavix-api:staging",
   CLAVIX_UI_IMAGE: "clavix-ui:staging",
   CLAVIX_KEYS_MASTER_KEY: "k",
@@ -78,10 +78,10 @@ describe("envProblems", () => {
 
   test("refuses a domain with a scheme, a port or a wildcard", () => {
     for (const bad of [
-      "https://clavix.softistx.com",
-      "clavix.softistx.com:443",
+      "https://clavixid.com",
+      "clavixid.com:443",
       "*.softistx.com",
-      "Clavix.softistx.com",
+      "Clavixid.com",
     ])
       expect(envProblems({ ...good, CLAVIX_DOMAIN: bad })).toHaveLength(1);
   });
@@ -98,13 +98,13 @@ describe("envProblems", () => {
 
 describe("domainRegex", () => {
   test("escapes the dots and matches one label only", () => {
-    const re = new RegExp(domainRegex("clavix.softistx.com"));
-    expect(re.test("acme.clavix.softistx.com")).toBe(true);
-    expect(re.test("console.clavix.softistx.com")).toBe(true);
-    expect(re.test("clavix.softistx.com")).toBe(false);
-    expect(re.test("a.b.clavix.softistx.com")).toBe(false);
-    expect(re.test("acme.clavixXsoftistx.com")).toBe(false);
-    expect(re.test("acme.clavix.softistx.com.evil.io")).toBe(false);
+    const re = new RegExp(domainRegex("clavixid.com"));
+    expect(re.test("acme.clavixid.com")).toBe(true);
+    expect(re.test("console.clavixid.com")).toBe(true);
+    expect(re.test("clavixid.com")).toBe(false);
+    expect(re.test("a.b.clavixid.com")).toBe(false);
+    expect(re.test("acme.clavixidXcom")).toBe(false);
+    expect(re.test("acme.clavixid.com.evil.io")).toBe(false);
   });
 
   test("throws on something that is not a DNS name", () => {
