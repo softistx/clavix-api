@@ -18,7 +18,7 @@ import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant, refusing } from "../catalog-support";
 import { tenantArg } from "../ids";
-import { keepConsoleResource } from "../reserved";
+import { keepConsoleResource, refuseMachineConsole } from "../reserved";
 
 const view = onTenant("view", tenantArg);
 const edit = onTenant("edit", tenantArg);
@@ -155,6 +155,7 @@ const resourceShape = (
     .map(detailTypeShape),
   metadataUrl: document?.metadataUrl ?? null,
   protectedResourceMetadata: document?.metadata ?? null,
+  allowClientCredentials: resource.allowClientCredentials === true,
   createdAt: resource.createdAt,
 });
 
@@ -250,10 +251,19 @@ export const resources: Resolvers = {
       );
     },
     updateResource: async (_, { tenantId, id, input }, ctx) => {
-      const { _id, slug } = await catalogTenant(ctx, tenantId);
-      const updated = await refusing(() =>
-        catalog.updateResource(_id, id, { name: input.name }),
-      );
+      const tenant = await catalogTenant(ctx, tenantId);
+      const { _id, slug } = tenant;
+      const updated = await refusing(async () => {
+        refuseMachineConsole(
+          tenant,
+          await catalog.findResource(_id, id),
+          input.allowClientCredentials,
+        );
+        return catalog.updateResource(_id, id, {
+          name: input.name ?? undefined,
+          allowClientCredentials: input.allowClientCredentials ?? undefined,
+        });
+      });
       await ctx.audit("resource.update", target("resource", _id, updated._id));
       const scopes = await catalog.listScopes(_id, { resourceId: updated._id });
       return resourceShape(

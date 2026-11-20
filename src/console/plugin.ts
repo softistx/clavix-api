@@ -1,4 +1,4 @@
-import type { OAuthPrincipal } from "@softistx/janus-oauth";
+import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
 import type { ExportThrottle } from "./audit-export/throttle";
@@ -32,7 +32,7 @@ export type ConsoleAuthenticate = (
   request: Request,
   /** The path the client called when it is not the GraphQL one (a DPoP proof's `htu` names it). */
   path?: string,
-) => Promise<OAuthPrincipal | ConsoleDPoPRefusal | null>;
+) => Promise<OAuthUserPrincipal | ConsoleDPoPRefusal | null>;
 
 /** The `WWW-Authenticate` of a refused DPoP request, and its nonce header. */
 function dpopChallenge({ refused }: ConsoleDPoPRefusal): HeadersInit {
@@ -101,8 +101,8 @@ export async function authenticated(
   authenticate: ConsoleAuthenticate,
   request: Request,
   path?: string,
-): Promise<OAuthPrincipal | Response> {
-  let principal: OAuthPrincipal | ConsoleDPoPRefusal | null;
+): Promise<OAuthUserPrincipal | Response> {
+  let principal: OAuthUserPrincipal | ConsoleDPoPRefusal | null;
   try {
     principal = await authenticate(request, path);
   } catch (error) {
@@ -155,7 +155,7 @@ export function useConsole({
   adminEvents,
   activity,
 }: ConsoleDeps) {
-  const principals = new WeakMap<Request, OAuthPrincipal>();
+  const principals = new WeakMap<Request, OAuthUserPrincipal>();
   // Ours, one per HTTP request: a client's `x-request-id` is never believed.
   const requestIds = new WeakMap<Request, string>();
   const requestIdOf = (request: Request) => {

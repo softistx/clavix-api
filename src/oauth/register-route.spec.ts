@@ -222,10 +222,11 @@ describe("open", () => {
     ).toBe(true);
   });
 
-  test("the device URN and the token exchange URN are refused", async () => {
+  test("the device URN and the token exchange URN, and client_credentials, are refused", async () => {
     for (const grant of [
       "urn:ietf:params:oauth:grant-type:device_code",
       "urn:ietf:params:oauth:grant-type:token-exchange",
+      "client_credentials",
     ]) {
       const response = await register("ag-open", {
         ...metadata,

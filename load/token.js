@@ -1,7 +1,8 @@
 // POST /token at 200 req/s for 60 s across the seeded tenants: the refresh_token
 // grant (rotation: each VU walks its own chain, one request at a time).
-// client_credentials is not offered by Clavix (unsupported_grant_type), so it is
-// only probed once in `setup` (docs/operations.md, "Load test").
+// The client_credentials grant: a confidential client per tenant (seeded with
+// the resource opted in), Basic authentication, no refresh and no user. It runs
+// beside the refresh grant (docs/operations.md, "Load test").
 
 import { check, sleep } from "k6";
 import http from "k6/http";
@@ -10,10 +11,11 @@ import { BASE, headers, scenario, tenants } from "./lib.js";
 const RATE = Number(__ENV.RATE || 200);
 const VUS = Number(__ENV.VUS || 100);
 
-// client_credentials is not offered yet (unsupported_grant_type): its scenario
-// is skipped unless CLIENT_CREDENTIALS=1 (needs a confidential client in the
-// seed and the grant on the server). Same 200 req/s and p95 < 150 ms target.
-const CC = __ENV.CLIENT_CREDENTIALS === "1";
+// The client_credentials scenario is on; CLIENT_CREDENTIALS=0 skips it (a
+// seed made before the grant shipped has no confidential client). Same
+// 200 req/s and p95 < 150 ms target.
+const CC = __ENV.CLIENT_CREDENTIALS !== "0";
+const RESOURCE = "https://api.load.test/v1";
 
 export const options = {
   scenarios: Object.assign(
@@ -52,11 +54,16 @@ for (const t of tenants) {
 
 export function setup() {
   const t = tenants[0];
-  const res = http.post(
-    `${BASE}/token`,
-    { grant_type: "client_credentials", client_id: t.chains[0].clientId },
-    { headers: headers(t.slug) },
-  );
+  const res = CC
+    ? http.post(
+        `${BASE}/token`,
+        { grant_type: "client_credentials", resource: RESOURCE, scope: "read" },
+        {
+          headers: headers(t.slug),
+          auth: `${t.confidential.clientId}:${t.confidential.secret}`,
+        },
+      )
+    : null;
   // Warm: the api builds a tenant's server on its first request. (No warm-up
   // scenario here: its VUs would rotate the chains the measured VUs then reuse.)
   for (const tenant of tenants) {
@@ -64,7 +71,9 @@ export function setup() {
       headers: headers(tenant.slug),
     });
   }
-  console.log(`client_credentials probe: ${res.status} ${res.body}`);
+  if (res !== null) {
+    console.log(`client_credentials probe: ${res.status} ${res.body}`);
+  }
 }
 
 let mine;
@@ -95,13 +104,13 @@ export function refresh() {
   }
 }
 
-// Basic client authentication: the seed must register a confidential client
-// (`clientSecret` in seed.json) once the grant ships.
+// Basic client authentication with the seed's confidential client
+// (`confidential` of each tenant in seed.json).
 export function clientCredentials() {
   const t = tenants[Math.floor(Math.random() * tenants.length)];
   const res = http.post(
     `${BASE}/token`,
-    { grant_type: "client_credentials", scope: "read" },
+    { grant_type: "client_credentials", resource: RESOURCE, scope: "read" },
     {
       headers: headers(t.slug),
       auth: `${t.confidential.clientId}:${t.confidential.secret}`,

@@ -118,7 +118,10 @@ export class Catalog {
   updateResource(
     tenantId: ObjectId,
     resourceId: string,
-    input: { name: string },
+    input: {
+      name?: string | undefined;
+      allowClientCredentials?: boolean | undefined;
+    },
   ): Promise<StoredResourceDoc> {
     return updateResource(this.resourcesOf(tenantId), resourceId, input);
   }

@@ -25,7 +25,7 @@ let tenantA = "";
 let tenantB = "";
 
 const CLIENT =
-  "id name type redirectUris grantTypes createdAt requirePushedAuthorizationRequests dpopBoundAccessTokens";
+  "id name type redirectUris grantTypes allowedScopes defaultScopes createdAt requirePushedAuthorizationRequests dpopBoundAccessTokens";
 const CREATE = `mutation($tenantId: ID!, $input: CreateClientInput!) {
   createClient(tenantId: $tenantId, input: $input) { client { ${CLIENT} } clientSecret }
 }`;
@@ -295,6 +295,52 @@ describe("clients and client", () => {
     });
     expect(bare.errors).toBeDefined();
     await admin(DELETE, { tenantId: tenantA, id: "smart-tv" });
+  });
+
+  test("a client_credentials client needs a confidential type and allowed scopes, and keeps them on a rename", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Worker",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+      allowedScopes: ["read", "write"],
+      defaultScopes: ["read"],
+    });
+    expect(created.errors).toBeUndefined();
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: {
+        id: "worker",
+        redirectUris: [],
+        grantTypes: ["CLIENT_CREDENTIALS"],
+        allowedScopes: ["read", "write"],
+        defaultScopes: ["read"],
+      },
+    });
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "worker",
+      input: { name: "Billing worker" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      allowedScopes: ["read", "write"],
+      defaultScopes: ["read"],
+    });
+    const publicOne = await create(admin, tenantA, {
+      name: "Public machine",
+      type: "PUBLIC",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+      allowedScopes: ["read"],
+    });
+    expect(codeOf(publicOne)).toBe("BAD_USER_INPUT");
+    const noScope = await create(admin, tenantA, {
+      name: "No scope",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+    });
+    expect(codeOf(noScope)).toBe("BAD_USER_INPUT");
+    await admin(DELETE, { tenantId: tenantA, id: "worker" });
   });
 
   test("a client's PAR requirement is set at creation, changed by an update and kept by a rename", async () => {

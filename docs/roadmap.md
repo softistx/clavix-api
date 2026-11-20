@@ -39,8 +39,6 @@ nxgt-janus release says which.
   and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
   Waits on `@softistx/security` `remotePolicy`.
 
-- **`client_credentials` grant** — a back end gets tokens for itself with the client credentials grant, adopted from nxgt-janus once it ships it (today `/token` answers 400 `unsupported_grant_type`); the load test's skipped `client_credentials` scenario then turns on.
-
 ## Later
 
 **Follow-ups**
@@ -70,6 +68,10 @@ nxgt-janus release says which.
 - **OAuth events in the sign-in log** — consents granted and denied, grant revocations, refresh-token
   reuse, device decisions, token exchanges and client registrations of a tenant's issuer are kept in
   its own log ([#21](https://github.com/softistx/clavix-api/issues/21)).
+- **`client_credentials` grant** — a back end gets tokens for itself with a confidential client that lists the
+  grant and its `allowedScopes`, against a resource that opted in (`allowClientCredentials`); the console sets
+  both and the load test measures it ([#362](https://github.com/softistx/clavix-api/issues/362),
+  [guide](guide/client-credentials.md)).
 - **Webhooks** — a tenant registers `https` endpoints in the console and receives its users'
   events (`user.created`, `session.signedIn`, ...) signed with the Standard Webhooks scheme, at least
   once, with retries; the secret is shown once and rolls without loss (both signatures for 24 hours);
@@ -245,7 +247,7 @@ nxgt-janus release says which.
   (PKCE) or confidential client on a tenant, idempotently, the secret shown once
   ([#6](https://github.com/softistx/clavix-api/issues/6)). A client's grant types are
   recorded, shown and enforced by janus-oauth 0.13 (an explicit list must name every grant the
-  client uses); grants other than code and refresh are not offered yet.
+  client uses); the device, token-exchange and client credentials grants are offered too.
 - **Tenants created by script** — `bun run tenants:create` creates a tenant (slug rules,
   reserved and deleted slugs refused, first signing key) idempotently and prints its issuer
   ([#74](https://github.com/softistx/clavix-api/issues/74)).

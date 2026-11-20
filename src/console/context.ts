@@ -1,4 +1,4 @@
-import type { OAuthPrincipal } from "@softistx/janus-oauth";
+import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { YogaInitialContext } from "graphql-yoga";
 import type { AuthEventsService } from "@/modules/audit/auth-events.service";
 import type { PlanId } from "@/modules/tenants/plan.schema";
@@ -229,7 +229,7 @@ export interface ConsoleUsers {
 /** What the console's plugin puts on every context, for a request whose bearer token was accepted. */
 export interface ConsoleExtras {
   /** Who the token belongs to (the user, the client, its scopes). */
-  readonly principal: OAuthPrincipal;
+  readonly principal: OAuthUserPrincipal;
   /** Whether the caller has `permission` on the tenant; a denial is `false`. */
   can(permission: Permission, tenantId: string): Promise<boolean>;
   /** Whether the caller has `permission` on the platform itself. */

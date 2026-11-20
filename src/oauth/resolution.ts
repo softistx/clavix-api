@@ -20,13 +20,15 @@ export const fingerprintOf = (
   Bun.hash(
     JSON.stringify(
       Object.entries(resources)
-        .map(([uri, { scopes, authorizationDetails }]) => {
+        .map(([uri, { scopes, authorizationDetails, clientCredentials }]) => {
           const types = Object.entries(authorizationDetails ?? {})
             .map(([type, { schema }]) => [type, digestOf(schema) ?? ""])
             .sort(([a], [b]) => String(a).localeCompare(String(b)));
-          return types.length === 0
-            ? [uri, [...scopes].sort()]
-            : [uri, [...scopes].sort(), types];
+          const base = [uri, [...scopes].sort()];
+          // Added only when set, so a tenant that has none keeps its
+          // fingerprint (and its cached issuer) across the release.
+          if (clientCredentials === true) base.push("cc");
+          return types.length === 0 ? base : [...base, types];
         })
         .sort(([a], [b]) => String(a).localeCompare(String(b))),
     ),

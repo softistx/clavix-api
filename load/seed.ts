@@ -5,7 +5,7 @@ import { env } from "@/config/env";
 import { createIssuers } from "@/config/oauth";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
-import { registerStoredResource } from "@/config/resources";
+import { catalog, registerStoredResource } from "@/config/resources";
 import {
   tenantBySlug,
   tenantResolver,
@@ -20,13 +20,17 @@ import { registerTenant } from "@/modules/tenants/register-tenant";
 // client, minted through the real authorize, approve and code exchange of the
 // real issuers (a fixed user stands in for the hosted sign-in). Idempotent for
 // tenants and clients; every run mints new chains. Prints one JSON document on
-// stdout: { domain, tenants: [{ slug, chains: [{ clientId, token }] }] }.
+// stdout: { domain, tenants: [{ slug, chains: [{ clientId, token }], confidential: { clientId, secret } }] }.
+// `confidential` is the client of the client_credentials scenario: the resource
+// opts in (`allowClientCredentials`) and the secret is rotated on every run, so
+// the seed always holds a working one.
 const TENANTS = Number(Bun.env["LOAD_TENANTS"] ?? 50);
 const CHAINS = Number(Bun.env["LOAD_CHAINS"] ?? 2);
 const REDIRECT = "https://app.example/callback";
 const VERIFIER = "v".repeat(64);
 const clientOf = (chain: number) => `load-${chain}`;
 const RESOURCE = "https://api.load.test/v1";
+const MACHINE = "load-cc";
 
 // The real end-user authentication of the tenants: the refresh grant checks the
 // user in the tenant's store, so each tenant gets one real user (a refresh of a
@@ -115,7 +119,11 @@ async function mintRefreshToken(slug: string): Promise<string> {
 
 const out: {
   domain: string;
-  tenants: { slug: string; chains: { clientId: string; token: string }[] }[];
+  tenants: {
+    slug: string;
+    chains: { clientId: string; token: string }[];
+    confidential: { clientId: string; secret: string };
+  }[];
 } = { domain: env.CLAVIX_DOMAIN, tenants: [] };
 try {
   for (let i = 0; i < TENANTS; i++) {
@@ -129,6 +137,29 @@ try {
       uri: RESOURCE,
       scopes: ["read"],
     });
+    const owner = await tenantBySlug(slug);
+    if (owner === undefined) throw new Error(`${slug}: tenant not found`);
+    const stored = (await catalog.listResources(owner._id)).find(
+      (resource) => resource.uri === RESOURCE,
+    );
+    if (stored === undefined) throw new Error(`${slug}: resource not stored`);
+    await catalog.updateResource(owner._id, stored._id.toHexString(), {
+      allowClientCredentials: true,
+    });
+    const machine = await registerClient(
+      { db: oauthDb, findTenant: tenantBySlug },
+      {
+        tenant: slug,
+        name: "Load machine",
+        clientId: MACHINE,
+        redirectUris: [],
+        type: "confidential",
+        grants: ["client_credentials"],
+        allowedScopes: ["read"],
+        defaultScopes: ["read"],
+        rotateSecret: true,
+      },
+    );
     const resolved = await tenantResolver.resolveHost(
       `${slug}.${env.CLAVIX_DOMAIN}`,
     );
@@ -156,7 +187,11 @@ try {
         token: await mintRefreshToken(slug),
       });
     }
-    out.tenants.push({ slug, chains });
+    out.tenants.push({
+      slug,
+      chains,
+      confidential: { clientId: MACHINE, secret: machine.clientSecret ?? "" },
+    });
   }
   console.log(JSON.stringify(out));
 } finally {
