@@ -1,5 +1,6 @@
 import {
   denial,
+  passkeyResolvers,
   type SecondFactorResolvers,
   secondFactorResolvers,
 } from "@softistx/janus-graphql";
@@ -46,6 +47,18 @@ const janus: SecondFactorResolvers = secondFactorResolvers({
   },
 });
 
+// The assertion check and the challenge's five attempts are janus's
+// (`confirmSecondFactorPasskey`); this module records and shapes the answer.
+async function passkeyAuthOf(ctx: Context) {
+  const auth = await janusIssuers.forRequest(ctx.request);
+  if (auth === null) throw denial("NOT_FOUND", "No such tenant");
+  return auth;
+}
+const janusPasskey = passkeyResolvers({
+  auth: passkeyAuthOf,
+  firstFactor: true, // the instance's type; only `confirmSecondFactorPasskey` is used
+});
+
 const iso = (value: string) => new Date(value);
 
 export const mfa: Resolvers = {
@@ -66,6 +79,19 @@ export const mfa: Resolvers = {
     recoverSecondFactor: async (_, { challenge, recoveryCode }, ctx) => {
       return answer(ctx, "recoveryCode", () =>
         janus.Mutation.recoverSecondFactor(_, { challenge, recoveryCode }, ctx),
+      );
+    },
+    confirmSecondFactorWithPasskey: async (
+      _,
+      { challenge, assertion },
+      ctx,
+    ) => {
+      return answer(ctx, "passkey", () =>
+        janusPasskey.Mutation.confirmSecondFactorPasskey(
+          _,
+          { challenge, assertion },
+          ctx,
+        ),
       );
     },
     enrollSecondFactor: async (_, __, ctx) => {
@@ -125,10 +151,13 @@ export const mfa: Resolvers = {
 /** A second-factor sign-in: recorded like any sign-in (method `totp` or `recoveryCode`), the session cookie janus's. */
 async function answer(
   ctx: Context,
-  method: "totp" | "recoveryCode",
-  run: () => ReturnType<
-    SecondFactorResolvers["Mutation"]["confirmSecondFactor"]
-  >,
+  method: "totp" | "recoveryCode" | "passkey",
+  run: () => Promise<{
+    userId: string;
+    expiresAt: string;
+    newDevice: boolean;
+    recoveryCodesLeft?: number | null;
+  }>,
 ) {
   const tenant = await ctx.tenant();
   if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
@@ -163,6 +192,6 @@ async function answer(
     },
     expiresAt: iso(done.expiresAt),
     newDevice: done.newDevice,
-    recoveryCodesLeft: done.recoveryCodesLeft,
+    recoveryCodesLeft: done.recoveryCodesLeft ?? null,
   };
 }

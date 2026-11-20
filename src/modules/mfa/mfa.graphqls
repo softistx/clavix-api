@@ -1,6 +1,6 @@
 """
 The TOTP second factor of the signed-in user of the tenant the request's host
-names (an authenticator app and ten recovery codes), and the two answers that
+names (an authenticator app and ten recovery codes), and the three answers that
 finish a sign-in that stopped at a `SecondFactorChallenge`. A tenant turns it on
 with `signIn.mfa.totp`; with it off, enrolment is refused and a user who already
 holds a factor keeps it (and can still disable it or renew the codes).
@@ -32,7 +32,7 @@ type SecondFactorSignedIn {
   expiresAt: DateTime!
   "Whether the session was opened from a device the user had not used."
   newDevice: Boolean!
-  "The recovery codes left after `recoverSecondFactor` spent one; null after `confirmSecondFactor`."
+  "The recovery codes left after `recoverSecondFactor` spent one; null after `confirmSecondFactor` and `confirmSecondFactorWithPasskey`."
   recoveryCodesLeft: Int
 }
 
@@ -58,6 +58,18 @@ extend type Mutation {
   recoverSecondFactor(
     challenge: String!
     recoveryCode: String!
+  ): SecondFactorSignedIn!
+  """
+  Redeems the challenge with one of the user's passkeys, the browser's answer
+  to the challenge's `passkeyOptions` (`credential.toJSON()`, as a JSON
+  string), and opens the session (cookie set). The five attempts are the ones
+  of `confirmSecondFactor`: CODE_INVALID with `attemptsLeft` for an assertion
+  that does not verify or names another user's passkey; TOKEN_UNKNOWN,
+  TOKEN_SPENT, TOKEN_EXPIRED. `recoveryCodesLeft` is null.
+  """
+  confirmSecondFactorWithPasskey(
+    challenge: String!
+    assertion: String!
   ): SecondFactorSignedIn!
   """
   Starts a factor and answers the secret and the URI to show as a QR code.
