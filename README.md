@@ -569,19 +569,19 @@ Each tenant chooses how its users sign in
 - **Two-factor (TOTP)**: off by default. The console's `updateMfaPolicy(tenantId, input: { mode, totp })`
   (`edit`, event `mfaPolicy.update`, idempotent) lets the tenant's users enrol an authenticator app;
   with `totp` off, enrolment is 403 `SECOND_FACTOR_DISABLED` and a user who holds a factor keeps it.
-  The hosted operations on the tenant's `/graphql`:
-
-| Operation                                                                               | Does                                                                                                                                                        |
-| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `secondFactor` / `sessionConfirmedUntil`                                                | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes).    |
-| `enrollSecondFactor` / `activateSecondFactor(code)`                                     | Starts a factor (secret and `otpauth://` URI), then checks the first code and answers ten recovery codes, once. Needs a fresh session: `STEP_UP_REQUIRED`.  |
-| `confirmSecondFactor(challenge, code)` / `recoverSecondFactor(challenge, recoveryCode)` | Answers the `SecondFactorChallenge` of a sign-in by code, link or social provider and opens the session; `TENANT_SUSPENDED` on a suspended tenant.          |
-| `regenerateRecoveryCodes(code)` / `disableSecondFactor(code)`                           | Renews the recovery codes, or removes the factor, on a current app code.                                                                                    |
+  The hosted operations on the tenant's `/graphql` are in the table below.
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
   and it is never logged. Losing the master key, or dropping the old key from the keyring before `bun run keys:reseal` reports nothing left under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
+
+| Operation                                                                               | Does                                                                                                                                                     |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secondFactor` / `sessionConfirmedUntil`                                                | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes). |
+| `enrollSecondFactor` / `activateSecondFactor(code)`                                     | Starts a factor (its secret and URI), then checks the first code and answers ten recovery codes, once. Needs a fresh session: `STEP_UP_REQUIRED`.        |
+| `confirmSecondFactor(challenge, code)` / `recoverSecondFactor(challenge, recoveryCode)` | Answers the `SecondFactorChallenge` of a sign-in by code, link or social provider and opens the session; `TENANT_SUSPENDED` on a suspended tenant.       |
+| `regenerateRecoveryCodes(code)` / `disableSecondFactor(code)`                           | Renews the recovery codes, or removes the factor, on a current app code.                                                                                 |
 
 ```sh
 curl -s https://api.clavix.example/console/graphql \
