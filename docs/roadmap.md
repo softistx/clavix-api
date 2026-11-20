@@ -85,8 +85,8 @@ nxgt-janus release says which.
 **Before v1**
 - A security review of the whole surface (the restore drill is done: see "Restore drill" in operations.md).
 - Load test of the token and JWKS paths: shipped under `load/` (refresh grant at 200 req/s passes; JWKS and
-  discovery miss 20 ms p95 at 2 000 req/s, see docs/operations.md "Load test"); `client_credentials` waits for
-  the upstream grant.
+  discovery served from an in-process cache pass 20 ms p95 at 2 000 req/s, see docs/operations.md "Load test");
+  `client_credentials` waits for the upstream grant.
 
 **Authorization authoring**
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary
