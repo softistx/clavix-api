@@ -392,7 +392,7 @@ Enterprise connection client secrets are sealed with another subkey of `CLAVIX_K
 `connection-secrets`); losing the key makes them unreadable and those sign-ins fail until an admin sets the
 secret again; a master-key rotation seals them again (`bun run keys:reseal`). A connection's domain is proved by a TXT record `_clavix-sso.<domain>` holding the token the
 console shows; verification reads DNS at most once a minute per connection. Each connection has its own redirect URI,
-`https://<tenant host>/sign-in/social/<connection id>/callback`: register that URL (and only that one) with the
+`https://<tenant host>/sign-in/social/<connection id>/callback` (the console's `Connection.redirectUri`): register that URL (and only that one) with the
 customer's identity provider. The earlier shared `/sign-in/sso/callback` is no longer used.
 
 A receiver verifies the Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`,

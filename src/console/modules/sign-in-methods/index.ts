@@ -58,7 +58,7 @@ const storedOf = <K extends string, V extends string>(
   return key;
 };
 
-async function issuerFor(tenant: Tenant) {
+export async function issuerFor(tenant: Pick<Tenant, "slug">) {
   const resolved = await tenantResolver.resolveHost(
     hostOf(tenant.slug, env.CLAVIX_DOMAIN),
   );

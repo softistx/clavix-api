@@ -74,6 +74,8 @@ type Connection {
   "The connection's name in links and events: `[a-z][a-z0-9-]{0,31}`, for ever."
   id: ID!
   name: String!
+  "The redirect URI to register at the identity provider: this connection's own callback on the tenant's sign-in host (`<issuer>/sign-in/social/<id>/callback`)."
+  redirectUri: String!
   "`https` issuer URL; its discovery document is read. Fixed once accounts are linked."
   issuer: String!
   clientId: String!
