@@ -760,12 +760,12 @@ does) rather than reading `.env`. A slice runs the specs of the code it changed.
 
 ## graxia plugins of this API
 
-`src/http/status.ts` (`useErrorStatus`) gives back what Yoga read and graxia does not: an error's
-`extensions.http.status` and `headers` (a throttle's `Retry-After`) answer the JSON result. `useWithoutQuotedValues`
+An error's `extensions.http.status` and `headers` (a throttle's `Retry-After`) answer the JSON result through graxia
+itself (`errorHttp`, on by default since 0.10: highest status wins, `http` is stripped from the body, `spec: true` ignores
+the status under `application/json`); no plugin of this API carries it. `useWithoutQuotedValues`
 (`src/http/coercion.ts`) scrubs the coercion errors in `onResultChunk` (streams) and `onResponse` (plain JSON). The console is
 `useConsole` (`onRequest` verifies the token, `onContext` adds the principal); `useInviteBudget` is
 `fieldRateLimit`, whose 429 and `Retry-After` are graxia's. A client that sends a GET or a non-JSON POST sends
 `x-graphql-csrf: 1`. The JSON plugins match `application/json` and `application/graphql-response+json` (parameters
-ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. `useErrorStatus`
-also removes `extensions.http` from the body. Unexpected resolver errors and janus 5xx errors go to the app's telemetry
+ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. Unexpected resolver errors and janus 5xx errors go to the app's telemetry
 logger (`src/http/unexpected.ts`, `report` of `janusGraxiaMaskError`).
