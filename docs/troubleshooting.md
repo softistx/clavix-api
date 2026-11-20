@@ -116,8 +116,8 @@ bun run clients:create --tenant acme --name "Back office" \
 ### `grant "<grant>" is not offered: ...`
 
 **When:** a grant outside the ones janus-oauth offers (the message lists them).
-**Why:** every client gets the same grants.
-**Fix:** drop the grant; the default is the offered set.
+**Why:** the offered grants are the authorization code, refresh token, device, token exchange and `client_credentials` (its own refusals are in the next section).
+**Fix:** drop the grant; the default is the authorization code and refresh token.
 
 ### `redirect URI "<uri>": <problem>` and `a client needs at least one redirect URI`
 
@@ -563,6 +563,27 @@ URIs), the call returns it and records the missed event. `createClient` then ans
 call `rotateClientSecret` if it was lost. `createRole` answers `CONFLICT` only when the
 description differs, `createResource` when the name differs, `createScope` when the description or
 the claims differ.
+
+### `client_credentials` refusals
+
+[Guide](guide/client-credentials.md). At registration (`clients:create`, `createClient`, `updateClient`):
+- `the client credentials grant needs a confidential client (--confidential)`: a public client cannot hold it.
+- `the client credentials grant needs at least one allowed scope`: janus answers `invalid_scope` to every
+  request of a client with no `allowedScopes`; give `--allowed-scopes`.
+- `default scopes must be allowed scopes: ...`: a default outside the ceiling.
+- `--allowed-scopes and --default-scopes belong to the client_credentials grant ...`: scopes without the grant.
+- `BAD_USER_INPUT` on `updateResource` with `allowClientCredentials: true` for the console's own resource.
+
+At `/token`:
+- `unsupported_grant_type` (400): no resource of the tenant has opted in. Turn `allowClientCredentials` on in
+  the resource's edit section.
+- `invalid_target` (400): no `resource` in the request (the default resource is userinfo and never opts in), or
+  the resource has not opted in.
+- `invalid_scope` (400): a scope outside the client's `allowedScopes`.
+- `unauthorized_client` (400): the client does not list the grant (`updateClient`).
+- `invalid_client` (401): wrong secret or a public client; send the secret with HTTP Basic.
+- A token that still works after the grant was turned off: tokens live until they expire, and revoking one does
+  not stop new requests; delete the client, drop the grant or rotate its secret.
 
 ### `BAD_USER_INPUT` on a client, resource or scope mutation
 

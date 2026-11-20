@@ -12,6 +12,8 @@ enum ClientGrantType {
   DEVICE_CODE
   "The token exchange grant (RFC 8693, `urn:ietf:params:oauth:grant-type:token-exchange`), for a confidential back end. Never implied, and refused until `setClientTokenExchange` sets the client's rules."
   TOKEN_EXCHANGE
+  "The client credentials grant (RFC 6749 section 4.4): a back end asks for an access token of its own, with no user. For a confidential client only, never implied, with `allowedScopes`, and served only for a resource that opted in (`Resource.allowClientCredentials`)."
+  CLIENT_CREDENTIALS
 }
 
 """
@@ -83,6 +85,13 @@ type Client {
   may ask for; empty when it lists none. Never implied.
   """
   authorizationDetailsTypes: [String!]!
+  """
+  The scopes the client may ask for with `CLIENT_CREDENTIALS`: a request is cut
+  to them. Empty without that grant.
+  """
+  allowedScopes: [String!]!
+  "The scopes a `CLIENT_CREDENTIALS` request with no `scope` gets (within `allowedScopes`)."
+  defaultScopes: [String!]!
   "The token exchange rules; `null` while none is set (the client cannot exchange)."
   tokenExchange: ClientTokenExchange
   "How the client came to be: `createdAt` is its registration time. An agent (`DYNAMIC`, `METADATA`) is read-only in the console and can be deleted."
@@ -120,8 +129,10 @@ input CreateClientInput {
   redirectUris: [String!]
   """
   The grants the client may use. Default: `AUTHORIZATION_CODE` and `REFRESH_TOKEN`.
-  A list needs `AUTHORIZATION_CODE`, `DEVICE_CODE` or `TOKEN_EXCHANGE`; add `REFRESH_TOKEN` for a
-  client that refreshes. Without `AUTHORIZATION_CODE` the client needs no redirect URI.
+  A list needs `AUTHORIZATION_CODE`, `DEVICE_CODE`, `TOKEN_EXCHANGE` or `CLIENT_CREDENTIALS`; add
+  `REFRESH_TOKEN` for a client that refreshes. Without `AUTHORIZATION_CODE` the client needs no
+  redirect URI. `TOKEN_EXCHANGE` and `CLIENT_CREDENTIALS` need a `CONFIDENTIAL` client
+  (BAD_USER_INPUT otherwise).
   """
   grantTypes: [ClientGrantType!]
   "The client_id (a-z, 0-9, `-`); default: the name. Creating an existing id is a CONFLICT, unless the call repeats it (same name, type and redirect URIs)."
@@ -137,6 +148,13 @@ input CreateClientInput {
   of a tenant whose consent pages do not show details yet. Default: none.
   """
   authorizationDetailsTypes: [String!]
+  """
+  The scopes the client may ask for with `CLIENT_CREDENTIALS` (at least one with that
+  grant, BAD_USER_INPUT otherwise; without the grant none is allowed).
+  """
+  allowedScopes: [String!]
+  "The scopes a request with no `scope` gets: within `allowedScopes`. Default: none."
+  defaultScopes: [String!]
 }
 
 "Fields left out stay as they are. The type and the secret never change here."
@@ -149,6 +167,10 @@ input UpdateClientInput {
   dpopBoundAccessTokens: Boolean
   "Replaces the detail types (same rules as on creation); `[]` clears them, left out keeps them."
   authorizationDetailsTypes: [String!]
+  "Replaces the `CLIENT_CREDENTIALS` scope ceiling; left out keeps it (it is dropped with the grant)."
+  allowedScopes: [String!]
+  "Replaces the `CLIENT_CREDENTIALS` default scopes; left out keeps them."
+  defaultScopes: [String!]
 }
 
 "The rules of `setClientTokenExchange`: they replace the client's current ones."

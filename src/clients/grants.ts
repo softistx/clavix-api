@@ -1,4 +1,8 @@
-import { DEVICE_GRANT, TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
+import {
+  CLIENT_CREDENTIALS_GRANT,
+  DEVICE_GRANT,
+  TOKEN_EXCHANGE_GRANT,
+} from "@softistx/janus-oauth";
 
 /**
  * The grant types Clavix offers. A client's `grantTypes` is enforced by janus-oauth on
@@ -9,13 +13,18 @@ import { DEVICE_GRANT, TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
  * (`refresh_token` alone is refused by janus). The device grant is never
  * implied: a client opts in. The token exchange grant (RFC 8693) is the same,
  * for a confidential client only, and it also needs the client's rules
- * (`clientPolicies`): with none, every exchange is refused.
+ * (`clientPolicies`): with none, every exchange is refused. The client
+ * credentials grant (RFC 6749 section 4.4) is the same: a confidential
+ * client only, never implied, with the scopes it may ask for
+ * (`allowedScopes`), and served only for a resource that opted in
+ * (`allowClientCredentials`).
  */
 export const OFFERED_GRANTS = [
   "authorization_code",
   "refresh_token",
   DEVICE_GRANT,
   TOKEN_EXCHANGE_GRANT,
+  CLIENT_CREDENTIALS_GRANT,
 ] as const;
 export type OfferedGrant = (typeof OFFERED_GRANTS)[number];
 

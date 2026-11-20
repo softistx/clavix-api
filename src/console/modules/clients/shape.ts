@@ -1,4 +1,8 @@
-import { DEVICE_GRANT, TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
+import {
+  CLIENT_CREDENTIALS_GRANT,
+  DEVICE_GRANT,
+  TOKEN_EXCHANGE_GRANT,
+} from "@softistx/janus-oauth";
 import type { clientsService } from "@/config/clients";
 
 // What an admin event names: the client's id and its tenant, never its secret.
@@ -19,6 +23,7 @@ const GRANT = {
   refresh_token: "REFRESH_TOKEN",
   [DEVICE_GRANT]: "DEVICE_CODE",
   [TOKEN_EXCHANGE_GRANT]: "TOKEN_EXCHANGE",
+  [CLIENT_CREDENTIALS_GRANT]: "CLIENT_CREDENTIALS",
 } as const;
 
 const REGISTRATION = {
@@ -43,6 +48,7 @@ const WIRE_GRANT = {
   REFRESH_TOKEN: "refresh_token",
   DEVICE_CODE: DEVICE_GRANT,
   TOKEN_EXCHANGE: TOKEN_EXCHANGE_GRANT,
+  CLIENT_CREDENTIALS: CLIENT_CREDENTIALS_GRANT,
 } as const;
 
 export type Rules = Awaited<ReturnType<typeof clientsService.tokenExchange>>;
@@ -71,6 +77,8 @@ export const shape = (
     dpopBoundAccessTokens: boolean;
     registration: "console" | "dynamic" | "metadata";
     authorizationDetailsTypes: readonly string[];
+    allowedScopes: readonly string[];
+    defaultScopes: readonly string[];
   },
   rules?: Rules,
 ) => ({
@@ -85,6 +93,8 @@ export const shape = (
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
   dpopBoundAccessTokens: client.dpopBoundAccessTokens,
   authorizationDetailsTypes: [...client.authorizationDetailsTypes],
+  allowedScopes: [...client.allowedScopes],
+  defaultScopes: [...client.defaultScopes],
   tokenExchange: exchangeShape(rules),
   registration: REGISTRATION[client.registration],
 });

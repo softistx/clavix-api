@@ -31,3 +31,25 @@ export function keepConsoleResource(
     );
   }
 }
+
+/**
+ * Refuses the client credentials grant on the console's own resource: the
+ * console takes an operator's token only (a client-only token is no operator),
+ * so no machine token is ever minted for it.
+ */
+export function refuseMachineConsole(
+  tenant: { slug: string },
+  resource: { uri: string } | undefined,
+  allow: boolean | null | undefined,
+) {
+  if (
+    allow === true &&
+    onPlatform(tenant) &&
+    resource?.uri === consoleResource
+  ) {
+    throw new CatalogError(
+      "BAD_USER_INPUT",
+      "The console's own resource takes an operator's token only: it cannot allow the client credentials grant",
+    );
+  }
+}

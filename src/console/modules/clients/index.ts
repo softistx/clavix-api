@@ -105,6 +105,8 @@ export const clients: Resolvers = {
         requirePar: input.requirePushedAuthorizationRequests ?? undefined,
         dpopBound: input.dpopBoundAccessTokens ?? undefined,
         detailTypes: input.authorizationDetailsTypes ?? undefined,
+        allowedScopes: input.allowedScopes ?? undefined,
+        defaultScopes: input.defaultScopes ?? undefined,
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
@@ -138,6 +140,8 @@ export const clients: Resolvers = {
             requirePar: input.requirePushedAuthorizationRequests ?? undefined,
             dpopBound: input.dpopBoundAccessTokens ?? undefined,
             detailTypes: input.authorizationDetailsTypes ?? undefined,
+            allowedScopes: input.allowedScopes ?? undefined,
+            defaultScopes: input.defaultScopes ?? undefined,
           });
         }),
       );

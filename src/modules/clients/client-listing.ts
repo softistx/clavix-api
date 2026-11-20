@@ -39,6 +39,10 @@ export interface ClientView {
   registration: ClientRegistration;
   /** The authorization detail types (RFC 9396) the client may ask for; empty when it lists none. */
   authorizationDetailsTypes: readonly string[];
+  /** The scopes the client may ask for with `client_credentials` (the ceiling); empty without that grant. */
+  allowedScopes: readonly string[];
+  /** The scopes a `client_credentials` request with no `scope` gets. */
+  defaultScopes: readonly string[];
 }
 
 // A listing reads the store page by page and keeps what matches; it stops
@@ -77,6 +81,8 @@ export const viewOf = (
   dpopBoundAccessTokens: record.dpopBoundAccessTokens === true,
   registration: registrationOf(record, agents),
   authorizationDetailsTypes: record.authorizationDetailsTypes ?? [],
+  allowedScopes: record.allowedScopes ?? [],
+  defaultScopes: record.defaultScopes ?? [],
 });
 
 /** Which clients a listing keeps, beyond `q`. */

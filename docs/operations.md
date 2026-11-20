@@ -852,9 +852,8 @@ What the drill showed about the setup:
   `NODE_TLS_REJECT_UNAUTHORIZED=0` for the API's own requests). `db:migrate` also needs
   `CLAVIX_PUBLIC_SCHEME=https`: the console client's redirect URI must be https.
 - The backup is taken against the live database: no stop is needed.
-- The drill does not exercise a `client_credentials` token: Clavix does not offer that grant
-  (`grant_types_supported` lists `authorization_code`, `refresh_token`, the device and the token-exchange
-  grants), so the token checked after the restore is one signed with the tenant's key.
+- The drill does not exercise a `client_credentials` token (it needs a resource that opted in and a confidential
+  client), so the token checked after the restore is one signed with the tenant's key.
 
 ## Signing keys
 
@@ -1011,18 +1010,17 @@ request rate. `jwks-discovery.js` warms for 10 s (not measured); `token.js` warm
 discovery request in `setup` instead, because its VUs hold state.
 
 Method notes:
-- **`client_credentials` is not offered yet** (janus-oauth has no such grant; it is filed upstream). `/token`
-  answers `unsupported_grant_type`. `token.js` records that answer in `setup` and measures the refresh grant,
-  which shares the client authentication and signing path, against the same target. Its `client_credentials`
-  scenario is written and skipped: `CLIENT_CREDENTIALS=1` turns it on once the grant ships (the seed must then
-  also register a confidential client and write its secret under `confidential` in `seed.json`).
+- **`client_credentials`**: the seed opts the load resource in (`allowClientCredentials`) and registers a
+  confidential client per tenant, whose id and secret go under `confidential` in `seed.json`. `token.js` probes
+  the grant once in `setup` and measures it beside the refresh grant (Basic authentication, `resource` and
+  `scope=read`). `CLIENT_CREDENTIALS=0` skips the scenario, for a `seed.json` made before the grant shipped.
 - **D26** (the v1 load test decision): `/token` p95 under 150 ms at 200 req/s with 0 errors; JWKS and discovery
   p95 under 20 ms at 2 000 req/s; run against a staging-like compose, not production.
 - **Prerequisites**: Docker with Compose 2.20+, the `grafana/k6` image, `openssl` and `bun` on the host, and a Docker
   VM with about 10 GiB. `load/out/` (git-ignored) receives `seed.json`, `*.summary.json` and `*.log`.
 - **Knobs**: `RATE`, `VUS`, `DURATION` and `WARMUP` (env of `run.ts k6`, passed to k6; the lower-rate rows below are
   `RATE=300 VUS=60 DURATION=30s WARMUP=5s` and `RATE=150 ...`), `LOAD_TENANTS` and `LOAD_CHAINS` (env of the seed,
-  defaults 50 and 2).
+  defaults 50 and 4).
 - **A refresh chain is one VU's.** Refresh tokens rotate and a reused one revokes the grant, so each VU walks
   its own chain (the seed makes 100 chains; a think time of 250 ms keeps about 50 VUs busy at 200 req/s, so about 50 chains over as many tenants are used).
   `seed.ts` mints the chains through the real `/par`, `/authorize`, approval and code exchange of the real issuers
@@ -1037,14 +1035,14 @@ sessions: the 1-minute load average was 3.5 to 6.1 during the runs (5-minute 4.0
 the limits of `compose.yml` (api 1 CPU, mongo 1 CPU, redis 0.25 CPU); k6 ran in a container with no limit.
 `@softistx/janus-oauth` as locked in `bun.lock`. The two cache rows were run together (2 000 req/s in all).
 
-| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                     |
-| --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | ------------------------------------------ |
-| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                       |
-| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)     |
-| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)     |
-| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                      |
-| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                      |
-| `client_credentials`                    | n/a               | n/a      | n/a      | n/a    | n/a              | not offered (400 `unsupported_grant_type`) |
+| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                                                                                             |
+| --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                                                                                               |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                             |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)                                                                             |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                              |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                                                                                              |
+| `client_credentials`                    | 200 req/s, 60 s   | 33.6     | 209.5    | 0      | p95 under 150 ms | pass (run beside the refresh grant: 400 req/s in all; 29 iterations dropped on one machine shared with other jobs) |
 
 Before the cache, the 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
 (1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,

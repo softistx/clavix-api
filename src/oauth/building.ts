@@ -109,6 +109,13 @@ export const buildIssuer =
         ),
         nonce: { secret: dpopNonceSecret },
       },
+      // RFC 6749 section 4.4: served by a tenant with at least one resource
+      // that opted in (`allowClientCredentials`); janus throws when it is on
+      // and none did. The userinfo resource never opts in. A request for any
+      // other resource, or none (the default is userinfo), is `invalid_target`.
+      clientCredentials: Object.values(resources).some(
+        (resource) => resource.clientCredentials === true,
+      ),
       // RFC 8693: served by every tenant (see `exchangePolicy`).
       tokenExchange: {
         policy: exchangePolicy(
@@ -133,14 +140,18 @@ export const buildIssuer =
           authTime,
           acr,
           amr,
+          subjectType,
         }: {
           subject: string;
+          /** `client` for a client credentials token: the subject is a client id, not a user. */
+          subjectType?: "client" | "user";
           audience: string;
           authTime?: Date;
           acr?: string;
           amr?: readonly string[];
         }) => ({
-          ...(rolesFor === undefined
+          // A machine has no roles: its subject is a client id, not a user.
+          ...(rolesFor === undefined || subjectType === "client"
             ? {}
             : {
                 roles: await rolesFor(tenant)(

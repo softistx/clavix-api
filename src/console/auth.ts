@@ -60,7 +60,7 @@ export function createConsoleAuthenticator({
     // granted the console audience, and its token is not an operator's.
     if (principal?.clientId !== CONSOLE_CLIENT_ID) return null;
     // An operator, not a machine: a token with no user behind it is refused
-    // (janus-oauth mints none today, the check keeps it so).
+    // (janus-oauth answers a client-only token only to a caller that opts in with `clientCredentials`, which the console never does; the check keeps it so).
     if (typeof principal.userId !== "string" || principal.userId === "") {
       return null;
     }
