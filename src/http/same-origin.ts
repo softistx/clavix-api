@@ -76,12 +76,22 @@ const forbidden = () =>
     },
   );
 
+function sameHost(origin: string, url: string): boolean {
+  try {
+    return new URL(origin).host === new URL(url).host;
+  } catch {
+    return false;
+  }
+}
+
 // A request a browser could send on the user's behalf from another page: a
 // foreign `Origin` (`null` included), or a POST that is not JSON. A request
 // with no `Origin` is no browser's cross-site one and passes.
 function crossSite(request: Request): boolean {
   const origin = request.headers.get("origin");
-  if (origin !== null && origin !== new URL(request.url).origin) return true;
+  // The host, not the full origin: behind Caddy the API sees `http://host`
+  // while the browser sends `https://host`. A `null` or malformed Origin is refused.
+  if (origin !== null && !sameHost(origin, request.url)) return true;
   return (
     request.method === "POST" &&
     !(request.headers.get("content-type") ?? "").startsWith("application/json")

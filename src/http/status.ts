@@ -1,4 +1,5 @@
 import { definePlugin } from "@graxia/core";
+import { isJsonAnswer } from "./media";
 
 // graxia no longer reads `extensions.http` of an error (Yoga did): this plugin
 // gives it back to this API, whose errors carry their status and headers
@@ -19,22 +20,37 @@ const httpOf = (body: unknown): HttpExtension[] =>
       ) ?? [],
   );
 
+// The body without `extensions.http`: the status and headers are the answer's, not the client's to read.
+function withoutHttp(body: unknown): unknown {
+  const strip = (one: Body): Body =>
+    one?.errors === undefined
+      ? one
+      : {
+          ...one,
+          errors: one.errors.map(({ extensions, ...error }) => {
+            if (extensions === undefined) return error;
+            const { http: _http, ...rest } = extensions;
+            return { ...error, extensions: rest };
+          }),
+        };
+  return Array.isArray(body)
+    ? (body as Body[]).map(strip)
+    : strip(body as Body);
+}
+
 /**
  * A graxia plugin that answers a JSON result with the highest status named by
  * an error's `extensions.http.status`, and that error's headers
- * (`Retry-After` of a throttle). A result with none is left as graxia made it.
+ * (`Retry-After` of a throttle), and drops `extensions.http` from the body. A
+ * result with none is left as graxia made it. Not carried: a `text/event-stream`
+ * answer, whose status is sent before any error is known.
  */
 export const useErrorStatus = () =>
   definePlugin({
     name: "clavix-error-status",
     async onResponse({ response, setResponse }) {
       if (response.status !== 200) return;
-      if (
-        !(response.headers.get("content-type") ?? "").startsWith(
-          "application/json",
-        )
-      )
-        return;
+      if (!isJsonAnswer(response.headers.get("content-type"))) return;
       let body: unknown;
       try {
         body = await response.clone().json();
@@ -54,7 +70,7 @@ export const useErrorStatus = () =>
       ))
         headers.set(name, String(value));
       setResponse(
-        new Response(response.body === null ? null : await response.text(), {
+        new Response(JSON.stringify(withoutHttp(body)), {
           status: top.status as number,
           headers,
         }),

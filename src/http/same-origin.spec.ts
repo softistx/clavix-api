@@ -135,3 +135,20 @@ describe("the same-origin guard on /graphql", () => {
     }
   });
 });
+
+describe("the Origin is compared by host", () => {
+  test("https Origin against the http URL behind the proxy passes", async () => {
+    const response = await post(
+      { ...json, origin: "https://acme.clavix.test" },
+      SIGN_OUT,
+    );
+    // Past the guard: whatever the operation answers, it is not the guard's FORBIDDEN.
+    expect(response.status).not.toBe(403);
+    expect(await codeOf(response)).not.toBe("FORBIDDEN");
+  });
+
+  test("a malformed Origin is refused", async () => {
+    const response = await post({ ...json, origin: "not a url" }, SIGN_OUT);
+    expect(response.status).toBe(403);
+  });
+});

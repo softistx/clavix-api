@@ -30,6 +30,7 @@ import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import { useErrorStatus } from "./http/status";
 import type { Throttle } from "./http/throttle/core";
+import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import type { VerificationThrottle } from "./modules/auth/verification-throttle";
 import { LOGO_PATH } from "./modules/branding/logo-route";
@@ -132,6 +133,7 @@ export function createApp(
       ide: ide ? "apollo-sandbox" : false,
       // Introspection follows the IDE: off wherever the IDE is.
       introspection: ide,
+      onUnexpected: reportUnexpected,
       plugins: [
         useSameOriginJson(),
         useWithoutQuotedValues(),
@@ -160,7 +162,9 @@ export function createApp(
             schema: consoleOptions.schema ?? consoleSchema,
             path: CONSOLE_PATH,
             ide: false,
+            // Deliberate: the bearer token is checked first (`useConsole`), so only an authenticated admin introspects.
             introspection: true,
+            onUnexpected: reportUnexpected,
             plugins: [
               // First: aliased invitations are counted before anything runs.
               ...(consoleOptions.budgets === undefined

@@ -4,7 +4,10 @@ import {
   janusGraxia,
   janusGraxiaMaskError,
 } from "@softistx/janus-graphql/graxia";
+import { createLogger } from "@softistx/telemetry";
 import { janusIssuers } from "@/config/users";
+
+const log = createLogger("janus");
 
 // `ctx.janus` on every operation, from the janus instance of the tenant the
 // request's host names (a session of another tenant is anonymous there), and
@@ -30,4 +33,8 @@ export const guardedSchema = (
 
 // A JanusError a resolver lets through is answered with its code and status
 // (MAIL_THROTTLED 429, STORE_FAILED 503), the rest as graxia masks it.
-export const janusMasking = { maskError: janusGraxiaMaskError() };
+export const janusMasking = {
+  maskError: janusGraxiaMaskError({
+    report: (error) => log.error("janus error answered 5xx", error),
+  }),
+};

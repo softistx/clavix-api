@@ -43,6 +43,7 @@ export function createConsoleSchema(
       scalarResolvers,
       resolvers,
       ...(extra.resolvers === undefined ? [] : [extra.resolvers]),
+      // graphql-tools merges to its own resolver type; graxia's `Resolvers<Ctx>` is the same shape.
     ]) as Resolvers<ConsoleContext>,
   });
   return guardSchema(withValidation(base), { ...guards, ...extra.guards });

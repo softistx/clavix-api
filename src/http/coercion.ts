@@ -1,6 +1,7 @@
 import { definePlugin } from "@graxia/core";
 import type { ExecutionResult } from "graphql";
 import { GraphQLError } from "graphql";
+import { isJsonAnswer } from "./media";
 
 // graphql-js words a variable coercion failure as
 // `Variable "$i" got invalid value <the value> at "i.clientSecret"; <reason>`,
@@ -44,8 +45,7 @@ export const useWithoutQuotedValues = () =>
       setChunk(scrub(chunk));
     },
     async onResponse({ response, setResponse }) {
-      const type = response.headers.get("content-type") ?? "";
-      if (!type.startsWith("application/json")) return;
+      if (!isJsonAnswer(response.headers.get("content-type"))) return;
       const body = await response.clone().text();
       let parsed: unknown;
       try {
