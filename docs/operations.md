@@ -508,10 +508,11 @@ Staging runs on the shared VPS behind its traefik (the `proxy` network of nxgt-d
 not behind Caddy. `deploy/compose.traefik.yml` is an overlay of `compose.yml`; `deploy/deploy.ts`
 drives both.
 
-| Host                         | Served by                                                                          |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| `clavix.softistx.com`        | platform pages, console, landing (the ui); the api for its OAuth and GraphQL paths |
-| `<slug>.clavix.softistx.com` | the tenant's hosted pages and issuer                                               |
+| Host                          | Served by                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `clavix.softistx.com`         | platform pages, console, landing (the ui); the api for its OAuth and GraphQL paths                             |
+| `console.clavix.softistx.com` | the console (redirect URI `https://console.clavix.softistx.com/console/auth/callback`; check `/healthz` there) |
+| `<slug>.clavix.softistx.com`  | the tenant's hosted pages and issuer (the `clavix` tenant's is `clavix.clavix.softistx.com`)                   |
 - **TLS** is traefik's, from its `letsencrypt` resolver (Cloudflare DNS-01). The routers ask for
   `clavix.softistx.com` and `*.clavix.softistx.com` together, because the
   `*.softistx.com` wildcard of traefik does not cover two levels. DNS has an `A` record for both names.
@@ -536,7 +537,7 @@ bun deploy/deploy.ts
 
 In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
-`NPM_REGISTRY_TOKEN` (or export it; the builds take it as a build secret and the api container does not receive it). The script refuses to run when the file is missing, readable by
+`NPM_REGISTRY_TOKEN` (or export it; the ui image build still reads it, as clavix-ui's `Dockerfile` mounts it, unlike the api's, so it is required here; the builds take it as a build secret and the api container does not receive it). The script refuses to run when the file is missing, readable by
 others (not mode 600) or incomplete (the keys of "First boot", step 3; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
 
 One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
