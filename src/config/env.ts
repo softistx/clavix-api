@@ -191,6 +191,19 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(60),
+  // The ports a Client ID Metadata Document may be served on (janus-oauth
+  // `allowPorts`): the document's URL names the port the server connects to.
+  // Comma-separated; 443 by default, add a port only for a client that needs it.
+  CLAVIX_METADATA_PORTS: z
+    .string()
+    .default("443")
+    .transform((value) => {
+      const ports = value
+        .split(",")
+        .map((port) => Number(port.trim()))
+        .filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535);
+      return ports.length === 0 ? [443] : ports;
+    }),
   // The tenants whose clients may list authorization detail types (RFC 9396) on
   // a flow with a consent page (code or device): slugs separated by commas, or `*` for every tenant. Janus
   // approves every detail it validated and the consent pages that show them are

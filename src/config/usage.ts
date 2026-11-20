@@ -1,3 +1,4 @@
+import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { partitionOf } from "@/modules/tenants/identity";
 import { UsageService } from "@/modules/usage/usage.service";
@@ -8,6 +9,18 @@ import { oauthDb } from "./oauth-db";
 import { redis } from "./redis";
 import { domainStore } from "./tenancy";
 import { webhookEndpoints } from "./webhook-endpoints";
+
+// The tenant's partition of the janus store counts its own registered clients
+// (`countClients({ source })`, on the `source` index `db:sync` creates).
+const countRegisteredClients = async (tenantId: string): Promise<number> => {
+  const store = createMongoOAuth(oauthDb, {
+    partition: partitionOf(new ObjectId(tenantId)),
+  });
+  if (store.countClients === undefined) {
+    throw new Error("the janus OAuth store has no countClients");
+  }
+  return store.countClients({ source: "registered" });
+};
 
 // Agents that registered themselves are `source: "registered"` clients of the
 // janus store too (J4), but they do not count against the hard `clients` quota
@@ -23,11 +36,7 @@ export const usageService = new UsageService(
   {
     clients: async (tenantId) => {
       const [registered, agents] = await Promise.all([
-        // Temporary, until @softistx/janus-oauth-mongo#972
-        oauthDb.collection("oauthPartitionedClients").countDocuments({
-          partition: partitionOf(new ObjectId(tenantId)),
-          source: "registered",
-        }),
+        countRegisteredClients(tenantId),
         agentClientsService.count(tenantId, "dynamic"),
       ]);
       return Math.max(0, registered - agents);

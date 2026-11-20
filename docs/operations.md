@@ -67,7 +67,7 @@ by the `Host` header, which Caddy passes untouched.
    ```sh
    alias dc='docker compose -f deploy/compose.yml --env-file deploy/.env'
    dc up -d mongo redis
-   dc run --rm api bun run db:sync       # collections, indexes, validators
+   dc run --rm api bun run db:sync       # collections, indexes, validators (the clients `source` index of `countClients` included)
    dc run --rm api bun run db:migrate    # prints the console client secret once: save it
    ```
 

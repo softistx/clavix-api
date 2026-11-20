@@ -65,6 +65,8 @@ export interface ClavixOAuthOptions {
   agentCheckFor?: AgentCheckFor;
   /** The transport of the Client ID Metadata Documents fetch; for specs. Default: janus's own. */
   metadataTransport?: MetadataTransport;
+  /** The ports a metadata document may be served on (`CLAVIX_METADATA_PORTS`). Default: 443. */
+  metadataPorts?: readonly number[];
   /**
    * The listener of a tenant's OAuth events, built per tenant so its events
    * can only reach that tenant's log (D12, D14). Absent: none is reported.
@@ -134,6 +136,7 @@ export function createClavixOAuthIssuers(
     exchangeRulesFor: options.exchangeRulesFor,
     agentCheckFor: options.agentCheckFor,
     metadataTransport: options.metadataTransport,
+    metadataPorts: options.metadataPorts,
     eventsFor: options.eventsFor,
   });
   const issuers = createOAuthIssuers<Keyed>({

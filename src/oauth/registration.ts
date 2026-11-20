@@ -17,6 +17,9 @@ export type MetadataTransport = Pick<
   "fetch" | "resolve"
 >;
 
+/** The ports a metadata document may be served on (`allowPorts`): the standard HTTPS port. */
+export const DEFAULT_METADATA_PORTS: readonly number[] = [443];
+
 const unique = (list: readonly string[]) => [...new Set(list)];
 
 /**
@@ -30,6 +33,7 @@ const unique = (list: readonly string[]) => [...new Set(list)];
 export function registrationOf(
   agents: AgentsPolicy,
   transport: MetadataTransport = {},
+  ports: readonly number[] = DEFAULT_METADATA_PORTS,
 ): OAuthRegistration {
   const dynamic =
     agents.dynamic === "off"
@@ -52,6 +56,9 @@ export function registrationOf(
             ...MCP_METADATA_DOCUMENT_HOSTS,
             ...agents.allowHosts,
           ]),
+          // The document's URL names the port the server connects to, and an
+          // anonymous caller chose it (janus-oauth 0.26): the HTTPS port only.
+          allowPorts: [...ports],
           ...transport,
         }
       : false,

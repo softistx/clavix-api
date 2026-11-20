@@ -60,6 +60,8 @@ export const connections = defineCollection({
     showButton: z.boolean().default(false),
     /** D6: the `acr` the identity provider must report: janus `stepUp`, a sign-in that lacks it is refused. */
     upstreamMfa: z.object({ acr: z.string() }).nullable().default(null),
+    /** RFC 9207: refuse an authorization response without `iss`; pinned at create (and issuer change) when the issuer advertises it. */
+    requireIss: z.boolean().default(false),
     enabled: z.boolean().default(true),
     revision: z.number().int().min(0).default(1),
   }),

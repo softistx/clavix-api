@@ -14,6 +14,7 @@ import {
   agentCheckFor as storedAgentCheckFor,
   exchangeRulesFor as storedExchangeRulesFor,
 } from "./client-policies";
+import { env } from "./env";
 import { eventBus } from "./events";
 import { dpopNonceSecret, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
@@ -49,6 +50,7 @@ export const createIssuers = (
         rolesFor,
         exchangeRulesFor,
         agentCheckFor,
+        metadataPorts: env.CLAVIX_METADATA_PORTS,
         eventsFor: (tenant) =>
           oauthListener(tenant.tenantId, tenant.issuer, eventBus),
       }),
