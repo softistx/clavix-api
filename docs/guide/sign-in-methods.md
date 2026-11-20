@@ -206,7 +206,10 @@ Every mutation is idempotent: the same call again changes nothing, and `version`
 
 Public, by host; an unknown host is `NOT_FOUND`. It lists only what is enabled, and never a client
 id or a secret. A provider whose secret was sealed under another master key is left out until its
-secret is entered again. Show a button per entry and nothing else: an operation of a method that is off
+secret is entered again. The tenant's enabled enterprise connections that have `showButton: true` follow
+the providers, with the connection's id as `id` and its name as `label`; a disabled connection, or one
+without `showButton`, is not listed (the visitor reaches it through the e-mail home-realm lookup). An
+entry's `id` is the `provider` of `socialSignInStart` either way. Show a button per entry and nothing else: an operation of a method that is off
 answers 404 `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) before anything is
 counted or mailed.
 

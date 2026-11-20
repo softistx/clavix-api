@@ -9,6 +9,7 @@ import {
   test,
 } from "bun:test";
 import { createApp } from "@/app";
+import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createGrantsRevoke, grantsRevokeQueue } from "@/config/grants-revoke";
@@ -191,6 +192,76 @@ describe("hostedSignInMethods", () => {
       (await gql("sih-other", HOSTED)).data?.["hostedSignInMethods"],
     ).toEqual({ methods: ["PASSKEY", "EMAIL_CODE"], social: [] });
     await policy.setSocial(other, { provider: "github", enabled: true });
+  });
+
+  describe("enterprise connections", () => {
+    const connect = (
+      id: string,
+      name: string,
+      extra: { showButton?: boolean; enabled?: boolean } = {},
+    ) =>
+      connectionsService.create(
+        social,
+        {
+          id,
+          name,
+          issuer: "https://idp.sih-social.test",
+          clientId: "sih-client",
+          clientSecret: "sih-conn-secret",
+          ...extra,
+        },
+        null,
+      );
+    const offered = async () => {
+      const answer = await gql("sih-social", HOSTED);
+      const hosted = answer.data?.["hostedSignInMethods"] as
+        | { social: { id: string; label: string }[] }
+        | undefined;
+      return hosted?.social ?? [];
+    };
+
+    afterEach(async () => {
+      for (const doc of await connectionsService.list(social)) {
+        await connectionsService.delete(social, doc.connectionId);
+      }
+    });
+
+    test("an enabled connection with showButton follows the static providers", async () => {
+      await connect("acme", "Acme SSO", { showButton: true });
+      const answer = await gql("sih-social", HOSTED);
+      expect(await offered()).toEqual([
+        { id: "github", label: "GitHub" },
+        { id: "acme", label: "Acme SSO" },
+      ]);
+      expect(answer.text).not.toContain("sih-conn-secret");
+    });
+
+    test("a connection without showButton stays out", async () => {
+      await connect("quiet", "Quiet SSO");
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+    });
+
+    test("a disabled connection with showButton stays out", async () => {
+      await connect("off", "Off SSO", { showButton: true, enabled: false });
+      expect(await offered()).toEqual([{ id: "github", label: "GitHub" }]);
+    });
+
+    test("another tenant's connection is never offered", async () => {
+      await connect("acme", "Acme SSO", { showButton: true });
+      expect(
+        (await gql("sih-other", HOSTED)).data?.["hostedSignInMethods"],
+      ).toEqual({
+        methods: ["PASSKEY", "EMAIL_CODE"],
+        social: [{ id: "github", label: "GitHub" }],
+      });
+    });
+
+    test("a tenant with only a shown connection offers it alone", async () => {
+      await connect("solo", "Solo SSO", { showButton: true });
+      await policy.setSocial(social, { provider: "github", enabled: false });
+      expect(await offered()).toEqual([{ id: "solo", label: "Solo SSO" }]);
+      await policy.setSocial(social, { provider: "github", enabled: true });
+    });
   });
 
   test("an unknown host is NOT_FOUND", async () => {
