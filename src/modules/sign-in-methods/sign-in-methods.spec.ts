@@ -20,10 +20,13 @@ import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { SignInPolicyService } from "./service";
 
-const app = createApp();
+// The OAuth issuers are mounted: the replacement revokes the former holder's grants through them.
+const flow = createFlow();
+const app = createApp({ oauth: flow.issuers });
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -86,6 +89,7 @@ const PASSKEY_OPTIONS = "mutation { passkeySignInOptions { challenge } }";
 
 let social = "";
 let other = "";
+let grants = "";
 
 beforeAll(async () => {
   await createTenantParOff(tenants, { slug: "sih-open", name: "Open" });
@@ -109,6 +113,13 @@ beforeAll(async () => {
     provider: "github",
     clientId: "gh-client-other",
     clientSecret: `${SECRET}-other`,
+  });
+  // A tenant with a signing key and a client, for the grants of a replaced holder.
+  grants = (await flow.setUp("sih-grants")).tenantId;
+  await policy.setSocial(grants, {
+    provider: "github",
+    clientId: "gh-client-grants",
+    clientSecret: `${SECRET}-grants`,
   });
 });
 
@@ -366,6 +377,55 @@ describe("social sign-in", () => {
       .find({ userId: holder.id, type: "session.signIn" })
       .toArray();
     expect(events.map((event) => event["reason"])).toEqual(["replaced"]);
+  });
+
+  test("replacing an unverified holder revokes their OAuth grants and refresh token; a verified user's stand (clavix-api #346)", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-grants", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-grants");
+    const holder = await auth.create({ email: "grants@social.example" });
+    const held = await flow.tokensOf("sih-grants", "openid", {
+      userId: holder.id,
+    });
+    expect(held.refresh_token ?? "").not.toBe("");
+    const client = flow.clients["sih-grants"] ?? { id: "", secret: "" };
+    const refresh = (token: string) =>
+      flow.post(
+        "sih-grants",
+        "/token",
+        { grant_type: "refresh_token", refresh_token: token },
+        flow.basic(client.id, client.secret),
+      );
+    const signIn = async () => {
+      const start = await startOn("sih-grants");
+      const { run } = github("grants@social.example");
+      const answer = await run(() =>
+        gql("sih-grants", COMPLETE, {
+          u: callbackOf("sih-grants", start.state),
+          f: start.flow,
+        }),
+      );
+      expect(answer.errors).toBeUndefined();
+      return answer.data?.["socialSignInComplete"] as {
+        replaced: boolean;
+        user: { id: string };
+      };
+    };
+    const replaced = await signIn();
+    expect(replaced).toMatchObject({ replaced: true, user: { id: holder.id } });
+    const refused = await refresh(held.refresh_token ?? "");
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toBe(
+      "invalid_grant",
+    );
+
+    // A grant the (now verified) user makes afterwards survives a plain sign-in.
+    const kept = await flow.tokensOf("sih-grants", "openid", {
+      userId: holder.id,
+    });
+    expect((await signIn()).replaced).toBe(false);
+    expect((await refresh(kept.refresh_token ?? "")).status).toBe(200);
   });
 
   test("a verified user is linked, never replaced: replaced is false and no reason is recorded", async () => {

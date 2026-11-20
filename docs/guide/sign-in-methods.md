@@ -249,7 +249,7 @@ The `__Host-clavix-session` cookie is set on the response; forward it to the bro
 
 `replaced` is true when this sign-in took over an account that held the e-mail **without ever proving
 it** (for example one made by someone else's sign-up): the provider's proof becomes the first proof of the
-address, and that account's password, passkeys, second factor, links and sessions are gone. This happens only
+address, and that account's password, passkeys, second factor, links and sessions are gone, and so are its OAuth grants and refresh tokens (Clavix revokes them). This happens only
 for the tenant's own Google, GitHub or Microsoft app, and only when the provider reports the e-mail as
 verified; an enterprise connection never replaces a holder (`EMAIL_NOT_VERIFIED_FOR_LINK`), and a verified
 user is only linked (`replaced: false`). The sign-in log's `session.signIn` carries `reason: "replaced"`.

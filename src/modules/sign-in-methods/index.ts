@@ -9,6 +9,7 @@ import {
   REPLACED_REASON,
   recordingSignIn,
 } from "@/modules/auth/sign-in-events";
+import { revokeOAuthGrants } from "@/modules/consent/revoke";
 import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
 import {
@@ -187,6 +188,11 @@ export const signInMethods: Resolvers = {
       if (done.status !== "signedIn") {
         throw denial("FORBIDDEN", "Sign-in could not be completed");
       }
+      // The address was taken from an unverified holder: janus dropped their
+      // sessions, not the OAuth grants and refresh tokens (clavix-api #346).
+      // First, so a missing profile cannot skip it: janus does not repeat
+      // `replaced`, a retried sign-in would not revoke.
+      if (done.replaced) await revokeOAuthGrants(ctx, done.userId);
       // janus types the user as an id and a type only: read the profile.
       const user = await auth.findUser(done.userId);
       if (user === null) {
