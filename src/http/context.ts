@@ -84,6 +84,6 @@ export function createBase(
 
 export type Base = ReturnType<typeof createBase>;
 
-// A resolver's context: Yoga's and the base's. The generated `Resolvers` takes
+// A resolver's context: graxia's and the base's. The generated `Resolvers` takes
 // it (codegen.ts: `contextType`).
 export type Context = Readonly<GraphQLContext<Base, JanusContext<TenantJanus>>>;

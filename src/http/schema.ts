@@ -1,10 +1,11 @@
 import { basename, join } from "node:path";
 import { loadFilesSync } from "@graphql-tools/load-files";
-import { mergeTypeDefs } from "@graphql-tools/merge";
+import { mergeResolvers, mergeTypeDefs } from "@graphql-tools/merge";
+import { createSchema, type Resolvers } from "@graxia/core";
 import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
-import { createSchema } from "graphql-yoga";
 import { resolvers } from "../modules";
+import { guardedSchema } from "../modules/auth/plugin";
 import { consentResolvers, consentTypeDefs } from "../modules/consent";
 import type { Context } from "./context";
 
@@ -27,9 +28,16 @@ const typeDefs = mergeTypeDefs([
   ),
 ]);
 
-export const schema = withValidation(
-  createSchema<Context>({
-    typeDefs,
-    resolvers: [scalarResolvers, resolvers, consentResolvers],
-  }),
+export const schema = guardedSchema(
+  withValidation(
+    createSchema<Context>()({
+      typeDefs,
+      // graxia takes graphql-tools' merged map: its element types differ from graxia's own.
+      resolvers: mergeResolvers([
+        scalarResolvers,
+        resolvers,
+        consentResolvers,
+      ]) as Resolvers<Context>,
+    }),
+  ),
 );

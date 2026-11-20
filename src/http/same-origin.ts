@@ -1,4 +1,4 @@
-import { sameOrigin } from "@alxia/graphql";
+import { definePlugin } from "@graxia/core";
 import { parse } from "graphql";
 
 /** The root fields of the consent API: a refused request that asks only for these sees `NOT_FOUND`, as if no such request existed. */
@@ -76,14 +76,31 @@ const forbidden = () =>
     },
   );
 
+// A request a browser could send on the user's behalf from another page: a
+// foreign `Origin` (`null` included), or a POST that is not JSON. A request
+// with no `Origin` is no browser's cross-site one and passes.
+function crossSite(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (origin !== null && origin !== new URL(request.url).origin) return true;
+  return (
+    request.method === "POST" &&
+    !(request.headers.get("content-type") ?? "").startsWith("application/json")
+  );
+}
+
 /**
- * `sameOrigin()` of @alxia/graphql, applied once to every /graphql operation (the cookie is the
- * credential): a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before anything
- * is parsed or run. A consent operation sees `NOT_FOUND` (404, as no such request); every other
- * operation sees `FORBIDDEN` (403). Neither answer carries a CORS header.
+ * Applied once to every /graphql operation (the cookie is the credential): a
+ * foreign `Origin`, `Origin: null` or a non-JSON POST is answered before
+ * anything is parsed or run. A consent operation sees `NOT_FOUND` (404, as no
+ * such request); every other operation sees `FORBIDDEN` (403). Neither answer
+ * carries a CORS header. graxia's own CSRF header check runs before it and
+ * stays on: a GET or a non-JSON POST needs `x-graphql-csrf` to reach this guard.
  */
 export const useSameOriginJson = () =>
-  sameOrigin({
-    refuse: async (request) =>
-      (await asksOnlyForConsent(request)) ? notFound() : forbidden(),
+  definePlugin({
+    name: "clavix-same-origin",
+    async onRequest({ request, respond }) {
+      if (!crossSite(request)) return;
+      respond((await asksOnlyForConsent(request)) ? notFound() : forbidden());
+    },
   });

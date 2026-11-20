@@ -1,7 +1,7 @@
 # clavix-api: rules for agents and contributors
 
 The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (one
-issuer per tenant): Bun, alxia, GraphQL Yoga, `@softistx/mongo`, `@softistx/redis` and the
+issuer per tenant): Bun, alxia, graxia (`@alxia/graphql` on `@graxia/core`), `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
 services behind them; tenants, clients, resources and scopes are managed in the console API
@@ -30,7 +30,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - Layout: `src/modules/<name>/` holds a module's `*.graphqls`, resolvers and services,
   merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
   `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
-  introspection (`src/http/introspection.ts`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/cli/` holds what the scripts share
+  introspection (`introspection: ide` of `createApp`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/cli/` holds what the scripts share
   (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below); generated code is in
   `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
@@ -259,7 +259,7 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 
 `src/modules/consent/` is the API of the hosted `/consent` page, served on E1's `/graphql`
 (janus-oauth's `oauthResolvers` and `oauthTypeDefs`, merged in `src/http/schema.ts`). `oauthContext`
-(a Yoga plugin added in `createApp` when `oauth.serverFor` exists) puts the issuers in the context, and
+(a graxia plugin, `onContext`, added in `createApp` when `oauth.serverFor` exists) puts the issuers in the context, and
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`). Step-up (M2): `beforeApprove` runs
@@ -278,7 +278,7 @@ resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are th
 
 ## Same-origin guard and shutdown
 
-`useSameOriginJson` (`src/http/same-origin.ts`, first Yoga plugin of `createApp`; `sameOrigin()` of `@alxia/graphql` with this API's own refusals) guards **every**
+`useSameOriginJson` (`src/http/same-origin.ts`, first graxia plugin of `createApp`, an `onRequest` of this API's own: `sameOrigin()` of `@alxia/graphql` is gone, and graxia's `csrf` option answers a fixed 403, so it is not used for this; graxia's CSRF header check stays on and runs before it, so a GET or a non-JSON POST carries `x-graphql-csrf: 1` to reach it) guards **every**
 `/graphql` operation once: a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before
 parsing, with no CORS header: consent operations (`CONSENT_FIELDS`) get 404 `NOT_FOUND`, all others 403
 `FORBIDDEN`. Origin and request are compared by host (TLS-terminating proxy); no Origin passes (the cookie
@@ -757,3 +757,12 @@ The `@softistx/*` packages come from npmjs (public): `bun install` needs no toke
 A spec connects to no service the CI runner lacks. The skeleton has no store; the slice
 that adds MongoDB or Redis starts an in-memory one in `test/setup.ts` (as healthix-api's
 does) rather than reading `.env`. A slice runs the specs of the code it changed.
+
+## graxia plugins of this API
+
+`src/http/status.ts` (`useErrorStatus`) gives back what Yoga read and graxia does not: an error's
+`extensions.http.status` and `headers` (a throttle's `Retry-After`) answer the JSON result. `useWithoutQuotedValues`
+(`src/http/coercion.ts`) scrubs the coercion errors in `onResultChunk` (streams) and `onResponse` (plain JSON). The console is
+`useConsole` (`onRequest` verifies the token, `onContext` adds the principal); `useInviteBudget` is
+`fieldRateLimit`, whose 429 and `Retry-After` are graxia's. A client that sends a GET or a non-JSON POST sends
+`x-graphql-csrf: 1`.

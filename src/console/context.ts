@@ -1,5 +1,5 @@
+import type { CoreContext } from "@graxia/core";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
-import type { YogaInitialContext } from "graphql-yoga";
 import type { AuthEventsService } from "@/modules/audit/auth-events.service";
 import type { PlanId } from "@/modules/tenants/plan.schema";
 import type { Access } from "./access";
@@ -259,4 +259,6 @@ export interface ConsoleActivity {
 }
 
 /** A console resolver's context. The generated `Resolvers` takes it (codegen.console.ts). */
-export type ConsoleContext = YogaInitialContext & ConsoleExtras;
+export type ConsoleContext = CoreContext & {
+  readonly request: Request;
+} & ConsoleExtras;
