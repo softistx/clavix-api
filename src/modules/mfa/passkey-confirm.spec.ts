@@ -323,4 +323,30 @@ describe("confirmSecondFactorWithPasskey", () => {
     });
     expect(done.errors).toBeUndefined();
   });
+
+  test("a tenant that turned passkeys off refuses the answer and keeps the challenge", async () => {
+    const kim = await holder(A, "kim@example.test");
+    const challenge = await challengeFor(A, "kim@example.test");
+    const tenantId = (await tenantOf(A)).tenantId;
+    await policies.updateMethods(tenantId, [
+      { type: "passkey", enabled: false },
+    ]);
+    try {
+      const refused = await gql(A, CONFIRM_PASSKEY, {
+        challenge: challenge.challenge,
+        assertion: await assertion(A, kim, challenge.passkeyOptions),
+      });
+      expect(codeOf(refused)).toBe("SIGN_IN_METHOD_DISABLED");
+      expect(cookieOf(refused)).toBe("");
+    } finally {
+      await policies.updateMethods(tenantId, [
+        { type: "passkey", enabled: true },
+      ]);
+    }
+    const done = await gql(A, CONFIRM_PASSKEY, {
+      challenge: challenge.challenge,
+      assertion: await assertion(A, kim, challenge.passkeyOptions),
+    });
+    expect(done.errors).toBeUndefined();
+  });
 });

@@ -11,6 +11,7 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { revokeIfSso } from "@/modules/connections/sso-gate";
+import { requireMethod } from "@/modules/sign-in-methods/gate";
 import { requireLive } from "@/tenancy/live";
 import {
   confirmPasskeyStepUp,
@@ -31,11 +32,7 @@ export const secondFactorDisabled = () =>
 // `auth` is a function of the context: janus-graphql asks it on every field for
 // the instance of the tenant that serves the request (nxgt-janus#914).
 const janus: SecondFactorResolvers = secondFactorResolvers({
-  auth: async (ctx) => {
-    const auth = await janusIssuers.forRequest((ctx as Context).request);
-    if (auth === null) throw denial("NOT_FOUND", "No such tenant");
-    return auth;
-  },
+  auth: (ctx) => passkeyAuthOf(ctx as Context),
   freshWithin: FRESH_WITHIN,
   sendStepUpCode: (issued, ctx) => sendStepUpCode(issued, ctx as Context),
   guard: async (action, _user, ctx) => {
@@ -86,6 +83,10 @@ export const mfa: Resolvers = {
       { challenge, assertion },
       ctx,
     ) => {
+      // A challenge outlives a policy change: a tenant that turned passkeys off no longer opens sessions with one.
+      const tenant = await ctx.tenant();
+      if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      requireMethod(tenant, "passkey");
       return answer(ctx, "passkey", () =>
         janusPasskey.Mutation.confirmSecondFactorPasskey(
           _,
