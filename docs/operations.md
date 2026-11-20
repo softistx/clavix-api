@@ -18,7 +18,7 @@ are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example
 | `redis` | `redis:7-alpine`                      | `api`                      | password, append-only file                       |
 
 Each service has CPU and memory limits in `deploy/compose.yml`
-(`deploy.resources.limits`): api 1 CPU / 1 GB, ui 0.5 / 512 MB, mongo 1 / 1 GB
+(`deploy.resources.limits`): api 1 CPU / 1 GB, ui 1 / 768 MB (it needs about 2 minutes and ~425 MiB to boot, so its healthcheck waits 120 s), mongo 1 / 1 GB
 (WiredTiger cache 0.25 GB, set in `deploy/mongo/entrypoint.sh`), redis
 0.25 / 256 MB, caddy 0.5 / 256 MB, backup and restore 0.5 / 512 MB. After a
 deploy, `docker stats --no-stream` shows whether one runs at its limit; raise

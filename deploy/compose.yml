@@ -72,9 +72,17 @@ services:
     expose: ["3001"]
     depends_on:
       api: { condition: service_healthy }
+    # The image's healthcheck test stays; only the timings change. The ui boots
+    # in about 2 minutes (50 % CPU, ~425 MiB) before it settles.
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
     deploy:
       resources:
-        limits: { cpus: "0.5", memory: 512M }
+        limits: { cpus: "1.0", memory: 768M }
 
   mongo:
     <<: *restart
