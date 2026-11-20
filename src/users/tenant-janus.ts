@@ -1,6 +1,7 @@
 import {
   createJanusIssuers,
   janus,
+  type PasskeySignInApi,
   type SealingKey,
   type SocialConfig,
   SocialError,
@@ -189,8 +190,10 @@ function buildJanus(
 
 /** The typed shape of a tenant's instance. It has no `social`: only a tenant with a provider does, reached through `socialOf`. */
 type BuiltJanus = ReturnType<typeof buildJanus>;
+type TenantUser = NonNullable<Awaited<ReturnType<BuiltJanus["findUser"]>>>;
 export type TenantJanus = BuiltJanus &
-  StepUpPasskeyApi<NonNullable<Awaited<ReturnType<BuiltJanus["findUser"]>>>>;
+  StepUpPasskeyApi<TenantUser> &
+  PasskeySignInApi<TenantUser>;
 
 /**
  * The instance of a tenant with at least one social provider. janus-graphql's
@@ -398,7 +401,8 @@ export function buildTenantJanus(
   // janus answers `stepUp.request(user, { via: "passkey" })` and `confirmPasskey`
   // for an instance with passkeys and a second factor (both wired above), but
   // its inferred type leaves them out: `StepUpPasskeyApi` names them, and the
-  // guard checks them at runtime instead of casting.
+  // guard checks them at runtime instead of casting. The same holds for
+  // `secondFactor.confirmPasskey` and `secondFactor.passkeyOptions` (janus 0.80).
   if (!hasPasskeyStepUp(instance)) {
     throw new Error("janus: the step-up by passkey is not wired");
   }
@@ -406,10 +410,15 @@ export function buildTenantJanus(
 }
 
 function hasPasskeyStepUp(instance: BuiltJanus): instance is TenantJanus {
-  const { stepUp } = instance as { stepUp: Partial<Record<string, unknown>> };
+  const { stepUp, secondFactor } = instance as {
+    stepUp: Partial<Record<string, unknown>>;
+    secondFactor: Partial<Record<string, unknown>>;
+  };
   return (
     typeof stepUp["confirmPasskey"] === "function" &&
-    typeof stepUp["request"] === "function"
+    typeof stepUp["request"] === "function" &&
+    typeof secondFactor["confirmPasskey"] === "function" &&
+    typeof secondFactor["passkeyOptions"] === "function"
   );
 }
 

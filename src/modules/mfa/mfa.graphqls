@@ -36,6 +36,12 @@ type SecondFactorSignedIn {
   recoveryCodesLeft: Int
 }
 
+"The options of a second-factor sign-in's passkey, read again from its challenge."
+type SecondFactorPasskeyOptions {
+  "JSON text for `navigator.credentials.get({ publicKey })`, the same as `SecondFactorChallenge.passkeyOptions`."
+  options: String!
+}
+
 extend type Query {
   "The signed-in user's second factor. UNAUTHENTICATED (401) when anonymous."
   secondFactor: SecondFactorStatus!
@@ -71,6 +77,19 @@ extend type Mutation {
     challenge: String!
     assertion: String!
   ): SecondFactorSignedIn!
+  """
+  Reads the passkey options of a sign-in challenge again (the same as
+  `SecondFactorChallenge.passkeyOptions`), so a page keeps only the challenge
+  and not the options, which grow with the user's passkeys. Anonymous, as the
+  sign-in is. It counts no attempt and spends nothing; `confirmSecondFactorWithPasskey`
+  answers it. TOKEN_UNKNOWN, TOKEN_SPENT, TOKEN_EXPIRED; SECOND_FACTOR_NOT_ENROLLED
+  (409) when the user holds no passkey; SIGN_IN_METHOD_DISABLED when the tenant
+  turned passkeys off; PASSKEY_THROTTLED (429, `Retry-After`) past the
+  per-address and per-tenant limits of `passkeySignInOptions`, whose budget it shares.
+  """
+  requestSecondFactorPasskeyOptions(
+    challenge: String!
+  ): SecondFactorPasskeyOptions!
   """
   Starts a factor and answers the secret and the URI to show as a QR code.
   SECOND_FACTOR_DISABLED (403) when the tenant did not turn TOTP on;

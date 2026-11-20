@@ -180,6 +180,26 @@ mutation ($challenge: String!, $assertion: String!) {
 }
 ```
 
+A page keeps only the `challenge`, not `passkeyOptions`: the options grow with the user's passkeys
+(a dozen of them overflow a 4 KB cookie). `requestSecondFactorPasskeyOptions(challenge)` answers the
+same options again, anonymously (the sign-in is), with `Cache-Control: no-store`:
+
+```graphql
+mutation ($challenge: String!) {
+  requestSecondFactorPasskeyOptions(challenge: $challenge) {
+    options # JSON text for navigator.credentials.get({ publicKey })
+  }
+}
+```
+
+It only reads the challenge: no attempt is counted and nothing is spent, so it may be called on every
+render of the second-factor page, and `confirmSecondFactorWithPasskey` redeems the challenge with the
+assertion built on those options. An unknown (another tenant's too), spent or lapsed challenge is
+`TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED`; a user who holds no passkey is
+`SECOND_FACTOR_NOT_ENROLLED` (409); a tenant that turned passkeys off is `SIGN_IN_METHOD_DISABLED`. It
+shares the per client address and per tenant limits of `passkeySignInOptions`: past them it is
+`PASSKEY_THROTTLED` (429, `Retry-After`).
+
 It shares the challenge's five attempts with the code: an assertion that does not verify, or names
 another user's passkey, is `CODE_INVALID` with `attemptsLeft`; an unknown (another tenant's too),
 spent or lapsed challenge is `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED`. On success it sets
