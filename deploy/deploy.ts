@@ -91,6 +91,9 @@ await stack.compose(
   "run",
   "--rm",
   "--no-deps",
+  // The one-off carries the api's labels: keep traefik from routing to it.
+  "--label",
+  "traefik.enable=false",
   "api",
   "sh",
   "-c",

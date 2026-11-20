@@ -30,6 +30,8 @@ services:
     environment:
       # Two hops: traefik, then the Cloudflare edge it trusts.
       CLAVIX_TRUSTED_PROXIES: "2"
+      # A build secret only: the api gets the whole .env (env_file) but not this.
+      NPM_REGISTRY_TOKEN: ""
     labels:
       traefik.enable: "true"
       traefik.docker.network: proxy

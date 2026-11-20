@@ -7,6 +7,8 @@ and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/of
 
 ## What runs
 
+> Staging on the shared VPS differs (traefik instead of Caddy, images built on the host): see "Staging".
+
 | Service | Image                                 | Reachable from             | Notes                                            |
 | ------- | ------------------------------------- | -------------------------- | ------------------------------------------------ |
 | `caddy` | `caddy:2`                             | the internet (80, 443)     | the only published ports; certificates on demand |
@@ -391,6 +393,8 @@ Both are read from `deploy/.env` like the others (compose hands the file to `api
 
 ## TLS
 
+> Staging terminates TLS in traefik, with a wildcard certificate and no on-demand TLS: see "Staging".
+
 Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the
 Caddyfile). Caddy's automatic HTTPS adds that redirect only for host names
 written in the config, and the catch-all site names none, so it is explicit;
@@ -422,6 +426,7 @@ it. Custom domains stay on demand.
 
 ## Upgrade
 
+> Staging redeploys with `bun deploy/deploy.ts` (it builds, there is no `dc pull`): see "Staging".
 1. Build and tag the new images; set the new tags in `deploy/.env`.
 2. Take a backup first (below).
 3. `dc pull` (or load the images), then
@@ -531,8 +536,8 @@ bun deploy/deploy.ts
 
 In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
-`NPM_REGISTRY_TOKEN` (or export it). The script refuses to run when the file is missing, readable by
-others (not mode 600) or incomplete, or when the `proxy` network does not exist.
+`NPM_REGISTRY_TOKEN` (or export it; the builds take it as a build secret and the api container does not receive it). The script refuses to run when the file is missing, readable by
+others (not mode 600) or incomplete (the keys of "First boot", step 3; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
 
 One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
 and ui images on the host (no registry), starts `mongo` and `redis`, runs `db:sync` and `db:migrate`
