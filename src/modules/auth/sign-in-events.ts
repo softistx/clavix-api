@@ -28,12 +28,19 @@ export const sourceOf = (ctx: Context) => ({
   requestId: requestIdOf(ctx.request),
 });
 
+/**
+ * The `reason` of a social sign-in that took over an account which held the
+ * e-mail without proving it (`replaced: true`, nxgt-janus #978).
+ */
+export const REPLACED_REASON = "replaced";
+
 /** Records a successful sign-in of `userId` by `method` (D14). Never throws (D13). */
 export const recordSignIn = (
   ctx: Context,
   tenantId: string,
   method: AuthMethod,
   userId: string,
+  reason?: string,
 ) =>
   eventBus.emit({
     kind: "auth",
@@ -42,6 +49,7 @@ export const recordSignIn = (
     outcome: "success",
     method,
     userId,
+    ...(reason === undefined ? {} : { reason }),
     ...sourceOf(ctx),
   });
 
@@ -67,6 +75,8 @@ export async function recordingSignIn<T>(
   method: AuthMethod,
   run: () => Promise<T>,
   userIdOf: (done: T) => string | null,
+  /** A short code recorded with a success (`REPLACED_REASON`), or none. */
+  successReasonOf: (done: T) => string | undefined = () => undefined,
 ): Promise<T> {
   let done: T;
   try {
@@ -85,6 +95,8 @@ export async function recordingSignIn<T>(
   }
   // `null`: the step ended in a second-factor challenge, which is no sign-in yet.
   const userId = userIdOf(done);
-  if (userId !== null) await recordSignIn(ctx, tenantId, method, userId);
+  if (userId !== null) {
+    await recordSignIn(ctx, tenantId, method, userId, successReasonOf(done));
+  }
   return done;
 }

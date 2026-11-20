@@ -139,6 +139,14 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
 - **Every write goes through `SignInPolicyService`** (`service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
 - **Gates**: `requireMethod(tenant, method)` (`gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked in the resolver before the throttle. Registering a passkey while signed in is not gated.
 - **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
+- **A social sign-in may replace an unverified holder (nxgt-janus #978)**. **Assumed, not answered**:
+  `social.unverifiedHolder` (`unverifiedHolderOf`, `tenant-janus.ts`) answers `'replace'` for the tenant's built-in
+  social apps (Google, GitHub, Microsoft: the static providers, which vouch for the addresses they hold) and
+  `'refuse'` for an enterprise connection (the tenant's own identity provider could vouch for an address it does
+  not control). janus asks only once the provider reported the e-mail verified, and never replaces a verified
+  user. A replaced user loses their credentials, links and sessions; `SocialSignedIn.replaced` says so, and the
+  sign-in log's `session.signIn` carries `reason: "replaced"`. Known gap: janus does not revoke the OAuth grants
+  and refresh tokens of the replaced user (janus-oauth's); tracked as a follow-up, not in this slice.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
 - **Console users** (`src/console/modules/users/`): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port (`janus-users.ts`), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `src/modules/auth/device.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.
@@ -620,6 +628,13 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
   reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
   prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
+- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/config/webhooks.ts`) gives both
+  queues (Redis and memory) `maxInFlight` (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, 4), `maxPending`
+  (`CLAVIX_WEBHOOKS_MAX_PENDING`, 5000) and `groupOf`. **Assumed, not answered**: the caps are per tenant, not
+  per endpoint, because janus-webhooks counts per group once `groupOf` is set (one queue cannot cap both). So the
+  queue's endpoint name is `<tenantId>.<endpointId>` (`queueEndpointId`, `webhookGroupOf`, `endpointIdOf` in
+  `delivery.ts`): the resolver adds the prefix and every callback strips it before it touches a store. The
+  claim also rotates over endpoints, so one endpoint of a tenant does not take the tenant's whole share.
 - The catalogue (D22, `events.ts`) is janus's 20 user events plus `session.signedIn`; `data` holds ids
   only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
   top-level field for it. Console admin events are not delivered. `webhook.test` is outside the

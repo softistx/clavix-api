@@ -76,7 +76,7 @@ const START = `mutation ($p: String!, $r: String) {
 }`;
 const COMPLETE = `mutation ($u: String!, $f: String!) {
   socialSignInComplete(callbackUrl: $u, flow: $f) {
-    ... on SocialSignedIn { created returnTo expiresAt user { id email name emailVerified } }
+    ... on SocialSignedIn { created replaced returnTo expiresAt user { id email name emailVerified } }
   }
 }`;
 const REQUEST_CODE = `mutation { requestSignInCode(email: "ada@example.com") { expiresAt } }`;
@@ -336,6 +336,63 @@ describe("social sign-in", () => {
     expect((await gql("sih-other", me, {}, session)).data).toEqual({
       currentUser: null,
     });
+  });
+
+  test("a built-in app's proof replaces an unverified holder of the address: replaced, and recorded in the sign-in log (nxgt-janus #978)", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-social", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-social");
+    const holder = await auth.create({ email: "squat@social.example" });
+    const start = await startOn("sih-social");
+    const { run } = github("squat@social.example");
+    const answer = await run(() =>
+      gql("sih-social", COMPLETE, {
+        u: callbackOf("sih-social", start.state),
+        f: start.flow,
+      }),
+    );
+    expect(answer.errors).toBeUndefined();
+    const done = answer.data?.["socialSignInComplete"] as {
+      created: boolean;
+      replaced: boolean;
+      user: { id: string; emailVerified: boolean };
+    };
+    expect(done).toMatchObject({ created: false, replaced: true });
+    expect(done.user).toMatchObject({ id: holder.id, emailVerified: true });
+    const events = await mongo.db.authEvents.raw
+      .find({ userId: holder.id, type: "session.signIn" })
+      .toArray();
+    expect(events.map((event) => event["reason"])).toEqual(["replaced"]);
+  });
+
+  test("a verified user is linked, never replaced: replaced is false and no reason is recorded", async () => {
+    const first = await startOn("sih-social");
+    const { run } = github("kept@social.example");
+    const created = await run(() =>
+      gql("sih-social", COMPLETE, {
+        u: callbackOf("sih-social", first.state),
+        f: first.flow,
+      }),
+    );
+    expect(created.errors).toBeUndefined();
+    const again = await startOn("sih-social");
+    const answer = await run(() =>
+      gql("sih-social", COMPLETE, {
+        u: callbackOf("sih-social", again.state),
+        f: again.flow,
+      }),
+    );
+    const done = answer.data?.["socialSignInComplete"] as {
+      created: boolean;
+      replaced: boolean;
+      user: { id: string };
+    };
+    expect(done).toMatchObject({ created: false, replaced: false });
+    const events = await mongo.db.authEvents.raw
+      .find({ userId: done.user.id, type: "session.signIn" })
+      .toArray();
+    expect(events.map((event) => event["reason"])).toEqual([null, null]);
   });
 
   test("returnTo must be a path of the site: no open redirect", async () => {

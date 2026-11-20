@@ -43,6 +43,10 @@ connectionsService.useHostResolver(async (host) =>
     : (await lookup(host, { all: true })).map((a) => a.address),
 );
 
+// janus-social connects to the checked addresses itself unless it is given a
+// `fetch`: the spec hands it the global one, which `beforeAll` swaps for the IdP.
+connectionsService.useFetch((input, init) => globalThis.fetch(input, init));
+
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -423,6 +427,20 @@ describe("federated sign-in", () => {
     };
     expect(done.created).toBe(false);
     expect(done.user.id).toBe(known);
+  });
+
+  test("an enterprise connection never replaces an unverified holder of the address (nxgt-janus #978)", async () => {
+    // Someone signed up as kim@acme.test and never proved it: a connection,
+    // the tenant's own IdP, is not trusted to take that account over.
+    const auth = await janusIssuers.forRequest(new Request(url("fedacme")));
+    if (auth === null) throw new Error("no janus for fedacme");
+    const holder = await auth.create({ email: "kim@acme.test" });
+    const refused = await federated("kim");
+    if (!("done" in refused)) throw new Error("no sign-in");
+    expect(codeOf(refused.done)).toBe("EMAIL_NOT_VERIFIED_FOR_LINK");
+    expect(refused.done.cookies).toEqual([]);
+    const kept = await auth.findUser(holder.id);
+    expect(kept?.emailVerified).toBe(false);
   });
 
   test("a connection with linked accounts is not deleted, counted by the tenant's own store", async () => {

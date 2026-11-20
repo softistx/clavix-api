@@ -91,6 +91,13 @@ export const env = defineEnv({
     .enum(production ? ["false"] : ["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // The durable webhook queue's caps (G2-03), counted per tenant (the queue's
+  // group) across every process: requests in flight at once, and deliveries
+  // held. A tenant's flood waits or is refused alone; the other tenants'
+  // endpoints keep being claimed. A delivery refused past the second is not
+  // queued and not retried.
+  CLAVIX_WEBHOOKS_MAX_IN_FLIGHT: z.coerce.number().int().min(1).default(4),
+  CLAVIX_WEBHOOKS_MAX_PENDING: z.coerce.number().int().min(1).default(5000),
   // The GraphQL IDE (Apollo Sandbox) on the hosted `/graphql`, and the
   // schema's introspection with it. The page runs a third-party script on the
   // origin that holds the session cookie, so it is a development tool only:

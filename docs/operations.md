@@ -344,9 +344,34 @@ the newest 100 per endpoint, dropped after 7 days by a TTL index on `at` (`bun r
 `WebhookEndpoint.deliveries(first:)` in the console API reads them, newest first; deleting an endpoint deletes
 its attempts, and a tenant purge empties them.
 
-| Variable                        | Meaning                                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production. |
+| Variable                         | Meaning                                                                                                                                  |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAVIX_WEBHOOKS_ALLOW_PRIVATE`  | `true` lets endpoints reach private and loopback addresses (a local receiver). Refused at boot in production.                            |
+| `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`  | requests in flight at once per tenant, all instances together; default 4.                                                                |
+| `CLAVIX_WEBHOOKS_MAX_PENDING`    | deliveries one tenant may hold (waiting, claimed or waiting for a retry); default 5000. The next one is refused.                         |
+
+**Caps per tenant (G2-03).** The queue names an endpoint `<tenantId>.<endpointId>` and groups by the tenant, so
+both caps count per tenant, not per endpoint (janus-webhooks counts per group once `groupOf` is set): a tenant
+whose endpoint floods or answers slowly holds at most `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT` requests, and a claim skips
+it for the other tenants' endpoints; claims also start from another endpoint in turn. A delivery refused by
+`CLAVIX_WEBHOOKS_MAX_PENDING` is not queued and never retried: the log has one line,
+`webhooks: delivery <id> refused, tenant <tenantId> holds <n>`, with ids only. Size it well above what a healthy
+tenant holds: a dead endpoint keeps about 28 hours of its events in retry. Both caps apply to the in-memory queue
+too (no `REDIS_URL`).
+
+**Upgrading to the capped queue.**
+- Run janus-webhooks-redis 0.13 or later on **every** instance before setting a cap, and the same values on all
+  of them: an older instance claims without counting, so the cap is exceeded by what it claims. Roll the
+  instances in one go.
+- Deliveries already waiting in Redis under the old bare endpoint names are given up as `endpointRemoved` (no
+  retry, no auto-disable) when their endpoint is no longer listed under that name; a rolling deploy during a
+  quiet moment loses at most what was waiting for a retry.
+- **Redis ACL.** A Redis user restricted by ACL needs `+@scripting` and the commands the queue scripts run:
+  `HSET HGET HGETALL HINCRBY EXISTS DEL ZADD ZREM ZRANGEBYSCORE ZREMRANGEBYSCORE ZCARD SADD SREM SISMEMBER
+  SMEMBERS HDEL GET SET` on `~clavix:webhooks:*`. Version 0.13 needs the new ones: `ZREMRANGEBYSCORE` (with the
+  in-flight cap), `HDEL` (with `groupOf`, which Clavix always sets) and `GET`/`SET` (the orphan claim). Grant them
+  **before** upgrading: without `GET`, those claims fail with `STORE_FAILED` (`NOPERM`). The compose Redis uses
+  the default user with `requirepass` and needs nothing.
 
 Endpoint secrets (`whsec_...`) are sealed in MongoDB with a subkey of `CLAVIX_KEYS_MASTER_KEY` (label
 `webhook-secrets`); losing the key leaves endpoints with no way to sign, and they are skipped, never sent

@@ -1,7 +1,9 @@
 import type { Duration } from "@softistx/janus";
 import {
   type EndpointResolver,
+  type RefusedDelivery,
   type WebhookQueue,
+  type WebhookQueueLimits,
   webhooks,
 } from "@softistx/janus-webhooks";
 import type { ClavixEvent } from "@/events/types";
@@ -15,6 +17,43 @@ import type { WebhookEndpointsService } from "./webhook-endpoints.service";
 
 /** The type of the event `sendTestWebhook` sends: not in the catalogue, never subscribed to. */
 export const TEST_EVENT_TYPE = "webhook.test";
+
+/**
+ * The queue's name for an endpoint: `<tenantId>.<endpointId>` (both hex ids,
+ * no dot). The queue caps what one *group* holds (`webhookGroupOf`), so the
+ * tenant must be readable from the name, in every process.
+ */
+export const queueEndpointId = (tenantId: string, endpointId: string) =>
+  `${tenantId}.${endpointId}`;
+
+/** The queue's group of an endpoint: its tenant. A name with no dot (a delivery queued before the prefix) is its own group. */
+export const webhookGroupOf = (queueEndpoint: string) =>
+  queueEndpoint.split(".")[0] ?? queueEndpoint;
+
+/** The endpoint's own id out of the queue's name. */
+export const endpointIdOf = (queueEndpoint: string) => {
+  const dot = queueEndpoint.indexOf(".");
+  return dot === -1 ? queueEndpoint : queueEndpoint.slice(dot + 1);
+};
+
+/**
+ * The queue's caps (G2-03), per tenant (`webhookGroupOf`): a tenant whose
+ * endpoint floods, or answers slowly, holds at most `maxInFlight` requests in
+ * flight and `maxPending` deliveries; the other tenants' endpoints are claimed
+ * all the same. Every process passes the same ones. A refused delivery is
+ * reported by ids only (never a URL or a body).
+ */
+export const webhookQueueLimits = (
+  caps: { maxInFlight: number; maxPending: number },
+  log: (message: string) => void = (message) => console.warn(message),
+): WebhookQueueLimits => ({
+  ...caps,
+  groupOf: webhookGroupOf,
+  onRefused: ({ event, group, maxPending }: RefusedDelivery) =>
+    log(
+      `webhooks: delivery ${event.id} refused, tenant ${group ?? "?"} holds ${maxPending}`,
+    ),
+});
 
 /** The actor of the admin event the auto-disable records (D20). */
 export const DISABLE_ACTOR = "system:webhooks:disable";
@@ -53,12 +92,20 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
 
   const endpoints: EndpointResolver<ClavixWebhookEvent> = async (event) => {
     const all = await deps.endpoints.deliveryEndpoints(event.data.tenantId);
+    const tenantId = event.data.tenantId;
+    const named = (list: typeof all) =>
+      list.map((endpoint) => ({
+        ...endpoint,
+        id: queueEndpointId(tenantId, endpoint.id),
+      }));
     if (event.type === TEST_EVENT_TYPE) {
-      return all
-        .filter((endpoint) => endpoint.id === event.data.endpointId)
-        .map(({ types: _types, ...endpoint }) => endpoint);
+      return named(
+        all
+          .filter((endpoint) => endpoint.id === event.data.endpointId)
+          .map(({ types: _types, ...endpoint }) => endpoint),
+      );
     }
-    return all;
+    return named(all);
   };
 
   const listener = webhooks<ClavixWebhookEvent>({
@@ -75,7 +122,7 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
       if (deps.deliveries !== undefined) {
         try {
           await deps.deliveries.record(tenantId, {
-            endpointId: attempt.endpoint,
+            endpointId: endpointIdOf(attempt.endpoint),
             eventId: attempt.event.id,
             type: attempt.event.type,
             attempt: attempt.attempt,
@@ -91,7 +138,10 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
       }
       if (!attempt.delivered) return;
       try {
-        await deps.endpoints.recordDelivered(tenantId, attempt.endpoint);
+        await deps.endpoints.recordDelivered(
+          tenantId,
+          endpointIdOf(attempt.endpoint),
+        );
       } catch (error) {
         log(`webhooks: could not record a delivery: ${String(error)}`);
       }
@@ -104,10 +154,13 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
       try {
         const disabled = await deps.endpoints.recordGiveUp(
           tenantId,
-          delivery.endpoint,
+          endpointIdOf(delivery.endpoint),
         );
         if (disabled) {
-          await deps.onDisabled({ tenantId, endpointId: delivery.endpoint });
+          await deps.onDisabled({
+            tenantId,
+            endpointId: endpointIdOf(delivery.endpoint),
+          });
         }
       } catch (error) {
         log(`webhooks: could not record a given-up delivery: ${String(error)}`);
