@@ -179,6 +179,9 @@ shows `enabled` and `recoveryCodesLeft`.
 | `SIGN_IN_METHOD_UNAVAILABLE`  | 409  | enabling a method with `available: false` (`PASSWORD`)                                  |
 | `SOCIAL_SECRET_REQUIRED`      | 400  | a provider set for the first time without `clientSecret`                                |
 | `BAD_USER_INPUT`              | 400  | a type given twice; a new provider without `clientId`; an empty or >512-character value |
+| `SECOND_FACTOR_DISABLED`      | 403  | hosted `enrollSecondFactor` or `activateSecondFactor` while the tenant's `mfa.totp` is off |
+| `STEP_UP_REQUIRED`            | 403  | hosted `enrollSecondFactor`: the session proved who it is more than ten minutes ago      |
+| `TENANT_SUSPENDED`            | 403  | `confirmSecondFactor` or `recoverSecondFactor` on a suspended tenant; no session opened  |
 
 The platform tenant (the one that signs the console's operators in) is stricter than the others: it
 always keeps a first-party method, `PASSKEY` or `EMAIL_CODE`, enabled, because a social provider

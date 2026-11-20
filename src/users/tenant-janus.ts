@@ -450,8 +450,11 @@ export function createTenantJanusIssuers({
             issuer: tenant.issuer,
             // `origins` is fixed when the instance is built, so the version
             // also carries the related origins: verifying or removing a domain
-            // rebuilds the cached instance (ADR-0036).
-            version: `${tenant.version}.${fingerprintOf(tenant.relatedOrigins)}`,
+            // rebuilds the cached instance (ADR-0036). It starts with the
+            // tenant's id: a new tenant under a purged tenant's slug has the
+            // same issuer and version, and must not get the old instance,
+            // bound to the old partition (clavix-api#290).
+            version: `${tenant.tenantId}.${tenant.version}.${fingerprintOf(tenant.relatedOrigins)}`,
             tenant,
           };
     },

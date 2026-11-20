@@ -125,6 +125,12 @@ export interface UserInvitationView {
   expiresAt: Date;
 }
 
+/** A user's TOTP factor as the console may know it: never the secret or the codes. */
+export interface UserSecondFactorView {
+  enabled: boolean;
+  recoveryCodesLeft: number | null;
+}
+
 /**
  * The end users of the tenants (their janus partition), their invitations and
  * grants. Every call names a tenant that is not in the trash (active or suspended) by id (the caller checked it);
@@ -172,10 +178,16 @@ export interface ConsoleUsers {
     verified: boolean,
   ): Promise<TenantUserView | null>;
   /** The user's TOTP factor; `enabled: false` for a user with none (or an unknown one). */
-  secondFactor(
+  secondFactor(tenantId: string, id: string): Promise<UserSecondFactorView>;
+  /**
+   * `secondFactor` for several users of one tenant, in the order of `ids`:
+   * one read of the records, then the recovery codes of the holders only
+   * (the `TenantUser.secondFactor` loader of a page).
+   */
+  secondFactors(
     tenantId: string,
-    id: string,
-  ): Promise<{ enabled: boolean; recoveryCodesLeft: number | null }>;
+    ids: readonly string[],
+  ): Promise<UserSecondFactorView[]>;
   /**
    * Removes the user's TOTP factor and recovery codes (a lost phone and lost
    * codes); the user as written, or `null` when unknown. Idempotent.

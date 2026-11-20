@@ -60,7 +60,9 @@ export const resolveIssuer =
     const resources = withScopes((await resourcesFor?.(tenant)) ?? {});
     return {
       issuer: tenant.issuer,
-      version: `${tenant.version}.${fingerprintOf(resources)}`,
+      // The tenant's id first: a new tenant under a purged tenant's slug has
+      // the same issuer and version (clavix-api#290).
+      version: `${tenant.tenantId}.${tenant.version}.${fingerprintOf(resources)}`,
       tenant,
       resources,
     };
