@@ -68,6 +68,16 @@ export class AdminEventReader {
     return { items: found.items, nextCursor: found.nextCursor, totalCount };
   }
 
+  /** One event of `scope` by id, or `null` when none matches (unknown, malformed id, or another scope's). */
+  async find(scope: AdminEventScope, id: string) {
+    if (!ObjectId.isValid(id)) return null;
+    const found = await this.collection.findFirst({
+      ...whereOf(scope, {}),
+      _id: new ObjectId(id),
+    });
+    return found ?? null;
+  }
+
   /** Whether more than `limit` events match (reads at most `limit + 1` index entries, never a full count). */
   async exceeds(
     scope: AdminEventScope,

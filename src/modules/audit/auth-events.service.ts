@@ -96,6 +96,13 @@ export class AuthEventsService {
     return { items: found.items, nextCursor: found.nextCursor, totalCount };
   }
 
+  /** One event of the tenant by id, or `null` (unknown, malformed id, or another tenant's). */
+  async find(tenantId: string, id: string) {
+    if (!ObjectId.isValid(id)) return null;
+    const found = await this.scoped(tenantId).findById(new ObjectId(id));
+    return found ?? null;
+  }
+
   /** Whether more than `limit` events match (reads at most `limit + 1` index entries, never a full count). */
   async exceeds(
     tenantId: string,

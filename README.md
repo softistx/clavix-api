@@ -496,6 +496,9 @@ The console reads it with `adminEvents(tenantId, filter, first, after)` (a tenan
 filter `from`, `to`, `action`, `actor`) and, for operators, `platformAdminEvents` across every tenant
 and the platform's own. Both answer `{ items, nextCursor, totalCount }`, newest first (`first`
 defaults to 25, at most 100), with each actor resolved to a name and an e-mail address in one batch.
+One event is read by id with `adminEvent(tenantId, id)` (a tenant viewer or more) and
+`authEvent(tenantId, id)` (a tenant admin or more, like the sign-in list); an unknown id, a malformed id
+or another tenant's event all answer `null`, so nothing tells them apart. An operator reads any console event with `platformAdminEvent(id)`.
 
 ### Sign-in events
 

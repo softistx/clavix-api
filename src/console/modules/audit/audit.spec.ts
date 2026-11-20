@@ -312,3 +312,83 @@ describe("platformAdminEvents", () => {
     expect(page.totalCount).toBe(1);
   });
 });
+
+describe("adminEvent and authEvent", () => {
+  const ONE_ADMIN = `query($tenantId: ID!, $id: ID!) {
+    adminEvent(tenantId: $tenantId, id: $id) { id action tenantId actor { id } }
+  }`;
+  const ONE_AUTH = `query($tenantId: ID!, $id: ID!) {
+    authEvent(tenantId: $tenantId, id: $id) { id type userId }
+  }`;
+  const idOf = async (
+    collection: "adminEvents" | "authEvents",
+    tenant: string,
+  ) => {
+    const found = await mongo.db[collection].raw.findOne({
+      tenantId: new ObjectId(tenant),
+    });
+    if (found === null) throw new Error(`no seeded ${collection} event`);
+    return found._id.toHexString();
+  };
+
+  test("reads one event of the tenant by id", async () => {
+    const a = await admin(ONE_ADMIN, {
+      tenantId: tenantA,
+      id: await idOf("adminEvents", tenantA),
+    });
+    expect((pageOf(a, "adminEvent") as { tenantId: string }).tenantId).toBe(
+      tenantA,
+    );
+    const b = await admin(ONE_AUTH, {
+      tenantId: tenantA,
+      id: await idOf("authEvents", tenantA),
+    });
+    expect(b.errors).toBeUndefined();
+    expect((pageOf(b, "authEvent") as { id: string }).id).toBeString();
+  });
+
+  test("another tenant's event, an unknown id and a malformed id are all null", async () => {
+    const otherAdmin = await idOf("adminEvents", tenantB);
+    const otherAuth = await idOf("authEvents", tenantB);
+    for (const id of [otherAdmin, "5f0000000000000000000000", "not-an-id"]) {
+      const result = await admin(ONE_ADMIN, { tenantId: tenantA, id });
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.["adminEvent"]).toBeNull();
+    }
+    for (const id of [otherAuth, "5f0000000000000000000000", "not-an-id"]) {
+      const result = await admin(ONE_AUTH, { tenantId: tenantA, id });
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.["authEvent"]).toBeNull();
+    }
+  });
+
+  test("keeps the list permissions: a viewer reads no sign-in event, a stranger nothing", async () => {
+    const adminId = await idOf("adminEvents", tenantA);
+    const authId = await idOf("authEvents", tenantA);
+    expect(
+      (await viewer(ONE_ADMIN, { tenantId: tenantA, id: adminId })).errors,
+    ).toBeUndefined();
+    expect(
+      codeOf(await viewer(ONE_AUTH, { tenantId: tenantA, id: authId })),
+    ).toBe("FORBIDDEN");
+    expect(
+      codeOf(await stranger(ONE_ADMIN, { tenantId: tenantA, id: adminId })),
+    ).toBe("FORBIDDEN");
+    expect(
+      codeOf(await adminB(ONE_AUTH, { tenantId: tenantA, id: authId })),
+    ).toBe("FORBIDDEN");
+  });
+
+  test("an operator reads any console event by id, nobody else", async () => {
+    const ONE = `query($id: ID!) { platformAdminEvent(id: $id) { id tenantId } }`;
+    const id = await idOf("adminEvents", tenantB);
+    const found = await operator(ONE, { id });
+    expect((pageOf(found, "platformAdminEvent") as { id: string }).id).toBe(id);
+    expect(
+      (await operator(ONE, { id: "5f0000000000000000000000" })).data?.[
+        "platformAdminEvent"
+      ],
+    ).toBeNull();
+    expect(codeOf(await admin(ONE, { id }))).toBe("FORBIDDEN");
+  });
+});

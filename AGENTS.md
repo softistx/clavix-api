@@ -437,7 +437,9 @@ does two things, and nothing else touches the collection:
   magic link, passkey, social), and the per-tenant janus `events` listener (`events/janus-listener.ts`:
   second factor, recovery codes, passkeys; no address). A new type goes in `AUTH_EVENT_TYPES` (closed).
   OAuth events (M4 E3, D14): `createClavixOAuthIssuers({ eventsFor })` gives each tenant's issuer its own janus-oauth `events` listener (`events/oauth-listener.ts`, built per tenant and dropping an event of another issuer; wired in `config/oauth.ts`): `consent.granted` / `.denied`, `grant.revoked`, `refreshToken.reused`, `device.approved` / `.denied`, `token.exchanged`, `client.registered`, with client and user, no address, no client name; `oauth.client.loginFailed` is not recorded (telemetry's).
-  Reads: console `authEvents` (`edit`, an admin: addresses) and `adminEvents` (`view`),
+  Reads: console `authEvents` (`edit`, an admin: addresses) and `adminEvents` (`view`), and by id
+  `authEvent(tenantId, id)` / `adminEvent(tenantId, id)` (same permissions; `null` for an unknown or
+  another tenant's id, `find` on the reader and the service),
   `platformAdminEvents` (operators). The full IP stays in `authEvents` only (D15). Retention
   (`modules/audit/retention.ts`, queue `audit-retention`, 04:17 UTC, `config/audit-retention.ts`) cuts by the
   tenant's current plan (`Plan.auditRetentionDays`) as `system:audit:retention`, with no event per deletion.

@@ -134,6 +134,16 @@ extend type Query {
     after: String
   ): AuthEventPage!
   """
+  One console event of a tenant by id (tenant viewer). `null` for an unknown
+  id or another tenant's event: nothing tells them apart.
+  """
+  adminEvent(tenantId: ID!, id: ID!): AdminEvent
+  """
+  One sign-in event of a tenant by id (tenant admin). `null` for an unknown id
+  or another tenant's event: nothing tells them apart.
+  """
+  authEvent(tenantId: ID!, id: ID!): AuthEvent
+  """
   The console's activity on every tenant and on the platform itself
   (operator), newest first. `first` defaults to 25, at most 100.
   """
@@ -142,4 +152,9 @@ extend type Query {
     first: Int
     after: String
   ): AdminEventPage!
+  """
+  One event of the platform's log by id (operator), whichever tenant it is
+  about. `null` for an unknown id.
+  """
+  platformAdminEvent(id: ID!): AdminEvent
 }
