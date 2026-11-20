@@ -28,7 +28,6 @@ import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
-import { useErrorStatus } from "./http/status";
 import type { Throttle } from "./http/throttle/core";
 import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
@@ -137,7 +136,6 @@ export function createApp(
       plugins: [
         useSameOriginJson(),
         useWithoutQuotedValues(),
-        useErrorStatus(),
         janusPlugin(),
         ...(options.oauth?.serverFor === undefined
           ? []
@@ -171,7 +169,6 @@ export function createApp(
                 ? []
                 : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
               useWithoutQuotedValues(),
-              useErrorStatus(),
               useConsole(consoleOptions),
             ],
             ...janusMasking,
