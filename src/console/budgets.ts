@@ -1,9 +1,9 @@
 import { type FieldLimit, fieldRateLimit } from "@alxia/graphql";
-import { defineRateLimit, type LimitResult } from "@softistx/redis";
+import { defineRateLimit, GuardError, type LimitResult } from "@softistx/redis";
 import { GraphQLError } from "graphql";
 import {
   type Bound,
-  consumeOrSkip,
+  logSkipped,
   retryAfterSeconds,
 } from "@/http/throttle/core";
 import type { ConsoleContext } from "./context";
@@ -84,6 +84,8 @@ export interface ConsoleBudgets {
 }
 
 const SKIPPED = "console budgets";
+// What a request that alone exceeds a budget is told to wait: the longest window.
+const OVER_BUDGET_RETRY_MS = 3_600_000;
 
 /**
  * The budgets over the app's Redis limits. Redis down or slow: the call goes
@@ -100,8 +102,21 @@ export function createConsoleBudgets(
   log: (message: string) => void = (message) => console.warn(message),
 ): ConsoleBudgets {
   const spend = async <P>(limit: Bound<P>, params: P, cost = 1) => {
-    const result = await consumeOrSkip(limit, params, SKIPPED, log, cost);
-    return result === undefined || result.allowed ? null : result;
+    try {
+      const result = await limit.consume(params, cost, { timeoutMs: 250 });
+      return result.allowed ? null : result;
+    } catch (error) {
+      // More selections in one request than the whole budget holds: refused,
+      // never skipped (it would let a single POST of aliases through).
+      if (error instanceof GuardError && error.code === "COST") {
+        return {
+          allowed: false,
+          retryAfter: OVER_BUDGET_RETRY_MS,
+        } as LimitResult;
+      }
+      logSkipped(error, SKIPPED, log);
+      return null;
+    }
   };
   const refuse = (result: LimitResult | null) => {
     if (result !== null) throw rateLimited(retryAfterSeconds(result));
