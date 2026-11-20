@@ -41,6 +41,7 @@ describe("compose.traefik.yml", () => {
       "/token",
       "/jwks.json",
       "/console/graphql",
+      "/console/audit/export",
       "/healthz",
       "/.well-known/openid-configuration",
     ])

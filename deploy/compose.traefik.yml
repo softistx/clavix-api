@@ -39,7 +39,7 @@ services:
         && (Path(`/authorize`) || Path(`/par`) || Path(`/device_authorization`)
         || Path(`/token`) || Path(`/register`) || Path(`/revoke`) || Path(`/introspect`)
         || Path(`/jwks.json`) || Path(`/userinfo`) || Path(`/graphql`)
-        || Path(`/console/graphql`) || Path(`/branding/logo`) || Path(`/healthz`)
+        || Path(`/console/graphql`) || Path(`/console/audit/export`) || Path(`/branding/logo`) || Path(`/healthz`)
         || Path(`/.well-known/oauth-authorization-server`)
         || Path(`/.well-known/openid-configuration`) || Path(`/.well-known/webauthn`))
       traefik.http.routers.clavix-api.service: clavix-api

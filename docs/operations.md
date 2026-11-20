@@ -544,7 +544,7 @@ bun deploy/deploy.ts
 In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
 no registry token (the `@softistx` packages come from public npmjs). The script refuses to run when the file is missing, readable by
-others (not mode 600 or 400) or incomplete (the keys of "First boot", step 3; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
+others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
 
 One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
 and ui images on the host (no registry), starts `mongo` and `redis`, runs `db:sync` and `db:migrate`
@@ -563,6 +563,8 @@ To check the merged files without deploying:
 CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' docker compose \
   -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env config -q
 ```
+
+Rollback in staging: the cleanup removes the images the new build replaced, so the generic "previous tags" rollback does not apply. Check out the old commit (api and ui) and run `bun deploy/deploy.ts --no-pull`.
 
 ### Backup and restore in staging
 
