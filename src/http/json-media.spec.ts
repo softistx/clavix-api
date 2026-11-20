@@ -57,3 +57,32 @@ describe("the JSON plugins on each media type", () => {
     });
   }
 });
+
+describe("useErrorStatus without a named status", () => {
+  test("extensions.http is still stripped and content-length dropped", async () => {
+    let out: Response | undefined;
+    const hook = useErrorStatus().onResponse as unknown as (a: {
+      response: Response;
+      setResponse: (r: Response) => void;
+    }) => Promise<void>;
+    const body = JSON.stringify({
+      errors: [
+        { message: "x", extensions: { code: "X", http: { headers: {} } } },
+      ],
+    });
+    await hook({
+      response: new Response(body, {
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(body.length),
+        },
+      }),
+      setResponse: (r) => {
+        out = r;
+      },
+    });
+    expect(out?.status).toBe(200);
+    expect(out?.headers.get("content-length")).toBeNull();
+    expect(await out?.text()).not.toContain('"http"');
+  });
+});

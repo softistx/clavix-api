@@ -60,11 +60,22 @@ export const useErrorStatus = () =>
       const named = httpOf(body).filter(
         (http) => typeof http.status === "number",
       );
-      if (named.length === 0) return;
+      const headers = new Headers(response.headers);
+      headers.delete("content-length");
+      if (named.length === 0) {
+        // No status to carry, but `extensions.http` still never reaches the client.
+        if (httpOf(body).length === 0) return;
+        setResponse(
+          new Response(JSON.stringify(withoutHttp(body)), {
+            status: response.status,
+            headers,
+          }),
+        );
+        return;
+      }
       const top = named.reduce((a, b) =>
         (b.status as number) > (a.status as number) ? b : a,
       );
-      const headers = new Headers(response.headers);
       for (const [name, value] of Object.entries(
         (top.headers ?? {}) as Record<string, unknown>,
       ))

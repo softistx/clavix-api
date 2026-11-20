@@ -7,6 +7,8 @@ import {
 import { createLogger } from "@softistx/telemetry";
 import { janusIssuers } from "@/config/users";
 
+import { scrubbed } from "@/http/unexpected";
+
 const log = createLogger("janus");
 
 // `ctx.janus` on every operation, from the janus instance of the tenant the
@@ -35,6 +37,6 @@ export const guardedSchema = (
 // (MAIL_THROTTLED 429, STORE_FAILED 503), the rest as graxia masks it.
 export const janusMasking = {
   maskError: janusGraxiaMaskError({
-    report: (error) => log.error("janus error answered 5xx", error),
+    report: (error) => log.error("janus error answered 5xx", scrubbed(error)),
   }),
 };
