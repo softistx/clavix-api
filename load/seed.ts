@@ -25,7 +25,7 @@ import { registerTenant } from "@/modules/tenants/register-tenant";
 // opts in (`allowClientCredentials`) and the secret is rotated on every run, so
 // the seed always holds a working one.
 const TENANTS = Number(Bun.env["LOAD_TENANTS"] ?? 50);
-const CHAINS = Number(Bun.env["LOAD_CHAINS"] ?? 2);
+const CHAINS = Number(Bun.env["LOAD_CHAINS"] ?? 4);
 const REDIRECT = "https://app.example/callback";
 const VERIFIER = "v".repeat(64);
 const clientOf = (chain: number) => `load-${chain}`;

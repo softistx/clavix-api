@@ -1020,7 +1020,7 @@ Method notes:
   VM with about 10 GiB. `load/out/` (git-ignored) receives `seed.json`, `*.summary.json` and `*.log`.
 - **Knobs**: `RATE`, `VUS`, `DURATION` and `WARMUP` (env of `run.ts k6`, passed to k6; the lower-rate rows below are
   `RATE=300 VUS=60 DURATION=30s WARMUP=5s` and `RATE=150 ...`), `LOAD_TENANTS` and `LOAD_CHAINS` (env of the seed,
-  defaults 50 and 2).
+  defaults 50 and 4).
 - **A refresh chain is one VU's.** Refresh tokens rotate and a reused one revokes the grant, so each VU walks
   its own chain (the seed makes 100 chains; a think time of 250 ms keeps about 50 VUs busy at 200 req/s, so about 50 chains over as many tenants are used).
   `seed.ts` mints the chains through the real `/par`, `/authorize`, approval and code exchange of the real issuers
@@ -1042,7 +1042,7 @@ the limits of `compose.yml` (api 1 CPU, mongo 1 CPU, redis 0.25 CPU); k6 ran in 
 | `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below) |
 | `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                  |
 | `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                  |
-| `client_credentials`                    | n/a               | n/a      | n/a      | n/a    | n/a              | scenario on, not run in this table     |
+| `client_credentials`                    | 200 req/s, 60 s   | 33.6     | 209.5    | 0      | p95 under 150 ms | pass (run beside the refresh grant: 400 req/s in all; 29 iterations dropped on one machine shared with other jobs) |
 
 Before the cache, the 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
 (1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,

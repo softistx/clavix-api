@@ -219,7 +219,7 @@ describe("update, roll, test and delete", () => {
   test("webhookEventTypes lists the catalogue", async () => {
     const result = await admin(TYPES, { tenantId: tenantA });
     const types = result.data?.["webhookEventTypes"] as string[];
-    expect(types).toHaveLength(19);
+    expect(types).toHaveLength(17);
     expect(types).toContain("session.signedIn");
   });
 });

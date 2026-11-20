@@ -5,6 +5,7 @@
 // beside the refresh grant (docs/operations.md, "Load test").
 
 import { check, sleep } from "k6";
+import encoding from "k6/encoding";
 import http from "k6/http";
 import { BASE, headers, scenario, tenants } from "./lib.js";
 
@@ -17,9 +18,18 @@ const VUS = Number(__ENV.VUS || 100);
 const CC = __ENV.CLIENT_CREDENTIALS !== "0";
 const RESOURCE = "https://api.load.test/v1";
 
+// k6's `auth` option takes credentials from the URL, not from params: build the
+// Basic header by hand.
+const basic = (c) => ({
+  Authorization: `Basic ${encoding.b64encode(`${c.clientId}:${c.secret}`)}`,
+});
+
+const refreshScenario = scenario(RATE, "refresh", VUS, false);
+refreshScenario.run.tags.grant = "refresh";
+
 export const options = {
   scenarios: Object.assign(
-    scenario(RATE, "refresh", VUS, false),
+    refreshScenario,
     CC
       ? {
           cc: {
@@ -38,13 +48,19 @@ export const options = {
   thresholds: {
     dropped_iterations: ["count==0"],
     "http_req_duration{phase:run}": ["p(95)<150"],
+    "http_req_duration{grant:refresh}": ["p(95)<150"],
+    ...(CC
+      ? { "http_req_duration{grant:client_credentials}": ["p(95)<150"] }
+      : {}),
     "http_req_failed{phase:run}": ["rate==0"],
     "checks{phase:run}": ["rate==1"],
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "p(99)", "max"],
 };
 
-// One chain per VU: tenants have two chains each, VU n takes chain n.
+// One chain per VU: VU n takes chain n. The client_credentials scenario takes VU ids
+// too, so the ids of the refresh VUs reach 2 x VUS: the seed makes 4 chains per
+// tenant (LOAD_CHAINS) so that no two VUs share one.
 const chains = [];
 for (const t of tenants) {
   for (const c of t.chains) {
@@ -59,8 +75,7 @@ export function setup() {
         `${BASE}/token`,
         { grant_type: "client_credentials", resource: RESOURCE, scope: "read" },
         {
-          headers: headers(t.slug),
-          auth: `${t.confidential.clientId}:${t.confidential.secret}`,
+          headers: headers(t.slug, basic(t.confidential)),
         },
       )
     : null;
@@ -112,8 +127,7 @@ export function clientCredentials() {
     `${BASE}/token`,
     { grant_type: "client_credentials", resource: RESOURCE, scope: "read" },
     {
-      headers: headers(t.slug),
-      auth: `${t.confidential.clientId}:${t.confidential.secret}`,
+      headers: headers(t.slug, basic(t.confidential)),
     },
   );
   check(res, { 200: (r) => r.status === 200 });
