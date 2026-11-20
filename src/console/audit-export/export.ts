@@ -1,5 +1,7 @@
 import { planOf } from "@/modules/tenants/plan.schema";
+import { permitted } from "../guard";
 import { CONSOLE_EXPORT_PATH } from "../identity";
+import type { Permission } from "../model";
 import { authenticated, type ConsoleDeps, refusal } from "../plugin";
 import { exportBody } from "./body";
 import {
@@ -17,7 +19,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * `GET /console/audit/export` (D17): one tenant's console activity (`log=admin`,
- * `view`) or sign-in log (`log=auth`, `edit`: it holds addresses, D18) as CSV
+ * `view`) or sign-in log (`log=auth`, `edit`: it holds addresses, D18; on the
+ * `clavix` tenant the platform's `edit`, as the GraphQL guard asks) as CSV
  * or NDJSON, streamed from the store a batch at a time. The caller is
  * authenticated like the GraphQL API (Bearer or DPoP, console client, verified
  * e-mail). The range is cut to the tenant's retention, an export holds at most
@@ -47,11 +50,19 @@ export async function serveAuditExport(
   const { tenantId, log, format, from, to } = params;
 
   // Role first, so a caller with no right learns nothing of the tenant (D18).
+  // The same rule as the GraphQL guard (`permitted`): the sign-in log of the
+  // `clavix` tenant (`edit`) is the platform's, not a tenant-level role's.
   const permission = log === "auth" ? "edit" : "view";
-  if (!(await deps.access.can(userId, permission, tenantId))) {
+  const [tenant] = await deps.directory.tenantsByIds([tenantId]);
+  const who = {
+    can: (wanted: Permission, id: string) =>
+      deps.access.can(userId, wanted, id),
+    canPlatform: (wanted: Permission) =>
+      deps.access.canPlatform(userId, wanted),
+  };
+  if (!(await permitted(who, permission, tenantId, tenant))) {
     return refusal(403, "FORBIDDEN", "Not allowed");
   }
-  const [tenant] = await deps.directory.tenantsByIds([tenantId]);
   if (tenant === undefined) {
     return refusal(404, "NOT_FOUND", "No such tenant");
   }

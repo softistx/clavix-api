@@ -67,6 +67,26 @@ const suspended = () =>
     extensions: { code: "TENANT_SUSPENDED", http: { status: 403 } },
   });
 
+/**
+ * Whether the caller's roles give `permission` on the tenant, for every way
+ * in (the GraphQL guard below, the audit export's route). A write (`edit`,
+ * `manage`) on Clavix's own tenant is the platform's: a tenant-level role
+ * there (an operator's) must not reach the operators, the issuer's domains,
+ * its sign-in policy, its clients or its sign-in log. `target` is the tenant
+ * as read (`undefined` when unknown).
+ */
+export function permitted(
+  who: Pick<ConsoleContext, "can" | "canPlatform">,
+  permission: Permission,
+  tenantId: string,
+  target: { slug: string } | undefined,
+): Promise<boolean> {
+  if (permission !== "view" && target?.slug === PLATFORM_TENANT_SLUG) {
+    return who.canPlatform(permission);
+  }
+  return who.can(permission, tenantId);
+}
+
 async function allowed(
   guard: Guard,
   args: Record<string, unknown>,
@@ -79,13 +99,9 @@ async function allowed(
       const tenantId = guard.tenant(args);
       if (guard.permission === "view") return ctx.can("view", tenantId);
       const target = await targetOf(ctx, tenantId);
-      // A write on Clavix's own tenant is the platform's: a tenant-level role
-      // there (an operator's) must not reach the operators, the issuer's
-      // domains, its sign-in policy or its clients.
-      if (target?.slug === PLATFORM_TENANT_SLUG) {
-        return ctx.canPlatform(guard.permission);
+      if (!(await permitted(ctx, guard.permission, tenantId, target))) {
+        return false;
       }
-      if (!(await ctx.can(guard.permission, tenantId))) return false;
       // Allowed by role, refused by state: only a platform operator still
       // writes on a suspended tenant (support). The role check comes first so
       // a caller with no right learns nothing of the tenant's state.
