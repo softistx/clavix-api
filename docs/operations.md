@@ -345,10 +345,11 @@ its attempts, and a tenant purge empties them.
 Endpoint secrets (`whsec_...`) are sealed in MongoDB with a subkey of `CLAVIX_KEYS_MASTER_KEY` (label
 `webhook-secrets`); losing the key leaves endpoints with no way to sign, and they are skipped, never sent
 unsigned. The queue `webhook-secrets-prune` (daily, 04:37 UTC) removes rolled secrets whose 24 hours are over.
+A master-key rotation seals them again (`bun run keys:reseal`, "Rotating the master key" below).
 
 Enterprise connection client secrets are sealed with another subkey of `CLAVIX_KEYS_MASTER_KEY` (label
 `connection-secrets`); losing the key makes them unreadable and those sign-ins fail until an admin sets the
-secret again. A connection's domain is proved by a TXT record `_clavix-sso.<domain>` holding the token the
+secret again; a master-key rotation seals them again (`bun run keys:reseal`). A connection's domain is proved by a TXT record `_clavix-sso.<domain>` holding the token the
 console shows; verification reads DNS at most once a minute per connection.
 
 A receiver verifies the Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`,
@@ -680,37 +681,64 @@ record another instance sealed under the new one):
 1. Deploy `CLAVIX_KEYS_MASTER_KEY=<old>,<new>`: the old key still seals, the new
    one already opens. Wait until every instance runs it.
 2. Deploy `CLAVIX_KEYS_MASTER_KEY=<new>,<old>`: the new key seals.
-3. Re-seal what is still under the old key, from any instance with the same
+3. Seal again what is still under the old key, from any instance with the same
    environment: `bun run keys:reseal`. It goes over every tenant (suspended and
-   trashed included), prints `{ tenants, resealed, current, skipped, failed, secondFactor }`
-   and **exits 1 while `skipped` or `failed` is above 0**: run it again. A
-   record is `skipped` when someone changed it meanwhile; a tenant is `failed`
-   when no key of the list opens one of its records (the message names the
-   tenant).
-4. When a run answers `resealed: 0, skipped: 0, failed: 0`, deploy
-   `CLAVIX_KEYS_MASTER_KEY=<new>` alone.
+   trashed included) and over **every store sealed under the keyring**:
 
-Dropping the old key before step 4 makes the unsealed records unreadable: signing
-fails for those tenants (the JWKS still serves) until the old key is back in the
-list.
+   | In the report                              | What it is                                                      |
+   | ------------------------------------------ | --------------------------------------------------------------- |
+   | `resealed`, `current`, `skipped`, `failed` | the tenants' signing keys (`failed` counts tenants, any store)  |
+   | `secondFactor`                             | the users' TOTP secrets, and their recovery-code hashes         |
+   | `webhookSecrets`                           | the webhook endpoints' signing secrets, rolled ones included    |
+   | `connectionSecrets`                        | the enterprise connections' client secrets                      |
+   | `socialSecrets`                            | the social providers' client secrets (tenants in the trash too) |
+   | `oldKeyNeededBy`                           | every count that still needs the old key; `[]` when it can go   |
 
-The tenants' social client secrets (sign-in methods) use a subkey of the same
-master key. With a keyring they are still opened under any key of the list, but
-`keys:reseal` does not re-wrap them (clavix-api#49): **keep the old key in the
-list while any social secret is sealed under it**, or enter those secrets again.
+   Each store reports `scanned`, `resealed`, `current`, `skipped`, `unreadable`
+   and `behind`. The run **exits 1** and prints `keys: keep the old master key
+   ...` while any store has:
+   - `skipped` above 0: a record changed meanwhile. Run it again.
+   - `failed` above 0: a step threw for a tenant (the log line names the
+     tenant and the step). For the signing keys it means no key of the list
+     opens one of its records.
+   - `unreadable` above 0: no key of the list opens that secret (the log names
+     the endpoint or the connection, never the value). A re-run does not clear
+     it: put the missing key back in the list, or enter the secret again
+     (roll the endpoint's secret, set the connection's or the provider's client
+     secret, `resetUserSecondFactor` for a user's TOTP).
+   - `behind` above 0: counted again after the pass, the secrets still under an
+     older key.
+4. **Only when a run exits 0 and prints `"oldKeyNeededBy": []`**, deploy
+   `CLAVIX_KEYS_MASTER_KEY=<new>` alone. `resealed: 0` on the signing keys is
+   not enough: read `oldKeyNeededBy`.
+
+Dropping the old key while `oldKeyNeededBy` still names a store makes those
+secrets unreadable until the old key is back in the list:
+- signing keys: signing fails for those tenants (the JWKS still serves);
+- webhook secrets: the endpoint is left out of delivery (never sent unsigned),
+  with only a log line `webhooks: a secret of endpoint <id> could not be opened`;
+- connection client secrets: the connection is off and its domains cannot sign
+  in through SSO (`connections: <id> of tenant <tenant> is off`);
+- social client secrets: the provider is no longer offered on the sign-in page;
+- TOTP secrets: those users cannot pass the second factor.
 
 The users' TOTP secrets (second factor) are sealed under a subkey of the same
 master key (HKDF, info `second-factor`). `keys:reseal` seals them again with janus's
 `secondFactor.reseal` (batches of 100, resumable, idempotent), including the users who
 do not sign in, and reports `secondFactor: { scanned, resealed, current, skipped,
-unreadable, sealed, behind, recoveryCodesBehind }`. It exits 1 while `skipped` or
-`unreadable` is above 0 (run it again for `skipped`; an `unreadable` secret is one no key of the list
-opens: put the missing key back, or reset that user's factor with `resetUserSecondFactor`, a re-run does not clear it). `sealed` and `behind` count the secrets only (not the recovery codes); `behind` is the secrets still under an older key: 0 after a pass. The recovery
-codes are hashes and cannot be hashed again: their old hashes keep working while the old
-key is in the list, and new ones (a user's `regenerateRecoveryCodes`) are hashed under the
-first key. **Keep the old key in the list while `recoveryCodesBehind` is above 0**, or
-those users' remaining recovery codes stop working (an admin's `resetUserSecondFactor`
-lets them enrol again).
+unreadable, sealed, behind, recoveryCodesBehind }`. `sealed` and `behind` count the
+secrets only (not the recovery codes). The recovery codes are hashes and cannot be
+hashed again: their old hashes keep working while the old key is in the list, and new
+ones (a user's `regenerateRecoveryCodes`) are hashed under the first key. They do not
+make the run exit 1 (no run can move them), but `oldKeyNeededBy` lists
+`secondFactor.recoveryCodesBehind`: **keep the old key in the list while it is above
+0**, or accept that those users' remaining recovery codes stop working (an admin's
+`resetUserSecondFactor` lets them enrol again).
+
+After a master key **leaked**, do the same four steps at once, then treat every
+secret that was sealed under it as exposed to whoever also holds a copy of the
+database: roll the webhook secrets, replace the connection and social client
+secrets at their providers, and rotate the signing keys (below).
 
 ### Emergency rotation (a signing key leaked)
 
