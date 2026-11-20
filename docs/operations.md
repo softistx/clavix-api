@@ -902,6 +902,85 @@ A **lost** master key cannot be recovered by rotation: the stored keys are
 unreadable. Drop the tenants' `oauthSigningKeys` documents and restart the API so
 the start pass creates new keys (README, "Signing keys").
 
+## Load test
+
+`load/` holds the k6 scripts and the harness of the v1 load test (D26). It runs on one machine against
+the production image and `deploy/compose.yml` as they are (production mode, the resource limits, a one-node
+replica set, Redis with a password), under the compose project `clavix-load`: `mongo`, `redis` and `api`.
+Caddy and the ui are not started: k6 joins the compose network and sends what Caddy would add (the tenant's
+`Host`, `X-Forwarded-For` from a pool of 250 addresses, `X-Forwarded-Proto: https`). Nothing is published on
+the host, and the whole run is torn down with its volumes. Staging hardware is the better judge of the
+numbers: D26 asks for another machine, and a laptop shares its cores.
+
+| File                     | Role                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| `load/run.sh`            | `build`, `up`, `seed`, `k6 <out> <script>`, `down`, or `all`; writes a throwaway `deploy/.env`  |
+| `load/seed.ts`           | 50 tenants, 2 public clients each, one real user per tenant, one refresh-token chain per client |
+| `load/token.js`          | `POST /token`, refresh grant, 200 req/s, 60 s                                                   |
+| `load/jwks-discovery.js` | `GET /jwks.json` and `GET /.well-known/openid-configuration`, 1 000 req/s each, 60 s            |
+| `load/lib.js`            | the target, the tenants, the headers, the arrival-rate scenarios                                |
+
+```sh
+load/run.sh build                     # docker build -t clavix-api:load .
+load/run.sh up                        # mongo, redis, db:sync, db:migrate
+load/run.sh seed                      # tenants, clients, chains; (re)starts the api; run it again before every token run
+load/run.sh k6 "$PWD/load/out" jwks-discovery.js
+load/run.sh k6 "$PWD/load/out" token.js
+load/run.sh down                      # containers, volumes, the generated deploy/.env
+```
+
+The k6 image is `grafana/k6` (any other tool image is never pulled). Each script runs open-model
+(`constant-arrival-rate`), so a slow server shows as latency and dropped iterations, never as a lower
+request rate. `jwks-discovery.js` warms for 10 s (not measured); `token.js` warms each tenant with one
+discovery request in `setup` instead, because its VUs hold state.
+
+Method notes:
+- **`client_credentials` is not offered.** `/token` answers `unsupported_grant_type` (the provider has no such
+  grant, and the default grants of a client are code and refresh). `token.js` records that answer in `setup`
+  and measures the refresh grant, the other half of D26's `/token` target.
+- **A refresh chain is one VU's.** Refresh tokens rotate and a reused one revokes the grant, so each VU walks
+  its own chain (`think time` of 250 ms keeps ~50 VUs, so about 50 chains over as many tenants, busy at 200 req/s).
+  `seed.ts` mints the chains through the real `/par`, `/authorize`, approval and code exchange of the real issuers
+  (the approval is called directly, in place of the hosted sign-in, for the tenant's real user); the seed must run again before each token run.
+- **Thresholds** are in the scripts: refresh p95 under 150 ms with 0 failures; JWKS and discovery p95 under 20 ms
+  with 0 failures. `k6` exits non-zero when one is crossed.
+
+### Results (2026-11-20)
+
+Machine: Apple M5 Pro, 18 cores; the Docker VM has 18 CPUs and 9.7 GiB. The laptop was shared with other
+sessions: the 1-minute load average was 3.5 to 6.1 during the runs (5-minute 4.0 to 5.0). Containers keep
+the limits of `compose.yml` (api 1 CPU, mongo 1 CPU, redis 0.25 CPU); k6 ran in a container with no limit.
+`@softistx/janus-oauth` as locked in `bun.lock`; commit of this branch.
+
+| Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                     |
+| --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | ------------------------------------------ |
+| `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                       |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss**                                   |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss**                                   |
+| `client_credentials`                    | n/a               | n/a      | n/a      | n/a    | n/a              | not offered (400 `unsupported_grant_type`) |
+
+The 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
+(1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,
+to find where it stops meeting the threshold:
+
+| JWKS and discovery together | JWKS p95 (ms) | Discovery p95 (ms) | Threshold (20 ms)        |
+| --------------------------- | ------------- | ------------------ | ------------------------ |
+| 300 req/s (150 each)        | 3.3           | 4.2                | pass                     |
+| 600 req/s (300 each)        | 13.4          | 18.0               | pass, with little margin |
+| 2 000 req/s (1 000 each)    | 175.9         | 232.6              | miss                     |
+
+Suspected cause of the miss (measured, not fixed here): every JWKS and discovery request reads Mongo. With
+the profiler on, one `/jwks.json` made 7 queries: `resources`, `scopes` and `detailTypes` twice each (the
+tenant's resource catalogue, read while the tenant's server is built or consulted) and one `oauthSigningKeys`
+read. At 1 000 req/s each that is about 14 000 Mongo reads a second behind a 1 CPU api. A per-tenant cache of
+these reads (short TTL, dropped on the tenant's `version` change) or a cached JWKS and discovery document is
+the fix to evaluate; it changes how a resource or key change propagates, so it is an owner decision and a
+separate PR. Rerun `load/run.sh` after it and replace this table.
+
+Side finding fixed in this PR: the production bundle (`bun dist/server.js`) did not start, `tsyringe requires a
+reflect polyfill` (the passkey verification pulls it in), because nothing imported `reflect-metadata`. The
+specs never hit it, they do not run the bundle. `src/server.ts` now imports it first and it is a direct dependency.
+
 ## Troubleshooting
 
 | Symptom                            | Look at                                                                                                                                                                                                                                                                                                                          |
