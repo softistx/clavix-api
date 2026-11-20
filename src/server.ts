@@ -1,5 +1,6 @@
-// Temporary, until nxgt-janus#992: tsyringe (through the passkeys package) needs this polyfill
-// before anything imports it; the bundle fails at start without it.
+// Bun's bundler emits the ESM inits of @simplewebauthn/server before its CommonJS require of
+// reflect-metadata, so @peculiar/x509 loads tsyringe first; importing the polyfill here, first,
+// fixes the order.
 import "reflect-metadata";
 import { createApp } from "./app";
 import { createAgentsPrune } from "./config/agents-prune";
