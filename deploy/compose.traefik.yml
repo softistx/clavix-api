@@ -43,6 +43,9 @@ services:
         || Path(`/.well-known/oauth-authorization-server`)
         || Path(`/.well-known/openid-configuration`) || Path(`/.well-known/webauthn`))
       traefik.http.routers.clavix-api.service: clavix-api
+      # Public requests never carry the BFF-only header (docs/operations.md).
+      traefik.http.middlewares.clavix-api-strip.headers.customrequestheaders.x-sso-connection: ""
+      traefik.http.routers.clavix-api.middlewares: clavix-api-strip
       traefik.http.routers.clavix-api.tls: "true"
       traefik.http.routers.clavix-api.tls.certresolver: letsencrypt
       traefik.http.routers.clavix-api.tls.domains[0].main: ${CLAVIX_DOMAIN}

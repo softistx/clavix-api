@@ -30,6 +30,10 @@ Caddy sends the authorization server (`/authorize`, `/token`, `/par`, `/device_a
 and `/healthz` to the API (a proxy of your own must route `/device_authorization` too), and everything else to the UI. The tenant is chosen
 by the `Host` header, which Caddy passes untouched.
 
+The edge strips `x-sso-connection` from every request it forwards to the API (Caddy `header_up -X-Sso-Connection`, the traefik
+`clavix-api-strip` middleware). Only the UI sets that header, on the private network (`clavix-api:3000`), to bind an enterprise
+connection's callback to the route that received it; a public client could otherwise send it together with a callback URL.
+
 ## Health
 
 - `GET /healthz` is liveness: 200 `{ status, version }`, no dependency is
