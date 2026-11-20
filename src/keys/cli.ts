@@ -14,7 +14,8 @@ export const RESEAL_USAGE = `Usage: bun run keys:reseal
 
 Seals again, under the first key of CLAVIX_KEYS_MASTER_KEY, everything stored under the keyring,
 for every tenant (suspended and trashed included), and prints the counts as JSON:
-  resealed, current, skipped, failed   the signing keys
+  tenants                              how many tenants the run went over
+  resealed, current, skipped, failed   the signing keys (failed counts tenants, any store)
   secondFactor                         the users' TOTP secrets (janus secondFactor.reseal, in batches)
   webhookSecrets                       the webhook endpoints' signing secrets, rolled ones included
   connectionSecrets                    the enterprise connections' client secrets

@@ -61,6 +61,8 @@ export class SignInPolicyService {
   constructor(
     private readonly tenants: TenantsService,
     private readonly box: SecretBox,
+    private readonly log: (message: string) => void = (message) =>
+      console.warn(message),
   ) {}
 
   /** The tenant (suspended included: its policy stays readable), or NOT_FOUND (404) for an unknown or trashed one. */
@@ -184,8 +186,8 @@ export class SignInPolicyService {
    * Seals the tenant's social client secrets again under the keyring's first
    * key (`keys:reseal`, a master-key rotation), a tenant in the trash
    * included. One write for the tenant, refused when it changed meanwhile
-   * (`skipped`: run again). A secret no key opens is left as it is
-   * (`unreadable`).
+   * (`skipped`: run again). A secret no key opens is left as it is and logged
+   * by provider and tenant, never by value (`unreadable`).
    */
   async resealSecrets(tenantId: string): Promise<SecretResealCounts> {
     const counts = emptySecretResealCounts();
@@ -208,6 +210,9 @@ export class SignInPolicyService {
         return { ...entry, secret };
       } catch {
         counts.unreadable += 1;
+        this.log(
+          `sign-in: the ${entry.provider} secret of tenant ${owner} could not be sealed again`,
+        );
         return entry;
       }
     });

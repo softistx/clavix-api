@@ -31,7 +31,8 @@ openssl rand -base64 32   # a value for CLAVIX_KEYS_MASTER_KEY
 
 The variable is one key or a comma-separated keyring of 32-byte base64 keys, none repeated. Fix the list and
 redeploy. If signing fails after a rotation, or webhooks stop arriving, an enterprise connection or a social
-provider disappears from the sign-in page, the old key was dropped before `bun run keys:reseal` exited 0 with
+provider disappears from the sign-in page, or users cannot pass their second factor (TOTP or an old recovery
+code), the old key was dropped before `bun run keys:reseal` exited 0 with
 `"oldKeyNeededBy": []`: put the old key back after the new one and run it again.
 See `docs/operations.md`, "Signing keys".
 

@@ -687,6 +687,7 @@ record another instance sealed under the new one):
 
    | In the report                              | What it is                                                      |
    | ------------------------------------------ | --------------------------------------------------------------- |
+   | `tenants`                                  | how many tenants the run went over                              |
    | `resealed`, `current`, `skipped`, `failed` | the tenants' signing keys (`failed` counts tenants, any store)  |
    | `secondFactor`                             | the users' TOTP secrets, and their recovery-code hashes         |
    | `webhookSecrets`                           | the webhook endpoints' signing secrets, rolled ones included    |
@@ -694,23 +695,34 @@ record another instance sealed under the new one):
    | `socialSecrets`                            | the social providers' client secrets (tenants in the trash too) |
    | `oldKeyNeededBy`                           | every count that still needs the old key; `[]` when it can go   |
 
-   Each store reports `scanned`, `resealed`, `current`, `skipped`, `unreadable`
-   and `behind`. The run **exits 1** and prints `keys: keep the old master key
-   ...` while any store has:
+   Each of the nested stores (`secondFactor`, `webhookSecrets`,
+   `connectionSecrets`, `socialSecrets`) reports `scanned`, `resealed`,
+   `current`, `skipped`, `unreadable` and `behind`; the signing keys have the
+   top-level counts only. The run prints `keys: keep the old master key ...`
+   on stderr whenever `oldKeyNeededBy` is not empty, and **exits 1** while any
+   store has:
    - `skipped` above 0: a record changed meanwhile. Run it again.
-   - `failed` above 0: a step threw for a tenant (the log line names the
-     tenant and the step). For the signing keys it means no key of the list
-     opens one of its records.
-   - `unreadable` above 0: no key of the list opens that secret (the log names
-     the endpoint or the connection, never the value). A re-run does not clear
-     it: put the missing key back in the list, or enter the secret again
-     (roll the endpoint's secret, set the connection's or the provider's client
-     secret, `resetUserSecondFactor` for a user's TOTP).
+   - `failed` above 0: a step threw for a tenant. The log line is
+     `keys: reseal failed for tenant <id> (<step>): <message>`, the step being
+     `signing keys`, `second factor`, `webhookSecrets`, `connectionSecrets` or
+     `socialSecrets`. For the signing keys it means no key of the list opens
+     one of its records.
+   - `unreadable` above 0: no key of the list opens that secret. The log names
+     the record, never the value:
+     `webhooks: a secret of endpoint <id> could not be sealed again`,
+     `connections: the secret of <id> (tenant <tenant>) could not be sealed again`,
+     `sign-in: the <provider> secret of tenant <tenant> could not be sealed again`.
+     The TOTP secrets are counted by janus and not logged per user. A re-run
+     does not clear it: put the missing key back in the list, or enter the
+     secret again (roll the endpoint's secret, set the connection's or the
+     provider's client secret, `resetUserSecondFactor` for a user's TOTP).
    - `behind` above 0: counted again after the pass, the secrets still under an
      older key.
 4. **Only when a run exits 0 and prints `"oldKeyNeededBy": []`**, deploy
    `CLAVIX_KEYS_MASTER_KEY=<new>` alone. `resealed: 0` on the signing keys is
-   not enough: read `oldKeyNeededBy`.
+   not enough: read `oldKeyNeededBy`. The one entry no run can clear is
+   `secondFactor.recoveryCodesBehind` (an exit 0 that still lists it): see the
+   recovery codes below before dropping the key with it.
 
 Dropping the old key while `oldKeyNeededBy` still names a store makes those
 secrets unreadable until the old key is back in the list:

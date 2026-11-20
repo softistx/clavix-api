@@ -55,7 +55,7 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
       log,
     },
   );
-  const policy = new SignInPolicyService(tenants, boxes.social);
+  const policy = new SignInPolicyService(tenants, boxes.social, log);
   const secretStores: ResealDeps["secretStores"] = {
     webhookSecrets: (tenantId) => webhooks.resealSecrets(tenantId),
     connectionSecrets: (tenantId) => connections.resealSecrets(tenantId),
@@ -387,6 +387,9 @@ describe("every sealed store follows the rotation (clavix-api#329)", () => {
     // Named by id, never by value.
     expect(logs.join("\n")).toContain(connection.id);
     expect(logs.join("\n")).not.toContain(connection.clientSecret);
+    expect(logs.join("\n")).toContain(
+      `sign-in: the github secret of tenant ${liveId} could not be sealed again`,
+    );
   });
 
   test("a store that throws fails its tenant once and the other stores still run", async () => {
