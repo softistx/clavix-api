@@ -1294,6 +1294,29 @@ describe("a repeat after a failed record", () => {
     ).toBe("CONFLICT");
   });
 
+  test("a retried client_credentials createClient with padded scopes returns the stored client", async () => {
+    const input = {
+      name: "Padded",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+      allowedScopes: ["read"],
+      defaultScopes: ["read"],
+    };
+    const first = await create(admin, tenantA, input);
+    expect(first.errors).toBeUndefined();
+    const again = await create(admin, tenantA, {
+      ...input,
+      allowedScopes: [" read"],
+      defaultScopes: ["read "],
+    });
+    expect(again.errors).toBeUndefined();
+    const result = again.data?.["createClient"] as
+      | { clientSecret: string | null }
+      | undefined;
+    expect(result?.clientSecret).toBeNull();
+  });
+
   test("eight identical concurrent calls: one secret, seven null, one stored client", async () => {
     const results = await Promise.all(
       Array.from({ length: 8 }, () =>
