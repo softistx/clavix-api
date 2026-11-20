@@ -1058,8 +1058,8 @@ the cache. Load average before the run: 2.60 (1 min), 1.90 (5 min), 2.43 (15 min
 | `POST /token` (refresh grant)           | 200 req/s, 60 s   | 24.5     | 95.9     | 0      | 0       | pass   |
 | `client_credentials`                    | 200 req/s, 60 s   | 29.2     | 92.6     | 0      | 0       | pass   |
 
-`dropped_iterations` is 0 on both scripts (125 004 JWKS and discovery requests, 24 053 `/token` requests, 0 failed): the
-earlier 29 drops came from the shared machine, not from the api or the VU pool. All D26 thresholds hold.
+`dropped_iterations` is 0 on both scripts (120 002 JWKS and discovery requests and 24 002 `/token` requests in the measured phase, 0 failed): the
+29 drops of the first run did not recur on a quiet machine, which points to the shared machine rather than the api or the VU pool. All D26 thresholds hold.
 
 Before the cache, the 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
 (1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,
