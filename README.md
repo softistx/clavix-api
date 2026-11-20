@@ -500,7 +500,7 @@ defaults to 25, at most 100), with each actor resolved to a name and an e-mail a
 
 What a tenant's users do to their own access is written to its own `authEvents` collection
 (tenant-owned, closed schema): `session.signIn` (by `emailCode`, `magicLink`, `passkey` or `social`,
-a refusal with its reason code) and `session.signOut` from the hosted sign-in, and the second-factor and
+a refusal with its reason code; a social sign-in that took over an address held unverified carries `reason: "replaced"`) and `session.signOut` from the hosted sign-in, and the second-factor and
 passkey changes janus reports (`secondFactor.*`, `recoveryCode*`, `passkey.*`); `stepUp.confirm` is
 the step-up confirmation (passkey, app code or e-mailed code). Per-token events are not recorded. Each event holds the type, the time, the
 outcome, the actor, the user or client, the full address, a browser family (never the whole

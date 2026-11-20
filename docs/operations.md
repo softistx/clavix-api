@@ -368,9 +368,8 @@ too (no `REDIS_URL`).
 - Run janus-webhooks-redis 0.13 or later on **every** instance before setting a cap, and the same values on all
   of them: an older instance claims without counting, so the cap is exceeded by what it claims. Roll the
   instances in one go.
-- Deliveries already waiting in Redis under the old bare endpoint names are given up as `endpointRemoved` (no
-  retry, no auto-disable) when their endpoint is no longer listed under that name; a rolling deploy during a
-  quiet moment loses at most what was waiting for a retry.
+- A running deployment must drain the webhook queue before this upgrade: queue entries now name their endpoint
+  `<tenantId>.<endpointId>`, so deliveries waiting under the old bare names would be given up as `endpointRemoved`.
 - **Redis ACL.** A Redis user restricted by ACL needs `+@scripting` and the commands the queue scripts run:
   `HSET HGET HGETALL HINCRBY EXISTS DEL ZADD ZREM ZRANGEBYSCORE ZREMRANGEBYSCORE ZCARD SADD SREM SISMEMBER
   SMEMBERS HDEL GET SET` on `~clavix:webhooks:*`. Version 0.13 needs the new ones: `ZREMRANGEBYSCORE` (with the

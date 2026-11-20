@@ -579,7 +579,8 @@ export class ConnectionsService {
   /**
    * Specs only: replaces the transport of every request to an identity
    * provider (janus-social 0.10 otherwise connects to the checked addresses
-   * itself, past the global `fetch`). Production leaves it unset.
+   * itself, past the global `fetch`). Production leaves it unset: no production
+   * file calls it, which `spec-seams.spec.ts` enforces.
    */
   useFetch(fetcher: ConnectionsFetch | undefined): void {
     this.fetcher = fetcher;

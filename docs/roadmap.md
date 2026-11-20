@@ -35,6 +35,9 @@ nxgt-janus release says which.
   an endpoint that fails 5 deliveries in a row is switched off and the owners are e-mailed
   ([#22](https://github.com/softistx/clavix-api/issues/22)). A deliveries log (the last 100 attempts per
   endpoint, 7 days: status, failure name, duration, never a body) shows an admin why an endpoint fails.
+  The queue is capped per tenant (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, `CLAVIX_WEBHOOKS_MAX_PENDING`), so one
+  tenant's flooding endpoint cannot starve another's (G2-03,
+  [#330](https://github.com/softistx/clavix-api/issues/330)).
 - **Step-up and authentication level** (M4) — a client asks for `acr_values`, `max_age` or `prompt=login`
   and gets what it asked for or a clear refusal: a request no sign-in can meet is denied on the client's
   redirect with `unmet_authentication_requirements`, and one the user can still meet (second factor,
