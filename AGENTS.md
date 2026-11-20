@@ -629,7 +629,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
   reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
   prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
-- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/config/webhooks.ts`) gives both
+- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/modules/webhooks/delivery.ts`, applied in `src/config/webhooks.ts`) gives both
   queues (Redis and memory) `maxInFlight` (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, 4), `maxPending`
   (`CLAVIX_WEBHOOKS_MAX_PENDING`, 5000) and `groupOf`. **Assumed, not answered**: the caps are per tenant, not
   per endpoint, because janus-webhooks counts per group once `groupOf` is set (one queue cannot cap both). So the
