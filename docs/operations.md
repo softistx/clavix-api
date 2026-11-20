@@ -990,19 +990,19 @@ numbers: D26 asks for another machine, and a laptop shares its cores.
 
 | File                     | Role                                                                                            |
 | ------------------------ | ----------------------------------------------------------------------------------------------- |
-| `load/run.sh`            | `build`, `up`, `seed`, `k6 <out> <script>`, `down`, or `all`; writes a throwaway `deploy/.env`  |
+| `load/run.ts`            | `build`, `up`, `seed`, `k6 <out> <script>`, `down`, or `all`; writes a throwaway `deploy/.env`  |
 | `load/seed.ts`           | 50 tenants, 2 public clients each, one real user per tenant, one refresh-token chain per client |
 | `load/token.js`          | `POST /token`, refresh grant, 200 req/s, 60 s                                                   |
 | `load/jwks-discovery.js` | `GET /jwks.json` and `GET /.well-known/openid-configuration`, 1 000 req/s each, 60 s            |
 | `load/lib.js`            | the target, the tenants, the headers, the arrival-rate scenarios                                |
 
 ```sh
-load/run.sh build                     # docker build -t clavix-api:load .
-load/run.sh up                        # mongo, redis, db:sync, db:migrate
-load/run.sh seed                      # tenants, clients, chains; (re)starts the api; run it again before every token run
-load/run.sh k6 "$PWD/load/out" jwks-discovery.js
-load/run.sh k6 "$PWD/load/out" token.js
-load/run.sh down                      # containers, volumes, the generated deploy/.env
+bun load/run.ts build                     # docker build -t clavix-api:load .
+bun load/run.ts up                        # mongo, redis, db:sync, db:migrate
+bun load/run.ts seed                      # tenants, clients, chains; (re)starts the api; run it again before every token run
+bun load/run.ts k6 "$PWD/load/out" jwks-discovery.js
+bun load/run.ts k6 "$PWD/load/out" token.js
+bun load/run.ts down                      # containers, volumes, the generated deploy/.env
 ```
 
 The k6 image is `grafana/k6` (any other tool image is never pulled). Each script runs open-model
@@ -1020,7 +1020,7 @@ Method notes:
   p95 under 20 ms at 2 000 req/s; run against a staging-like compose, not production.
 - **Prerequisites**: Docker with Compose 2.20+, the `grafana/k6` image, `openssl` and `bun` on the host, and a Docker
   VM with about 10 GiB. `load/out/` (git-ignored) receives `seed.json`, `*.summary.json` and `*.log`.
-- **Knobs**: `RATE`, `VUS`, `DURATION` and `WARMUP` (env of `run.sh k6`, passed to k6; the lower-rate rows below are
+- **Knobs**: `RATE`, `VUS`, `DURATION` and `WARMUP` (env of `run.ts k6`, passed to k6; the lower-rate rows below are
   `RATE=300 VUS=60 DURATION=30s WARMUP=5s` and `RATE=150 ...`), `LOAD_TENANTS` and `LOAD_CHAINS` (env of the seed,
   defaults 50 and 2).
 - **A refresh chain is one VU's.** Refresh tokens rotate and a reused one revokes the grant, so each VU walks

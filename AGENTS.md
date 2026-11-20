@@ -713,8 +713,6 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `x-sso-connection` header the BFF sets from its own `:provider` route parameter (it forwards no browser header);
   a missing or disagreeing pair binds nothing, which a connection's flow refuses (fail closed). Register
   `<issuer>/sign-in/social/<id>/callback` with each identity provider.
-- Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
-  (`src/config/connections.ts`); janus has no such API.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
 - **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
   enabled connection owning the address's verified domain (`ownerOf`: two claimants answer none), else null; it
