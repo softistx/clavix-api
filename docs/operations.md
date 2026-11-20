@@ -2,7 +2,7 @@
 
 Run Clavix on one host with Docker Compose: the API, the UI, MongoDB (a one-node
 replica set), Redis and Caddy for TLS. Nothing here is deployed by CI. The files
-are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`
+are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`,
 `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/offsite.ts`) and, for the load test, `load/`.
 
 ## What runs
@@ -1009,6 +1009,7 @@ Application errors and their causes: [troubleshooting.md](troubleshooting.md).
 
 ## Not covered yet
 
+- JWKS and discovery miss the D26 target (p95 20 ms at 2 000 req/s on one API CPU; see "Load test"): the cache decision is open.
 - TLS on Redis (the connection is authenticated, on the private network).
 - Image publishing and any deploy pipeline (workflows are off).
 - Point-in-time recovery (oplog): designed, not built (see "Point-in-time recovery").
