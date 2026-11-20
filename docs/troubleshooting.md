@@ -1013,3 +1013,11 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** the callback is bound to the connection whose URL received it, and must match the flow's connection. It is refused when the identity provider returned the visitor to another connection's URL, when the BFF sent no `x-sso-connection` header, or when the header disagrees with the callback URL's path. A provider still registered with the old shared `/sign-in/sso/callback` lands on a path that names no connection.
 
 **Fix:** register `https://<tenant host>/sign-in/social/<connection id>/callback` with the identity provider, and make sure the BFF sends the callback route's `:provider` as `x-sso-connection`.
+
+## `tsyringe requires a reflect polyfill` when the bundle starts
+
+**When:** `bun dist/server.js` stops at start, with a stack through `@peculiar/x509` and `@simplewebauthn/server`. The specs do not show it, they do not run the bundle.
+
+**Why:** Bun's bundler emits the ESM inits of `@simplewebauthn/server` before its CommonJS require of `reflect-metadata`, so `@peculiar/x509` loads `tsyringe` first.
+
+**Fix:** keep `import "reflect-metadata"` first in `src/server.ts`.
