@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { defineTheme } from "@softistx/material-core/theme";
-import { graphql } from "graphql";
+import {
+  type ExecutionResult,
+  experimentalExecuteIncrementally,
+  parse,
+} from "graphql";
 import { ObjectId } from "mongodb";
 import { createApp } from "@/app";
 import { access } from "@/config/access";
@@ -91,17 +95,19 @@ const eventsOf = (tenantId: string) =>
     .sort({ _id: 1 })
     .toArray();
 
-const run = (
+// graxia's schema declares @defer and @stream, which graphql's plain `execute`
+// refuses: run it incrementally (a query without them answers one result).
+const run = async (
   source: string,
   userId: string,
   variableValues?: Record<string, unknown>,
 ) =>
-  graphql({
+  (await experimentalExecuteIncrementally({
     schema: consoleSchema,
-    source,
+    document: parse(source),
     contextValue: ctxFor(userId),
     ...(variableValues === undefined ? {} : { variableValues }),
-  });
+  })) as ExecutionResult;
 
 interface Payload {
   changed: boolean;

@@ -1,5 +1,7 @@
+import { definePlugin } from "@graxia/core";
 import type { ExecutionResult } from "graphql";
 import { GraphQLError } from "graphql";
+import { isJsonAnswer } from "./media";
 
 // graphql-js words a variable coercion failure as
 // `Variable "$i" got invalid value <the value> at "i.clientSecret"; <reason>`,
@@ -9,7 +11,7 @@ import { GraphQLError } from "graphql";
 // Only variables are scrubbed: clients send their values as variables. Both
 // endpoints use it: the console API and the hosted /graphql (e-mail codes,
 // passkey answers, social flow values).
-const COERCION = /^Variable "\$([A-Za-z_]\w*)" got invalid value\b/;
+const COERCION = /^Variable "\$([A-Za-z_]\w*)" (?:got|has) invalid value\b/;
 const AT = /\bat "([^"]*)";/;
 
 /** The coercion error without the value it quotes; any other error as it is. */
@@ -24,28 +26,45 @@ export function withoutQuotedValue(error: GraphQLError): GraphQLError {
   );
 }
 
-type Result = ExecutionResult | readonly ExecutionResult[];
+const scrub = (chunk: unknown): unknown => {
+  const result = chunk as ExecutionResult | null;
+  return result?.errors === undefined
+    ? chunk
+    : { ...result, errors: result.errors.map(withoutQuotedValue) };
+};
 
-const scrub = (one: ExecutionResult): ExecutionResult =>
-  one.errors === undefined
-    ? one
-    : { ...one, errors: one.errors.map(withoutQuotedValue) };
-
-/** A GraphQL plugin that scrubs the coercion errors of every result. */
-export function useWithoutQuotedValues() {
-  return {
-    onResultProcess({
-      result,
-      setResult,
-    }: {
-      result: Result;
-      setResult: (result: Result) => void;
-    }) {
-      setResult(
-        Array.isArray(result)
-          ? result.map(scrub)
-          : scrub(result as ExecutionResult),
+/**
+ * A graxia plugin that scrubs the coercion errors of every result: on the
+ * stream transports (`onResultChunk`) and, since a plain JSON answer runs no
+ * chunk hook, on the final response (`onResponse`).
+ */
+export const useWithoutQuotedValues = () =>
+  definePlugin({
+    name: "clavix-without-quoted-values",
+    onResultChunk({ chunk, setChunk }) {
+      setChunk(scrub(chunk));
+    },
+    async onResponse({ response, setResponse }) {
+      if (!isJsonAnswer(response.headers.get("content-type"))) return;
+      const body = await response.clone().text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        return;
+      }
+      const scrubbed = Array.isArray(parsed)
+        ? parsed.map(scrub)
+        : scrub(parsed);
+      if (JSON.stringify(scrubbed) === body) return;
+      const headers = new Headers(response.headers);
+      headers.delete("content-length");
+      setResponse(
+        new Response(JSON.stringify(scrubbed), {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        }),
       );
     },
-  };
-}
+  });

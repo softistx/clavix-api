@@ -4,6 +4,13 @@ import { createApp } from "@/app";
 const app = createApp();
 const URL_ = "http://acme.clavix.test/graphql";
 const json = { "content-type": "application/json" };
+// graxia's own CSRF check runs first and stays on: a GET or a non-JSON POST
+// carries this header to reach the same-origin guard.
+const csrf = { "x-graphql-csrf": "1" };
+const formHeaders = {
+  ...csrf,
+  "content-type": "application/x-www-form-urlencoded",
+};
 
 const post = (headers: Record<string, string>, body: unknown) =>
   app.request(URL_, {
@@ -58,7 +65,7 @@ describe("the same-origin guard on /graphql", () => {
 
   test("a form post is refused, also for the sign-in code", async () => {
     const response = await post(
-      { "content-type": "application/x-www-form-urlencoded" },
+      formHeaders,
       new URLSearchParams(REQUEST_CODE).toString(),
     );
     expect(response.status).toBe(403);
@@ -73,7 +80,7 @@ describe("the same-origin guard on /graphql", () => {
     expect(foreign.status).toBe(404);
     expect(await codeOf(foreign)).toBe("NOT_FOUND");
     const form = await post(
-      { "content-type": "application/x-www-form-urlencoded" },
+      formHeaders,
       new URLSearchParams(CONSENT).toString(),
     );
     expect(await codeOf(form)).toBe("NOT_FOUND");
@@ -91,9 +98,10 @@ describe("the same-origin guard on /graphql", () => {
 
   test("a foreign-Origin GET and a JSON array body are refused", async () => {
     const get = await app.request(`${URL_}?query=%7BcurrentUser%7Bid%7D%7D`, {
-      headers: { origin: "https://evil.clavix.test" },
+      headers: { ...csrf, origin: "https://evil.clavix.test" },
     });
     expect(get.status).toBe(403);
+    expect(await codeOf(get)).toBe("FORBIDDEN");
     const batch = await post({ ...json, origin: "https://evil.clavix.test" }, [
       SIGN_OUT,
     ]);
@@ -108,6 +116,15 @@ describe("the same-origin guard on /graphql", () => {
     expect(odd.status).toBe(403);
   });
 
+  test("graxia's CSRF header check still refuses a form post without its header", async () => {
+    const response = await post(
+      { "content-type": "application/x-www-form-urlencoded" },
+      new URLSearchParams(REQUEST_CODE).toString(),
+    );
+    expect(response.status).toBe(403);
+    expect(await codeOf(response)).toBe("CSRF_HEADER_REQUIRED");
+  });
+
   test("the tenant's own Origin and a request with no Origin pass", async () => {
     for (const headers of [
       { ...json, origin: "http://acme.clavix.test" },
@@ -116,5 +133,22 @@ describe("the same-origin guard on /graphql", () => {
       const response = await post(headers, { query: "{ health { status } }" });
       expect(response.status).toBe(200);
     }
+  });
+});
+
+describe("the Origin is compared by host", () => {
+  test("https Origin against the http URL behind the proxy passes", async () => {
+    const response = await post(
+      { ...json, origin: "https://acme.clavix.test" },
+      SIGN_OUT,
+    );
+    // Past the guard: whatever the operation answers, it is not the guard's FORBIDDEN.
+    expect(response.status).not.toBe(403);
+    expect(await codeOf(response)).not.toBe("FORBIDDEN");
+  });
+
+  test("a malformed Origin is refused", async () => {
+    const response = await post({ ...json, origin: "not a url" }, SIGN_OUT);
+    expect(response.status).toBe(403);
   });
 });

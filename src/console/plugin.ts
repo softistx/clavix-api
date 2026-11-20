@@ -1,3 +1,4 @@
+import { createStateKey, definePlugin } from "@graxia/core";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
@@ -137,8 +138,11 @@ export async function authenticated(
   return principal;
 }
 
+/** The verified principal of the request, passed from `onRequest` to `onContext`. */
+const principalKey = createStateKey<OAuthUserPrincipal>("console-principal");
+
 /**
- * The console's Yoga plugin: the bearer token is verified before anything is
+ * The console's graxia plugin: the bearer token is verified before anything is
  * parsed (no token, a forged, expired or other-audience one: 401; the store
  * down: 503), then `principal`, `can`, `canPlatform` and `audit` ride on the context.
  * No cookie is read and no tenant is resolved from the host: the token is the
@@ -155,7 +159,6 @@ export function useConsole({
   adminEvents,
   activity,
 }: ConsoleDeps) {
-  const principals = new WeakMap<Request, OAuthUserPrincipal>();
   // Ours, one per HTTP request: a client's `x-request-id` is never believed.
   const requestIds = new WeakMap<Request, string>();
   const requestIdOf = (request: Request) => {
@@ -166,33 +169,22 @@ export function useConsole({
     }
     return requestId;
   };
-  return {
-    async onRequest({
-      request,
-      endResponse,
-    }: {
-      request: Request;
-      endResponse: (response: Response) => void;
-    }) {
-      // Called server to server: no CORS, so a preflight (no credential) is refused too.
-      // Outside `useSameOriginJson` on purpose: a bearer header is no ambient credential.
+  return definePlugin({
+    name: "clavix-console",
+    // Called server to server: no CORS, so a preflight (no credential) is refused too.
+    // A bearer header is no ambient credential, so no same-origin guard applies.
+    async onRequest({ request, respond, state }) {
       const principal = await authenticated(authenticate, request);
       if (principal instanceof Response) {
-        endResponse(principal);
+        respond(principal);
         return;
       }
-      principals.set(request, principal);
+      state.set(principalKey, principal);
     },
-    onContextBuilding({
-      context,
-      extendContext,
-    }: {
-      context: { request: Request };
-      extendContext: (extras: ConsoleExtras) => void;
-    }) {
-      const principal = principals.get(context.request);
-      if (principal === undefined) return; // refused in onRequest; nothing runs
-      extendContext({
+    onContext({ request, state }): ConsoleExtras | undefined {
+      const principal = state.get(principalKey);
+      if (principal === undefined) return undefined; // refused in onRequest; nothing runs
+      return {
         principal,
         access,
         directory,
@@ -212,9 +204,9 @@ export function useConsole({
             action,
             tenantId: target.tenantId,
             target: { type: target.type, id: target.id },
-            requestId: requestIdOf(context.request),
+            requestId: requestIdOf(request),
           }),
-      });
+      };
     },
-  };
+  });
 }

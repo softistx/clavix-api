@@ -26,10 +26,11 @@ import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
-import { useNoIntrospection } from "./http/introspection";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
+import { useErrorStatus } from "./http/status";
 import type { Throttle } from "./http/throttle/core";
+import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/plugin";
 import type { VerificationThrottle } from "./modules/auth/verification-throttle";
 import { LOGO_PATH } from "./modules/branding/logo-route";
@@ -130,10 +131,13 @@ export function createApp(
     graphql(app, {
       schema,
       ide: ide ? "apollo-sandbox" : false,
+      // Introspection follows the IDE: off wherever the IDE is.
+      introspection: ide,
+      onUnexpected: reportUnexpected,
       plugins: [
-        ...(ide ? [] : [useNoIntrospection()]),
         useSameOriginJson(),
         useWithoutQuotedValues(),
+        useErrorStatus(),
         janusPlugin(),
         ...(options.oauth?.serverFor === undefined
           ? []
@@ -146,7 +150,7 @@ export function createApp(
               ),
             ]),
       ],
-      maskedErrors: janusMasking,
+      ...janusMasking,
     }),
   );
   const consoleOptions = options.console;
@@ -158,15 +162,19 @@ export function createApp(
             schema: consoleOptions.schema ?? consoleSchema,
             path: CONSOLE_PATH,
             ide: false,
+            // Deliberate: the bearer token is checked first (`useConsole`), so only an authenticated admin introspects.
+            introspection: true,
+            onUnexpected: reportUnexpected,
             plugins: [
               // First: aliased invitations are counted before anything runs.
               ...(consoleOptions.budgets === undefined
                 ? []
                 : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
               useWithoutQuotedValues(),
+              useErrorStatus(),
               useConsole(consoleOptions),
             ],
-            maskedErrors: janusMasking,
+            ...janusMasking,
           }),
         )
         // The audit export (D17): a stream, so a route beside the GraphQL one.

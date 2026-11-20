@@ -2,9 +2,9 @@ import { basename, join } from "node:path";
 import { loadFilesSync } from "@graphql-tools/load-files";
 import { mergeResolvers, mergeTypeDefs } from "@graphql-tools/merge";
 import type { IResolvers } from "@graphql-tools/utils";
+import { createSchema, type Resolvers } from "@graxia/core";
 import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
-import { createSchema } from "graphql-yoga";
 import type { ConsoleContext } from "./context";
 import { type Guards, guardSchema } from "./guard";
 import { guards, resolvers } from "./modules";
@@ -32,7 +32,7 @@ export const consoleTypeDefs = mergeTypeDefs(consoleSources);
 export function createConsoleSchema(
   extra: { typeDefs?: string; resolvers?: IResolvers; guards?: Guards } = {},
 ) {
-  const base = createSchema<ConsoleContext>({
+  const base = createSchema<ConsoleContext>()({
     // Merged from the sources each time: merging into `consoleTypeDefs` would
     // write a spec's root types into its shared `schema { ... }` definition.
     typeDefs:
@@ -43,7 +43,8 @@ export function createConsoleSchema(
       scalarResolvers,
       resolvers,
       ...(extra.resolvers === undefined ? [] : [extra.resolvers]),
-    ]),
+      // graphql-tools merges to its own resolver type; graxia's `Resolvers<Ctx>` is the same shape.
+    ]) as Resolvers<ConsoleContext>,
   });
   return guardSchema(withValidation(base), { ...guards, ...extra.guards });
 }

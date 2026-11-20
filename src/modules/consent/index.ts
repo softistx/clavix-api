@@ -1,4 +1,5 @@
 import type { IResolvers } from "@graphql-tools/utils";
+import { definePlugin } from "@graxia/core";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
 import { GraphQLError } from "graphql";
@@ -54,19 +55,16 @@ export const oauthContext = (
   texts?: ScopeTextsFor,
   detailTexts?: DetailTextsFor,
   agents?: AgentsFor,
-) => ({
-  onContextBuilding: ({
-    extendContext,
-  }: {
-    extendContext: (extension: WithServers) => void;
-  }) =>
-    extendContext({
+) =>
+  definePlugin({
+    name: "clavix-oauth-context",
+    onContext: (): WithServers => ({
       [SERVERS]: oauth,
       ...(texts === undefined ? {} : { [TEXTS]: texts }),
       ...(detailTexts === undefined ? {} : { [DETAIL_TEXTS]: detailTexts }),
       ...(agents === undefined ? {} : { [AGENTS]: agents }),
     }),
-});
+  });
 
 // One read of the tenant's texts per request, shared by the fields of a page.
 function perRequest<T>() {

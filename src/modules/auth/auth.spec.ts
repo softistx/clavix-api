@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  setSystemTime,
+  test,
+} from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
@@ -181,6 +188,24 @@ describe("the e-mail code flow", () => {
     expect(
       (await gql("acme", ME, {}, cookie)).data?.["currentUser"],
     ).toBeNull();
+  });
+
+  test("a session past its renewal point gets a fresh session cookie", async () => {
+    const { challenge, code } = await ask("acme", "renew@example.test");
+    const verified = await gql("acme", VERIFY, { challenge, code: code ?? "" });
+    const cookie = cookieOf(verified) ?? "";
+    expect(cookieOf(await gql("acme", ME, {}, cookie))).toBeUndefined();
+    // SESSION.renewAfter is one day: two days on, the session is renewed.
+    setSystemTime(new Date(Date.now() + 2 * 24 * 3600 * 1000));
+    try {
+      const later = await gql("acme", ME, {}, cookie);
+      expect(later.data?.["currentUser"]).toMatchObject({
+        email: "renew@example.test",
+      });
+      expect(cookieOf(later)).toBeDefined();
+    } finally {
+      setSystemTime();
+    }
   });
 
   test("currentUser is null without a session", async () => {
