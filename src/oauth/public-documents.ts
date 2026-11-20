@@ -23,7 +23,7 @@ export interface PublicDocumentsOptions {
   generations: KeyGenerations;
   /** Seconds an entry is served at most: the bound for what the key cannot see (another instance's rotation, a retired key's `publishUntil`, a resource or scope change in discovery). Default 60. */
   ttlSeconds?: number;
-  /** Entries kept at most; the oldest goes first. Default 5000. */
+  /** Entries kept at most; the oldest inserted goes first. Default 5000. */
   maxEntries?: number;
   now?: () => number;
 }
@@ -53,6 +53,9 @@ export function withPublicDocuments<
   const max = options.maxEntries ?? 5000;
   const now = options.now ?? Date.now;
   const entries = new Map<string, Entry>();
+  // One janus call per slot and key at a time: a cold or expired entry is not
+  // refilled by every concurrent request (7 store reads each).
+  const filling = new Map<string, Promise<Entry | Response>>();
 
   const answer = (entry: Entry, request: Request): Response => {
     const headers = new Headers(entry.headers);
@@ -63,6 +66,34 @@ export function withPublicDocuments<
     return new Response(entry.body, { status: entry.status, headers });
   };
 
+  const fill = async (
+    request: Request,
+    ip: string | undefined,
+    slot: string,
+    key: string,
+  ): Promise<Entry | Response> => {
+    const response = await oauth.handle(request, ip);
+    if (response.status !== 200) return response;
+    const body = await response.text();
+    const entry: Entry = {
+      key,
+      expiresAt: now() + ttl,
+      body,
+      headers: [...response.headers].filter(
+        ([name]) => name !== "etag" && name !== "content-length",
+      ),
+      etag: `"${Bun.hash(body).toString(36)}"`,
+      status: 200,
+    };
+    entries.delete(slot);
+    entries.set(slot, entry);
+    if (entries.size > max) {
+      const oldest = entries.keys().next();
+      if (!oldest.done) entries.delete(oldest.value);
+    }
+    return entry;
+  };
+
   return {
     ...oauth,
     handle: async (request: Request, ip?: string | undefined) => {
@@ -71,29 +102,24 @@ export function withPublicDocuments<
         return oauth.handle(request, ip);
       const tenant = await resolver.resolveRequest(request);
       if (tenant === null) return oauth.handle(request, ip);
-      const key = `${tenant.tenantId}.${tenant.version}.${generations.of(tenant.tenantId)}`;
+      const key = `${tenant.tenantId}.${tenant.version}.${generations.of(tenant.tenantId)}.${tenant.issuer}`;
       const slot = `${host.toLowerCase()}${pathname}`;
       const hit = entries.get(slot);
       if (hit !== undefined && hit.key === key && hit.expiresAt > now())
         return answer(hit, request);
-      const response = await oauth.handle(request, ip);
-      if (response.status !== 200) return response;
-      const body = await response.text();
-      const entry: Entry = {
-        key,
-        expiresAt: now() + ttl,
-        body,
-        headers: [...response.headers].filter(([name]) => name !== "etag"),
-        etag: `"${Bun.hash(body).toString(36)}"`,
-        status: 200,
-      };
-      entries.delete(slot);
-      entries.set(slot, entry);
-      if (entries.size > max) {
-        const oldest = entries.keys().next();
-        if (!oldest.done) entries.delete(oldest.value);
+      const flight = `${slot}|${key}`;
+      let pending = filling.get(flight);
+      if (pending === undefined) {
+        pending = fill(request, ip, slot, key).finally(() =>
+          filling.delete(flight),
+        );
+        filling.set(flight, pending);
       }
-      return answer(entry, request);
+      const filled = await pending;
+      // A refusal or other non-200 is not cached: each caller gets its own copy.
+      return filled instanceof Response
+        ? filled.clone()
+        : answer(filled, request);
     },
   };
 }

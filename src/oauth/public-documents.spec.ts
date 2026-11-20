@@ -119,6 +119,25 @@ describe("public documents cache", () => {
     expect(t.reads()).toBe(2);
   });
 
+  test("concurrent misses share one call", async () => {
+    const t = setup();
+    const all = await Promise.all(
+      Array.from({ length: 20 }, () => t.oauth.handle(new Request(JWKS))),
+    );
+    expect(t.reads()).toBe(1);
+    expect(new Set(await Promise.all(all.map((r) => r.text()))).size).toBe(1);
+  });
+
+  test("a non-200 is not cached and another host has its own slot", async () => {
+    const t = setup();
+    const missing = "https://acme.clavix.test/.well-known/openid-configuration";
+    await t.oauth.handle(new Request(JWKS));
+    await t.oauth.handle(new Request("https://acme.clavix.test/nothing"));
+    expect(t.reads()).toBe(2);
+    await t.oauth.handle(new Request(missing));
+    expect(t.reads()).toBe(3);
+  });
+
   test("an unknown host, a non-GET and another path go through uncached", async () => {
     const t = setup();
     await t.oauth.handle(new Request("https://nobody.clavix.test/jwks.json"));
