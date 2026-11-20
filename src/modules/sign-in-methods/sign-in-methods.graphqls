@@ -18,7 +18,8 @@ enum HostedSignInMethod {
 What the hosted sign-in page of the tenant the host names offers. Public; it
 says nothing about who may sign in. `methods` lists the enabled methods only,
 in the enum's order (PASSWORD never appears yet); `social` the enabled
-providers. Never both empty.
+providers, then the enabled enterprise connections with `showButton` (id: the
+connection's id, label: its name). Never both empty.
 """
 type HostedSignInMethods {
   methods: [HostedSignInMethod!]!

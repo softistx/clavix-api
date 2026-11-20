@@ -113,15 +113,23 @@ async function socialOfTenant(ctx: Context) {
 export const signInMethods: Resolvers = {
   Query: {
     hostedSignInMethods: async (_, __, ctx) => {
-      const { signIn } = await tenantOf(ctx);
+      const { signIn, tenantId } = await tenantOf(ctx);
+      // The static apps first, then the enterprise connections the tenant
+      // chose to show as a button (enabled, `showButton`), oldest first.
+      const connections = await connectionsService.list(tenantId);
       return {
         methods: methodsOf(signIn)
           .filter((method) => method.enabled)
           .map((method) => HOSTED[method.type]),
-        social: offeredSocial(signIn, secretBox.opens).map(({ provider }) => ({
-          id: provider,
-          label: SOCIAL_LABELS[provider],
-        })),
+        social: [
+          ...offeredSocial(signIn, secretBox.opens).map(({ provider }) => ({
+            id: provider,
+            label: SOCIAL_LABELS[provider],
+          })),
+          ...connections
+            .filter((doc) => doc.enabled && doc.showButton)
+            .map((doc) => ({ id: doc.connectionId, label: doc.name })),
+        ],
       };
     },
   },
