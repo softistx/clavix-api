@@ -7,6 +7,8 @@ and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/of
 
 ## What runs
 
+> Staging on the shared VPS differs (traefik instead of Caddy, images built on the host): see "Staging".
+
 | Service | Image                                 | Reachable from             | Notes                                            |
 | ------- | ------------------------------------- | -------------------------- | ------------------------------------------------ |
 | `caddy` | `caddy:2`                             | the internet (80, 443)     | the only published ports; certificates on demand |
@@ -420,6 +422,8 @@ Both are read from `deploy/.env` like the others (compose hands the file to `api
 
 ## TLS
 
+> Staging terminates TLS in traefik, with a wildcard certificate and no on-demand TLS: see "Staging".
+
 Plain HTTP on port 80 is redirected to HTTPS (`http:// { redir ... }` in the
 Caddyfile). Caddy's automatic HTTPS adds that redirect only for host names
 written in the config, and the catch-all site names none, so it is explicit;
@@ -452,6 +456,7 @@ it. Custom domains stay on demand.
 
 ## Upgrade
 
+> Staging redeploys with `bun deploy/deploy.ts` (it builds, there is no `dc pull`): see "Staging".
 1. Build and tag the new images; set the new tags in `deploy/.env`.
 2. Take a backup first (below).
 3. `dc pull` (or load the images), then
@@ -526,6 +531,71 @@ it. Custom domains stay on demand.
 Rollback: set the previous tags and `dc up -d api ui`. This rolls back the
 images, not the schema or data: if a migration changed data, restore the backup
 taken in step 2 (below).
+
+## Staging
+
+Staging runs on the shared VPS behind its Traefik v3 (the `proxy` network of nxgt-docker),
+not behind Caddy. `deploy/compose.traefik.yml` is an overlay of `compose.yml`; `deploy/deploy.ts`
+drives both.
+
+| Host                          | Served by                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `clavix.softistx.com`         | platform pages, console, landing (the ui); the api for its OAuth and GraphQL paths                             |
+| `console.clavix.softistx.com` | the console (redirect URI `https://console.clavix.softistx.com/console/auth/callback`; check `/healthz` there) |
+| `<slug>.clavix.softistx.com`  | the tenant's hosted pages and issuer (the `clavix` tenant's is `clavix.clavix.softistx.com`)                   |
+- **TLS** is traefik's, from its `letsencrypt` resolver (Cloudflare DNS-01). The routers ask for
+  `clavix.softistx.com` and `*.clavix.softistx.com` together, because the
+  `*.softistx.com` wildcard of traefik does not cover two levels. DNS has an `A` record for both names.
+- **Caddy is not started** (its profile is `standalone`) and **custom domains are off**: on-demand
+  TLS needs Caddy, so a tenant's own domain is not served in staging.
+- The hosts come from `CLAVIX_DOMAIN` in `deploy/.env`; nothing is hard-coded in the overlay. The api gets the
+  paths the Caddyfile gave it, the ui everything else; `/internal` and `/readyz` have no route to the api.
+- The api and ui are named `clavix-api` and `clavix-ui` and the ui calls `http://clavix-api:3000`:
+  the service names `api` and `ui` would be aliases on the shared `proxy` network.
+- Every service keeps its `deploy.resources.limits`; the healthchecks are the light ones of
+  "What runs" (every 30 s, no Bun or `mongosh` process).
+
+### Deploy and redeploy
+
+On the VPS, with the two checkouts side by side (`clavix-api/`, `clavix-ui/`) and traefik up:
+
+```sh
+cd clavix-api
+cp deploy/.env.example deploy/.env && chmod 600 deploy/.env   # first time; fill it (see "First boot")
+bun deploy/deploy.ts
+```
+
+In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
+(`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
+no registry token (the `@softistx` packages come from public npmjs). The script refuses to run when the file is missing, readable by
+others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
+
+One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
+and ui images on the host (no registry), starts `mongo` and `redis`, runs `db:sync` and `db:migrate`
+in a one-shot api container, `up -d --wait` for the whole stack (`--timeout <s>`, default 300), then
+cleans: the images the build replaced (and any other id under the two image names), dangling images
+(`docker image prune -f`) and the build cache older than 24 hours
+(`docker builder prune -f --filter until=24h`). It never runs `docker system prune`, and never
+touches volumes. A rerun with nothing new rebuilds from cache, migrates nothing and recreates no container.
+
+A **redeploy** is the same command. The first run prints the console client secret once (`db:migrate`):
+follow "First boot", steps 5 and 6, then run it again.
+
+To check the merged files without deploying:
+
+```sh
+CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' docker compose \
+  -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env config -q
+```
+
+Rollback in staging: the cleanup removes the images the new build replaced, so the generic "previous tags" rollback does not apply. Check out the old commit (api and ui) and run `bun deploy/deploy.ts --no-pull`.
+
+### Backup and restore in staging
+
+The `backup` and `restore` tools (profile `tools`) work as in "Backup" and "Restore", with both files in the
+alias: `dc='docker compose -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env'`
+(and `CLAVIX_DOMAIN_RE` exported as above). To restore, follow "Restore" (stop `api ui`, restore, start
+them) and "Off-host copies" for `offsite:latest`.
 
 ## Backup
 
