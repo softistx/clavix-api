@@ -9,6 +9,7 @@ import {
   REPLACED_REASON,
   recordingSignIn,
 } from "@/modules/auth/sign-in-events";
+import { revokeOAuthGrants } from "@/modules/consent";
 import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
 import {
@@ -192,6 +193,9 @@ export const signInMethods: Resolvers = {
       if (user === null) {
         throw denial("FORBIDDEN", "Sign-in could not be completed");
       }
+      // The address was taken from an unverified holder: janus dropped their
+      // sessions, not the OAuth grants and refresh tokens (clavix-api #346).
+      if (done.replaced) await revokeOAuthGrants(ctx, done.userId);
       await usageService.recordActive(tenant.tenantId, user.id);
       return {
         __typename: "SocialSignedIn" as const,
