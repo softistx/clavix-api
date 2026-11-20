@@ -20,11 +20,13 @@ const signIn = (patch: Partial<AuthEvent> = {}): AuthEvent => ({
 });
 
 describe("catalogue", () => {
-  test("is the 20 user events and session.signedIn", () => {
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(21);
+  test("is the 18 user events and session.signedIn", () => {
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(19);
     expect(isWebhookEventType("user.created")).toBe(true);
     expect(isWebhookEventType("session.signedIn")).toBe(true);
     expect(isWebhookEventType("domain.add")).toBe(false);
+    expect(isWebhookEventType("user.apiKeyCreated")).toBe(false);
+    expect(isWebhookEventType("user.apiKeyRevoked")).toBe(false);
   });
 });
 
