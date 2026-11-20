@@ -75,6 +75,8 @@ export type HostResolver = NonNullable<OidcConnectionsOptions["resolveHost"]>;
 export interface ConnectionsOptions {
   txt: TxtResolver;
   links: LinkCounter;
+  /** Reads the issuer's metadata: whether it advertises the `iss` response parameter (RFC 9207). Absent: never pinned. */
+  advertisesIss?: (issuer: string) => Promise<boolean>;
   now?: () => Date;
   log?: (message: string) => void;
 }
@@ -121,6 +123,22 @@ export class ConnectionsService {
   ) {
     this.now = options.now ?? (() => new Date());
     this.log = options.log ?? ((message) => console.warn(message));
+  }
+
+  /**
+   * Whether the issuer advertises the `iss` response parameter (RFC 9207), so
+   * the record pins it (`requireIssParameter`): a provider that later drops the
+   * line cannot lift the requirement. A provider that cannot be read now is
+   * `false`; the library still requires `iss` whenever the metadata says so.
+   */
+  private async issAdvertised(issuer: string): Promise<boolean> {
+    const probe = this.options.advertisesIss;
+    if (probe === undefined) return false;
+    try {
+      return await probe(issuer);
+    } catch {
+      return false;
+    }
   }
 
   private scoped(tenantId: string) {
@@ -170,6 +188,7 @@ export class ConnectionsService {
   ): Promise<ConnectionDoc> {
     const name = nameOf(input.name);
     const emailTrust = input.emailTrust ?? "claimAndDomain";
+    const requireIss = await this.issAdvertised(input.issuer);
     const record = checked({
       connectionId: input.id,
       issuer: input.issuer,
@@ -182,6 +201,7 @@ export class ConnectionsService {
       claims: claimsOf(input.claims),
       domains: [],
       upstreamAcr: input.upstreamMfa?.acr ?? null,
+      requireIss,
       revision: 1,
     });
     const scoped = this.scoped(tenantId);
@@ -213,6 +233,7 @@ export class ConnectionsService {
       jit: input.jit ?? true,
       showButton: input.showButton ?? false,
       upstreamMfa: input.upstreamMfa ?? null,
+      requireIss,
       enabled: input.enabled ?? true,
       revision: 1,
     });
@@ -246,9 +267,14 @@ export class ConnectionsService {
           : (patch.upstreamMfa?.acr ?? null),
     };
     const domains = current.domains.map((entry) => entry.domain);
+    const requireIss =
+      next.issuer === current.issuer
+        ? current.requireIss
+        : await this.issAdvertised(next.issuer);
     const record = checked({
       connectionId,
       ...next,
+      requireIss,
       clientSecret: secret,
       domains,
       revision: current.revision + 1,
@@ -285,6 +311,7 @@ export class ConnectionsService {
       ...(patch.upstreamMfa === undefined
         ? {}
         : { upstreamMfa: patch.upstreamMfa }),
+      requireIss,
       enabled,
       revision: current.revision + 1,
     });

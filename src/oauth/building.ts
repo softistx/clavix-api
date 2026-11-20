@@ -43,6 +43,8 @@ export interface BuildDeps {
   eventsFor?: ((tenant: ResolvedTenant) => OAuthEventListener) | undefined;
   /** Specs inject the metadata documents' transport; production uses janus's. */
   metadataTransport?: MetadataTransport | undefined;
+  /** The ports a metadata document may be served on. Default: 443. */
+  metadataPorts?: readonly number[] | undefined;
 }
 
 /**
@@ -62,6 +64,7 @@ export const buildIssuer =
     exchangeRulesFor,
     agentCheckFor,
     metadataTransport,
+    metadataPorts,
     eventsFor,
   }: BuildDeps) =>
   ({ tenant, resources }: Keyed) => {
@@ -86,7 +89,11 @@ export const buildIssuer =
       },
       // Agents (D7, D8): off unless the tenant opted in; `/register` is ours
       // (`register-route.ts`), not janus's.
-      registration: registrationOf(tenant.oauth.agents, metadataTransport),
+      registration: registrationOf(
+        tenant.oauth.agents,
+        metadataTransport,
+        metadataPorts,
+      ),
       // RFC 9126: `/par` is always served; `required` makes every client push.
       pushedAuthorizationRequests: { required: tenant.oauth.par.required },
       // RFC 9449: proofs are single-use (the Mongo replay cache is shared by

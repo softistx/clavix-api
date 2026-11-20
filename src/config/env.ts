@@ -172,6 +172,42 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Single sign-on starts that send no mail (`hostedHomeRealm`, and
+  // `socialSignInStart`, each with its own buckets): per client address and
+  // tenant, and per tenant, apart from the sign-in code budget above.
+  // Redis only, as above.
+  CLAVIX_SSO_IP_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_SSO_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_SSO_TENANT_LIMIT: z.coerce.number().int().min(1).default(2000),
+  CLAVIX_SSO_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // Console `sendTestWebhook`: per endpoint and per tenant, over one window
+  // (a test event holds a slot of the shared delivery queue). Redis only.
+  CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT: z.coerce.number().int().min(1).default(5),
+  CLAVIX_WEBHOOK_TEST_TENANT_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(60),
+  // Console `inviteUser` / `inviteAdmin` (each sends a mail): per caller and
+  // mutation (every aliased selection of one POST counts), and per tenant,
+  // both mutations together. Redis only.
+  CLAVIX_INVITE_CALLER_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_INVITE_CALLER_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  CLAVIX_INVITE_TENANT_LIMIT: z.coerce.number().int().min(1).default(200),
+  CLAVIX_INVITE_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Audit exports (GET /console/audit/export): starts per tenant, Redis only.
   CLAVIX_EXPORT_TENANT_LIMIT: z.coerce.number().int().min(1).default(10),
   CLAVIX_EXPORT_TENANT_WINDOW_SECONDS: z.coerce
@@ -191,6 +227,19 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(60),
+  // The ports a Client ID Metadata Document may be served on (janus-oauth
+  // `allowPorts`): the document's URL names the port the server connects to.
+  // Comma-separated; 443 by default, add a port only for a client that needs it.
+  CLAVIX_METADATA_PORTS: z
+    .string()
+    .default("443")
+    .transform((value) => {
+      const ports = value
+        .split(",")
+        .map((port) => Number(port.trim()))
+        .filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535);
+      return ports.length === 0 ? [443] : ports;
+    }),
   // The tenants whose clients may list authorization detail types (RFC 9396) on
   // a flow with a consent page (code or device): slugs separated by commas, or `*` for every tenant. Janus
   // approves every detail it validated and the consent pages that show them are

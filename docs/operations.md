@@ -69,7 +69,7 @@ by the `Host` header, which Caddy passes untouched.
    ```sh
    alias dc='docker compose -f deploy/compose.yml --env-file deploy/.env'
    dc up -d mongo redis
-   dc run --rm api bun run db:sync       # collections, indexes, validators
+   dc run --rm api bun run db:sync       # collections, indexes, validators (the clients `source` index of `countClients` included)
    dc run --rm api bun run db:migrate    # prints the console client secret once: save it
    ```
 
@@ -148,6 +148,11 @@ refused; the hosted pages and the OAuth clients are unaffected. The schema is in
 The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVICE_IP_LIMIT`,
 `CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
 Redis; with Redis down the lookups go through unthrottled and a line is logged.
+
+The anonymous SSO start and home-realm lookup limits (`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`,
+`CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`) and the console's test-webhook
+(`CLAVIX_WEBHOOK_TEST_*`) and invitation (`CLAVIX_INVITE_*`) budgets are read by the API and kept in Redis too, defaults
+in the README. With Redis down they let the call through and log a line.
 
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
@@ -407,9 +412,10 @@ The answer is 200 for
 - the apex, `console.<domain>`, and `<slug>.<domain>` of a live tenant,
 
 and a bare 404 for everything else (an unknown, pending, lapsed or suspended
-domain, a deleted tenant, a wrong token); 429 past `CLAVIX_TLS_ASK_LIMIT`
-asks a minute (a flood of random names sent to your IP can use that budget up
-and make legitimate asks answer 429 for a minute; raise the limit if it happens). So a stranger pointing a name at your IP gets no certificate.
+domain, a deleted tenant, a wrong token); 429 once `CLAVIX_TLS_ASK_LIMIT`
+asks a minute were answered 200 (the host is looked up first: an ask for an
+unknown name is a 404 that spends nothing, so a flood of random names sent to
+your IP cannot make a real domain wait). So a stranger pointing a name at your IP gets no certificate.
 
 **The endpoint is not reachable from outside**, three ways at once:
 the API publishes no port, so only `caddy` and `ui` reach it on the compose

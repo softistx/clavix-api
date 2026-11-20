@@ -70,17 +70,19 @@ export function logSkipped(
 }
 
 /**
- * Counts one request on a single limit of its own (the signed-in operations
- * add one beside the pair): `undefined` when Redis is down, logged.
+ * Counts one request (or `cost` of them) on a single limit of its own (the
+ * signed-in operations add one beside the pair): `undefined` when Redis is
+ * down, logged.
  */
 export async function consumeOrSkip<P>(
   limit: Bound<P>,
   params: P,
   skipped: string,
   log: (message: string) => void,
+  cost = 1,
 ): Promise<LimitResult | undefined> {
   try {
-    return await limit.consume(params, 1, { timeoutMs: REDIS_TIMEOUT_MS });
+    return await limit.consume(params, cost, { timeoutMs: REDIS_TIMEOUT_MS });
   } catch (error) {
     logSkipped(error, skipped, log);
     return undefined;

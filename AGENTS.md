@@ -38,7 +38,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
   partition themselves by tenant, so they take the plain `oauthDb` (`src/config/oauth-db.ts`),
   not the scoped collections. `createApp({ oauth })` mounts it. The issuers are split: `issuers.ts` (`createClavixOAuthIssuers`), `resolution.ts` (host to tenant and resources), `building.ts` (the server config). `AuthFor` and `ClaimsFor` are wired by `src/users` (`createIssuers(authFor, claimsFor, resourcesFor?)` in `src/config/oauth.ts` is the real wiring, keys and stored resources included, and `src/server.ts` passes the real `authFor`/`claimsFor` of `src/config/users.ts`; a tenant with no key yet gets a 503 `temporarily_unavailable`). `resourcesFor` defaults to the tenants' stored resources (below); without any, only userinfo's resource, the issuer's `defaultResource`, is served. `/consent` is the hosted page, built in clavix-ui (its API is built, see Consent). `bun run
-  db:sync` also syncs the OAuth collections (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
+  db:sync` also syncs the OAuth collections (the clients `source` index of `countClients`, which counts the quota's clients in `src/config/usage.ts`) (output `{ app, oauth, users, invitations, relations }`). Lifetimes (assumed
   owner decision, clavix-api#24) (`src/oauth/lifetimes.ts`): access token 15 min,
   refresh 30 days sliding, 90 days cap.
 - Imports carry no extension (bundler resolution); `@/` is `src/`, `~/` is `test/`.
@@ -602,7 +602,8 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
 - A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
 - **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
   domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
-  when Redis is down: refused, with a warning, `tlsAskGate`), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
+  when Redis is down: refused, with a warning, `tlsAskGate`; **spent after the lookup**, by known hosts only, so a flood of unknown names
+  cannot use up the budget real domains need, #328), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
   The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
@@ -620,6 +621,15 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
   reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
   prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
+- **Console budgets (`src/console/budgets.ts`, #328)**: `ctx.budgets` (`ConsoleDeps.budgets`; undefined without Redis) holds the
+  `@softistx/redis` limits of the console mutations that act outside the platform. `sendTestWebhook` spends
+  `budgets.testWebhook` (5/min per endpoint, then 20/min per tenant, `CLAVIX_WEBHOOK_TEST_*`) once the endpoint is found
+  and enabled, before the address check and the queue. `inviteUser` / `inviteAdmin` spend `budgets.invitation` (200/h per
+  tenant, both together, `CLAVIX_INVITE_TENANT_*`) just before the invitation is issued, and the per-caller budget
+  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@alxia/graphql`'s `fieldRateLimit` (`useInviteBudget`, first in the
+  console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
+  `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
+  that sends a mail or queues outbound work gets its budget here, never a counter of its own.
 - The catalogue (D22, `events.ts`) is janus's 20 user events plus `session.signedIn`; `data` holds ids
   only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
   top-level field for it. Console admin events are not delivered. `webhook.test` is outside the
@@ -664,12 +674,21 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   by one enabled connection per tenant (`DOMAIN_TAKEN`).
 - Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
+- **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
+  (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
+  (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
+  whenever the metadata advertises it). The redirect URI stays the tenant's one shared URL: janus-social 0.10's
+  per-connection form (`redirectUri` as a function plus `connections.callback(id, parameters)`) needs the callback
+  to be bound, and `@softistx/janus-graphql`'s `socialSignInComplete` cannot bind yet (a connection's sign-in through
+  it is refused), so it waits for that resolver or for F3's own callback route.
 - Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
   (`src/config/connections.ts`); janus has no such API.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
 - **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
   enabled connection owning the address's verified domain (`ownerOf`: two claimants answer none), else null; it
-  spends the `signInThrottle` (IP and tenant) and is `no-store`. The federated sign-in is janus's
+  spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods/sso-throttle.ts`,
+  `CLAVIX_SSO_*`, refusal `MAIL_THROTTLED`), never the mail-sending `signInThrottle` (#328: a flood of lookups must not close
+  a tenant's sign-in codes), and is `no-store`. The federated sign-in is janus's
   `socialSignInStart` / `socialSignInComplete` with the connection id as `provider` (an unknown or disabled one is
   `SIGN_IN_METHOD_DISABLED`); the session is `amr: ["fed"]`. JIT (D4): a new user is created only when the
   connection's `jit` is on, whatever the tenant's `signUp` (`SIGN_UP_DISABLED` otherwise); an existing user is linked.

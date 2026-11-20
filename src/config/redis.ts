@@ -9,6 +9,7 @@ import {
   type ExportLimitConfig,
   exportLimits,
 } from "@/console/audit-export/throttle";
+import { consoleLimits } from "@/console/budgets";
 import { keyRotation } from "@/keys/queue";
 import { agentsPrune } from "@/modules/agents/prune.queue";
 import { auditRetention } from "@/modules/audit/retention.queue";
@@ -27,6 +28,7 @@ import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
+import { ssoLimits } from "@/modules/sign-in-methods/sso-throttle";
 import { tenantPurge } from "@/modules/tenants/purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
 import { webhookSecretsPrune } from "@/modules/webhooks/secrets-prune.queue";
@@ -118,6 +120,21 @@ export async function openAppRedis(
         ...registerLimits(register),
         ...metadataLimits(metadata),
         ...exportLimits(auditExport),
+        ...ssoLimits({
+          ipLimit: env.CLAVIX_SSO_IP_LIMIT,
+          ipWindowSeconds: env.CLAVIX_SSO_IP_WINDOW_SECONDS,
+          tenantLimit: env.CLAVIX_SSO_TENANT_LIMIT,
+          tenantWindowSeconds: env.CLAVIX_SSO_TENANT_WINDOW_SECONDS,
+        }),
+        ...consoleLimits({
+          testEndpointLimit: env.CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT,
+          testTenantLimit: env.CLAVIX_WEBHOOK_TEST_TENANT_LIMIT,
+          testWindowSeconds: env.CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS,
+          inviteCallerLimit: env.CLAVIX_INVITE_CALLER_LIMIT,
+          inviteCallerWindowSeconds: env.CLAVIX_INVITE_CALLER_WINDOW_SECONDS,
+          inviteTenantLimit: env.CLAVIX_INVITE_TENANT_LIMIT,
+          inviteTenantWindowSeconds: env.CLAVIX_INVITE_TENANT_WINDOW_SECONDS,
+        }),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),
       },
       background: {

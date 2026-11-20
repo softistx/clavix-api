@@ -2,6 +2,7 @@ import type { OAuthPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
 import type { ExportThrottle } from "./audit-export/throttle";
+import type { ConsoleBudgets } from "./budgets";
 import type {
   ConsoleActivity,
   ConsoleAdmins,
@@ -58,6 +59,8 @@ export interface ConsoleDeps {
   admins: ConsoleAdmins;
   users: ConsoleUsers;
   exclusive: Exclusive;
+  /** The budgets of the test webhooks and the invitations (`budgets.ts`); none without Redis. */
+  budgets?: ConsoleBudgets | undefined;
   /** Where `ctx.audit` appends its events. */
   adminEvents: AdminEventRecorder;
   /** The readers of the activity logs. */
@@ -148,6 +151,7 @@ export function useConsole({
   admins,
   users,
   exclusive,
+  budgets,
   adminEvents,
   activity,
 }: ConsoleDeps) {
@@ -195,6 +199,7 @@ export function useConsole({
         admins,
         users,
         exclusive,
+        budgets,
         activity,
         can: (permission, tenantId) =>
           access.can(principal.userId, permission, tenantId),

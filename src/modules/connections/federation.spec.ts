@@ -60,15 +60,23 @@ const policies = new SignInPolicyService(tenants, {
   seal: () => "",
   open: () => "",
 } as never);
-const checks: { tenantId: string; ip: string }[] = [];
+// One recording throttle per budget: which one an operation spends is the point (G2-10).
+type Who = { tenantId: string; ip: string };
+const checks: Who[] = [];
+const homeChecks: Who[] = [];
+const startChecks: Who[] = [];
 let throttled = false;
-const app = createApp({
-  signInThrottle: {
-    check: async (key: { tenantId: string; ip: string }) => {
-      checks.push(key);
+const recording = (into: Who[]) =>
+  ({
+    check: async (key: Who) => {
+      into.push(key);
       if (throttled) throw new Error("throttled");
     },
-  } as never,
+  }) as never;
+const app = createApp({
+  signInThrottle: recording(checks),
+  homeRealmThrottle: recording(homeChecks),
+  ssoStartThrottle: recording(startChecks),
 });
 
 // The upstream: its own OAuth issuers over the same database, like oidc.spec.
@@ -327,10 +335,13 @@ describe("home-realm discovery", () => {
     expect(await homeOf("ada@acme.test", "fedother")).toBeNull();
   });
 
-  test("it spends the sign-in limits of the tenant and the client address, and a refusal ends it", async () => {
+  test("it spends its own budget for the tenant and the client address, never the sign-in code one, and a refusal ends it", async () => {
     checks.length = 0;
+    homeChecks.length = 0;
     await homeOf("ada@acme.test");
-    expect(checks).toEqual([{ tenantId: acme, ip: "198.51.100.77" }]);
+    expect(homeChecks).toEqual([{ tenantId: acme, ip: "198.51.100.77" }]);
+    // G2-10: discovery sends no mail, so it must not empty the mail budget.
+    expect(checks).toEqual([]);
     throttled = true;
     const refused = await gql("fedacme", HOME, { e: "ada@acme.test" });
     throttled = false;
@@ -346,6 +357,22 @@ describe("home-realm discovery", () => {
 });
 
 describe("federated sign-in", () => {
+  test("the start spends its own budget, never the sign-in code or the discovery one, and a refusal ends it", async () => {
+    checks.length = 0;
+    homeChecks.length = 0;
+    startChecks.length = 0;
+    const started = await gql("fedacme", START, { p: "acme" });
+    expect(started.errors).toBeUndefined();
+    expect(startChecks).toEqual([{ tenantId: acme, ip: "198.51.100.77" }]);
+    expect(checks).toEqual([]);
+    expect(homeChecks).toEqual([]);
+    throttled = true;
+    const refused = await gql("fedacme", START, { p: "acme" });
+    throttled = false;
+    expect(refused.errors).toBeDefined();
+    expect(refused.data?.["socialSignInStart"] ?? null).toBeNull();
+  });
+
   test("a user typing ada@acme.test lands at Acme's IdP and comes back signed in, created by JIT on a tenant whose sign-up is closed", async () => {
     const realm = (await homeOf("ada@acme.test")) as { connectionId: string };
     const started = await federated("ada", "fedacme", realm.connectionId);
