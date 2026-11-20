@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { totpCode } from "@softistx/janus/testing";
 import {
   createMemorySigningKeys,
   type SigningKeyStore,
@@ -663,6 +664,90 @@ describe("second factor", () => {
   test("a viewer is refused, and B's user is unknown under A", async () => {
     expect(code(await reset(vwA, tenantA, uA1))).toBe("FORBIDDEN");
     expect(code(await reset(ownA, tenantA, uB1))).toBe("NOT_FOUND");
+  });
+});
+
+describe("second factor of a page of users", () => {
+  test("reads every row in one batch, the codes of the holders only", async () => {
+    const tenant = (
+      await tenantsService.create({ slug: "usr-mfa", name: "Mfa" })
+    ).id;
+    await access.grantTenant(tenant, ownA, "owner");
+    const { auth } = await poolOf("usr-mfa");
+    const holder = async (email: string) => {
+      const user = await auth.setEmailVerified(
+        await auth.create({ email }),
+        true,
+      );
+      const { secret } = await auth.secondFactor.enroll(user);
+      await auth.secondFactor.activate(user, totpCode(secret));
+      return user.id;
+    };
+    const on = await holder("on@mfa.test");
+    const off = (await auth.create({ email: "off@mfa.test" })).id;
+    const also = await holder("also@mfa.test");
+    const batched = spyOn(deps.users, "secondFactors");
+    const single = spyOn(deps.users, "secondFactor");
+    const counted = spyOn(auth.secondFactor, "recoveryCodesLeft");
+    try {
+      const page = await asConsole(
+        ownA,
+        `{ users(tenantId: "${tenant}") { items { id secondFactor { enabled recoveryCodesLeft } } } }`,
+      );
+      expect(page.errors).toBeUndefined();
+      const factor = (id: string) =>
+        page.data?.["users"].items.find((row: { id: string }) => row.id === id)
+          ?.secondFactor;
+      expect(factor(on)).toEqual({ enabled: true, recoveryCodesLeft: 10 });
+      expect(factor(off)).toEqual({ enabled: false, recoveryCodesLeft: null });
+      expect(factor(also)).toEqual({ enabled: true, recoveryCodesLeft: 10 });
+      expect(batched).toHaveBeenCalledTimes(1);
+      expect(single).not.toHaveBeenCalled();
+      expect(counted).toHaveBeenCalledTimes(2);
+      // A reset in the same request reads the factor after its write.
+      const reset = await asConsole(
+        ownA,
+        `mutation { resetUserSecondFactor(tenantId: "${tenant}", userId: "${on}") { secondFactor { enabled recoveryCodesLeft } } }`,
+      );
+      expect(reset.data?.["resetUserSecondFactor"].secondFactor).toEqual({
+        enabled: false,
+        recoveryCodesLeft: null,
+      });
+    } finally {
+      batched.mockRestore();
+      single.mockRestore();
+      counted.mockRestore();
+    }
+  });
+});
+
+describe("resetting an operator's second factor (clavix-api#290)", () => {
+  test("a platform admin may not reset a tenant owner's factor; a platform owner may", async () => {
+    const clavix = await poolOf(PLATFORM_TENANT_SLUG);
+    const platformAdmin = (
+      await clavix.auth.create({ email: "plat-adm@usr.test" })
+    ).id;
+    const platformOwner = (
+      await clavix.auth.create({ email: "plat-own@usr.test" })
+    ).id;
+    await access.grantPlatform(platformAdmin, "admin");
+    await access.grantPlatform(platformOwner, "owner");
+    const platform = clavix.resolved.tenantId;
+    const reset = (who: string, target: string) =>
+      asConsole(
+        who,
+        `mutation { resetUserSecondFactor(tenantId: "${platform}", userId: "${target}") { id } }`,
+      );
+    // ownA owns tenant A: only a platform owner may touch their factor.
+    expect(code(await reset(platformAdmin, ownA))).toBe("FORBIDDEN");
+    expect(code(await reset(platformAdmin, platformOwner))).toBe("FORBIDDEN");
+    expect(
+      (await reset(platformOwner, ownA)).data?.["resetUserSecondFactor"],
+    ).toEqual({ id: ownA });
+    // An operator with no role and no tenant stays an admin's to reset.
+    expect(
+      (await reset(platformAdmin, nobody)).data?.["resetUserSecondFactor"],
+    ).toEqual({ id: nobody });
   });
 });
 

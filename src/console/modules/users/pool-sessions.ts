@@ -10,6 +10,7 @@ export const poolSessions = ({
   | "revokeSession"
   | "revokeSessions"
   | "secondFactor"
+  | "secondFactors"
   | "resetSecondFactor"
 > => ({
   async secondFactor(tenantId, id) {
@@ -20,6 +21,26 @@ export const poolSessions = ({
       enabled: user.hasSecondFactor === true,
       recoveryCodesLeft: await auth.secondFactor.recoveryCodesLeft(user),
     };
+  },
+  async secondFactors(tenantId, ids) {
+    const auth = await janus(tenantId);
+    const found = new Map(
+      (await auth.findMany(ids)).map((user) => [user.id, user]),
+    );
+    // janus counts the recovery codes one user at a time and answers `null`
+    // without an active factor: only the holders' are read.
+    return Promise.all(
+      ids.map(async (id) => {
+        const user = found.get(id);
+        if (user?.hasSecondFactor !== true) {
+          return { enabled: false, recoveryCodesLeft: null };
+        }
+        return {
+          enabled: true,
+          recoveryCodesLeft: await auth.secondFactor.recoveryCodesLeft(user),
+        };
+      }),
+    );
   },
   async resetSecondFactor(tenantId, id) {
     const auth = await janus(tenantId);

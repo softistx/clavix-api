@@ -55,6 +55,7 @@
     "@softistx/telemetry": "^0.4.2",
     "@softistx/telemetry-mongo": "^0.3.3",
     "@softistx/telemetry-otlp": "^0.3.2",
+    "dataloader": "^2.2.3",
     "graphql": "^17.0.2",
     "graphql-yoga": "^5.24.2",
     "mongodb": "^7",
