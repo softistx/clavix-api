@@ -954,12 +954,18 @@ a tenant failed.
 - By default the retired key stays published for 24 h (the normal retirement
   window), so tokens already issued keep verifying.
 - If the **private key itself leaked**, add `--drop-old`: the retired key is
-  unpublished at once, so the tokens it signed stop verifying and the leak buys
-  nothing. Users sign in again; tell the relying parties.
+  unpublished from the store at once, so the tokens it signed stop verifying and the
+  leak buys nothing. The running API instances serve their cached JWKS for up to
+  60 s (the in-memory cache of `withPublicDocuments`; the CLI is another process, so
+  it cannot clear it), and a client that honours `max-age=300` may keep it 5 min
+  more. Restart the API instances to empty the cache when 60 s is too long. Users
+  sign in again; tell the relying parties.
 - If a `next` key was already published, it takes over at once; otherwise a new
   key is created and signs immediately. Relying parties that cached the JWKS
-  and have not fetched it since may fail to verify the new key until they do
-  (typically a few minutes, depending on the client).
+  and have not fetched it since may fail to verify the new key until they do:
+  every API instance shows the rotation within 60 s (the cache TTL, since the CLI
+  runs in its own process), and a client may keep the document `max-age=300` (5 min)
+  longer, so about 6 minutes at worst.
 - If the **master key** leaked, rotate it first (above), then run
   `keys:rotate --all --drop-old`: a new master key alone does not change the
   signing keys.
@@ -1029,32 +1035,41 @@ Method notes:
 Machine: Apple M5 Pro, 18 cores; the Docker VM has 18 CPUs and 9.7 GiB. The laptop was shared with other
 sessions: the 1-minute load average was 3.5 to 6.1 during the runs (5-minute 4.0 to 5.0). Containers keep
 the limits of `compose.yml` (api 1 CPU, mongo 1 CPU, redis 0.25 CPU); k6 ran in a container with no limit.
-`@softistx/janus-oauth` as locked in `bun.lock`; commit of this branch.
+`@softistx/janus-oauth` as locked in `bun.lock`. The two cache rows were run together (2 000 req/s in all).
 
 | Target                                  | Rate              | p95 (ms) | p99 (ms) | Errors | Threshold        | Result                                     |
 | --------------------------------------- | ----------------- | -------- | -------- | ------ | ---------------- | ------------------------------------------ |
 | `POST /token` (refresh grant)           | 200 req/s, 60 s   | 11.1     | 46.7     | 0      | p95 under 150 ms | pass                                       |
-| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss**                                   |
-| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss**                                   |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 175.9    | 228.4    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)     |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 232.6    | 296.7    | 0      | p95 under 20 ms  | **miss** (before the cache, see below)     |
+| `GET /jwks.json`                        | 1 000 req/s, 60 s | 0.41     | 0.96     | 0      | p95 under 20 ms  | pass (with the cache)                      |
+| `GET /.well-known/openid-configuration` | 1 000 req/s, 60 s | 0.42     | 0.95     | 0      | p95 under 20 ms  | pass (with the cache)                      |
 | `client_credentials`                    | n/a               | n/a      | n/a      | n/a    | n/a              | not offered (400 `unsupported_grant_type`) |
 
-The 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
+Before the cache, the 2 000 req/s run saturated the api: it held about 98 % of its 1 CPU limit, k6 dropped 10 605 iterations
 (1 630 req/s were served in all) and mongo ran at about 60 % of a core. The same script at lower rates, 30 s each,
-to find where it stops meeting the threshold:
+to find where it stopped meeting the threshold (before the cache):
 
-| JWKS and discovery together | JWKS p95 (ms) | Discovery p95 (ms) | Threshold (20 ms)        |
-| --------------------------- | ------------- | ------------------ | ------------------------ |
-| 300 req/s (150 each)        | 3.3           | 4.2                | pass                     |
-| 600 req/s (300 each)        | 13.4          | 18.0               | pass, with little margin |
-| 2 000 req/s (1 000 each)    | 175.9         | 232.6              | miss                     |
+| JWKS and discovery together (before the cache) | JWKS p95 (ms) | Discovery p95 (ms) | Threshold (20 ms)        |
+| ---------------------------------------------- | ------------- | ------------------ | ------------------------ |
+| 300 req/s (150 each)                           | 3.3           | 4.2                | pass                     |
+| 600 req/s (300 each)                           | 13.4          | 18.0               | pass, with little margin |
+| 2 000 req/s (1 000 each)                       | 175.9         | 232.6              | miss                     |
 
-Suspected cause of the miss (measured, not fixed here): every JWKS and discovery request reads Mongo. With
-the profiler on, one `/jwks.json` made 7 queries: `resources`, `scopes` and `detailTypes` twice each (the
-tenant's resource catalogue, read while the tenant's server is built or consulted) and one `oauthSigningKeys`
-read. At 1 000 req/s each that is about 14 000 Mongo reads a second behind a 1 CPU api. A per-tenant cache of
-these reads (short TTL, dropped on the tenant's `version` change) or a cached JWKS and discovery document is
-the fix to evaluate; it changes how a resource or key change propagates, so it is an owner decision and a
-separate PR. Rerun `load/run.sh` after it and replace this table.
+Cause of the miss (measured): every JWKS and discovery request read Mongo. With the profiler on, one
+`/jwks.json` made 7 queries: `resources`, `scopes` and `detailTypes` twice each (the tenant's resource catalogue,
+read while the tenant's server is resolved) and one `oauthSigningKeys` read. At 1 000 req/s each that is about
+14 000 Mongo reads a second behind a 1 CPU api.
+
+Fix (`withPublicDocuments`, `src/oauth/public-documents.ts`): the JWKS and the two discovery documents are served
+from memory, as the serialized body with an `ETag`, keyed by `<tenantId>.<tenant version>.<keys generation>.<issuer>` per host
+and path, and answer 304 to a matching `If-None-Match`; janus's `Cache-Control: public, max-age=300` is kept. A hit
+reads nothing but the tenant resolver's own cache. The keys generation is bumped by every insert, promote or retire
+of the tenant's signing keys in this process (`createTenantKeys`), a tenant write changes the version, and a
+60 s TTL bounds what the key cannot see: a rotation made by another instance, a retired key reaching its
+`publishUntil`, and a resource or scope change reaching `scopes_supported` in discovery (token flows still serve
+those at once). The cache table above was rerun after it, 2 000 req/s in all (1 000 each), same machine and limits,
+no dropped iteration.
 
 Side finding fixed in this PR: the production bundle (`bun dist/server.js`) did not start, `tsyringe requires a
 reflect polyfill` (the passkey verification pulls it in), because nothing imported `reflect-metadata`. The

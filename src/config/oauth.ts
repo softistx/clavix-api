@@ -8,6 +8,7 @@ import type {
   ResourcesFor,
   RolesFor,
 } from "@/oauth/ports";
+import { withPublicDocuments } from "@/oauth/public-documents";
 import { withTenantState } from "@/oauth/tenant-state";
 import { withAgentRegistration } from "./agents-registration";
 import {
@@ -16,7 +17,7 @@ import {
 } from "./client-policies";
 import { env } from "./env";
 import { eventBus } from "./events";
-import { dpopNonceSecret, signingKeysFor } from "./keys";
+import { dpopNonceSecret, keyGenerations, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
 import { rolesFor as storedRolesFor } from "./roles";
@@ -27,7 +28,7 @@ import { usageService } from "./usage";
 // keys and the tenants' stored resources (`resources:create`). The entry point
 // calls this with the end-user authentication and claims (`authFor`,
 // `claimsFor`) and passes the result to `createApp({ oauth })`. A suspended or
-// deleted tenant's `/authorize` and `/token` are refused, and a token issued
+// deleted tenant's `/authorize` and `/token` are refused; the JWKS and discovery documents are served from memory (`withPublicDocuments`), and a token issued
 // counts its user as active this month (`withTenantState`).
 export const createIssuers = (
   authFor: AuthFor,
@@ -38,22 +39,25 @@ export const createIssuers = (
   agentCheckFor: AgentCheckFor = storedAgentCheckFor,
 ) =>
   withTenantState(
-    withAgentRegistration(
-      createClavixOAuthIssuers({
-        resolver: tenantResolver,
-        db: oauthDb,
-        signingKeysFor,
-        dpopNonceSecret,
-        authFor,
-        claimsFor,
-        resourcesFor,
-        rolesFor,
-        exchangeRulesFor,
-        agentCheckFor,
-        metadataPorts: env.CLAVIX_METADATA_PORTS,
-        eventsFor: (tenant) =>
-          oauthListener(tenant.tenantId, tenant.issuer, eventBus),
-      }),
+    withPublicDocuments(
+      withAgentRegistration(
+        createClavixOAuthIssuers({
+          resolver: tenantResolver,
+          db: oauthDb,
+          signingKeysFor,
+          dpopNonceSecret,
+          authFor,
+          claimsFor,
+          resourcesFor,
+          rolesFor,
+          exchangeRulesFor,
+          agentCheckFor,
+          metadataPorts: env.CLAVIX_METADATA_PORTS,
+          eventsFor: (tenant) =>
+            oauthListener(tenant.tenantId, tenant.issuer, eventBus),
+        }),
+      ),
+      { resolver: tenantResolver, generations: keyGenerations },
     ),
     {
       resolver: tenantResolver,
