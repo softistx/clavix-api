@@ -155,8 +155,8 @@ Redis; with Redis down the lookups go through unthrottled and a line is logged.
 
 The anonymous SSO start and home-realm lookup limits (`CLAVIX_SSO_IP_LIMIT`, `CLAVIX_SSO_IP_WINDOW_SECONDS`,
 `CLAVIX_SSO_TENANT_LIMIT`, `CLAVIX_SSO_TENANT_WINDOW_SECONDS`) and the console's test-webhook
-(`CLAVIX_WEBHOOK_TEST_*`) and invitation (`CLAVIX_INVITE_*`) budgets are read by the API and kept in Redis too, defaults
-in the README. With Redis down they let the call through and log a line.
+(`CLAVIX_WEBHOOK_TEST_*`) and invitation (`CLAVIX_INVITE_*`, except `CLAVIX_INVITE_PENDING_LIMIT`) budgets are read by the API and kept in Redis too, defaults
+in the README. With Redis down they let the call through and log a line. The pending-invitation cap and the 60 s invite cooldown read the stored invitations, so they hold without Redis.
 
 Compose builds `MONGO_URI` and `REDIS_URL` from the variables above, and sets `CLAVIX_TRUSTED_PROXIES=1` (Caddy is the
 one proxy) and `API_URL` itself; do not put them in the file. `deploy/.env` is
