@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConsoleContext } from "../../context";
 import { createExclusive } from "../../exclusive";
 import type { Role } from "../../model";
-import { keepOwners } from "./operators";
+import { keepOwners, type OwnerChange } from "./operators";
 
 const PLATFORM = { slug: "clavix" };
 
@@ -13,6 +13,10 @@ interface Setup {
   platform?: string[];
   disabled?: string[];
   gone?: string[];
+  /** The users whose e-mail is not proved. */
+  unverified?: string[];
+  /** What the caller may do on the platform; everything by default. */
+  manage?: boolean;
   /** Called on each read of the user's memberships: lets a spec grant meanwhile. */
   onMemberships?: (call: number) => void;
 }
@@ -24,8 +28,10 @@ function fake(setup: Setup = {}) {
   let reads = 0;
   const ctx = {
     exclusive: createExclusive(),
-    canPlatform: async () => true,
+    canPlatform: async () => setup.manage ?? true,
     directory: {
+      emailVerified: async (id: string) =>
+        !(setup.unverified ?? []).includes(id),
       findUser: async (id: string) =>
         (setup.gone ?? []).includes(id)
           ? null
@@ -153,5 +159,53 @@ describe("the memberships keep changing", () => {
       extensions: { code: string; http: { status: number } };
     };
     expect(extensions).toEqual({ code: "CONFLICT", http: { status: 409 } });
+  });
+});
+
+const change = (ctx: ConsoleContext, id: string, kind: OwnerChange) =>
+  keepOwners(ctx, PLATFORM, id, async () => "done", kind, `u:${id}`);
+
+describe("un-verifying an owner", () => {
+  test("the last live platform owner keeps a proved e-mail", async () => {
+    const ctx = fake({ platform: ["a", "b"], disabled: ["b"] });
+    expect(await code(change(ctx, "a", "unverify"))).toBe("LAST_OWNER");
+  });
+
+  test("the only owner of a tenant too", async () => {
+    const ctx = fake({ owners: { t1: ["a"] } });
+    expect(await code(change(ctx, "a", "unverify"))).toBe("LAST_OWNER");
+  });
+
+  test("with another live owner it goes through", async () => {
+    const ctx = fake({ platform: ["a", "b"] });
+    expect(await code(change(ctx, "a", "unverify"))).toBe("ok");
+  });
+
+  test("twice changes nothing, so it is not refused", async () => {
+    const ctx = fake({ platform: ["a"], unverified: ["a"] });
+    expect(await code(change(ctx, "a", "unverify"))).toBe("ok");
+  });
+});
+
+describe("a change that keeps the owners (enable, sign out, reset the second factor)", () => {
+  test("needs platform manage on an owner, whatever the kind", async () => {
+    const ctx = fake({ platform: ["a", "b"], manage: false });
+    for (const kind of ["touch", "unverify", "disable", "delete"] as const) {
+      expect([kind, await code(change(ctx, "a", kind))]).toEqual([
+        kind,
+        "FORBIDDEN",
+      ]);
+    }
+  });
+
+  test("is never LAST_OWNER", async () => {
+    const ctx = fake({ platform: ["a"], owners: { t1: ["a"] } });
+    expect(await code(change(ctx, "a", "touch"))).toBe("ok");
+  });
+
+  test("a user with no role is anyone's with edit", async () => {
+    const ctx = fake({ manage: false });
+    expect(await code(change(ctx, "nobody", "touch"))).toBe("ok");
+    expect(await code(change(ctx, "nobody", "unverify"))).toBe("ok");
   });
 });

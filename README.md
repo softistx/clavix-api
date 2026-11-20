@@ -37,6 +37,10 @@ bun run generate   # GraphQL types, gitignored; also run by build and verify
 bun dev            # http://localhost:3000/graphql and /healthz
 ```
 
+Under `bun dev` a browser that opens `/graphql` gets the GraphQL IDE (Apollo Sandbox) and the schema
+can be introspected. Both are off everywhere else (`CLAVIX_GRAPHQL_IDE`), and production refuses to
+start with the IDE on: the hosted `/graphql` is the origin of every tenant's session cookie.
+
 ## Scripts
 
 | Script                    | Does                                                                                              |
@@ -62,7 +66,7 @@ one needs on top:
 | `tenants:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and `CLAVIX_PUBLIC_PORT`) for the issuer it prints, `CLAVIX_KEYS_MASTER_KEY` for the first signing key; `REDIS_URL` when set, to drop the tenant cache |
 | `clients:create`             | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port) for the issuer it prints                                                                                                                     |
 | `resources:create`           | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_SCHEME` (and port), to refuse a tenant's own userinfo URL                                                                                                       |
-| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`)                                                                                                                      |
+| `keys:reseal`, `keys:rotate` | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (the keyring, for `keys:reseal`); `REDIS_URL` when set, for `keys:reseal` to drop the tenant cache                                                    |
 | `operators:grant`            | `MONGO_URI`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY` (reads the clavix tenant's users; `--create` also needs `CLAVIX_SMTP_URL`)                                                                            |
 | `start`                      | all of the environment; in production `REDIS_URL`, `CLAVIX_DOMAIN`, `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL` and `CLAVIX_TRUSTED_PROXIES` are required                                                    |
 
@@ -105,6 +109,7 @@ one needs on top:
 | `CLAVIX_INVITE_TENANT_LIMIT` / `CLAVIX_INVITE_TENANT_WINDOW_SECONDS`     | console invitations per tenant, both mutations together: 200 per 3600 s                                                                                                                                                                        |
 | `CLAVIX_TLS_ASK_LIMIT`                                                   | asks answered 200 per minute, all callers together, default 120; past it 429 (an ask for an unknown host is a 404 and spends nothing)                                                                                                          |
 | `CLAVIX_WEBHOOKS_ALLOW_PRIVATE`                                          | `true` lets webhook endpoints reach private addresses (local receiver); default `false`, refused in production                                                                                                                                 |
+| `CLAVIX_GRAPHQL_IDE`                                                     | `true` serves the GraphQL IDE (Apollo Sandbox) on `GET /graphql` and allows introspection of the hosted schema; default `true` under `bun dev` (`NODE_ENV=development`), `false` elsewhere, and `true` is refused in production                |
 | `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`                                            | optional: the OTLP/HTTP collector of traces and logs (D24); unset, nothing is exported (see operations, "Telemetry")                                                                                                                           |
 | `OTEL_EXPORTER_OTLP_HEADERS`                                             | optional: `key=value` pairs separated by commas, sent to the collector                                                                                                                                                                         |
@@ -166,7 +171,8 @@ Clavix adds no `jose`.
   the database. To recover, drop the tenants' `oauthSigningKeys` documents and let the rotation
   create new keys: tokens signed by the lost keys stop verifying once the JWKS no longer lists
   them. Changing a master key you still hold is not a loss: it rotates without downtime
-  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`).
+  (`CLAVIX_KEYS_MASTER_KEY` takes a comma-separated keyring, first = current; `bun run keys:reseal`
+  seals every stored secret again: signing keys, TOTP, webhook, connection and social secrets).
 - **Rotating** the master key and the **emergency rotation** of the signing keys
   (`bun run keys:rotate <tenant>|--all [--drop-old]`) are in `docs/operations.md`, "Signing keys".
 - `bun run db:sync` creates the collection's indexes (one `current` and one `next` key per tenant).
@@ -232,7 +238,10 @@ accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60
 that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
 a script did); a resend keeps it. The
 last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
-removed, nor disabled or deleted, on a tenant or on the platform: `LAST_OWNER` (409). An `owner`
+removed, nor disabled or deleted, nor have their e-mail un-verified, on a tenant or on the platform:
+`LAST_OWNER` (409). Any change to the account of a `clavix` user who holds a platform role or owns a
+tenant (disable, enable, delete, sign out, `setUserEmailVerified`, `resetUserSecondFactor`) needs
+`manage` on the platform (a platform owner), not the `edit` the field asks: `FORBIDDEN`. An `owner`
 invitation is refused once its inviter is deleted or disabled. Role changes of one
 tenant run one at a time (a lock in the app's Redis, `REDIS_URL`; without Redis, outside production,
 within the process), so two concurrent removals cannot leave a tenant with no owner. An invitee who
@@ -503,7 +512,7 @@ entry outside the closed list is `BAD_USER_INPUT`.
 
 `GET https://console.<domain>/console/audit/export?tenantId=<id>&log=admin|auth&format=csv|ndjson&from=&to=`
 streams a tenant's console activity (`log=admin`, a tenant viewer or more) or sign-in log (`log=auth`, an
-admin or more: it holds addresses) as CSV (default) or NDJSON, with the console's own authentication
+admin or more: it holds addresses; on the `clavix` tenant a platform admin or more, as for `authEvents`) as CSV (default) or NDJSON, with the console's own authentication
 (`Authorization: Bearer` or `DPoP`, verified e-mail). `from` and `to` are ISO 8601 dates; the range is cut
 to the tenant's retention. An export holds at most 100,000 rows, the newest: `x-clavix-export-truncated:
 true` says it was cut, `x-clavix-export-from` the range's start. A tenant may start 10 exports an hour (`CLAVIX_EXPORT_TENANT_LIMIT`; 429 with `Retry-After`).
@@ -551,7 +560,7 @@ Each tenant chooses how its users sign in
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
-  and it is never logged. Losing the master key, or dropping the old key from the keyring while a secret is still sealed under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
+  and it is never logged. Losing the master key, or dropping the old key from the keyring before `bun run keys:reseal` reports nothing left under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
 
 ```sh

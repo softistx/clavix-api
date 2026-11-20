@@ -3,7 +3,12 @@ import { GraphQLError } from "graphql";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
-import { type SecretBox, secretContext } from "./secrets";
+import {
+  emptySecretResealCounts,
+  type SecretBox,
+  type SecretResealCounts,
+  secretContext,
+} from "./secrets";
 import {
   hasSignInMethod,
   isAvailable,
@@ -56,6 +61,8 @@ export class SignInPolicyService {
   constructor(
     private readonly tenants: TenantsService,
     private readonly box: SecretBox,
+    private readonly log: (message: string) => void = (message) =>
+      console.warn(message),
   ) {}
 
   /** The tenant (suspended included: its policy stays readable), or NOT_FOUND (404) for an unknown or trashed one. */
@@ -173,6 +180,52 @@ export class SignInPolicyService {
       if (social.length === signIn.social.length) return null;
       return this.usable({ ...signIn, social });
     });
+  }
+
+  /**
+   * Seals the tenant's social client secrets again under the keyring's first
+   * key (`keys:reseal`, a master-key rotation), a tenant in the trash
+   * included. One write for the tenant, refused when it changed meanwhile
+   * (`skipped`: run again). A secret no key opens is left as it is and logged
+   * by provider and tenant, never by value (`unreadable`).
+   */
+  async resealSecrets(tenantId: string): Promise<SecretResealCounts> {
+    const counts = emptySecretResealCounts();
+    const tenant = await this.tenants.anyById(tenantId);
+    if (tenant === undefined) return counts;
+    const owner = tenant._id.toHexString();
+    let pending = 0;
+    const social = tenant.signIn.social.map((entry) => {
+      counts.scanned += 1;
+      if (entry.secret.kid === this.box.kid) {
+        counts.current += 1;
+        return entry;
+      }
+      try {
+        const secret = this.box.reseal(
+          entry.secret,
+          secretContext(owner, entry.provider),
+        );
+        pending += 1;
+        return { ...entry, secret };
+      } catch {
+        counts.unreadable += 1;
+        this.log(
+          `sign-in: the ${entry.provider} secret of tenant ${owner} could not be sealed again`,
+        );
+        return entry;
+      }
+    });
+    if (pending > 0) {
+      const written = await this.tenants.replaceSocial(tenant, social);
+      if (written) counts.resealed += pending;
+      else counts.skipped += pending;
+    }
+    const after = await this.tenants.anyById(tenantId);
+    counts.behind = (after?.signIn.social ?? []).filter(
+      (entry) => entry.secret.kid !== this.box.kid,
+    ).length;
+    return counts;
   }
 
   /** One tenant write; other changes that keep winning the race end in CONFLICT (409), nothing stored. */

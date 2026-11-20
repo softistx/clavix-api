@@ -8,6 +8,7 @@ import {
   TLS_ASK_PATH,
   WEBAUTHN_WELL_KNOWN,
 } from "./config/domains-routes";
+import { env } from "./config/env";
 import { readyz } from "./config/ready";
 import { detailTextsFor, scopeTextsFor } from "./config/resources";
 import {
@@ -25,6 +26,7 @@ import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
+import { useNoIntrospection } from "./http/introspection";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
@@ -78,8 +80,11 @@ export function createApp(
     telemetry?: Telemetry;
     // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
     ready?: () => Promise<ReadyReport>;
+    // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
+    ide?: boolean;
   } = {},
 ) {
+  const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
   const base = createBase(
     undefined,
     {
@@ -124,8 +129,9 @@ export function createApp(
   ).plugin((app) =>
     graphql(app, {
       schema,
-      ide: "apollo-sandbox",
+      ide: ide ? "apollo-sandbox" : false,
       plugins: [
+        ...(ide ? [] : [useNoIntrospection()]),
         useSameOriginJson(),
         useWithoutQuotedValues(),
         janusPlugin(),

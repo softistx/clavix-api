@@ -23,6 +23,7 @@ export const usageService = new UsageService(
   {
     clients: async (tenantId) => {
       const [registered, agents] = await Promise.all([
+        // Temporary, until @softistx/janus-oauth-mongo#972
         oauthDb.collection("oauthPartitionedClients").countDocuments({
           partition: partitionOf(new ObjectId(tenantId)),
           source: "registered",

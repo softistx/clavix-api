@@ -30,8 +30,10 @@ openssl rand -base64 32   # a value for CLAVIX_KEYS_MASTER_KEY
 ## `CLAVIX_KEYS_MASTER_KEY: not 32 bytes in base64 ...` / `the same key appears twice in the keyring`
 
 The variable is one key or a comma-separated keyring of 32-byte base64 keys, none repeated. Fix the list and
-redeploy. If signing fails after a rotation, the old key was dropped before `bun run keys:reseal` answered
-`resealed: 0, skipped: 0, failed: 0` (or it exits 1): put the old key back after the new one and run it again.
+redeploy. If signing fails after a rotation, or webhooks stop arriving, an enterprise connection or a social
+provider disappears from the sign-in page, or users cannot pass their second factor (TOTP or an old recovery
+code), the old key was dropped before `bun run keys:reseal` exited 0 with
+`"oldKeyNeededBy": []`: put the old key back after the new one and run it again.
 See `docs/operations.md`, "Signing keys".
 
 ## `CLAVIX_TRUSTED_PROXIES is required in production: set the number of reverse proxies in front of the app (0 if none)`
@@ -52,6 +54,19 @@ CLAVIX_TRUSTED_PROXIES=0   # none: ctx.ip is the connection's address
 With `0`, `ctx.ip` is the connection address; with `n > 0` it is read from the forwarded chain. A number
 too high lets a client choose its own IP; too low rate-limits the proxy itself. See "Sign-in code limits"
 in the README.
+
+## `CLAVIX_GRAPHQL_IDE: Invalid option: expected "false"` at start-up, or no IDE on `/graphql`
+
+**When:** the API refuses to start in production with `CLAVIX_GRAPHQL_IDE=true`; or a browser that opens
+`/graphql` gets no page, and a tool's introspection query is answered
+`GraphQL introspection has been disabled, but the requested query contained the field "__schema".`
+
+**Why:** the IDE (Apollo Sandbox) loads a third-party script on the origin that holds every tenant's
+session cookie, so it is a development tool only. It is on under `bun dev` (`NODE_ENV=development`),
+off elsewhere, and cannot be switched on in production; introspection follows the same switch.
+
+**Fix:** remove the variable from the production environment. To explore the schema, run the API locally
+(`bun dev`, or `CLAVIX_GRAPHQL_IDE=true` outside production), or read `src/modules/**/*.graphqls`.
 
 ## Client registration refusals (`clients:create`)
 
@@ -479,6 +494,13 @@ The caller's role does not give the permission the field needs (a viewer cannot 
 admin cannot touch another tenant), or the field has no guard. Grant the role, for a platform
 role `bun run operators:grant --email <address> --role <role>`.
 
+Two cases ask for more than the tenant role on the `clavix` tenant:
+- a write there, and the sign-in log (`authEvents`, `GET /console/audit/export?log=auth`), need the
+  **platform** role (`edit`: a platform admin or owner); a tenant-level role on `clavix` only reads;
+- changing the account of a `clavix` user who holds a platform role or owns a tenant (`disableUser`,
+  `enableUser`, `deleteUser`, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`)
+  needs a platform **owner** (`manage`): a platform admin cannot lock out, weaken or bring back an owner.
+
 ### `EMAIL_UNVERIFIED` (403) on any console operation
 
 **When:** every console call but `me { user platformRole emailVerified }` is answered with HTTP 403 and
@@ -519,12 +541,13 @@ scope name with a space or a quote, a scope without `resourceId` that is not `op
 or `email`, an empty name, or `rotateClientSecret` on a public client (`A public client has no
 secret to rotate`).
 
-### `LAST_OWNER` (409) on `changeMembership`, `removeMembership`, `disableUser` or `deleteUser`
+### `LAST_OWNER` (409) on `changeMembership`, `removeMembership`, `disableUser`, `deleteUser` or `setUserEmailVerified`
 
-The change would leave the tenant with no owner. For `disableUser` and `deleteUser` on a `clavix`
-user, the user is the only owner who can sign in of a tenant they own, or the only live platform
+The change would leave the tenant with no owner. For `disableUser`, `deleteUser` and
+`setUserEmailVerified(verified: false)` on a `clavix` user (an unproved e-mail is refused everywhere in
+the console), the user is the only owner who can sign in of a tenant they own, or the only live platform
 owner. One rule everywhere: a disabled or deleted owner does not count, so with owners X (disabled)
-and Y, Y cannot step down or be removed. Disabling a user who is already disabled is never refused.
+and Y, Y cannot step down or be removed. Disabling a user who is already disabled, or un-verifying one who is already unproved, is never refused.
 Name, invite or enable another owner first, then demote or remove this one. Of two owners removed at the same moment, the second is refused. `CONFLICT` (409)
 on the same two mutations means the user's roles kept changing during the call: retry.
 

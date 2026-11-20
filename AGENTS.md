@@ -29,7 +29,8 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `.claude/settings.json`); healthix-api is the worked example this skeleton was cut from.
 - Layout: `src/modules/<name>/` holds a module's `*.graphqls`, resolvers and services,
   merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
-  `src/config/` reads the environment once (`defineEnv`); `src/cli/` holds what the scripts share
+  `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
+  introspection (`src/http/introspection.ts`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/cli/` holds what the scripts share
   (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below); generated code is in
   `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
@@ -141,7 +142,7 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
 - **Console users** (`src/console/modules/users/`): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port (`janus-users.ts`), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `src/modules/auth/device.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.
-- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; re-wrapping is clavix-api#49).
+- **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; `keys:reseal` wraps them again under the first).
 
 `src/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
 `createJanusIssuers`, fed by the same tenant resolver as the OAuth issuers, `version` as a string) builds
@@ -273,7 +274,7 @@ so a code mail in flight is not lost; `stopTimeout` is set above it.
 
 `src/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
 `src/config/keys.ts`; a tenant's partition is its hex id), the rotation policy and the hourly
-`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). Sign and
+`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, which must cover **every store sealed under the keyring** (signing keys, TOTP secrets, and the `createSecretBox` stores in `SECRET_STORES`, `src/keys/reseal.ts`: each service's `resealSecrets(tenantId)`; a new sealed store adds its entry there, and the old key is dropped only when the report's `oldKeyNeededBy` is empty), and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). Sign and
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 
@@ -305,10 +306,12 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
 - **Writes on the `clavix` tenant are the platform's** (`guard.ts`, `allowed`): an `onTenant` guard
   with `edit` or `manage` whose target is the `clavix` tenant itself asks `canPlatform` instead of
   the tenant role (operators, the issuer's domains, sign-in policy, clients, branding and users
-  are all behind it); `view` stays tenant-level. It is central, so no module opts in. A tenant-level
+  are all behind it); `view` stays tenant-level. It is central, so no module opts in: the rule is
+  `permitted` (`guard.ts`), which the audit export's route uses too (`log=auth` on `clavix` is the platform's `edit`); a new way into the console that checks a role goes through it, never `access.can` bare. A tenant-level
   role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
-  also removes their console relations (`access.removeUser`); disabling or deleting a `clavix` user
-  who holds a platform role or owns a tenant needs platform `manage` (`users/operators.ts`).
+  also removes their console relations (`access.removeUser`); every mutation that changes the account of a `clavix` user
+  who holds a platform role or owns a tenant needs platform `manage` (`keepOwners`, `users/operators.ts`: disable, enable,
+  delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
   there, never in `src/modules`.
@@ -348,10 +351,10 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
   Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
   **One owner rule** (`otherLiveOwners`, `service.ts`): an owner counts only while they exist and can
-  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable and
-  delete of a `clavix` user, tenant ownerships and the last live platform owner, under
+  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable,
+  delete and un-verify of a `clavix` user (`OwnerChange`; `touch` checks the caller only, no count), tenant ownerships and the last live platform owner, under
   `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
-  ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` is never `LAST_OWNER`.
+  ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` or un-verify is never `LAST_OWNER`.
   Invitations are **not** the console's own: `src/invitations/tenant-invitations.ts`
   (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
   mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
@@ -422,7 +425,7 @@ does two things, and nothing else touches the collection:
 - **Export (M4 E2, D17)**: `GET /console/audit/export` (`src/console/audit-export/`: `export.ts` handler, `params.ts`, `columns.ts`, `body.ts`, `serveAuditExport`, mounted
   by `createApp` beside `/console/graphql`, in the Caddyfile `@api` matcher) authenticates like the GraphQL API
   (`authenticated` in `plugin.ts`, the DPoP proof's `htu` being the export path), then a verified e-mail, `view`
-  for `log=admin`, `edit` for `log=auth`. The range is cut to the plan's retention, at most 100 000 rows
+  for `log=admin`, `edit` for `log=auth` (through `permitted`, so the platform's `edit` on the `clavix` tenant). The range is cut to the plan's retention, at most 100 000 rows
   (`ConsoleDeps.auditExport` overrides it in a spec; `exceeds` reads at most one row past the limit, no full count), a per-tenant budget (`throttle.ts`, limit `auditExport`, `CLAVIX_EXPORT_TENANT_*`, 429; Redis only, down: allowed and logged), streamed with `reader.stream` / `authEventsService.stream`
   (`modules/audit/stream.ts`, 500 rows per batch, one row per pull). `auditLog.export` is recorded, awaited,
   before the first byte. CSV cells go through `csvCell` (formula guard). `ConsoleDirectory.tenantsByIds` carries the `plan`.
