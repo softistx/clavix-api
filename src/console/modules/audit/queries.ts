@@ -1,6 +1,8 @@
 import { InvalidCursorError } from "@softistx/mongo";
+import type { StoredAdminEvent } from "@/console/admin-events/reader";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { isAuthEventType } from "@/modules/audit/auth-events.model";
+import type { StoredAuthEvent } from "@/modules/audit/auth-events.service";
 import type { ConsoleContext } from "../../context";
 import { liveTenant, tenantIdOf } from "../ids";
 import { badInput } from "../users/shapes";
@@ -52,6 +54,37 @@ const actorOf = (
   };
 };
 
+const adminEventOf = (
+  event: StoredAdminEvent,
+  admins: Map<string, Named | null>,
+) => ({
+  id: event._id.toHexString(),
+  action: event.action,
+  actor: actorOf("user", event.actor, admins),
+  target: event.target,
+  tenantId: event.tenantId?.toHexString() ?? null,
+  at: event.at,
+  requestId: event.requestId,
+});
+
+const authEventOf = (
+  event: StoredAuthEvent,
+  people: Map<string, Named | null>,
+) => ({
+  id: event._id.toHexString(),
+  type: event.type,
+  at: event.at,
+  outcome: event.outcome,
+  reason: event.reason,
+  method: event.method,
+  actor: actorOf(event.actor.kind, event.actor.id, people),
+  userId: event.userId,
+  clientId: event.clientId,
+  ip: event.ip,
+  userAgent: event.userAgent,
+  requestId: event.requestId,
+});
+
 const adminPage = async (
   ctx: ConsoleContext,
   scope: Parameters<ConsoleContext["activity"]["admin"]["page"]>[0],
@@ -77,15 +110,7 @@ const adminPage = async (
     (id) => ctx.directory.findUser(id),
   );
   return {
-    items: page.items.map((event) => ({
-      id: event._id.toHexString(),
-      action: event.action,
-      actor: actorOf("user", event.actor, admins),
-      target: event.target,
-      tenantId: event.tenantId?.toHexString() ?? null,
-      at: event.at,
-      requestId: event.requestId,
-    })),
+    items: page.items.map((event) => adminEventOf(event, admins)),
     nextCursor: page.nextCursor,
     totalCount: page.totalCount,
   };
@@ -96,6 +121,35 @@ export const auditQueries: NonNullable<Resolvers["Query"]> = {
     const tenantId = tenantIdOf(given);
     await liveTenant(ctx.directory, tenantId);
     return adminPage(ctx, { tenantId }, args);
+  },
+  adminEvent: async (_, { tenantId: given, id }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    await liveTenant(ctx.directory, tenantId);
+    const event = await ctx.activity.admin.find({ tenantId }, id);
+    if (event === null) return null;
+    const admins = await resolveEach([event.actor], (actor) =>
+      ctx.directory.findUser(actor),
+    );
+    return adminEventOf(event, admins);
+  },
+  platformAdminEvent: async (_, { id }, ctx) => {
+    const event = await ctx.activity.admin.find({ all: true }, id);
+    if (event === null) return null;
+    const admins = await resolveEach([event.actor], (actor) =>
+      ctx.directory.findUser(actor),
+    );
+    return adminEventOf(event, admins);
+  },
+  authEvent: async (_, { tenantId: given, id }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    await liveTenant(ctx.directory, tenantId);
+    const event = await ctx.activity.auth.find(tenantId, id);
+    if (event === null) return null;
+    const people = await resolveEach(
+      event.actor.kind === "user" ? [event.actor.id] : [],
+      (actor) => ctx.users.find(tenantId, actor),
+    );
+    return authEventOf(event, people);
   },
   platformAdminEvents: (_, args, ctx) => adminPage(ctx, { all: true }, args),
   authEvents: async (_, { tenantId: given, filter, first, after }, ctx) => {
@@ -128,20 +182,7 @@ export const auditQueries: NonNullable<Resolvers["Query"]> = {
       (id) => ctx.users.find(tenantId, id),
     );
     return {
-      items: page.items.map((event) => ({
-        id: event._id.toHexString(),
-        type: event.type,
-        at: event.at,
-        outcome: event.outcome,
-        reason: event.reason,
-        method: event.method,
-        actor: actorOf(event.actor.kind, event.actor.id, people),
-        userId: event.userId,
-        clientId: event.clientId,
-        ip: event.ip,
-        userAgent: event.userAgent,
-        requestId: event.requestId,
-      })),
+      items: page.items.map((event) => authEventOf(event, people)),
       nextCursor: page.nextCursor,
       totalCount: page.totalCount,
     };

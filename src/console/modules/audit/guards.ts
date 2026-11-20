@@ -8,7 +8,10 @@ import { tenantArg } from "../ids";
 export const auditGuards: Guards = {
   "Query.adminEvents": onTenant("view", tenantArg),
   "Query.authEvents": onTenant("edit", tenantArg),
+  "Query.adminEvent": onTenant("view", tenantArg),
+  "Query.authEvent": onTenant("edit", tenantArg),
   "Query.platformAdminEvents": onPlatform("view"),
+  "Query.platformAdminEvent": onPlatform("view"),
 };
 
 // Reads only: no mutation, so nothing to audit.
