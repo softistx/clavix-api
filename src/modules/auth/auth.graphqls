@@ -30,8 +30,9 @@ type SignedIn {
 
 """
 A sign-in that is not finished: the user holds a TOTP second factor, so no
-session is open yet. Answer it with `confirmSecondFactor` (the app's code) or
-`recoverSecondFactor` (a recovery code), with the same `challenge`. The
+session is open yet. Answer it with `confirmSecondFactor` (the app's code),
+`recoverSecondFactor` (a recovery code) or `confirmSecondFactorWithPasskey` (its
+`passkeyOptions`' answer), with the same `challenge`. The
 challenge is a secret like a session token: keep it where the next request
 presents it, never in a URL or a log. Single use and `Cache-Control: no-store`.
 """

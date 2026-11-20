@@ -163,7 +163,27 @@ mutation ($challenge: String!, $code: String!) {
 ```
 
 `recoverSecondFactor(challenge, recoveryCode)` answers it with a recovery code instead. A passkey
-sign-in is multi-factor and still answers `SignedIn`. An admin removes a user's factor with
+sign-in is multi-factor and still answers `SignedIn`. When `methods` holds `passkey`, the challenge
+carries `passkeyOptions` (JSON text for `navigator.credentials.get`, bound to the challenge), and
+`confirmSecondFactorWithPasskey(challenge, assertion)` answers it with the browser's result
+(`credential.toJSON()` as a JSON string), keeping the original sign-in's context:
+
+```graphql
+mutation ($challenge: String!, $assertion: String!) {
+  confirmSecondFactorWithPasskey(challenge: $challenge, assertion: $assertion) {
+    user {
+      id
+    }
+    newDevice
+    recoveryCodesLeft
+  }
+}
+```
+
+It shares the challenge's five attempts with the code: an assertion that does not verify, or names
+another user's passkey, is `CODE_INVALID` with `attemptsLeft`; an unknown (another tenant's too),
+spent or lapsed challenge is `TOKEN_UNKNOWN`, `TOKEN_SPENT` or `TOKEN_EXPIRED`. On success it sets
+the session cookie, records `session.signIn` by `passkey`, and `recoveryCodesLeft` is null. An admin removes a user's factor with
 `resetUserSecondFactor(tenantId, userId)` (`edit`, event `user.resetSecondFactor`); `TenantUser.secondFactor`
 shows `enabled` and `recoveryCodesLeft`.
 
