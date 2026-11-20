@@ -1,3 +1,6 @@
+// Temporary, until nxgt-janus#992: tsyringe (through the passkeys package) needs this polyfill
+// before anything imports it; the bundle fails at start without it.
+import "reflect-metadata";
 import { createApp } from "./app";
 import { createAgentsPrune } from "./config/agents-prune";
 import { createAuditRetention } from "./config/audit-retention";

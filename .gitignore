@@ -14,3 +14,4 @@ deploy/tls/*
 deploy/tls/ca/*
 deploy/tls/server/*
 !deploy/tls/*/.gitkeep
+load/out/
