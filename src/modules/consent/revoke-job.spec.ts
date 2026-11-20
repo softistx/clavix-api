@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createGrantsRevoke } from "@/config/grants-revoke";
 import type { Context } from "@/http/context";
 import { grantsRevoke } from "./revoke.queue";
 import { revokeOnReplace, startGrantsRevoke } from "./revoke-job";
@@ -91,5 +92,44 @@ describe("startGrantsRevoke", () => {
     expect(grantsRevoke.attempts).toBe(8);
     expect(grantsRevoke.backoff.base).toBe(60_000);
     expect(grantsRevoke.backoff.max).toBe(3_600_000);
+  });
+});
+
+describe("createGrantsRevoke", () => {
+  const job = { tenantId: "t", userId: "u" };
+  test("a tenant that is gone has nothing to revoke", async () => {
+    const run = createGrantsRevoke(
+      async () => {
+        throw new Error("unused");
+      },
+      async () => undefined,
+    );
+    expect(await run(job)).toBe(0);
+  });
+
+  test("no server for the tenant throws so the job retries", async () => {
+    const run = createGrantsRevoke(
+      async () => null,
+      async () => "acme",
+    );
+    await expect(run(job)).rejects.toThrow("no OAuth server for acme");
+  });
+
+  test("revokes through the tenant's server", async () => {
+    const seen: unknown[] = [];
+    const server = {
+      grants: {
+        revokeAll: async (who: unknown) => {
+          seen.push(who);
+          return 3;
+        },
+      },
+    };
+    const run = createGrantsRevoke(
+      (async () => server) as never,
+      async () => "acme",
+    );
+    expect(await run(job)).toBe(3);
+    expect(seen).toEqual([{ id: "u" }]);
   });
 });

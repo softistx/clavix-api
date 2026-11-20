@@ -340,6 +340,16 @@ needs Redis (`REDIS_URL`): without it nothing runs. A tick that leaves a tenant 
 queue retries it; the logs say `audit: retention failed for <tenant> (...)`. It deletes in batches of
 1,000 and writes no event per deletion (actor `system:audit:retention`). A plan change applies at the next run.
 
+
+## Grant revocation retries
+
+When a social sign-in replaces an unverified holder and revoking their OAuth grants fails, the revocation is
+queued (`grants-revoke`, Redis) and the sign-in succeeds. The job retries up to 8 times, backing off from 1 minute
+doubling to 1 hour. Without `REDIS_URL`, or when the job cannot be stored, the sign-in fails instead. Watch the logs
+`grants: revocation queued after a failure`, `grants: revocation not queued` and `grants: no OAuth server for <slug>`
+(check `CLAVIX_PUBLIC_SCHEME`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_PORT`). A job that exhausts its attempts stays in the
+failed set for 30 days and the user's grants stay live: revoke them from the console (connected apps).
+
 ## Webhooks
 
 A tenant's events are posted to its endpoints (`https` only, public addresses only, checked when saved and
