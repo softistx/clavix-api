@@ -4,6 +4,7 @@ import { createAuditRetention } from "./config/audit-retention";
 import { createConsoleDeps } from "./config/console";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
+import { createGrantsRevoke } from "./config/grants-revoke";
 import { signingKeysFor } from "./config/keys";
 import { createIssuers } from "./config/oauth";
 import { createTenantPurge } from "./config/purge";
@@ -16,6 +17,7 @@ import { startKeyRotation } from "./keys";
 import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { startAuditRetention } from "./modules/audit/retention-worker";
 import { drain } from "./modules/auth/outbox";
+import { startGrantsRevoke } from "./modules/consent/revoke-job";
 import { startDomainRecheck } from "./modules/domains/recheck-worker";
 import { startTenantPurge } from "./modules/tenants/purge-worker";
 import { startWebhookSecretsPrune } from "./modules/webhooks/secrets-prune-worker";
@@ -60,6 +62,12 @@ startAuditRetention(createAuditRetention(), redis?.queues.auditRetention);
 startWebhookSecretsPrune(
   createWebhookSecretsPrune(),
   redis?.queues.webhookSecretsPrune,
+);
+// A grant revocation that failed at a social replace is retried with backoff
+// (#353).
+startGrantsRevoke(
+  createGrantsRevoke(oauth.serverFor),
+  redis?.queues.grantsRevoke,
 );
 const app = createApp({
   oauth,

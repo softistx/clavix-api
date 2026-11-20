@@ -147,8 +147,13 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   user. A replaced user loses their credentials, links and sessions; `SocialSignedIn.replaced` says so, and the
   sign-in log's `session.signIn` carries `reason: "replaced"`. Clavix revokes the replaced user's OAuth grants
   and refresh tokens itself: `socialSignInComplete` calls `revokeOAuthGrants` (`modules/consent/revoke.ts`, janus-oauth
-  `grants.revokeAll`) when `replaced` is true, before anything else. A failure propagates and janus does not repeat
-  `replaced`, so a retried sign-in would not revoke (clavix-api #346).
+  `grants.revokeAll`) when `replaced` is true, before anything else. janus does not repeat `replaced`, so a
+  failure must not be lost (clavix-api #353): `revokeOnReplace` (`modules/consent/revoke-job.ts`) puts a failed
+  revocation on the `grants-revoke` queue (`revoke.queue.ts`, `{ tenantId, userId }`, 8 attempts, backoff 1 min
+  doubling to 1 h, `grantsRevokeQueue` in `config/grants-revoke.ts`) and the sign-in succeeds once the job is
+  stored; the worker (`startGrantsRevoke`, started in `server.ts`, `createGrantsRevoke`) finds the tenant's
+  server by its issuer URL and repeats the idempotent `revokeAll`. With no Redis, or when the job cannot be
+  added, the original error fails the sign-in as before.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
 - **Console users** (`src/console/modules/users/`): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port (`janus-users.ts`), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `src/modules/auth/device.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.

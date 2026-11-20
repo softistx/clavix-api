@@ -1,5 +1,6 @@
 import { denial, socialResolvers } from "@softistx/janus-graphql";
 import { connectionsService } from "@/config/connections";
+import { grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
@@ -9,7 +10,7 @@ import {
   REPLACED_REASON,
   recordingSignIn,
 } from "@/modules/auth/sign-in-events";
-import { revokeOAuthGrants } from "@/modules/consent/revoke";
+import { revokeOnReplace } from "@/modules/consent/revoke-job";
 import { challengeAnswer } from "@/modules/mfa/challenge";
 import { requireLive } from "@/tenancy/live";
 import {
@@ -191,8 +192,16 @@ export const signInMethods: Resolvers = {
       // The address was taken from an unverified holder: janus dropped their
       // sessions, not the OAuth grants and refresh tokens (clavix-api #346).
       // First, so a missing profile cannot skip it: janus does not repeat
-      // `replaced`, a retried sign-in would not revoke.
-      if (done.replaced) await revokeOAuthGrants(ctx, done.userId);
+      // `replaced`, a retried sign-in would not revoke. A failed revocation is
+      // queued and retried (clavix-api #353); unqueued, the sign-in fails.
+      if (done.replaced) {
+        await revokeOnReplace(
+          ctx,
+          tenant.tenantId,
+          done.userId,
+          grantsRevokeQueue.current,
+        );
+      }
       // janus types the user as an id and a type only: read the profile.
       const user = await auth.findUser(done.userId);
       if (user === null) {
