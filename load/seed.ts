@@ -15,7 +15,7 @@ import {
 import { authFor, claimsFor, forTenant } from "@/config/users";
 import { registerTenant } from "@/modules/tenants/register-tenant";
 
-// Seeds the load test (load/README via docs/operations.md, "Load test"): TENANTS
+// Seeds the load test (docs/operations.md, "Load test"): TENANTS
 // tenants, each with CHAINS public clients and one refresh-token chain per
 // client, minted through the real authorize, approve and code exchange of the
 // real issuers (a fixed user stands in for the hosted sign-in). Idempotent for

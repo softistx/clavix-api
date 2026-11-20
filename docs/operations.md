@@ -3,7 +3,7 @@
 Run Clavix on one host with Docker Compose: the API, the UI, MongoDB (a one-node
 replica set), Redis and Caddy for TLS. Nothing here is deployed by CI. The files
 are `Dockerfile`, `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`
-and `scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/offsite.ts`).
+`scripts/mongo-backup.ts` / `scripts/mongo-restore.ts` (with `scripts/lib/offsite.ts`) and, for the load test, `load/`.
 
 ## What runs
 
@@ -935,15 +935,24 @@ request rate. `jwks-discovery.js` warms for 10 s (not measured); `token.js` warm
 discovery request in `setup` instead, because its VUs hold state.
 
 Method notes:
-- **`client_credentials` is not offered.** `/token` answers `unsupported_grant_type` (the provider has no such
-  grant, and the default grants of a client are code and refresh). `token.js` records that answer in `setup`
-  and measures the refresh grant, the other half of D26's `/token` target.
+- **`client_credentials` is not offered yet** (janus-oauth has no such grant; it is filed upstream). `/token`
+  answers `unsupported_grant_type`. `token.js` records that answer in `setup` and measures the refresh grant,
+  which shares the client authentication and signing path, against the same target. Its `client_credentials`
+  scenario is written and skipped: `CLIENT_CREDENTIALS=1` turns it on once the grant ships (the seed must then
+  also register a confidential client and write its secret under `confidential` in `seed.json`).
+- **D26** (the v1 load test decision): `/token` p95 under 150 ms at 200 req/s with 0 errors; JWKS and discovery
+  p95 under 20 ms at 2 000 req/s; run against a staging-like compose, not production.
+- **Prerequisites**: Docker with Compose 2.20+, the `grafana/k6` image, `openssl` and `bun` on the host, and a Docker
+  VM with about 10 GiB. `load/out/` (git-ignored) receives `seed.json`, `*.summary.json` and `*.log`.
+- **Knobs**: `RATE`, `VUS`, `DURATION` and `WARMUP` (env of `run.sh k6`, passed to k6; the lower-rate rows below are
+  `RATE=300 VUS=60 DURATION=30s WARMUP=5s` and `RATE=150 ...`), `LOAD_TENANTS` and `LOAD_CHAINS` (env of the seed,
+  defaults 50 and 2).
 - **A refresh chain is one VU's.** Refresh tokens rotate and a reused one revokes the grant, so each VU walks
-  its own chain (`think time` of 250 ms keeps ~50 VUs, so about 50 chains over as many tenants, busy at 200 req/s).
+  its own chain (the seed makes 100 chains; a think time of 250 ms keeps about 50 VUs busy at 200 req/s, so about 50 chains over as many tenants are used).
   `seed.ts` mints the chains through the real `/par`, `/authorize`, approval and code exchange of the real issuers
   (the approval is called directly, in place of the hosted sign-in, for the tenant's real user); the seed must run again before each token run.
 - **Thresholds** are in the scripts: refresh p95 under 150 ms with 0 failures; JWKS and discovery p95 under 20 ms
-  with 0 failures. `k6` exits non-zero when one is crossed.
+  with 0 failures; no dropped iteration (a saturated api cannot pass on the latency of the few requests it served). `k6` exits non-zero when one is crossed.
 
 ### Results (2026-11-20)
 

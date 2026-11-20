@@ -1,5 +1,6 @@
-// tsyringe (a dependency of the passkey verification) needs this polyfill before
-// anything imports it; the bundle fails at start without it.
+// Temporary, until nxgt-janus issue (tsyringe polyfill not imported by the passkey
+// verification; number to be filed by the coordinator): tsyringe needs this polyfill
+// before anything imports it; the bundle fails at start without it.
 import "reflect-metadata";
 import { createApp } from "./app";
 import { createAgentsPrune } from "./config/agents-prune";

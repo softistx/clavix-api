@@ -24,6 +24,7 @@ export const options = {
     prefixed("discovery", scenario(RATE, "discovery", VUS)),
   ),
   thresholds: {
+    dropped_iterations: ["count==0"],
     "http_req_duration{phase:run,endpoint:jwks}": ["p(95)<20"],
     "http_req_duration{phase:run,endpoint:discovery}": ["p(95)<20"],
     "http_req_failed{phase:run}": ["rate==0"],
