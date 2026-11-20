@@ -11,11 +11,16 @@ import {
 import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { createGrantsRevoke, grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
+import {
+  type RevokeJob,
+  startGrantsRevoke,
+} from "@/modules/consent/revoke-job";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
@@ -26,7 +31,26 @@ import { SignInPolicyService } from "./service";
 
 // The OAuth issuers are mounted: the replacement revokes the former holder's grants through them.
 const flow = createFlow();
-const app = createApp({ oauth: flow.issuers });
+// `revokeAll` can be made to reject, to see the failure path of the replacement (#353).
+const revokeDown = { on: false, calls: 0 };
+const issuers = {
+  ...flow.issuers,
+  serverFor: async (request: Request) => {
+    const server = await flow.issuers.serverFor(request);
+    if (server === null || !revokeDown.on) return server;
+    return {
+      ...server,
+      grants: {
+        ...server.grants,
+        revokeAll: async () => {
+          revokeDown.calls += 1;
+          throw new Error("store down");
+        },
+      },
+    };
+  },
+};
+const app = createApp({ oauth: issuers });
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -426,6 +450,109 @@ describe("social sign-in", () => {
     });
     expect((await signIn()).replaced).toBe(false);
     expect((await refresh(kept.refresh_token ?? "")).status).toBe(200);
+  });
+
+  test("a revocation that fails at a replace is queued and retried until the refresh token is refused (clavix-api #353)", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-grants", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-grants");
+    const holder = await auth.create({ email: "retry@social.example" });
+    const held = await flow.tokensOf("sih-grants", "openid", {
+      userId: holder.id,
+    });
+    const client = flow.clients["sih-grants"] ?? { id: "", secret: "" };
+    const refresh = () =>
+      flow.post(
+        "sih-grants",
+        "/token",
+        {
+          grant_type: "refresh_token",
+          refresh_token: held.refresh_token ?? "",
+        },
+        flow.basic(client.id, client.secret),
+      );
+    const signIn = async () => {
+      const start = await startOn("sih-grants");
+      const { run } = github("retry@social.example");
+      return run(() =>
+        gql("sih-grants", COMPLETE, {
+          u: callbackOf("sih-grants", start.state),
+          f: start.flow,
+        }),
+      );
+    };
+    const jobs: RevokeJob[] = [];
+    let handler: ((job: { data: RevokeJob }) => Promise<unknown>) | undefined;
+    const previous = grantsRevokeQueue.current;
+    grantsRevokeQueue.current = {
+      add: async (data) => {
+        jobs.push(data);
+      },
+    };
+    startGrantsRevoke(createGrantsRevoke(flow.issuers.serverFor), {
+      work: (fn) => {
+        handler = fn;
+        return { on: () => {} };
+      },
+    });
+    revokeDown.on = true;
+    revokeDown.calls = 0;
+    try {
+      const answer = await signIn();
+      // The sign-in succeeded: the job is stored, the grants still stand.
+      expect(answer.errors).toBeUndefined();
+      expect(answer.data?.["socialSignInComplete"]).toMatchObject({
+        replaced: true,
+      });
+      expect(revokeDown.calls).toBe(1);
+      expect(jobs).toEqual([{ tenantId: grants, userId: holder.id }]);
+      expect((await refresh()).status).toBe(200);
+    } finally {
+      revokeDown.on = false;
+    }
+    // The first run of the job fails (the store is still down for it), the retry succeeds.
+    revokeDown.on = true;
+    const down = createGrantsRevoke(issuers.serverFor);
+    await expect(down(jobs[0] as RevokeJob)).rejects.toThrow("store down");
+    revokeDown.on = false;
+    await handler?.({ data: jobs[0] as RevokeJob });
+    const refused = await refresh();
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toBe(
+      "invalid_grant",
+    );
+    grantsRevokeQueue.current = previous;
+  });
+
+  test("a revocation that cannot be queued fails the sign-in, as before", async () => {
+    const auth = await janusIssuers.forRequest(
+      new Request(`${issuerOf("sih-grants", origin)}/`),
+    );
+    if (auth === null) throw new Error("no janus for sih-grants");
+    await auth.create({ email: "noqueue@social.example" });
+    const previous = grantsRevokeQueue.current;
+    grantsRevokeQueue.current = {
+      add: async () => {
+        throw new Error("redis down");
+      },
+    };
+    revokeDown.on = true;
+    try {
+      const start = await startOn("sih-grants");
+      const { run } = github("noqueue@social.example");
+      const answer = await run(() =>
+        gql("sih-grants", COMPLETE, {
+          u: callbackOf("sih-grants", start.state),
+          f: start.flow,
+        }),
+      );
+      expect(answer.errors?.length).toBe(1);
+      expect(answer.data?.["socialSignInComplete"] ?? null).toBeNull();
+    } finally {
+      revokeDown.on = false;
+      grantsRevokeQueue.current = previous;
+    }
   });
 
   test("a verified user is linked, never replaced: replaced is false and no reason is recorded", async () => {
