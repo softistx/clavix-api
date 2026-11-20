@@ -91,6 +91,15 @@ export const env = defineEnv({
     .enum(production ? ["false"] : ["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // The GraphQL IDE (Apollo Sandbox) on the hosted `/graphql`, and the
+  // schema's introspection with it. The page runs a third-party script on the
+  // origin that holds the session cookie, so it is a development tool only:
+  // on under `bun dev` (NODE_ENV=development), off elsewhere, and `true` is
+  // refused in production.
+  CLAVIX_GRAPHQL_IDE: z
+    .enum(production ? ["false"] : ["true", "false"])
+    .default(Bun.env.NODE_ENV === "development" ? "true" : "false")
+    .transform((value) => value === "true"),
   // Sign-in code requests (`requestSignInCode`), on top of janus's 5 per address
   // per 10 min. Per client address and tenant, and per tenant. They need
   // Redis (REDIS_URL): without it there is no such limit.

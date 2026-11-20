@@ -97,8 +97,15 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   revokeUserSessions: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await liveTenant(ctx.directory, tenantId);
-    const ended = await ctx.users.revokeSessions(tenantId, userId);
+    const tenant = await liveTenant(ctx.directory, tenantId);
+    const ended = await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () => ctx.users.revokeSessions(tenantId, userId),
+      "touch",
+      userKey(tenantId, userId),
+    );
     await ctx.audit("user.revokeSessions", target("user", userId, tenantId));
     return ended;
   },
@@ -109,8 +116,17 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   ) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await liveTenant(ctx.directory, tenantId);
-    const user = await ctx.users.setEmailVerified(tenantId, userId, verified);
+    const tenant = await liveTenant(ctx.directory, tenantId);
+    // Un-verifying locks the account out of the console (ADR-0041): an
+    // owner's is the owners' business, and the last one keeps theirs.
+    const user = await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () => ctx.users.setEmailVerified(tenantId, userId, verified),
+      verified ? "touch" : "unverify",
+      userKey(tenantId, userId),
+    );
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.setEmailVerified", target("user", userId, tenantId));
     return shape(user, tenantId);
@@ -118,8 +134,15 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   resetUserSecondFactor: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    await liveTenant(ctx.directory, tenantId);
-    const user = await ctx.users.resetSecondFactor(tenantId, userId);
+    const tenant = await liveTenant(ctx.directory, tenantId);
+    const user = await keepOwners(
+      ctx,
+      tenant,
+      userId,
+      () => ctx.users.resetSecondFactor(tenantId, userId),
+      "touch",
+      userKey(tenantId, userId),
+    );
     if (user === null) throw denial("NOT_FOUND", "No such user");
     await ctx.audit("user.resetSecondFactor", target("user", userId, tenantId));
     return shape(user, tenantId);
@@ -146,18 +169,17 @@ async function setActive(
   const tenantId = tenantIdOf(given);
   idArg(userId, "userId");
   const tenant = await liveTenant(ctx.directory, tenantId);
-  const user = await (active
-    ? ctx.users.setActive(tenantId, userId, true)
-    : keepOwners(
-        ctx,
-        tenant,
-        userId,
-        // Under the user lock (taken by `keepOwners`) like the accept hooks:
-        // an owner role is not granted to an account disabled meanwhile.
-        () => ctx.users.setActive(tenantId, userId, false),
-        "disable",
-        userKey(tenantId, userId),
-      ));
+  // Under the user lock (taken by `keepOwners`) like the accept hooks: an
+  // owner role is not granted to an account disabled meanwhile. Enabling goes
+  // through it too: an operator an owner disabled is the owners' to bring back.
+  const user = await keepOwners(
+    ctx,
+    tenant,
+    userId,
+    () => ctx.users.setActive(tenantId, userId, active),
+    active ? "touch" : "disable",
+    userKey(tenantId, userId),
+  );
   if (user === null) throw denial("NOT_FOUND", "No such user");
   await ctx.audit(
     active ? "user.enable" : "user.disable",

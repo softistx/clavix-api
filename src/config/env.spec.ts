@@ -30,6 +30,7 @@ const clean = {
   CLAVIX_PUBLIC_PORT: undefined,
   CLAVIX_KEYS_MASTER_KEY: undefined,
   CLAVIX_SMTP_URL: undefined,
+  CLAVIX_GRAPHQL_IDE: undefined,
 };
 
 const masterKey = Buffer.alloc(32, 7).toString("base64");
@@ -204,4 +205,37 @@ test("CLAVIX_TRUSTED_PROXIES is required in production, with a clear error", asy
   ).rejects.toThrow("CLAVIX_TRUSTED_PROXIES");
   const zero = await load({ ...production, CLAVIX_TRUSTED_PROXIES: "0" });
   expect(zero.env.CLAVIX_TRUSTED_PROXIES).toBe(0);
+});
+
+test("the GraphQL IDE: on under development, off elsewhere, refused in production", async () => {
+  expect((await load(clean)).env.CLAVIX_GRAPHQL_IDE).toBe(false);
+  expect(
+    (await load({ ...clean, NODE_ENV: "development" })).env.CLAVIX_GRAPHQL_IDE,
+  ).toBe(true);
+  expect(
+    (
+      await load({
+        ...clean,
+        NODE_ENV: "development",
+        CLAVIX_GRAPHQL_IDE: "false",
+      })
+    ).env.CLAVIX_GRAPHQL_IDE,
+  ).toBe(false);
+  expect(
+    (await load({ ...clean, CLAVIX_GRAPHQL_IDE: "true" })).env
+      .CLAVIX_GRAPHQL_IDE,
+  ).toBe(true);
+  const production = {
+    ...clean,
+    NODE_ENV: "production",
+    REDIS_URL: "redis://redis:6379",
+    CLAVIX_DOMAIN: "clavix.example",
+    CLAVIX_PUBLIC_SCHEME: "https",
+    CLAVIX_KEYS_MASTER_KEY: masterKey,
+    CLAVIX_SMTP_URL: "smtps://relay.example:465",
+  };
+  expect((await load(production)).env.CLAVIX_GRAPHQL_IDE).toBe(false);
+  await expect(
+    load({ ...production, CLAVIX_GRAPHQL_IDE: "true" }),
+  ).rejects.toThrow("CLAVIX_GRAPHQL_IDE");
 });

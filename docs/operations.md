@@ -137,6 +137,12 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `BACKUP_OFFSITE_S3_PREFIX`                                               | backup, restore             | key prefix of the objects (default `clavix-backups`)                                                                                                           |
 | `BACKUP_OFFSITE_KEEP_DAYS`                                               | backup                      | remote retention in days (default 30)                                                                                                                          |
 
+The GraphQL IDE (Apollo Sandbox) and the introspection of the hosted `/graphql` are off in production:
+`CLAVIX_GRAPHQL_IDE` is `false` there and the API refuses to start with `true`. Leave it out of `deploy/.env`.
+A browser that opens `https://<tenant host>/graphql` gets no page, and a `__schema` or `__type` query is
+refused; the hosted pages and the OAuth clients are unaffected. The schema is in the repository
+(`src/modules/**/*.graphqls`); to explore it, run the API locally with `bun dev`.
+
 The device grant's code-lookup limits (`CLAVIX_DEVICE_USER_LIMIT`, `CLAVIX_DEVICE_IP_LIMIT`,
 `CLAVIX_DEVICE_TENANT_LIMIT` and their `_WINDOW_SECONDS`, defaults in the README) are read by the API and kept in
 Redis; with Redis down the lookups go through unthrottled and a line is logged.
