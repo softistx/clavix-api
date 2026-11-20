@@ -7,7 +7,7 @@
       "dependencies": {
         "@alxia/core": "^0.26.0",
         "@alxia/env": "^0.5.0",
-        "@alxia/graphql": "^0.16.4",
+        "@alxia/graphql": "^0.16.5",
         "@alxia/telemetry": "^0.9.3",
         "@graphql-tools/load-files": "^8.0.6",
         "@graphql-tools/merge": "^10.0.6",
@@ -64,7 +64,7 @@
 
     "@alxia/env": ["@alxia/env@0.5.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" }, "bin": { "alxia-env": "dist/cli/index.js" } }, "sha512-DhZMLwIFJUA3LZ/BzYKQQm+7O9nMH2DXfvKfkt01WcKccDySAsiHg735irOT0ymehxuRa22EzJzalX3n/fjN+w=="],
 
-    "@alxia/graphql": ["@alxia/graphql@0.16.4", "", { "peerDependencies": { "@alxia/core": "^0.25.0", "graphql": "^16.11.0 || ^17.0.0", "graphql-ws": "^6.1.0", "graphql-yoga": "^5.16.0 || ^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-RZsr1JWhsIpQoOCUyiiAdfiNXuuXEPAWqUmWYpKGrJBlbBsEbnYKM1Jz8UK8YDoxGpd/T2hmo3gnZ299JMnbLQ=="],
+    "@alxia/graphql": ["@alxia/graphql@0.16.5", "", { "peerDependencies": { "@alxia/core": "^0.26.0", "graphql": "^16.11.0 || ^17.0.0", "graphql-ws": "^6.1.0", "graphql-yoga": "^5.16.0 || ^6.0.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["graphql-ws"] }, "sha512-mZHOulhQ08i9ZuNT5KyH7XRKHjR7zzoRtPVkIotisASb7ToSDV3VoEKD32VyxtmHw99a6IQIDp0p2b69E0Rg4A=="],
 
     "@alxia/telemetry": ["@alxia/telemetry@0.9.3", "", { "peerDependencies": { "@alxia/core": "^0.26.0", "@softistx/telemetry": "^0.3.0 || ^0.4.0 || ^0.5.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-googs1Vwoh0W6h0b5gRtcyRUBk+YLVj2//IGiJIrTx5JY8ETf/ABzYFHik1Aa22wBGrlZvhtiKOuv8PaVHQatg=="],
 
