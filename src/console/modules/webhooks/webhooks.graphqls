@@ -92,7 +92,7 @@ input UpdateWebhookEndpointInput {
 type Query {
   "Needs `view` on the tenant. Oldest first."
   webhookEndpoints(tenantId: ID!): [WebhookEndpoint!]!
-  "The event types an endpoint can subscribe to: janus's 20 user events and `session.signedIn`. Needs `view` on the tenant."
+  "The event types an endpoint can subscribe to: janus's 18 user events (not the API key ones) and `session.signedIn`. Needs `view` on the tenant."
   webhookEventTypes(tenantId: ID!): [String!]!
 }
 

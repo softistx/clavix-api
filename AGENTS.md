@@ -645,7 +645,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
   `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
   that sends a mail or queues outbound work gets its budget here, never a counter of its own.
-- The catalogue (D22, `events.ts`) is janus's 20 user events plus `session.signedIn`; `data` holds ids
+- The catalogue (D22, `events.ts`) is janus's 18 user events (without `user.apiKeyCreated` / `user.apiKeyRevoked`, which never fire until API keys are adopted, #336) plus `session.signedIn`; `data` holds ids
   only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
   top-level field for it. Console admin events are not delivered. `webhook.test` is outside the
   catalogue and goes to one endpoint, whatever its types.
