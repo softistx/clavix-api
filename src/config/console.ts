@@ -1,5 +1,6 @@
 import { createExportThrottle } from "@/console/audit-export/throttle";
 import { createConsoleAuthenticator } from "@/console/auth";
+import { createConsoleBudgets } from "@/console/budgets";
 import {
   CONSOLE_PATH,
   consoleAudience,
@@ -78,6 +79,8 @@ export function createConsoleDeps(
       invitationsOf: (id) => invitationsOf(() => resolveById(id)),
     }),
     exclusive,
+    budgets:
+      redis === undefined ? undefined : createConsoleBudgets(redis.limits),
     auditExport:
       redis === undefined
         ? {}

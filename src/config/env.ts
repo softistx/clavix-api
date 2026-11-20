@@ -179,6 +179,42 @@ export const env = defineEnv({
     .int()
     .min(1)
     .default(3600),
+  // Single sign-on starts that send no mail (`hostedHomeRealm`, and
+  // `socialSignInStart`, each with its own buckets): per client address and
+  // tenant, and per tenant, apart from the sign-in code budget above.
+  // Redis only, as above.
+  CLAVIX_SSO_IP_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_SSO_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(600),
+  CLAVIX_SSO_TENANT_LIMIT: z.coerce.number().int().min(1).default(2000),
+  CLAVIX_SSO_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  // Console `sendTestWebhook`: per endpoint and per tenant, over one window
+  // (a test event holds a slot of the shared delivery queue). Redis only.
+  CLAVIX_WEBHOOK_TEST_ENDPOINT_LIMIT: z.coerce.number().int().min(1).default(5),
+  CLAVIX_WEBHOOK_TEST_TENANT_LIMIT: z.coerce.number().int().min(1).default(20),
+  CLAVIX_WEBHOOK_TEST_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(60),
+  // Console `inviteUser` / `inviteAdmin` (each sends a mail): per caller and
+  // mutation (every aliased selection of one POST counts), and per tenant,
+  // both mutations together. Redis only.
+  CLAVIX_INVITE_CALLER_LIMIT: z.coerce.number().int().min(1).default(60),
+  CLAVIX_INVITE_CALLER_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  CLAVIX_INVITE_TENANT_LIMIT: z.coerce.number().int().min(1).default(200),
+  CLAVIX_INVITE_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Audit exports (GET /console/audit/export): starts per tenant, Redis only.
   CLAVIX_EXPORT_TENANT_LIMIT: z.coerce.number().int().min(1).default(10),
   CLAVIX_EXPORT_TENANT_WINDOW_SECONDS: z.coerce

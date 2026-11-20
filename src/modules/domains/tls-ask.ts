@@ -17,7 +17,11 @@ export interface TlsAskDeps {
    * none is, only custom domains are served.
    */
   allowedPlatformHost?: ((host: string) => Promise<boolean>) | undefined;
-  /** Spends one ask; `false` past the limit, and when the limiter cannot answer (fails closed, see `tlsAskGate`). */
+  /**
+   * Spends one ask of a host that may have a certificate (an unknown host
+   * never reaches it); `false` past the limit, and when the limiter cannot
+   * answer (fails closed, see `tlsAskGate`).
+   */
   limit?: (() => Promise<boolean>) | undefined;
   log?: (message: string) => void;
 }
@@ -47,7 +51,8 @@ const answer = (status: number) =>
 /**
  * Caddy's on-demand TLS ask: 200 for a verified custom domain of a live
  * tenant or for a known platform host (a live tenant's slug host), 404 for
- * everything else, 429 past the rate limit. It reveals
+ * everything else, 429 for a known host past the rate limit (an unknown one
+ * is a 404 that spends nothing). It reveals
  * nothing: a wrong secret, a missing or malformed domain, an unknown, pending,
  * lapsed or suspended one all answer the same bare 404. A request that went
  * through a proxy (it carries `X-Forwarded-*`, `X-Real-IP` or `Forwarded`) is public traffic and is
@@ -94,16 +99,20 @@ export function tlsAsk(deps: TlsAskDeps) {
         return answer(404);
       }
     }
-    // The limit counts only well-formed asks: every shape check is above.
-    if (deps.limit !== undefined && !(await deps.limit())) return answer(429);
+    // The host is looked up before the limit is spent: a name nobody serves
+    // is refused with the budget untouched, so a flood of unknown names (any
+    // client can make the proxy ask) cannot spend what the first handshake of
+    // a real host needs. The limit then counts only the asks about to say yes.
     try {
       const ok = underPlatform
         ? ((await deps.allowedPlatformHost?.(host)) ?? false)
         : await deps.allowed(host);
-      return answer(ok ? 200 : 404);
+      if (!ok) return answer(404);
     } catch (error) {
       (deps.log ?? console.warn)(`tls-ask: lookup failed: ${String(error)}`);
       return answer(404);
     }
+    if (deps.limit !== undefined && !(await deps.limit())) return answer(429);
+    return answer(200);
   };
 }
