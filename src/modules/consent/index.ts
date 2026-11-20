@@ -30,12 +30,12 @@ export const consentTypeDefs = oauthTypeDefs;
 
 // The OAuth servers the app serves: put on every context by `oauthContext`,
 // read by the resolvers, which pick the request host's server.
-const SERVERS = "oauthServers" as const;
-type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
+export const SERVERS = "oauthServers" as const;
+export type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
 const TEXTS = "scopeTextsFor" as const;
 const DETAIL_TEXTS = "detailTextsFor" as const;
 const AGENTS = "agentsFor" as const;
-type WithServers = {
+export type WithServers = {
   [SERVERS]?: ServerSource;
   [TEXTS]?: ScopeTextsFor;
   [DETAIL_TEXTS]?: DetailTextsFor;
@@ -202,7 +202,7 @@ const janusResolvers = oauthResolvers({
   oauth: (ctx) => serverOf(ctx),
 });
 
-async function serverOf(ctx: unknown) {
+export async function serverOf(ctx: unknown) {
   // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
   const request = requestOf(ctx);
   const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
