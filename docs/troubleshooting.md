@@ -591,6 +591,23 @@ budget, or raise the two limits for the import and put them back. Without `REDIS
 there is no budget; with Redis down the invitation goes through and
 `redis unavailable: console budgets skipped` is logged.
 
+### `INVITE_TOO_SOON` (429) or `PENDING_INVITATIONS_LIMIT` (409) on `inviteUser` or `inviteAdmin`
+
+`INVITE_TOO_SOON`: the address already has a pending invitation in this scope that was sent less
+than 60 seconds ago. Inviting again replaces it (new code, new mail), so it waits out the same
+cooldown as `resendAdminInvitation`. Nothing was issued and no mail went out.
+`extensions.retryAfter` (and `Retry-After`) is the seconds to wait; the address is compared
+without case.
+
+`PENDING_INVITATIONS_LIMIT`: the tenant (for `inviteAdmin`, the managed tenant's admin list) holds
+`CLAVIX_INVITE_PENDING_LIMIT` pending invitations (default 500) and the address is a new one.
+Revoke stale ones (`revokeInvitation`, `revokeAdminInvitation`; lapsed ones do not count) or raise
+the limit. Re-inviting an address already pending is not refused by the cap.
+
+Both checks read the stored invitations, so they need no Redis and still hold when Redis is down,
+unlike the `RATE_LIMITED` budgets above, which fail open (the invitation goes through). They are
+not atomic: concurrent invitations may overshoot the cap by a few.
+
 ### `ALREADY_MEMBER` (409) on `inviteAdmin`
 
 The address already holds a role on the tenant. Change it with `changeMembership`.

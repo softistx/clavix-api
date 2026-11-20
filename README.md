@@ -108,6 +108,7 @@ one needs on top:
 | `CLAVIX_WEBHOOK_TEST_TENANT_LIMIT`                                       | console `sendTestWebhook` per tenant, all its endpoints together: 20 per the same window                                                                                                                                                       |
 | `CLAVIX_INVITE_CALLER_LIMIT` / `CLAVIX_INVITE_CALLER_WINDOW_SECONDS`     | console `inviteUser` and `inviteAdmin`, each, per caller: 60 per 3600 s, every aliased selection counted; past it `RATE_LIMITED` 429 (Redis only)                                                                                              |
 | `CLAVIX_INVITE_TENANT_LIMIT` / `CLAVIX_INVITE_TENANT_WINDOW_SECONDS`     | console invitations per tenant, both mutations together: 200 per 3600 s                                                                                                                                                                        |
+| `CLAVIX_INVITE_PENDING_LIMIT`                                            | pending invitations one tenant (or one tenant's admin list) may hold: 500; a new address past it is `PENDING_INVITATIONS_LIMIT` (409); stored data, no Redis needed                                                                            |
 | `CLAVIX_TLS_ASK_LIMIT`                                                   | asks answered 200 per minute, all callers together, default 120; past it 429 (an ask for an unknown host is a 404 and spends nothing)                                                                                                          |
 | `CLAVIX_WEBHOOKS_ALLOW_PRIVATE`                                          | `true` lets webhook endpoints reach private addresses (local receiver); default `false`, refused in production                                                                                                                                 |
 | `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`                                          | webhook requests in flight at once per tenant, all instances together: 4. One tenant's flood cannot starve another tenant's endpoints                                                                                                          |
@@ -238,7 +239,7 @@ already a member is `ALREADY_MEMBER` (409); a second invitation to a pending add
 lifetime, a new mail naming the caller, the old code stops working, a lapsed invitation is allowed.
 It is `NOT_FOUND` (404) for an id that is not this tenant's, `INVITATION_NOT_PENDING` (409) once
 accepted or revoked, and `RESEND_TOO_SOON` (429, `retryAfter` seconds) within 60 s of the last send of
-that invitation. Invitations expose `invitedBy { id name }`, the operator who first invited (null when
+that invitation. Inviting an address that already has a pending invitation younger than 60 s is `INVITE_TOO_SOON` (429, `retryAfter`), and a new address past `CLAVIX_INVITE_PENDING_LIMIT` (500) pending invitations of the scope is `PENDING_INVITATIONS_LIMIT` (409). Invitations expose `invitedBy { id name }`, the operator who first invited (null when
 a script did); a resend keeps it. The
 last owner who can sign in (a disabled or deleted owner does not count) can be neither demoted nor
 removed, nor disabled or deleted, nor have their e-mail un-verified, on a tenant or on the platform:

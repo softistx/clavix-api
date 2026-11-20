@@ -379,6 +379,10 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   from janus's `updatedAt`, so it holds across processes with no Redis; the check and the write run under
   `ctx.exclusive` per invitation. Refusals are `ResendRefusedError` (`NOT_FOUND`, `INVITATION_NOT_PENDING`,
   `RESEND_TOO_SOON` with `retryAfter`). A users-pool invitation has no resend yet.
+  `invite` is guarded by `guardInvite` (`src/invitations/invite-guards.ts`, from the stored pending list, so no Redis and
+  it holds when Redis is down): re-inviting an address inside the cooldown is `INVITE_TOO_SOON` (`retryAfter`), a new
+  address past `CLAVIX_INVITE_PENDING_LIMIT` (500 per scope) is `PENDING_INVITATIONS_LIMIT`; both are `ResendRefusedError`s
+  that `refusing` maps (429 / 409). Not atomic. The Redis budgets (`CLAVIX_INVITE_*`) stay fail-open, as the audit export.
   Its events are `membership.invite` / `.resendInvitation` / `.revokeInvitation` (target `invitation`) and `membership.change`
   / `.remove` (target `user`), recorded outside the lock once the change is stored; the resolvers
   canonicalise `tenantId` (24 hex, lower case) and bound the ids first, so `ctx.audit` cannot refuse

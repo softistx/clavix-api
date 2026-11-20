@@ -126,7 +126,8 @@ extend type Mutation {
   Invites an e-mail address into the tenant's user pool (tenant admin). The
   invitee accepts on the tenant's hosted `/invitation` page, which makes the
   account (e-mail proved), even when sign-up is closed. A pending invitation of
-  the same address is replaced (a new mail goes out). Errors: USER_EXISTS (409)
+  the same address is replaced (a new mail goes out, after 60 s: INVITE_TOO_SOON 429 with `retryAfter` inside it;
+  PENDING_INVITATIONS_LIMIT 409 past the pending cap for a new address). Errors: USER_EXISTS (409)
   when the address already has an account in the tenant, NOT_FOUND for an
   unknown tenant.
   """

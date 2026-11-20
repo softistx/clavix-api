@@ -35,7 +35,8 @@ type Mutation {
   accepts on the hosted `/invitation` page of the `clavix` tenant; accepting
   grants the role, once (an `owner` invitation is refused once its inviter is disabled or
   deleted, and grants nothing to an account deleted or disabled meanwhile). A pending invitation of the same address is replaced
-  (a new mail goes out). Errors: ALREADY_MEMBER (409) when the address already
+  (a new mail goes out, after 60 s: INVITE_TOO_SOON 429 with `retryAfter` inside it;
+  PENDING_INVITATIONS_LIMIT 409 past the pending cap for a new address). Errors: ALREADY_MEMBER (409) when the address already
   holds a role there, NOT_FOUND for an unknown tenant.
   """
   inviteAdmin(

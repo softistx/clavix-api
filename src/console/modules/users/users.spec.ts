@@ -839,6 +839,16 @@ describe("invitations", () => {
       );
     const first = (await invite()).data?.["inviteUser"].id as string;
     const oldCode = codeMailedTo(email);
+    // Inside the cooldown a second invite is refused and mails nothing.
+    const early = await invite();
+    expect(early.errors?.[0]?.extensions?.["code"]).toBe("INVITE_TOO_SOON");
+    expect(codeMailedTo(email)).toBe(oldCode);
+    await oauthDb
+      .collection("partitionedInvitations")
+      .updateMany(
+        { email },
+        { $set: { updatedAt: new Date(Date.now() - 120_000) } },
+      );
     const second = (await invite()).data?.["inviteUser"].id as string;
     expect(second).not.toBe(first);
     const newCode = codeMailedTo(email);
