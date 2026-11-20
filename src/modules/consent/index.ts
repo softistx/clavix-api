@@ -30,12 +30,12 @@ export const consentTypeDefs = oauthTypeDefs;
 
 // The OAuth servers the app serves: put on every context by `oauthContext`,
 // read by the resolvers, which pick the request host's server.
-const SERVERS = "oauthServers" as const;
-type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
+export const SERVERS = "oauthServers" as const;
+export type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
 const TEXTS = "scopeTextsFor" as const;
 const DETAIL_TEXTS = "detailTextsFor" as const;
 const AGENTS = "agentsFor" as const;
-type WithServers = {
+export type WithServers = {
   [SERVERS]?: ServerSource;
   [TEXTS]?: ScopeTextsFor;
   [DETAIL_TEXTS]?: DetailTextsFor;
@@ -202,23 +202,7 @@ const janusResolvers = oauthResolvers({
   oauth: (ctx) => serverOf(ctx),
 });
 
-/**
- * Revokes every standing OAuth grant of `userId` on the request's tenant, with
- * the access and refresh tokens they opened (janus-oauth `grants.revokeAll`);
- * answers how many grants it revoked. Nothing to revoke where no OAuth server
- * is mounted. For a user whose address was taken over by a social sign-in
- * (`SocialSignedIn.replaced`): janus drops their sessions, never their grants.
- */
-export async function revokeOAuthGrants(
-  ctx: Context,
-  userId: string,
-): Promise<number> {
-  const source = (ctx as unknown as WithServers)[SERVERS];
-  if (source === undefined) return 0;
-  return (await serverOf(ctx)).grants.revokeAll({ id: userId });
-}
-
-async function serverOf(ctx: unknown) {
+export async function serverOf(ctx: unknown) {
   // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
   const request = requestOf(ctx);
   const server = await (ctx as WithServers)[SERVERS]?.serverFor(request);
