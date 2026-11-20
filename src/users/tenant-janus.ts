@@ -81,9 +81,25 @@ export interface ConnectionsOf {
   jitAllowed(tenantId: string, connectionId: string): Promise<boolean>;
 }
 
-/** The path, on the tenant's issuer host, where an identity provider sends the visitor back: one URL for every connection of the tenant. */
-export const ssoCallbackUrlOf = (issuer: string) =>
-  `${issuer}/sign-in/sso/callback`;
+const SSO_CALLBACK_PATH = /^\/sign-in\/social\/([^/]+)\/callback$/;
+
+/** Where an identity provider sends the visitor back: one URL per connection (nxgt-janus#975), the hosted UI's `/sign-in/social/:provider/callback` route. */
+export const ssoCallbackUrlOf = (issuer: string, connectionId: string) =>
+  `${issuer}/sign-in/social/${encodeURIComponent(connectionId)}/callback`;
+
+/**
+ * The connection a callback URL names, read from its path: `null` for any
+ * other path. The URL is the one the identity provider redirected the visitor
+ * to, so the id is the callback's own, never a claim.
+ */
+export function connectionIdOfCallbackUrl(callbackUrl: string): string | null {
+  try {
+    const match = SSO_CALLBACK_PATH.exec(new URL(callbackUrl).pathname);
+    return match?.[1] === undefined ? null : decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
 
 /** janus's `invitations.beforeAccept` and `onAccepted` of one tenant. */
 export interface InvitationHooks {
@@ -214,7 +230,8 @@ function connectionsOfTenant(
       source: connections.sourceOf(tenant.tenantId),
       ...(resolveHost === undefined ? {} : { resolveHost }),
       ...(fetcher === undefined ? {} : { fetch: fetcher }),
-      redirectUri: ssoCallbackUrlOf(tenant.issuer),
+      redirectUri: (connection) =>
+        ssoCallbackUrlOf(tenant.issuer, connection.id),
     });
   } catch (error) {
     console.warn(
@@ -263,6 +280,23 @@ export const homeRealmOf = (
   email: string,
 ): Promise<string | null> =>
   homeRealms.get(auth)?.forEmail(email) ?? Promise.resolve(null);
+
+/**
+ * Binds a callback's parameters to the connection whose URL received them
+ * (janus-social `connections.callback`, nxgt-janus#987). A tenant with no
+ * connections answers the parameters unbound: a connection's flow is then
+ * refused, and a static app's is unaffected.
+ */
+export function bindSsoCallback(
+  auth: TenantJanus,
+  connectionId: string,
+  callback: URLSearchParams,
+): URLSearchParams {
+  const realms = homeRealms.get(auth);
+  return realms === undefined
+    ? callback
+    : realms.callback(connectionId, callback);
+}
 
 /**
  * The new user's fields, or the refusal: through a connection, the connection's

@@ -681,8 +681,8 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `github`, `microsoft` are refused (they are the static apps). `emailTrust` offers `claimAndDomain`
   and `domain` only. `upstreamMfa.acr` is enforced (D6): it becomes the connection's `stepUp.acrValues`, so an ID token without that `acr` is `SOCIAL_STEP_UP_UNMET`.
 - `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `tenant-janus.ts` wires it as
-  `social.resolveProvider` through `oidcConnections` (one redirect URI per tenant:
-  `<issuer>/sign-in/sso/callback`). Every tenant's janus instance carries it, so the static-social
+  `social.resolveProvider` through `oidcConnections` (one redirect URI per connection:
+  `<issuer>/sign-in/social/<id>/callback`, the hosted UI's callback route). Every tenant's janus instance carries it, so the static-social
   gate in `sign-in-methods` also checks the tenant's offered providers.
 - Domain ownership: `addConnectionDomain` returns a TXT name `_clavix-sso.<domain>` and token;
   `verifyConnectionDomain` reads the TXT (60 s cooldown) and can be asked again. A domain is claimed
@@ -692,10 +692,14 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
   (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
   (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
-  whenever the metadata advertises it). The redirect URI stays the tenant's one shared URL: janus-social 0.10's
-  per-connection form (`redirectUri` as a function plus `connections.callback(id, parameters)`) needs the callback
-  to be bound, and `@softistx/janus-graphql`'s `socialSignInComplete` cannot bind yet (a connection's sign-in through
-  it is refused), so it waits for that resolver or for F3's own callback route.
+  whenever the metadata advertises it). Each connection has its own redirect URI
+  (`ssoCallbackUrlOf(issuer, id)`: janus-social's function form, nxgt-janus#975), and `socialResolvers`'s
+  `bindCallback` (janus-graphql 0.35, nxgt-janus#987; `sign-in-methods/index.ts`) binds the callback to the
+  connection whose URL received it (`bindSsoCallback`), so an identity provider cannot pass a visitor's flow to another
+  one even without `iss`. The id is the path of `callbackUrl` (`connectionIdOfCallbackUrl`) and must equal the
+  `x-sso-connection` header the BFF sets from its own `:provider` route parameter (it forwards no browser header);
+  a missing or disagreeing pair binds nothing, which a connection's flow refuses (fail closed). Register
+  `<issuer>/sign-in/social/<id>/callback` with each identity provider.
 - Temporary, until @softistx/janus-social#930: the linked-user count is a raw count on `partitionedSocialLinks`
   (`src/config/connections.ts`); janus has no such API.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.

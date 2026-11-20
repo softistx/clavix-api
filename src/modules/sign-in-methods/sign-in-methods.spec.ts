@@ -48,12 +48,14 @@ async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   cookie?: string,
+  headers: Record<string, string> = {},
 ): Promise<Answer> {
   const response = await app.request(`${issuerOf(slug, origin)}/graphql`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "x-forwarded-for": "198.51.100.23",
+      ...headers,
       ...(cookie === undefined ? {} : { cookie }),
     },
     body: JSON.stringify({ query, variables }),
@@ -493,6 +495,38 @@ describe("social sign-in", () => {
     const answer = await gql("sih-social", START, { p: "github" });
     expect(codeOf(answer)).toBe("SIGN_IN_METHOD_DISABLED");
     expect(answer.text).not.toContain("github");
+  });
+
+  test("a built-in app completes through the bound callback path: the BFF's x-sso-connection names it, nothing refuses it (nxgt-janus#987)", async () => {
+    const tenant = await createTenantParOff(tenants, {
+      slug: "sih-bound",
+      name: "Bound",
+      signUp: true,
+    });
+    await policy.setSocial(tenant.id, {
+      provider: "github",
+      clientId: "gh-client-bound",
+      clientSecret: SECRET,
+    });
+    const start = await startOn("sih-bound");
+    const { run } = github("bound@social.example");
+    const answer = await run(() =>
+      gql(
+        "sih-bound",
+        COMPLETE,
+        { u: callbackOf("sih-bound", start.state), f: start.flow },
+        undefined,
+        { "x-sso-connection": "github" },
+      ),
+    );
+    expect(answer.errors).toBeUndefined();
+    expect(
+      (
+        answer.data?.["socialSignInComplete"] as
+          | { created: boolean }
+          | undefined
+      )?.created,
+    ).toBe(true);
   });
 });
 

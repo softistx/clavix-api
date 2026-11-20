@@ -40,6 +40,8 @@ https:// {
 		reverse_proxy api:3000 {
 			# The tenant is chosen by the Host header: pass it untouched.
 			header_up Host {host}
+			# Only the ui sets this, on the private network (docs/operations.md).
+			header_up -X-Sso-Connection
 		}
 	}
 

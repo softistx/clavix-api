@@ -30,6 +30,10 @@ Caddy sends the authorization server (`/authorize`, `/token`, `/par`, `/device_a
 and `/healthz` to the API (a proxy of your own must route `/device_authorization` too), and everything else to the UI. The tenant is chosen
 by the `Host` header, which Caddy passes untouched.
 
+The edge strips `x-sso-connection` from every request it forwards to the API (Caddy `header_up -X-Sso-Connection`, the traefik
+`clavix-api-strip` middleware). Only the UI sets that header, on the private network (`clavix-api:3000`), to bind an enterprise
+connection's callback to the route that received it; a public client could otherwise send it together with a callback URL.
+
 ## Health
 
 - `GET /healthz` is liveness: 200 `{ status, version }`, no dependency is
@@ -387,7 +391,9 @@ A master-key rotation seals them again (`bun run keys:reseal`, "Rotating the mas
 Enterprise connection client secrets are sealed with another subkey of `CLAVIX_KEYS_MASTER_KEY` (label
 `connection-secrets`); losing the key makes them unreadable and those sign-ins fail until an admin sets the
 secret again; a master-key rotation seals them again (`bun run keys:reseal`). A connection's domain is proved by a TXT record `_clavix-sso.<domain>` holding the token the
-console shows; verification reads DNS at most once a minute per connection.
+console shows; verification reads DNS at most once a minute per connection. Each connection has its own redirect URI,
+`https://<tenant host>/sign-in/social/<connection id>/callback`: register that URL (and only that one) with the
+customer's identity provider. The earlier shared `/sign-in/sso/callback` is no longer used.
 
 A receiver verifies the Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`,
 HMAC-SHA256 over `id.timestamp.body`, every `v1,` signature of the header is tried during a roll) and dedupes

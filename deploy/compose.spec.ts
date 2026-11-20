@@ -31,6 +31,14 @@ describe("compose.traefik.yml", () => {
     expect(code).not.toMatch(/softistx\.com/);
   });
 
+  test("strips the BFF-only x-sso-connection header from public requests", () => {
+    expect(overlay).toContain('customrequestheaders.x-sso-connection: ""');
+    expect(overlay).toContain("clavix-api.middlewares: clavix-api-strip");
+    expect(readFileSync(join(DEPLOY_DIR, "Caddyfile"), "utf8")).toContain(
+      "header_up -X-Sso-Connection",
+    );
+  });
+
   test("joins the external proxy network and does not start caddy", () => {
     expect(overlay).toMatch(/networks:\n {2}proxy:\n {4}external: true/);
     expect(overlay).toMatch(/caddy:\n {4}profiles: \["standalone"\]/);
