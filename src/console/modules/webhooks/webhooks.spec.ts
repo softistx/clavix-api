@@ -30,6 +30,7 @@ const ROLL = `mutation($tenantId: ID!, $id: ID!, $keepPrevious: Boolean!) {
 }`;
 const TEST = `mutation($tenantId: ID!, $id: ID!) { sendTestWebhook(tenantId: $tenantId, id: $id) }`;
 const LIST = `query($tenantId: ID!) { webhookEndpoints(tenantId: $tenantId) { ${FIELDS} } }`;
+const ONE = `query($tenantId: ID!, $id: ID!) { webhookEndpoint(tenantId: $tenantId, id: $id) { ${FIELDS} } }`;
 const TYPES = `query($tenantId: ID!) { webhookEventTypes(tenantId: $tenantId) }`;
 
 type Created = {
@@ -113,6 +114,40 @@ describe("createWebhookEndpoint", () => {
     });
     expect(codeOf(over)).toBe("QUOTA_EXCEEDED");
     expect(await mongo.db.webhookEndpoints.raw.countDocuments({})).toBe(2);
+  });
+});
+
+describe("webhookEndpoint", () => {
+  test("reads one endpoint; unknown, malformed and other-tenant ids give null", async () => {
+    await mongo.db.webhookEndpoints.raw.deleteMany({});
+    const created = createdOf(
+      await admin(CREATE, { tenantId: tenantA, input: { url: URL_1 } }),
+    );
+    const id = created.endpoint.id;
+    const one = await viewer(ONE, { tenantId: tenantA, id });
+    expect(one.errors).toBeUndefined();
+    expect(
+      (one.data?.["webhookEndpoint"] as { id: string } | undefined)?.id,
+    ).toBe(id);
+    expect(JSON.stringify(one.data)).not.toContain(created.secret);
+    const missing = await admin(ONE, {
+      tenantId: tenantA,
+      id: "000000000000000000000000",
+    });
+    expect(missing.errors).toBeUndefined();
+    expect(missing.data?.["webhookEndpoint"]).toBeNull();
+    const malformed = await admin(ONE, { tenantId: tenantA, id: "nope" });
+    expect(malformed.data?.["webhookEndpoint"]).toBeNull();
+    // The endpoint of tenant A, asked through tenant B by B's own admin.
+    const other = await adminB(ONE, { tenantId: tenantB, id });
+    expect(other.errors).toBeUndefined();
+    expect(other.data?.["webhookEndpoint"]).toBeNull();
+  });
+  test("needs view on the tenant", async () => {
+    const id = "000000000000000000000000";
+    expect(codeOf(await adminB(ONE, { tenantId: tenantA, id }))).toBe(
+      "FORBIDDEN",
+    );
   });
 });
 

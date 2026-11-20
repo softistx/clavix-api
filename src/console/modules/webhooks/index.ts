@@ -23,6 +23,7 @@ const edit = onTenant("edit", tenantArg);
 
 export const webhooksGuards: Guards = {
   "Query.webhookEndpoints": view,
+  "Query.webhookEndpoint": view,
   "Query.webhookEventTypes": view,
   "Mutation.createWebhookEndpoint": edit,
   "Mutation.updateWebhookEndpoint": edit,
@@ -119,6 +120,11 @@ export const webhooks: Resolvers = {
     webhookEndpoints: async (_, { tenantId }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       return (await endpoints.list(tenant._id.toHexString())).map(shape);
+    },
+    webhookEndpoint: async (_, { tenantId, id }, ctx) => {
+      const tenant = await catalogTenant(ctx, tenantId);
+      const found = await endpoints.find(tenant._id.toHexString(), id);
+      return found === undefined ? null : shape(found);
     },
     webhookEventTypes: async (_, { tenantId }, ctx) => {
       await catalogTenant(ctx, tenantId);
