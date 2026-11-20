@@ -557,14 +557,24 @@ Staging runs on the shared VPS behind its Traefik v3 (the `proxy` network of nxg
 not behind Caddy. `deploy/compose.traefik.yml` is an overlay of `compose.yml`; `deploy/deploy.ts`
 drives both.
 
-| Host                          | Served by                                                                                                      |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `clavix.softistx.com`         | platform pages, console, landing (the ui); the api for its OAuth and GraphQL paths                             |
-| `console.clavix.softistx.com` | the console (redirect URI `https://console.clavix.softistx.com/console/auth/callback`; check `/healthz` there) |
-| `<slug>.clavix.softistx.com`  | the tenant's hosted pages and issuer (the `clavix` tenant's is `clavix.clavix.softistx.com`)                   |
+| Host                   | Served by                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| `clavixid.com`         | platform pages, console, landing (the ui); the api for its OAuth and GraphQL paths                      |
+| `console.clavixid.com` | the console (redirect URI `https://console.clavixid.com/console/auth/callback`; check `/healthz` there) |
+| `<slug>.clavixid.com`  | the tenant's hosted pages and issuer (the `clavix` tenant's is `clavix.clavixid.com`)                   |
 - **TLS** is traefik's, from its `letsencrypt` resolver (Cloudflare DNS-01). The routers ask for
-  `clavix.softistx.com` and `*.clavix.softistx.com` together, because the
-  `*.softistx.com` wildcard of traefik does not cover two levels. DNS has an `A` record for both names.
+  `clavixid.com` and `*.clavixid.com` together, because the `*.softistx.com` wildcard of traefik
+  does not cover them. Staging has a zone of its own, `clavixid.com`, so the tenant hosts stay one
+  level deep and Cloudflare's edge certificate covers them (`<slug>.clavix.softistx.com` was two
+  levels deep: the TLS handshake failed at the edge). The traefik Cloudflare token must cover the zone.
+- **DNS and tunnel**: the VPS has no public port 443; all HTTP goes through the Cloudflare Tunnel
+  to `https://traefik:443`. In the `clavixid.com` zone, two proxied `CNAME` records, `@` and `*`, point
+  to `<tunnel id>.cfargotunnel.com` (no `A` record). The tunnel has two routes (published
+  applications), `clavixid.com` and `*.clavixid.com`, to `https://traefik:443` with the origin
+  server name `clavixid.com`.
+- **Platform mail** is sent as `no-reply@<CLAVIX_DOMAIN>` (here `no-reply@clavixid.com`) through the VPS
+  mail relay (`CLAVIX_SMTP_URL=smtp://<user>:<pass>@<relay host>:587?tls.servername=<relay name>`). The
+  relay must accept that sender, and the zone carries the relay's SPF, DKIM and DMARC records.
 - **Caddy is not started** (its profile is `standalone`) and **custom domains are off**: on-demand
   TLS needs Caddy, so a tenant's own domain is not served in staging.
 - The hosts come from `CLAVIX_DOMAIN` in `deploy/.env`; nothing is hard-coded in the overlay. The api gets the
@@ -584,7 +594,7 @@ cp deploy/.env.example deploy/.env && chmod 600 deploy/.env   # first time; fill
 bun deploy/deploy.ts
 ```
 
-In `deploy/.env`, set `CLAVIX_DOMAIN=clavix.softistx.com`, local image names
+In `deploy/.env`, set `CLAVIX_DOMAIN=clavixid.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
 no registry token (the `@softistx` packages come from public npmjs). The script refuses to run when the file is missing, readable by
 others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
@@ -603,7 +613,7 @@ follow "First boot", steps 5 and 6, then run it again.
 To check the merged files without deploying:
 
 ```sh
-CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavix\.softistx\.com$' docker compose \
+CLAVIX_DOMAIN_RE='^[a-z0-9-]+\.clavixid\.com$' docker compose \
   -f deploy/compose.yml -f deploy/compose.traefik.yml --env-file deploy/.env config -q
 ```
 

@@ -17,7 +17,7 @@ const base = readFileSync(join(DEPLOY_DIR, "compose.yml"), "utf8");
 const v = (name: string) => `$\u007b${name}}`;
 
 describe("compose.traefik.yml", () => {
-  test("asks for the two-level wildcard on the letsencrypt resolver", () => {
+  test("asks for the apex and wildcard on the letsencrypt resolver", () => {
     expect(overlay).toContain("tls.certresolver: letsencrypt");
     expect(overlay).toContain(`tls.domains[0].main: ${v("CLAVIX_DOMAIN")}`);
     expect(overlay).toContain(`tls.domains[0].sans: "*.${v("CLAVIX_DOMAIN")}"`);
