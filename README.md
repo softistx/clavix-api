@@ -571,13 +571,12 @@ Each tenant chooses how its users sign in
   with `totp` off, enrolment is 403 `SECOND_FACTOR_DISABLED` and a user who holds a factor keeps it.
   The hosted operations on the tenant's `/graphql`:
 
-| Operation                                                                     | Does                                                                                                                                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `secondFactor` / `sessionConfirmedUntil`                                      | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes). |
-| `enrollSecondFactor` / `activateSecondFactor(code)`                           | Starts a factor (secret and `otpauth://` URI), then checks the first code and answers ten recovery codes, once. Needs a fresh session: `STEP_UP_REQUIRED`. |
-| `confirmSecondFactor(challenge, code)` / `recoverSecondFactor(challenge, recoveryCode)` | Answers the `SecondFactorChallenge` of a sign-in by code, link or social provider and opens the session; `TENANT_SUSPENDED` on a suspended tenant. |
-| `regenerateRecoveryCodes(code)` / `disableSecondFactor(code)`                 | Renews the recovery codes, or removes the factor, on a current app code.                                                                               |
-
+| Operation                                                                               | Does                                                                                                                                                        |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secondFactor` / `sessionConfirmedUntil`                                                | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes).    |
+| `enrollSecondFactor` / `activateSecondFactor(code)`                                     | Starts a factor (secret and `otpauth://` URI), then checks the first code and answers ten recovery codes, once. Needs a fresh session: `STEP_UP_REQUIRED`.  |
+| `confirmSecondFactor(challenge, code)` / `recoverSecondFactor(challenge, recoveryCode)` | Answers the `SecondFactorChallenge` of a sign-in by code, link or social provider and opens the session; `TENANT_SUSPENDED` on a suspended tenant.          |
+| `regenerateRecoveryCodes(code)` / `disableSecondFactor(code)`                           | Renews the recovery codes, or removes the factor, on a current app code.                                                                                    |
 - **Secrets**: a client secret is sealed with AES-256-GCM under a key derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, label `social-secrets`) and stored as the envelope
   `{ v, kid, iv, ct }`, bound to its tenant and provider. No query returns it (`hasSecret` only)
