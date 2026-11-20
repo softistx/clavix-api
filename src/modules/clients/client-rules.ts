@@ -73,9 +73,15 @@ export function sameClient(
       (stored.grantTypes.length === wantedGrants.size &&
         stored.grantTypes.every((grant) => wantedGrants.has(grant)))) &&
     (input.allowedScopes === undefined ||
-      sameSet(stored.allowedScopes, input.allowedScopes)) &&
+      sameSet(
+        stored.allowedScopes,
+        input.allowedScopes.map((s) => s.trim()),
+      )) &&
     (input.defaultScopes === undefined ||
-      sameSet(stored.defaultScopes, input.defaultScopes)) &&
+      sameSet(
+        stored.defaultScopes,
+        input.defaultScopes.map((s) => s.trim()),
+      )) &&
     stored.name === input.name.trim() &&
     stored.type === input.type &&
     (input.requirePar === undefined ||

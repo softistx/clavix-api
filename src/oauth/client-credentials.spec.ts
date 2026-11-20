@@ -6,8 +6,10 @@ import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog, registerStoredResource } from "@/config/resources";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createConsoleAuthenticator } from "@/console/auth";
 import { createFlow } from "~/oauth-flow";
+import { withTenantState } from "./tenant-state";
 
 const OPEN = "https://machine.cc.example/api";
 const CLOSED = "https://closed.cc.example/api";
@@ -256,6 +258,100 @@ describe("the client credentials grant", () => {
     expect(
       (await token("worker", { resource: OPEN, scope: "read" })).status,
     ).toBe(200);
+  });
+
+  test("a client's credentials posted to another tenant's host are 401 invalid_client", async () => {
+    const { tenantId: other } = await flow.setUp("cc-b");
+    // Opted in on B too, so the refusal is the client's, not the grant's.
+    await registerStoredResource({
+      tenant: "cc-b",
+      uri: OPEN,
+      scopes: ["read"],
+    });
+    const [stored] = (
+      await catalog.listResources(new ObjectId(String(other)))
+    ).filter((resource) => resource.uri === OPEN);
+    if (stored === undefined) throw new Error("resource not stored");
+    await catalog.updateResource(
+      new ObjectId(String(other)),
+      stored._id.toHexString(),
+      {
+        allowClientCredentials: true,
+      },
+    );
+    const crossed = await token(
+      "worker",
+      { resource: OPEN, scope: "read" },
+      "cc-b",
+    );
+    expect(crossed.status).toBe(401);
+    expect((await answerOf(crossed)).error).toBe("invalid_client");
+  });
+
+  test("another tenant's client is refused on a resource that opted in elsewhere", async () => {
+    await flow.setUp("cc-c");
+    await machine("c-worker", { slug: "cc-c", allowedScopes: ["read"] });
+    // OPEN opted in for cc-a only; cc-c has no such resource.
+    const refused = await token(
+      "c-worker",
+      { resource: OPEN, scope: "read" },
+      "cc-c",
+    );
+    expect(refused.status).toBe(400);
+    expect(["unsupported_grant_type", "invalid_target"]).toContain(
+      (await answerOf(refused)).error ?? "",
+    );
+  });
+
+  test("a suspended tenant's client_credentials /token is refused", async () => {
+    await flow.setUp("cc-susp");
+    await machine("s-worker", { slug: "cc-susp", allowedScopes: ["read"] });
+    const tenant = await findTenant("cc-susp");
+    if (tenant === undefined) throw new Error("no tenant");
+    await tenantsService.suspend(tenant._id.toHexString());
+    const guarded = withTenantState(flow.issuers, { resolver: tenantResolver });
+    const response = await guarded.handle(
+      new Request(flow.url("cc-susp", "/token"), {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          authorization: flow.basic("s-worker", secrets["s-worker"] ?? ""),
+        },
+        body: new URLSearchParams({
+          grant_type: CLIENT_CREDENTIALS_GRANT,
+          resource: OPEN,
+          scope: "read",
+        }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "TENANT_SUSPENDED" });
+  });
+
+  test("a client_credentials token records no active user", async () => {
+    const active: string[] = [];
+    const guarded = withTenantState(flow.issuers, {
+      resolver: tenantResolver,
+      onActive: (tenantIdOf, userId) => {
+        active.push(`${tenantIdOf}/${userId}`);
+      },
+    });
+    const response = await guarded.handle(
+      new Request(flow.url(SLUG, "/token"), {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          authorization: flow.basic("worker", secrets["worker"] ?? ""),
+        },
+        body: new URLSearchParams({
+          grant_type: CLIENT_CREDENTIALS_GRANT,
+          resource: OPEN,
+          scope: "read",
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(active).toEqual([]);
   });
 });
 

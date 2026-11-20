@@ -55,7 +55,7 @@ curl -s https://acme.clavix.example/token \
   -d grant_type=client_credentials \
   -d resource=https://api.acme.example/v1 \
   -d scope="read"
-# { "access_token": "...", "token_type": "Bearer", "expires_in": 3600, "scope": "read" }
+# { "access_token": "...", "token_type": "Bearer", "expires_in": 900, "scope": "read" }
 ```
 
 `resource` is required: a request without it falls back to the tenant's default resource (userinfo), which never

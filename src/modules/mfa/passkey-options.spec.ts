@@ -277,11 +277,12 @@ describe("requestSecondFactorPasskeyOptions", () => {
     const challenge = await challengeFor(A, "zoe@example.test");
     await oauthDb
       .collection("partitionedTokens")
-      .updateMany({}, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+      .updateMany(
+        { partition: (await tenantOf(A)).tenantId },
+        { $set: { expiresAt: new Date(Date.now() - 1000) } },
+      );
     const late = await gql(A, OPTIONS, { challenge: challenge.challenge });
-    expect(["TOKEN_EXPIRED", "TOKEN_UNKNOWN"]).toContain(
-      codeOf(late) as string,
-    );
+    expect(codeOf(late)).toBe("TOKEN_EXPIRED");
     expect(late.data).toBeNull();
   });
 
@@ -294,7 +295,9 @@ describe("requestSecondFactorPasskeyOptions", () => {
     await holder(A, "tom@example.test");
     // The passkey is removed after the challenge was issued.
     const challenge = await challengeFor(A, "tom@example.test");
-    await oauthDb.collection("partitionedPasskeys").deleteMany({});
+    await oauthDb.collection("partitionedPasskeys").deleteMany({
+      partition: (await tenantOf(A)).tenantId,
+    });
     const refused = await gql(A, OPTIONS, { challenge: challenge.challenge });
     expect(codeOf(refused)).toBe("SECOND_FACTOR_NOT_ENROLLED");
   });
@@ -305,8 +308,21 @@ describe("requestSecondFactorPasskeyOptions", () => {
     await holder(A, "amy@example.test");
     const challenge = await challengeFor(A, "amy@example.test");
     const refused = await gql(B, OPTIONS, { challenge: challenge.challenge });
-    expect(refused.errors).toBeDefined();
+    expect(codeOf(refused)).toBe("TOKEN_UNKNOWN");
     expect(refused.data).toBeNull();
+  });
+
+  test("a suspended tenant is TENANT_SUSPENDED", async () => {
+    await holder(A, "sue@example.test");
+    const challenge = await challengeFor(A, "sue@example.test");
+    const tenantId = (await tenantOf(A)).tenantId;
+    await tenantsService.suspend(tenantId);
+    try {
+      const refused = await gql(A, OPTIONS, { challenge: challenge.challenge });
+      expect(codeOf(refused)).toBe("TENANT_SUSPENDED");
+    } finally {
+      await tenantsService.reactivate(tenantId);
+    }
   });
 
   test("a tenant that turned passkeys off refuses it and keeps the challenge", async () => {
