@@ -2,17 +2,21 @@ import type { UserEvent, UserEventType } from "@softistx/janus";
 import type { WebhookEvent } from "@softistx/janus-webhooks";
 import type { AuthEvent } from "@/events/types";
 
-// The event catalogue of the webhooks (D22): the 18 user events of janus that
+// The event catalogue of the webhooks (D22): the 16 user events of janus that
 // Clavix can emit and its `session.signedIn`. `user.apiKeyCreated` and
 // `user.apiKeyRevoked` are left out: Clavix configures no janus `apiKeys`, so
-// they can never fire (#336); they come back with API keys. Typed as a record
+// they can never fire (#336); they come back with API keys. The same for
+// `user.passwordReset` and `user.passwordChanged`: password sign-in is
+// unavailable, so no password flow runs (#336's rule). Typed as a record
 // so that a type janus adds fails the build here, where the catalogue is decided.
-type NotEmitted = "user.apiKeyCreated" | "user.apiKeyRevoked";
+type NotEmitted =
+  | "user.apiKeyCreated"
+  | "user.apiKeyRevoked"
+  | "user.passwordReset"
+  | "user.passwordChanged";
 const USER_TYPES: Record<Exclude<UserEventType, NotEmitted>, true> = {
   "user.created": true,
   "user.emailVerified": true,
-  "user.passwordReset": true,
-  "user.passwordChanged": true,
   "user.emailChanged": true,
   "user.secondFactorEnabled": true,
   "user.secondFactorDisabled": true,

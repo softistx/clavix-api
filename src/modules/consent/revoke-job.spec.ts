@@ -107,12 +107,12 @@ describe("createGrantsRevoke", () => {
     expect(await run(job)).toBe(0);
   });
 
-  test("no server for the tenant throws so the job retries", async () => {
+  test("a purged tenant (no server) is done: the job is dropped, not retried", async () => {
     const run = createGrantsRevoke(
       async () => null,
       async () => "acme",
     );
-    await expect(run(job)).rejects.toThrow("no OAuth server for acme");
+    expect(await run(job)).toBe(0);
   });
 
   test("revokes through the tenant's server", async () => {

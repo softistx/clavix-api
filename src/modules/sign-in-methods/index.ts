@@ -127,7 +127,12 @@ export const signInMethods: Resolvers = {
             label: SOCIAL_LABELS[provider],
           })),
           ...connections
-            .filter((doc) => doc.enabled && doc.showButton)
+            .filter(
+              (doc) =>
+                doc.enabled &&
+                doc.showButton &&
+                connectionsService.isOffered(tenantId, doc),
+            )
             .map((doc) => ({ id: doc.connectionId, label: doc.name })),
         ],
       };
@@ -148,7 +153,10 @@ export const signInMethods: Resolvers = {
           tenant.tenantId,
           provider,
         );
-        if (connection === undefined || !connection.enabled) {
+        if (
+          connection === undefined ||
+          !connectionsService.isOffered(tenant.tenantId, connection)
+        ) {
           throw methodDisabled("this provider");
         }
       }

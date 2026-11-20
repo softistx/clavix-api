@@ -9,6 +9,7 @@ import type { Resolvers } from "@/generated/console/resolvers";
 import { ConnectionError } from "@/modules/connections/connections.errors";
 import type { ConnectionDoc } from "@/modules/connections/connections.model";
 import { txtNameOf } from "@/modules/connections/connections.service";
+import { callbackUrlOf } from "@/modules/sign-in-methods/social";
 import { effectiveQuotas } from "@/modules/tenants/plan.schema";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
@@ -104,13 +105,9 @@ const TRUST_IN = {
 const AUTH = { post: "POST", basic: "BASIC" } as const;
 const AUTH_IN = { POST: "post", BASIC: "basic" } as const;
 
-/** Where the identity provider sends the visitor back: this connection's own callback on the tenant's issuer host, the URI the admin registers there. */
-const redirectUriOf = (issuer: string, connectionId: string) =>
-  `${issuer}/sign-in/social/${connectionId}/callback`;
-
 const shape = (doc: ConnectionDoc, issuer: string) => ({
   id: doc.connectionId,
-  redirectUri: redirectUriOf(issuer, doc.connectionId),
+  redirectUri: callbackUrlOf(issuer, doc.connectionId),
   name: doc.name,
   issuer: doc.issuer,
   clientId: doc.clientId,

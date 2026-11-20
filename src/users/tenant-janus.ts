@@ -26,7 +26,10 @@ import { instrumentJanus } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
 import type { SecretBox } from "@/modules/sign-in-methods/secrets";
 import { isEnabled } from "@/modules/sign-in-methods/sign-in.schema";
-import { socialProvidersOf } from "@/modules/sign-in-methods/social";
+import {
+  callbackUrlOf,
+  socialProvidersOf,
+} from "@/modules/sign-in-methods/social";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { originOf, rpIdOf } from "./rp";
@@ -82,10 +85,6 @@ export interface ConnectionsOf {
 }
 
 const SSO_CALLBACK_PATH = /^\/sign-in\/social\/([^/]+)\/callback$/;
-
-/** Where an identity provider sends the visitor back: one URL per connection (nxgt-janus#975), the hosted UI's `/sign-in/social/:provider/callback` route. */
-export const ssoCallbackUrlOf = (issuer: string, connectionId: string) =>
-  `${issuer}/sign-in/social/${encodeURIComponent(connectionId)}/callback`;
 
 /**
  * The connection a callback URL names, read from its path: `null` for any
@@ -230,8 +229,7 @@ function connectionsOfTenant(
       source: connections.sourceOf(tenant.tenantId),
       ...(resolveHost === undefined ? {} : { resolveHost }),
       ...(fetcher === undefined ? {} : { fetch: fetcher }),
-      redirectUri: (connection) =>
-        ssoCallbackUrlOf(tenant.issuer, connection.id),
+      redirectUri: (connection) => callbackUrlOf(tenant.issuer, connection.id),
     });
   } catch (error) {
     console.warn(

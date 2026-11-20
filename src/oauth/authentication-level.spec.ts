@@ -88,6 +88,27 @@ describe("assess", () => {
     expect(phr).toMatchObject({ met: true, acr: ACR.phishingResistant });
   });
 
+  test("phr without a passkey is an enrolment, from 1fa and from mfa alike", () => {
+    const noPasskey = { available: true, passkey: false };
+    const demands = { ...none, acrValues: [ACR.phishingResistant] };
+    for (const amr of [["otp"], ["otp", "mfa"]]) {
+      const out = assess(
+        { amr, authenticatedAt: ago(30) },
+        demands,
+        noPasskey,
+        NOW,
+      );
+      expect(out.missing).toEqual(["ENROLMENT"]);
+    }
+    const withPasskey = assess(
+      { amr: ["otp", "mfa"], authenticatedAt: ago(30) },
+      demands,
+      { available: true, passkey: true },
+      NOW,
+    );
+    expect(withPasskey.missing).toEqual(["SECOND_FACTOR"]);
+  });
+
   test("an app code meets mfa but not phr", () => {
     const totp = { amr: ["otp", "mfa"], authenticatedAt: ago(30) };
     expect(

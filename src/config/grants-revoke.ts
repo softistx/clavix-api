@@ -12,7 +12,7 @@ export const grantsRevokeQueue: { current: RevokeEnqueuer | undefined } = {
 
 /**
  * Revokes every grant of a user over the real stores, outside a request: the
- * tenant's server is found by its issuer URL. A tenant that is gone has no
+ * tenant's server is found by its issuer URL. A tenant that is gone or purged has no
  * grant left to revoke (its partition is purged).
  */
 export const createGrantsRevoke =
@@ -30,6 +30,8 @@ export const createGrantsRevoke =
       port: env.CLAVIX_PUBLIC_PORT,
     });
     const server = await serverFor(new Request(`${issuer}/`));
-    if (server === null) throw new Error(`grants: no OAuth server for ${slug}`);
+    // A purged tenant's tombstone has no server: its partition holds no
+    // grant, so the job is done (a throw would retry it for nothing).
+    if (server === null) return 0;
     return server.grants.revokeAll({ id: userId });
   };
