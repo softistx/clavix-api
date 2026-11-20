@@ -164,4 +164,30 @@ describe("key generations", () => {
     expect(generations.of(tenantId)).toBeGreaterThan(0);
     expect(generations.of(new ObjectId().toHexString())).toBe(0);
   });
+
+  test("a rotation that promotes and one that retires each bump the generation", async () => {
+    const generations = createKeyGenerations();
+    const keys = createTenantKeys({
+      db: mongo.db,
+      masterKey: new Uint8Array(32).fill(7),
+      generations,
+    });
+    const tenantId = new ObjectId().toHexString();
+    const day = 24 * 60 * 60 * 1000;
+    const start = new Date();
+    const at = (days: number) => new Date(start.getTime() + days * day);
+    await ensureSigningKey(keys.signingKeysFor, tenantId, start);
+    const inserted = generations.of(tenantId);
+    // Inside the 48 h lead: the next key is inserted and published.
+    await ensureSigningKey(keys.signingKeysFor, tenantId, at(89));
+    const leading = generations.of(tenantId);
+    expect(leading).toBeGreaterThan(inserted);
+    // Past the 90 d cadence: the next key is promoted and the old one retired.
+    await ensureSigningKey(keys.signingKeysFor, tenantId, at(91));
+    const promoted = generations.of(tenantId);
+    expect(promoted).toBeGreaterThan(leading);
+    // Nothing left to do: no write, no bump.
+    await ensureSigningKey(keys.signingKeysFor, tenantId, at(91));
+    expect(generations.of(tenantId)).toBe(promoted);
+  });
 });
