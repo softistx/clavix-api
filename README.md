@@ -576,6 +576,8 @@ Each tenant chooses how its users sign in
   and it is never logged. Losing the master key, or dropping the old key from the keyring before `bun run keys:reseal` reports nothing left under it (see docs/operations.md, "Signing keys"), makes it unreadable: the provider is
   left out with a warning that names the tenant and provider, and the admin enters the secret again.
 
+The second factor on the tenant's hosted `/graphql` (not the console API):
+
 | Operation                                                                               | Does                                                                                                                                                     |
 | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `secondFactor` / `sessionConfirmedUntil`                                                | The signed-in user's factor (`enabled`, `recoveryCodesLeft`), and until when the session counts as fresh (its sign-in or last step-up plus ten minutes). |
