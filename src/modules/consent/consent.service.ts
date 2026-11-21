@@ -1,4 +1,4 @@
-import type { Context } from "@/http/context";
+import { type Context, contextOf } from "@/http/context";
 import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import { agentMarksReader, markOf } from "./consent.agent-marker";
@@ -22,7 +22,6 @@ import { denyUnreachable, isUnreachable } from "./consent.unmet";
 import {
   appCtxOf,
   consentCtxOf,
-  contextOf,
   localeOfCtx,
   perRequest,
   requestOf,

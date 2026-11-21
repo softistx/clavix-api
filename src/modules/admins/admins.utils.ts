@@ -53,7 +53,7 @@ export const shapeInvitation = <
   { invitedBy, role, ...invitation }: I,
   names: ReadonlyMap<string, string | null>,
 ) => ({
-  ...(invitation as Omit<I, "role" | "invitedBy">),
+  ...invitation,
   role: GRAPHQL_ROLE[role],
   invitedBy:
     invitedBy === null

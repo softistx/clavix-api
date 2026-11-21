@@ -11,6 +11,22 @@ import {
   valueDraft,
 } from "./resources.utils";
 
+describe("fieldDraft kinds", () => {
+  test("every GraphQL kind maps back to the stored kind it comes from", () => {
+    const kinds = [
+      ["STRING", "string"],
+      ["NUMBER", "number"],
+      ["INTEGER", "integer"],
+      ["BOOLEAN", "boolean"],
+      ["ENUM", "enum"],
+      ["STRING_LIST", "string[]"],
+    ] as const;
+    for (const [graphql, stored] of kinds) {
+      expect(fieldDraft({ key: "k", kind: graphql }).kind).toBe(stored);
+    }
+  });
+});
+
 describe("localised", () => {
   test("a language not sent stays undefined", () => {
     expect(localised({ fr: "a", en: null })).toEqual({

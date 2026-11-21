@@ -56,7 +56,7 @@ export const discoverIssuer: IssuerChecker = async (parts) => {
   } catch (error) {
     if (error instanceof ConnectionError) throw error;
     if (error instanceof SocialError) {
-      const reason = String((error as { reason?: unknown }).reason ?? "");
+      const reason = String("reason" in error ? (error.reason ?? "") : "");
       throw new ConnectionError(
         UNREACHABLE.has(reason) ? "ISSUER_UNREACHABLE" : "ISSUER_REFUSED",
         UNREACHABLE.has(reason)

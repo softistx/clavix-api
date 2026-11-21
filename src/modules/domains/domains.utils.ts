@@ -19,11 +19,17 @@ export const target = (tenantId: ObjectId, id: string) => ({
 export const domainsKey = (tenant: { _id: ObjectId }) =>
   `console:domains:${tenant._id.toHexString()}`;
 
+const STATUS = {
+  pending: "PENDING",
+  verified: "VERIFIED",
+  unverified: "UNVERIFIED",
+} as const satisfies Record<DomainDoc["status"], string>;
+
 /** A claim as the console shows it. */
 export const shape = (doc: DomainDoc) => ({
   id: doc._id.toHexString(),
   host: doc.host,
-  status: doc.status.toUpperCase() as "PENDING" | "VERIFIED" | "UNVERIFIED",
+  status: STATUS[doc.status],
   txtRecord: { name: txtNameOf(doc.host), value: doc.txtToken },
   primary: doc.primary,
   verifiedAt: doc.verifiedAt,

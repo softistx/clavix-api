@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { sealedUnder } from "~/webhook-docs";
 import { type ConnectionDoc, connections } from "./connections.model";
 import {
+  algorithmOf,
   claimsOf,
   contextOf,
   nextOf,
@@ -82,5 +83,19 @@ describe("connections utils", () => {
       claims: { name: "n" },
       upstreamAcr: null,
     });
+  });
+});
+
+describe("algorithmOf", () => {
+  test("none pinned is null, a listed algorithm is kept", () => {
+    expect(algorithmOf(undefined)).toBeNull();
+    expect(algorithmOf("RS256")).toBe("RS256");
+    expect(algorithmOf("EdDSA")).toBe("EdDSA");
+  });
+
+  test("an algorithm the SDL does not list is never stored", () => {
+    expect(() => algorithmOf("HS256")).toThrow(
+      'Unknown ID token algorithm "HS256"',
+    );
   });
 });

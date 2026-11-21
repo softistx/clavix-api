@@ -3,6 +3,7 @@ import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { AdminsService } from "@/modules/admins/admins.service";
 import type { AuditService } from "@/modules/audit";
 import type { PlanId } from "@/modules/tenants";
+import { isRecord } from "@/shared/values";
 import type { Access } from "./access";
 import type { AdminEventReader } from "./admin-events/reader";
 import type { Audit } from "./audit";
@@ -133,3 +134,34 @@ export interface ConsoleActivity {
 export type ConsoleContext = CoreContext & {
   readonly request: Request;
 } & ConsoleExtras;
+
+const FUNCTIONS = ["can", "canPlatform", "audit", "exclusive"] as const;
+const SERVICES = [
+  "principal",
+  "access",
+  "directory",
+  "admins",
+  "members",
+  "users",
+  "budgets",
+  "activity",
+] as const;
+
+/** Whether a context is the console's: what its plugin puts on every context of an accepted token. */
+export const isConsoleContext = (ctx: unknown): ctx is ConsoleContext =>
+  isRecord(ctx) &&
+  ctx["request"] instanceof Request &&
+  FUNCTIONS.every((key) => typeof ctx[key] === "function") &&
+  SERVICES.every((key) => isRecord(ctx[key]));
+
+/**
+ * The console's context. Any other means the app is wired wrong (a field
+ * resolved without the plugin): a plain `Error`, a masked 500 that is
+ * reported, never a refusal.
+ */
+export const consoleContextOf = (ctx: unknown): ConsoleContext => {
+  if (!isConsoleContext(ctx)) {
+    throw new Error("The resolver context is not the console's");
+  }
+  return ctx;
+};

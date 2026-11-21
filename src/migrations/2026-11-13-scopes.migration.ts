@@ -2,6 +2,7 @@ import { getCollection, scopeToTenant } from "@softistx/mongo";
 import { defineMigration } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
 import { scopes } from "@/modules/resources";
+import { stringListOf } from "@/shared/values";
 
 export const id = "2026-11-13-scopes";
 
@@ -17,9 +18,7 @@ export async function moveScopesToDocuments(db: Db): Promise<number> {
   for (const resource of await resourceDocs
     .find({ scopes: { $exists: true } })
     .toArray()) {
-    const names = Array.isArray(resource["scopes"])
-      ? (resource["scopes"] as string[])
-      : [];
+    const names = stringListOf(resource["scopes"]);
     const owned = scopeToTenant(scopeDocs, resource["tenantId"]);
     for (const name of new Set(names)) {
       if (await owned.exists({ name, resourceId: resource._id })) continue;
@@ -53,7 +52,9 @@ export const scopesMigration = defineMigration({
         await scopeDocs
           .find({ tenantId: resource["tenantId"], resourceId: resource._id })
           .toArray()
-      ).map((scope) => scope["name"] as string);
+      ).flatMap((scope) =>
+        typeof scope["name"] === "string" ? [scope["name"]] : [],
+      );
       await db
         .collection("resources")
         .updateOne({ _id: resource._id }, { $set: { scopes: names } });

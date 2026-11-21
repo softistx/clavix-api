@@ -5,10 +5,11 @@ import { masterKeysProblem } from "../master-keys";
 export const isProduction = () => Bun.env.NODE_ENV === "production";
 
 // Required in production; elsewhere `fallback` stands in.
-export const inProduction = <T extends z.ZodType>(
-  schema: T,
+export const inProduction = <O>(
+  schema: z.ZodType<O, string>,
   fallback: string,
-) => (isProduction() ? schema : schema.prefault(fallback as never));
+): z.ZodType<O, string | undefined> =>
+  isProduction() ? schema : schema.prefault(fallback);
 
 // Optional outside production, required in it: an empty value is unset.
 export const optionalOutsideProduction = <T>(schema: z.ZodType<T, string>) =>

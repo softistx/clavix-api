@@ -1,7 +1,12 @@
 import type { OidcConnection } from "@softistx/janus-social";
 import type { ObjectId } from "mongodb";
 import { callbackUrlOf } from "@/modules/sign-in-methods";
-import type { ConnectionDoc } from "./connections.model";
+import { isOneOf } from "@/shared/values";
+import {
+  CONNECTION_ALGORITHMS,
+  type ConnectionAlgorithm,
+  type ConnectionDoc,
+} from "./connections.model";
 import type {
   ClaimsInput,
   ConnectionInput,
@@ -25,6 +30,17 @@ export const claimsOf = (claims: ClaimsInput | null | undefined) => {
     if (typeof value === "string" && value !== "") out[key] = value;
   }
   return out;
+};
+
+/** The algorithm janus holds for a connection, as the model stores it: `null` when none is pinned. An unknown one is a mismatch with the SDL, never stored. */
+export const algorithmOf = (
+  value: string | undefined,
+): ConnectionAlgorithm | null => {
+  if (value === undefined) return null;
+  if (!isOneOf(CONNECTION_ALGORITHMS, value)) {
+    throw new Error(`Unknown ID token algorithm "${value}"`);
+  }
+  return value;
 };
 
 /** The record fields an update leaves as they are, taken from the current document. */
@@ -65,8 +81,9 @@ export const newDocOf = (parts: {
   clientId: parts.record.client.id,
   secret: parts.secret,
   clientAuthentication: parts.record.client.authentication ?? null,
-  idTokenSignedResponseAlg:
-    parts.record.client.idTokenSignedResponseAlg ?? null,
+  idTokenSignedResponseAlg: algorithmOf(
+    parts.record.client.idTokenSignedResponseAlg,
+  ),
   scopes:
     parts.input.scopes === undefined || parts.input.scopes === null
       ? null
@@ -149,7 +166,7 @@ export const connectionShape = (doc: ConnectionDoc, issuer: string) => ({
   clientId: doc.clientId,
   clientAuthentication:
     doc.clientAuthentication === null ? null : AUTH[doc.clientAuthentication],
-  idTokenSignedResponseAlg: doc.idTokenSignedResponseAlg as never,
+  idTokenSignedResponseAlg: doc.idTokenSignedResponseAlg,
   scopes: doc.scopes,
   emailTrust: TRUST[doc.emailTrust],
   claims: {

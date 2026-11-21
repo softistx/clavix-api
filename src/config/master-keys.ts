@@ -1,3 +1,5 @@
+import { isNonEmpty } from "@/shared/values";
+
 /** One master key as written in the environment: 32 bytes in standard base64. */
 const ITEM = /^[A-Za-z0-9+/]{43}=$/;
 
@@ -22,9 +24,13 @@ export function masterKeysProblem(value: string): string | undefined {
  * for a malformed value; the environment is checked at boot, so this only
  * decodes.
  */
-export function parseMasterKeys(value: string): Uint8Array[] {
+export function parseMasterKeys(value: string): [Uint8Array, ...Uint8Array[]] {
   const problem = masterKeysProblem(value);
   if (problem !== undefined)
     throw new TypeError(`CLAVIX_KEYS_MASTER_KEY: ${problem}`);
-  return value.split(",").map((item) => Buffer.from(item.trim(), "base64"));
+  const keys = value
+    .split(",")
+    .map((item) => Buffer.from(item.trim(), "base64"));
+  if (!isNonEmpty(keys)) throw new TypeError("CLAVIX_KEYS_MASTER_KEY: no key");
+  return keys;
 }

@@ -3,9 +3,8 @@ import type { ConsentCtx, WithServers } from "./consent.types";
 import {
   appCtxOf,
   consentCtxOf,
-  contextOf,
+  decisionOf,
   isConsentCtx,
-  isContext,
   isServerCtx,
   localeOfCtx,
   perRequest,
@@ -47,25 +46,11 @@ describe("isServerCtx", () => {
 });
 
 describe("appCtxOf", () => {
-  test("returns the app's context, refuses another as NOT_FOUND", () => {
+  test("returns the app's context, refuses another with a plain Error", () => {
     const ctx = { tenant: async () => null };
     expect(appCtxOf(ctx)).toBe(ctx);
-    expect(() => appCtxOf({})).toThrow(notFound);
-  });
-});
-
-describe("contextOf", () => {
-  const base = {
-    tenant: async () => null,
-    janus: { user: async () => null },
-    deviceThrottle: { check: async () => {} },
-  };
-  test("accepts the app's context, refuses another as NOT_FOUND", () => {
-    expect(isContext(base)).toBe(true);
-    expect(Object.is(contextOf(base), base)).toBe(true);
-    expect(isContext({ ...base, janus: undefined })).toBe(false);
-    expect(isContext({ ...base, deviceThrottle: null })).toBe(false);
-    expect(() => contextOf({ tenant: base.tenant })).toThrow(notFound);
+    expect(() => appCtxOf({})).toThrow(Error);
+    expect(() => appCtxOf({})).not.toThrow(notFound);
   });
 });
 
@@ -76,12 +61,13 @@ describe("consentCtxOf", () => {
     detailTextsFor: async () => [],
     agentsFor: async () => [],
   };
-  test("accepts the consent readers' context, refuses another as NOT_FOUND", () => {
+  test("accepts the consent readers' context, refuses another with a plain Error", () => {
     expect(isConsentCtx(readers)).toBe(true);
     expect(Object.is(consentCtxOf(readers), readers)).toBe(true);
     expect(isConsentCtx({ ...readers, agentsFor: undefined })).toBe(false);
     expect(isConsentCtx(null)).toBe(false);
-    expect(() => consentCtxOf({})).toThrow(notFound);
+    expect(() => consentCtxOf({})).toThrow(Error);
+    expect(() => consentCtxOf({})).not.toThrow(notFound);
   });
 });
 
@@ -111,5 +97,18 @@ describe("localeOfCtx", () => {
         ctx(new Request("http://x", { headers: { "accept-language": "fr" } })),
       ),
     ).toBe("fr");
+  });
+});
+
+describe("decisionOf", () => {
+  test("keeps the decision janus answered, grantId included", () => {
+    const answer = { redirectTo: "https://a/cb", grantId: "g1" };
+    expect(decisionOf(answer)).toEqual(answer);
+  });
+
+  test("refuses an answer with no redirectTo as a plain error", () => {
+    for (const answer of [null, undefined, "x", {}, { redirectTo: 1 }]) {
+      expect(() => decisionOf(answer)).toThrow("answered no redirectTo");
+    }
   });
 });

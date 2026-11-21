@@ -354,9 +354,12 @@ export class ConnectionsService {
       current.secret,
       contextOf(tenantId, current.connectionId),
     );
-    const normalised = checked({
+    const [normalised] = checked({
       ...partsOf(current, secret, [domain]),
-    }).domains[0] as string;
+    }).domains;
+    if (normalised === undefined) {
+      throw new Error("janus returned no domain for the claimed one");
+    }
     await this.assertClaimable(tenantId, current, normalised);
     return this.scoped(tenantId).update(current._id, {
       domains: [

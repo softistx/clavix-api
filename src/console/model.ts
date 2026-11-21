@@ -1,12 +1,12 @@
 import { defineModel } from "@softistx/janus/permissions";
+import { isOneOf } from "@/shared/values";
 
 /** The roles of the console, strongest first. */
 export const ROLES = ["owner", "admin", "viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Whether a stored string is one of the console's roles. */
-export const isRole = (value: string): value is Role =>
-  (ROLES as readonly string[]).includes(value);
+export const isRole = (value: string): value is Role => isOneOf(ROLES, value);
 
 /** What a guard asks for. */
 export type Permission = "manage" | "edit" | "view";

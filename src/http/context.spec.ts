@@ -4,7 +4,7 @@ import { oauthPolicySchema } from "@/modules/oauth-policy";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { quietThrottles } from "~/ports";
 import type { TenantResolver } from "../tenancy/resolver";
-import { createBase } from "./context";
+import { contextOf, createBase, isContext } from "./context";
 
 const tenant = {
   tenantId: "t1",
@@ -44,4 +44,28 @@ test("tenant() resolves the request's host once, on first use", async () => {
   expect(seen).toEqual(["acme.clavix.test"]);
   await app.request("http://acme.clavix.test/who");
   expect(seen).toHaveLength(2);
+});
+
+test("contextOf returns the app's context and throws a plain Error for another", () => {
+  const base = {
+    tenant: async () => null,
+    janus: { user: async () => null },
+    deviceThrottle: { check: async () => {} },
+  };
+  expect(isContext(base)).toBe(true);
+  expect(Object.is(contextOf(base), base)).toBe(true);
+  expect(isContext({ ...base, janus: undefined })).toBe(false);
+  expect(isContext({ ...base, deviceThrottle: null })).toBe(false);
+  expect(isContext({ ...base, tenant: "t" })).toBe(false);
+  expect(isContext(null)).toBe(false);
+  const refusal = (() => {
+    try {
+      contextOf({ tenant: base.tenant });
+    } catch (error) {
+      return error;
+    }
+    return null;
+  })();
+  expect(refusal).toBeInstanceOf(Error);
+  expect(refusal).not.toHaveProperty("extensions");
 });

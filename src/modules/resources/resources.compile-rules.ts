@@ -1,3 +1,4 @@
+import { isOneOf } from "@/shared/values";
 import type { FieldKind } from "./resources.model";
 
 // What the compiler reads of a stored detail type (D1): a bounded list of
@@ -144,7 +145,7 @@ export function detailTypeProblem(
     if (key.length > DETAIL_LIMITS.key || !FIELD_KEY.test(key)) {
       return `a field key is a letter then letters, digits or "_", at most ${DETAIL_LIMITS.key} characters`;
     }
-    if ((RESERVED_KEYS as readonly string[]).includes(key)) {
+    if (isOneOf(RESERVED_KEYS, key)) {
       return `field "${key}": the name is reserved (RFC 9396)`;
     }
     if (keys.has(key)) return `field "${key}" is listed twice`;

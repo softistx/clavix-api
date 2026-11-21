@@ -1,4 +1,5 @@
 import { Resolver } from "node:dns/promises";
+import { propertyOf } from "@/shared/values";
 
 /** What a TXT lookup found. */
 export type TxtAnswer =
@@ -31,8 +32,8 @@ export function systemTxtResolver(
         const records = await resolver.resolveTxt(name);
         return { kind: "records", values: records.map((r) => r.join("")) };
       } catch (error) {
-        const code = (error as { code?: string }).code;
-        return code !== undefined && NOT_FOUND.has(code)
+        const code = propertyOf(error, "code");
+        return typeof code === "string" && NOT_FOUND.has(code)
           ? { kind: "none" }
           : { kind: "failed" };
       }

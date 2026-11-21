@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isOneOf } from "@/shared/values";
 
 /** The plans of the platform, smallest first. */
 export const PLAN_IDS = ["free", "pro", "enterprise"] as const;
@@ -93,10 +94,13 @@ export const PLANS: readonly Plan[] = [
 ];
 
 export const isPlanId = (value: string): value is PlanId =>
-  (PLAN_IDS as readonly string[]).includes(value);
+  isOneOf(PLAN_IDS, value);
 
-export const planOf = (id: PlanId): Plan =>
-  PLANS.find((plan) => plan.id === id) as Plan;
+export const planOf = (id: PlanId): Plan => {
+  const plan = PLANS.find((candidate) => candidate.id === id);
+  if (plan === undefined) throw new Error(`Unknown plan "${id}"`);
+  return plan;
+};
 
 /** A tenant's overrides as quotas: `null` where the plan's quota applies. */
 export const overridesOf = (overrides: QuotaOverrides): Quotas => ({

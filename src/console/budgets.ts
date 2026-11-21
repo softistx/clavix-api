@@ -105,8 +105,11 @@ export function createConsoleBudgets(
       if (error instanceof GuardError && error.code === "COST") {
         return {
           allowed: false,
+          limit: 0,
+          remaining: 0,
+          resetAfter: OVER_BUDGET_RETRY_MS,
           retryAfter: OVER_BUDGET_RETRY_MS,
-        } as LimitResult;
+        } satisfies LimitResult;
       }
       logSkipped(error, SKIPPED, log);
       return null;

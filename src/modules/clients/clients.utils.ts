@@ -38,6 +38,9 @@ const GRANT = {
   [CLIENT_CREDENTIALS_GRANT]: "CLIENT_CREDENTIALS",
 } as const;
 
+const isGrant = (value: string): value is keyof typeof GRANT =>
+  Object.hasOwn(GRANT, value);
+
 const REGISTRATION = {
   console: "CONSOLE",
   dynamic: "DYNAMIC",
@@ -99,7 +102,7 @@ export const shape = (
   type: TYPE[client.type],
   redirectUris: [...client.redirectUris],
   grantTypes: client.grantTypes.flatMap((grant) =>
-    Object.hasOwn(GRANT, grant) ? [GRANT[grant as keyof typeof GRANT]] : [],
+    isGrant(grant) ? [GRANT[grant]] : [],
   ),
   createdAt: client.createdAt,
   requirePushedAuthorizationRequests: client.requirePushedAuthorizationRequests,
@@ -197,15 +200,12 @@ export const agentKindsOf =
 export const sentSettings = (input: ClientSettingsInput): SentSettings => {
   const { requirePar, dpopBound, grants, detailTypes } = input;
   const { allowedScopes, defaultScopes } = input;
-  const sent = {
-    requirePar,
-    dpopBound,
-    grants,
-    detailTypes,
-    allowedScopes,
-    defaultScopes,
+  return {
+    ...(requirePar === undefined ? {} : { requirePar }),
+    ...(dpopBound === undefined ? {} : { dpopBound }),
+    ...(grants === undefined ? {} : { grants }),
+    ...(detailTypes === undefined ? {} : { detailTypes }),
+    ...(allowedScopes === undefined ? {} : { allowedScopes }),
+    ...(defaultScopes === undefined ? {} : { defaultScopes }),
   };
-  return Object.fromEntries(
-    Object.entries(sent).filter(([, value]) => value !== undefined),
-  ) as SentSettings;
 };

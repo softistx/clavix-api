@@ -1,6 +1,6 @@
 import { GraphQLError } from "graphql";
 import { defineCodes } from "@/i18n/define-codes";
-import { fail } from "@/shared/errors";
+import { extensionCodeOf, fail } from "@/shared/errors";
 
 // The codes this module raises (the inventory: src/i18n/codes.ts).
 export const codes = defineCodes("passkeys", [
@@ -35,8 +35,7 @@ export async function asPasskeyInvalid<T>(signIn: () => Promise<T>) {
   try {
     return await signIn();
   } catch (error) {
-    const code = (error as { extensions?: { code?: unknown } }).extensions
-      ?.code;
+    const code = extensionCodeOf(error);
     if (error instanceof GraphQLError && REFUSALS.has(String(code))) {
       throw passkeyInvalid();
     }

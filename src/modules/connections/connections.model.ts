@@ -11,6 +11,21 @@ import { sealedSecretSchema } from "@/modules/sign-in-methods";
 export const CONNECTION_EMAIL_TRUST = ["claimAndDomain", "domain"] as const;
 export type ConnectionEmailTrust = (typeof CONNECTION_EMAIL_TRUST)[number];
 
+/** The ID token signature algorithms a connection accepts (the SDL's `ConnectionAlgorithm`): asymmetric only. */
+export const CONNECTION_ALGORITHMS = [
+  "RS256",
+  "RS384",
+  "RS512",
+  "PS256",
+  "PS384",
+  "PS512",
+  "ES256",
+  "ES384",
+  "ES512",
+  "EdDSA",
+] as const;
+export type ConnectionAlgorithm = (typeof CONNECTION_ALGORITHMS)[number];
+
 /** One e-mail domain of a connection: owned only once its TXT record was seen (D3). */
 export const connectionDomainSchema = z.object({
   /** Lowercased, punycoded, a strict LDH name (janus `checkConnection`). */
@@ -40,7 +55,10 @@ export const connections = defineCollection({
     clientId: z.string().max(500),
     secret: sealedSecretSchema,
     clientAuthentication: z.enum(["post", "basic"]).nullable().default(null),
-    idTokenSignedResponseAlg: z.string().nullable().default(null),
+    idTokenSignedResponseAlg: z
+      .enum(CONNECTION_ALGORITHMS)
+      .nullable()
+      .default(null),
     scopes: z.array(z.string()).nullable().default(null),
     emailTrust: z.enum(CONNECTION_EMAIL_TRUST).default("claimAndDomain"),
     claims: z

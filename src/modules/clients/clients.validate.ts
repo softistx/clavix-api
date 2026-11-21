@@ -6,7 +6,7 @@ import {
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { CliInputError } from "@/shared/cli";
-import { unique } from "@/shared/values";
+import { isOneOf, unique } from "@/shared/values";
 import { clientIdOf, OFFERED_GRANTS, usesRedirect } from "./clients.rules";
 import type { OfferedGrant, RegisterClientInput } from "./clients.types";
 
@@ -37,7 +37,7 @@ function grantsAsked(
     throw new CliInputError("--grants needs at least one grant type");
   }
   for (const grant of grants ?? []) {
-    if (!(OFFERED_GRANTS as readonly string[]).includes(grant)) {
+    if (!isOneOf(OFFERED_GRANTS, grant)) {
       throw new CliInputError(
         `grant "${grant}" is not offered: Clavix offers ${OFFERED_GRANTS.join(", ")}`,
       );

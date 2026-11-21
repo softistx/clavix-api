@@ -1,5 +1,5 @@
-import type { Context } from "@/http/context";
 import { fail } from "@/shared/errors";
+import { isRecord, propertyOf } from "@/shared/values";
 import { localeOf } from "./consent.scope-labels";
 import type { ConsentCtx, ServerCtx } from "./consent.types";
 
@@ -27,20 +27,13 @@ export const isServerCtx = (ctx: unknown): ctx is ServerCtx =>
   "tenant" in ctx &&
   typeof ctx.tenant === "function";
 
-/** The app's context, `NOT_FOUND` for one without the tenant reader. */
+/** The app's context; a plain `Error` (a masked 500: wired wrong) for one without the tenant reader. */
 export const appCtxOf = (ctx: unknown): ServerCtx => {
-  if (!isServerCtx(ctx)) throw fail("NOT_FOUND", "Not found", { status: 404 });
+  if (!isServerCtx(ctx)) {
+    throw new Error("The resolver context is not the app's");
+  }
   return ctx;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-/** Whether a context is the app's GraphQL context: the tenant reader, janus and the throttles. */
-export const isContext = (ctx: unknown): ctx is Context =>
-  isServerCtx(ctx) &&
-  isRecord(Reflect.get(ctx, "janus")) &&
-  isRecord(Reflect.get(ctx, "deviceThrottle"));
 
 /** Whether a context carries the consent readers `oauthContext` puts on it. */
 export const isConsentCtx = (ctx: unknown): ctx is ConsentCtx =>
@@ -50,15 +43,11 @@ export const isConsentCtx = (ctx: unknown): ctx is ConsentCtx =>
   typeof ctx["detailTextsFor"] === "function" &&
   typeof ctx["agentsFor"] === "function";
 
-/** The app's GraphQL context, `NOT_FOUND` for any other. */
-export const contextOf = (ctx: unknown): Context => {
-  if (!isContext(ctx)) throw fail("NOT_FOUND", "Not found", { status: 404 });
-  return ctx;
-};
-
-/** The consent readers' context, `NOT_FOUND` for any other. */
+/** The consent readers' context; a plain `Error` (a masked 500: wired wrong) for any other. */
 export const consentCtxOf = (ctx: unknown): ConsentCtx => {
-  if (!isConsentCtx(ctx)) throw fail("NOT_FOUND", "Not found", { status: 404 });
+  if (!isConsentCtx(ctx)) {
+    throw new Error("The resolver context has no consent readers");
+  }
   return ctx;
 };
 
@@ -71,3 +60,14 @@ export const requestOf = (ctx: unknown): Request => {
 /** The locale a context's request asks for (`accept-language`). */
 export const localeOfCtx = (ctx: ConsentCtx) =>
   localeOf(ctx.request?.headers.get("accept-language") ?? null);
+
+/** The answer of janus-oauth's `approveOAuthRequest`, which it types as `unknown`: the decision as it is (`grantId` stays), checked to say where the user goes next. A different shape is a mismatch with janus, never passed on. */
+export const decisionOf = (result: unknown): { redirectTo: string } => {
+  if (
+    typeof propertyOf(result, "redirectTo") !== "string" ||
+    !isRecord(result)
+  ) {
+    throw new Error("janus-oauth's approveOAuthRequest answered no redirectTo");
+  }
+  return { ...result, redirectTo: String(result["redirectTo"]) };
+};

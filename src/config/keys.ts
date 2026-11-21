@@ -14,10 +14,7 @@ import { clock, warn } from "./runtime";
 // (the OAuth endpoints) signs with `signingKeysFor(tenantId)`; the JWKS route
 // serves `jwksFor(tenantId)`. The tenant id is the hex id (`partitionOf`).
 // It is one key, or a keyring during a rotation (comma-separated, the first seals).
-export const masterKeys = parseMasterKeys(env.CLAVIX_KEYS_MASTER_KEY) as [
-  Uint8Array,
-  ...Uint8Array[],
-];
+export const masterKeys = parseMasterKeys(env.CLAVIX_KEYS_MASTER_KEY);
 
 /** Counts the changes to each tenant's published keys; the public documents cache keys on it. */
 export const keyGenerations = createKeyGenerations();

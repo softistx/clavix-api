@@ -4,6 +4,7 @@ import type { Context } from "@/http/context";
 import { services } from "@/modules/services";
 import type { RequestDemands } from "./consent.authentication";
 import type { ConsentCtx, Detailed, LabelledScope } from "./consent.types";
+import { decisionOf } from "./consent.utils";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -14,6 +15,14 @@ const janusResolvers = oauthResolvers({
   approveOptions: (args, ctx) => services().consent.approveOptions(args, ctx),
   oauth: (ctx) => services().consent.serverOf(ctx),
 });
+
+// Temporary, until @softistx/janus-oauth#1028 (softistx/nxgt-janus#1028).
+// janus-oauth types its resolvers `(...args: never[]) => Promise<unknown>`: the
+// call goes through `Reflect.apply` and its answer is checked (`decisionOf`).
+const approveJanus = janusResolvers.Mutation["approveOAuthRequest"];
+if (approveJanus === undefined) {
+  throw new Error("janus-oauth has no approveOAuthRequest resolver");
+}
 
 type Scoped = { resource: string; scopes: LabelledScope[] };
 
@@ -48,11 +57,16 @@ export const consentResolvers: IResolvers = {
       ctx: unknown,
       info: unknown,
     ) => {
-      const approve = janusResolvers.Mutation?.["approveOAuthRequest"] as (
-        ...rest: unknown[]
-      ) => Promise<{ redirectTo: string }>;
       return services().consent.approveOrDenyUnmet(
-        () => approve(parent, args, ctx, info),
+        async () =>
+          decisionOf(
+            await Reflect.apply(approveJanus, undefined, [
+              parent,
+              args,
+              ctx,
+              info,
+            ]),
+          ),
         args.id,
         ctx,
       );

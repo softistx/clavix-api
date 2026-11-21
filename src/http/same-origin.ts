@@ -1,6 +1,7 @@
 import { definePlugin } from "@softistx/graxia";
 import { parse } from "graphql";
 import { errorBody } from "@/shared/errors";
+import { propertyOf } from "@/shared/values";
 
 /** The root fields of the consent API: a refused request that asks only for these sees `NOT_FOUND`, as if no such request existed. */
 export const CONSENT_FIELDS: ReadonlySet<string> = new Set([
@@ -17,7 +18,7 @@ async function queryOf(request: Request): Promise<string | null> {
     const type = request.headers.get("content-type") ?? "";
     const text = await request.clone().text();
     if (type.startsWith("application/json")) {
-      const { query } = JSON.parse(text) as { query?: unknown };
+      const query = propertyOf(JSON.parse(text), "query");
       return typeof query === "string" ? query : null;
     }
     return new URLSearchParams(text).get("query");
