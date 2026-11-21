@@ -1431,7 +1431,7 @@ A request that mixes consent and other root fields gets the 403. A refused reque
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` the server finishes the requests in flight, then waits up to 10 seconds for
-the sign-in code mails still being handed to the relay (`drain` in `src/modules/auth/outbox.ts`, an
+the sign-in code mails still being handed to the relay (`drain` in `src/modules/auth/auth.outbox.ts`, an
 `onStop` hook in `src/server.ts`), so a code is not lost; a mail still in flight after that is dropped
 and logged (the visitor asks again).
 

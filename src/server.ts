@@ -19,7 +19,7 @@ import { authFor, claimsFor } from "./config/users";
 import { createWebhookSecretsPrune, webhookDelivery } from "./config/webhooks";
 import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { startAuditRetention } from "./modules/audit/retention-worker";
-import { drain } from "./modules/auth/outbox";
+import { drain } from "./modules/auth";
 import { startGrantsRevoke } from "./modules/consent/revoke-job";
 import { startDomainRecheck } from "./modules/domains/domains.recheck-worker";
 import { startKeyRotation } from "./modules/keys";

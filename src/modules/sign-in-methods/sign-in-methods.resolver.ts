@@ -1,8 +1,5 @@
 import type { Resolvers } from "@/generated/graphql/resolvers";
-import {
-  REPLACED_REASON,
-  recordingSignIn,
-} from "@/modules/auth/sign-in-events";
+import { REPLACED_REASON, recordingSignIn } from "@/modules/auth";
 import { requireLive } from "@/tenancy/live";
 import {
   completedAnswer,

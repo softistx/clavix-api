@@ -18,7 +18,7 @@ import {
   MAGIC_LINK_LIFESPAN,
   SESSION_COOKIE,
 } from "@/modules/users/tenant-janus";
-import { settled } from "./outbox";
+import { settled } from "./auth.outbox";
 
 // Magic link is the tenant's choice, off until it turns it on (its sign-in
 // policy, slice A5): "plain" never did, "acme" and "vault" did.

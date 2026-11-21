@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { GraphQLError } from "graphql";
-import { janusMasking } from "./plugin";
+import { janusMasking } from "./auth.plugin";
 
 // An unexpected resolver error must not reach the client in production mode
 // (janus-graphql 0.24.2 fixed `janusMaskError()` leaking it under envelop 6; `janusGraxiaMaskError()` is the graxia one).

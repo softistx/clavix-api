@@ -5,7 +5,7 @@ import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
 import { createSchema, type Resolvers } from "@softistx/graxia";
 import { resolvers } from "../modules";
-import { guardedSchema } from "../modules/auth/plugin";
+import { guardedSchema } from "../modules/auth/auth.plugin";
 import { consentResolvers, consentTypeDefs } from "../modules/consent";
 import type { Context } from "./context";
 

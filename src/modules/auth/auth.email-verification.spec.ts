@@ -29,15 +29,12 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import {
-  confirmEmailVerification,
-  requestEmailVerification,
-} from "./email-verification";
-import { settled } from "./outbox";
+import { settled } from "./auth.outbox";
+import { AuthService } from "./auth.service";
 import {
   createVerificationThrottle,
   type VerificationLimitConfig,
-} from "./verification-throttle";
+} from "./auth.verification-throttle";
 
 const memory = mailer as MemoryMailer;
 const origin = {
@@ -636,42 +633,52 @@ describe("limits over Redis", () => {
 });
 
 describe("with a stubbed janus", () => {
-  const stub = (verifyEmail: object) => ({ verifyEmail }) as never;
+  const session = { user: { id: "u1", email: "a@b.c" } };
+  const serviceOver = (verifyEmail: object, mail: object = {}) =>
+    new AuthService({
+      issuers: {
+        forRequest: async () =>
+          ({ verifyEmail, authenticate: async () => session }) as never,
+      },
+      mailOf: () => mail as never,
+      usage: { recordActive: async () => {} },
+    });
+  const ctx = () =>
+    ({
+      request: new Request("https://acme.example/graphql"),
+      ip: "198.51.100.9",
+      tenant: async () => ({ tenantId: "t1", status: "active" }),
+      set: { headers: new Headers() },
+    }) as never;
 
   test("a store outage on confirm is not turned into EMAIL_VERIFICATION_INVALID", async () => {
     const failure = Object.assign(new JanusError("STORE_FAILED"), {
       code: "STORE_FAILED",
     });
-    const auth = stub({
+    const service = serviceOver({
       confirm: async () => {
         throw failure;
       },
     });
-    await expect(confirmEmailVerification(auth, "t", "u1")).rejects.toBe(
+    await expect(service.confirmEmailVerification(ctx(), "t")).rejects.toBe(
       failure,
     );
   });
 
   test("the mail is not sent when the address has since passed to another user", async () => {
     const sent: unknown[] = [];
-    const auth = stub({
-      prepare: async () => ({
-        send: async () => ({
-          user: { id: "other", name: null },
-          email: "a@b.c",
+    const service = serviceOver(
+      {
+        prepare: async () => ({
+          send: async () => ({
+            user: { id: "other", name: null },
+            email: "a@b.c",
+          }),
         }),
-      }),
-    });
-    const mail = { verifyEmail: async (issued: unknown) => sent.push(issued) };
-    expect(
-      await requestEmailVerification(
-        { auth, mail: mail as never },
-        {
-          id: "u1",
-          email: "a@b.c",
-        },
-      ),
-    ).toBe(true);
+      },
+      { verifyEmail: async (issued: unknown) => sent.push(issued) },
+    );
+    expect(await service.requestEmailVerification(ctx())).toBe(true);
     await settled();
     expect(sent).toHaveLength(0);
   });

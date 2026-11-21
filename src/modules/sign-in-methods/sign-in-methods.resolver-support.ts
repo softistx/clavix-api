@@ -5,7 +5,7 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Context } from "@/http/context";
 import { revokeOnReplace } from "@/modules/consent/revoke-job";
-import { challengeAnswer } from "@/modules/mfa/challenge";
+import { challengeAnswer } from "@/modules/mfa";
 import { services } from "@/modules/services";
 import {
   bindSsoCallback,

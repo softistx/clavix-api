@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { afterAnswer, drain } from "./outbox";
+import { afterAnswer, drain } from "./auth.outbox";
 
 describe("the outbox drain on shutdown", () => {
   test("waits for a mail in flight, then reports drained", async () => {

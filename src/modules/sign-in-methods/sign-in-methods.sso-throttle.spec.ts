@@ -13,8 +13,7 @@ import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { tenantResolver } from "@/config/tenancy";
-import { settled } from "@/modules/auth/outbox";
-import { createSignInThrottle, signInLimits } from "@/modules/auth/throttle";
+import { createSignInThrottle, settled, signInLimits } from "@/modules/auth";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,
