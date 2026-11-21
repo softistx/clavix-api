@@ -5,11 +5,9 @@ import type { ConsoleDirectory } from "@/console/context";
 import { CONSOLE_PATH } from "@/console/identity";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
 
-export interface ConsoleResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
+export type ConsoleResult = GqlResult;
 
 // The console's wiring with no OAuth server behind it: `authenticate` is
 // replaced below, so the token is never verified (console.spec.ts covers that).
@@ -84,8 +82,7 @@ export function consoleAs(
   return async (
     query: string,
     variables: Record<string, unknown> = {},
-  ): Promise<ConsoleResult> =>
-    (await (await request(query, variables)).json()) as ConsoleResult;
+  ): Promise<ConsoleResult> => gqlOf(await request(query, variables));
 }
 
 /** The first error's code, `undefined` when the call succeeded. */

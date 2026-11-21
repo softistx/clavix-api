@@ -63,7 +63,7 @@ describe("the lock order", () => {
     const ctx = withMembers({
       exclusive,
       canPlatform: async () => true,
-      directory: { findUser: async (id: string) => ({ id, active: true }) },
+      directory: { findUser: async (id: string) => userOf(id, true) },
       access: {
         memberships: async () => [
           { tenantId: TENANT_B, role: "admin" },
@@ -116,28 +116,41 @@ describe("the lock order", () => {
     expectOrdered(taken);
   });
 
+  const userOf = (id: string, active: boolean) => ({
+    id,
+    email: `${id}@clavix.test`,
+    emailVerified: true,
+    active,
+    createdAt: new Date(0),
+  });
   const consoleCtx = (exclusive: ConsoleContext["exclusive"]) =>
     withMembers({
       exclusive,
       canPlatform: async () => true,
       audit: async () => {},
       directory: {
-        tenantsByIds: async () => [{ slug: "clavix", name: "Clavix" }],
-        findUser: async (id: string) => ({ id, active: true }),
+        tenantsByIds: async () => [
+          {
+            id: TENANT_A,
+            slug: "clavix",
+            name: "Clavix",
+            status: "active",
+            plan: "free",
+          },
+        ],
+        findUser: async (id: string) => userOf(id, true),
       },
       users: {
-        setActive: async (_t: string, id: string, active: boolean) => ({
-          id,
-          active,
-        }),
-        delete: async () => {},
+        setActive: async (_t: string, id: string, active: boolean) =>
+          userOf(id, active),
+        delete: async () => true,
       },
       access: {
         memberships: async () => [{ tenantId: TENANT_A, role: "owner" }],
         platformRole: async () => null,
         owners: async () => ["u", "other"],
         platformOwners: async () => [],
-        removeUser: async () => {},
+        removeUser: async () => 1,
       },
     });
   const call = (

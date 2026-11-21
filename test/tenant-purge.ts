@@ -8,7 +8,7 @@ import {
   purgeMongoOAuthPartition,
 } from "@softistx/janus-oauth-mongo";
 import { scopeToTenant } from "@softistx/mongo";
-import type { ObjectId } from "mongodb";
+import type { Document, ObjectId } from "mongodb";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
@@ -49,6 +49,11 @@ export const run = (now: Date) =>
 
 // One document per janus collection of the partition (OAuth, stores, signing
 // keys, invitations), written raw: the purge reads only `partition`.
+/** A raw document of a janus collection: the purge reads only its `partition`. */
+interface SeededDoc {
+  _id: string;
+  partition: string;
+}
 export const JANUS = [
   ...oauthPartitionedCollections,
   ...janusPartitionedCollections,
@@ -58,16 +63,16 @@ export const JANUS = [
 export const clearSeeded = async () => {
   for (const name of JANUS)
     await oauthDb
-      .collection(name)
-      .deleteMany({ _id: { $regex: `^[0-9a-f]+:${name}:` } as never });
+      .collection<SeededDoc>(name)
+      .deleteMany({ _id: { $regex: `^[0-9a-f]+:${name}:` } });
 };
 export const seedJanus = async (partition: string) => {
   for (const name of JANUS) {
-    await oauthDb.collection(name).insertMany(
+    await oauthDb.collection<SeededDoc>(name).insertMany(
       [1].map((n) => ({
         _id: `${partition}:${name}:${n}`,
         partition,
-      })) as never[],
+      })),
       { bypassDocumentValidation: true },
     );
   }
@@ -75,19 +80,21 @@ export const seedJanus = async (partition: string) => {
 export const janusOf = async (partition: string) =>
   Object.fromEntries(
     await Promise.all(
-      JANUS.map(async (name) => [
-        name,
-        await oauthDb
-          .collection(name)
-          .find({ partition })
-          .sort({ _id: 1 })
-          .toArray(),
-      ]),
+      JANUS.map(
+        async (name): Promise<[string, Document[]]> => [
+          name,
+          await oauthDb
+            .collection(name)
+            .find({ partition })
+            .sort({ _id: 1 })
+            .toArray(),
+        ],
+      ),
     ),
   );
 export const janusCount = async (partition: string) =>
   Object.values(await janusOf(partition)).reduce(
-    (n: number, docs) => n + (docs as unknown[]).length,
+    (n: number, docs) => n + docs.length,
     0,
   );
 
