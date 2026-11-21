@@ -14,6 +14,15 @@ describe("filterOf", () => {
   test("an empty filter matches everything", () => {
     expect(filterOf({})).toEqual({});
     expect(filterOf({ types: [], userId: null })).toEqual({});
+    expect(
+      filterOf({
+        from: null,
+        to: null,
+        types: null,
+        clientId: null,
+        outcome: null,
+      }),
+    ).toEqual({});
   });
 
   test("combines the set fields", () => {
