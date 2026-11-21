@@ -1,9 +1,9 @@
+import { refusal } from "@/console/modules/refusal";
 import type {
   CheckConnectionInput,
   CreateConnectionInput,
   UpdateConnectionInput,
 } from "@/generated/console/resolvers";
-import { refusal } from "@/modules/tenants/tenants.console-errors";
 import { fail } from "@/shared/errors";
 import { ConnectionError } from "./connections.errors";
 import { AUTH_IN, TRUST_IN } from "./connections.utils";
@@ -61,7 +61,8 @@ export const checkOf = (input: CheckConnectionInput) => ({
   clientId: input.clientId,
   clientSecret: input.clientSecret,
   clientAuthentication:
-    input.clientAuthentication == null
+    input.clientAuthentication === null ||
+    input.clientAuthentication === undefined
       ? null
       : AUTH_IN[input.clientAuthentication],
   idTokenSignedResponseAlg: input.idTokenSignedResponseAlg ?? null,
@@ -77,10 +78,14 @@ export const createOf = (input: CreateConnectionInput) => ({
   ...input,
   id: input.id,
   clientAuthentication:
-    input.clientAuthentication == null
+    input.clientAuthentication === null ||
+    input.clientAuthentication === undefined
       ? null
       : AUTH_IN[input.clientAuthentication],
-  emailTrust: input.emailTrust == null ? undefined : TRUST_IN[input.emailTrust],
+  emailTrust:
+    input.emailTrust === null || input.emailTrust === undefined
+      ? undefined
+      : TRUST_IN[input.emailTrust],
   claims: claimsIn(input.claims),
   requireSso: input.requireSso ?? undefined,
   jit: input.jit ?? undefined,

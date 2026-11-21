@@ -1,21 +1,8 @@
-import { planOf } from "@/modules/tenants";
-import { permitted } from "../guard";
-import { CONSOLE_EXPORT_PATH } from "../identity";
-import type { Permission } from "../model";
-import { authenticated, type ConsoleDeps, refusal } from "../plugin";
-import { exportBody } from "./body";
-import {
-  ADMIN_COLUMNS,
-  AUTH_COLUMNS,
-  adminRow,
-  authRow,
-  mapRows,
-} from "./columns";
-import { parseParams } from "./params";
+import type { ConsoleDeps } from "../plugin";
+import { authorize, bodyOf, exceeds, rangeStart, recordExport } from "./steps";
 
 /** D17: an export holds at most this many rows (the newest ones). */
 export const EXPORT_MAX_ROWS = 100_000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * `GET /console/audit/export` (D17): one tenant's console activity (`log=admin`,
@@ -32,92 +19,19 @@ export async function serveAuditExport(
   request: Request,
   deps: ConsoleDeps,
 ): Promise<Response> {
-  if (request.method !== "GET") {
-    return refusal(405, "METHOD_NOT_ALLOWED", "Use GET", { allow: "GET" });
-  }
-  const principal = await authenticated(
-    deps.authenticate,
-    deps.reportError,
-    request,
-    CONSOLE_EXPORT_PATH,
-  );
-  if (principal instanceof Response) return principal;
-  const userId = principal.userId;
-  if (!(await deps.directory.emailVerified(userId))) {
-    return refusal(403, "EMAIL_UNVERIFIED", "Verify your e-mail address first");
-  }
-  const params = parseParams(request.url);
-  if (params instanceof Response) return params;
-  const { tenantId, log, format, from, to } = params;
-
-  // Role first, so a caller with no right learns nothing of the tenant (D18).
-  // The same rule as the GraphQL guard (`permitted`): the sign-in log of the
-  // `clavix` tenant (`edit`) is the platform's, not a tenant-level role's.
-  const permission = log === "auth" ? "edit" : "view";
-  const [tenant] = await deps.directory.tenantsByIds([tenantId]);
-  const who = {
-    can: (wanted: Permission, id: string) =>
-      deps.access.can(userId, wanted, id),
-    canPlatform: (wanted: Permission) =>
-      deps.access.canPlatform(userId, wanted),
-  };
-  if (!(await permitted(who, permission, tenantId, tenant))) {
-    return refusal(403, "FORBIDDEN", "Not allowed");
-  }
-  if (tenant === undefined) {
-    return refusal(404, "NOT_FOUND", "No such tenant");
-  }
-  const retryAfter = await deps.auditExport?.throttle?.(tenantId);
-  if (retryAfter !== undefined && retryAfter !== null) {
-    return refusal(429, "RATE_LIMITED", "Too many exports", {
-      "retry-after": String(retryAfter),
-    });
-  }
-
-  // The range stays inside the retention (D17): older rows are gone or about to be.
+  const allowed = await authorize(request, deps);
+  if (allowed instanceof Response) return allowed;
+  const { userId, tenant, params } = allowed;
+  const { tenantId, log, format } = params;
   const now = deps.now();
-  const retention = planOf(tenant.plan).auditRetentionDays * DAY_MS;
-  const floor = new Date(now.getTime() - retention);
-  const start = from === null || from < floor ? floor : from;
+  const start = rangeStart(tenant.plan, params.from, now);
   const maxRows = deps.auditExport?.maxRows ?? EXPORT_MAX_ROWS;
-  const filter = { from: start, to };
-  const scope = { tenantId };
-  const truncated =
-    log === "admin"
-      ? await deps.activity.admin.exceeds(scope, filter, maxRows)
-      : await deps.activity.auth.exceeds(tenantId, filter, maxRows);
-
-  // The export is on the record before it leaves: a failure to record is no export.
-  try {
-    await deps.adminEvents.record({
-      actor: userId,
-      action: "auditLog.export",
-      tenantId,
-      target: { type: "auditLog", id: log },
-      requestId: crypto.randomUUID(),
-    });
-  } catch (error) {
-    deps.reportError("console: audit export not recorded", error);
-    return refusal(503, "SERVICE_UNAVAILABLE", "Try again later");
-  }
-
-  const body =
-    log === "admin"
-      ? exportBody(
-          mapRows(deps.activity.admin.stream(scope, filter, maxRows), adminRow),
-          ADMIN_COLUMNS,
-          format,
-        )
-      : exportBody(
-          mapRows(
-            deps.activity.auth.stream(tenantId, filter, maxRows),
-            authRow,
-          ),
-          AUTH_COLUMNS,
-          format,
-        );
+  const filter = { from: start, to: params.to };
+  const truncated = await exceeds(deps, params, filter, maxRows);
+  const failure = await recordExport(deps, userId, tenantId, log);
+  if (failure !== undefined) return failure;
   const day = now.toISOString().slice(0, 10);
-  return new Response(body, {
+  return new Response(bodyOf(deps, params, filter, maxRows), {
     status: 200,
     headers: {
       "content-type":

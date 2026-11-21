@@ -1,13 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { InvalidSlugError, SlugTakenError } from "@/modules/tenants";
-import { badInput, refusal } from "./tenants.console-errors";
+import { refusal } from "./refusal";
 
-describe("tenants console errors", () => {
-  it("words a malformed input with its field", () => {
-    const error = badInput("bad", "name");
-    expect(error.extensions["code"]).toBe("BAD_USER_INPUT");
-  });
-
+describe("console refusals", () => {
   it("maps the service's refusals and passes anything else through", () => {
     const taken = refusal(new SlugTakenError("acme")) as {
       extensions: Record<string, unknown>;

@@ -2,10 +2,11 @@ import { InvalidCursorError } from "@softistx/mongo";
 import { tenantsService } from "@/config/tenancy";
 import type { ConsoleContext } from "@/console/context";
 import type { Role } from "@/console/model";
+import { pageSize } from "@/console/modules/ids";
 import { GRAPHQL_ROLE } from "@/modules/admins/admins.utils";
 import { parentOf } from "@/modules/tenants/tenants.console-parent";
 import { fail } from "@/shared/errors";
-import { limitOf, stronger } from "./me.utils";
+import { stronger } from "./me.utils";
 
 /** A page of tenants; a cursor that is not valid is the caller's mistake. */
 async function listing<T>(page: () => Promise<T>): Promise<T> {
@@ -38,7 +39,7 @@ export async function operatorTenants(
         q: text,
         state: "live",
         after: after ?? undefined,
-        first: limitOf(first),
+        first: pageSize(first),
       }),
       tenantsService.count({ q: text, state: "live" }),
     ]),
@@ -73,7 +74,7 @@ export async function memberTenants(
         state: "live",
         ids,
         after: after ?? undefined,
-        first: limitOf(first),
+        first: pageSize(first),
       }),
       tenantsService.count({ q: text, state: "live", ids }),
     ]),

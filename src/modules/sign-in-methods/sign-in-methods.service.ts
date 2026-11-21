@@ -1,7 +1,8 @@
 import { OptimisticLockError } from "@softistx/mongo";
 import type { Tenant, TenantsService } from "@/modules/tenants";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { badInput, refusal } from "./sign-in-methods.errors";
+import { badInput } from "@/shared/errors";
+import { refusal } from "./sign-in-methods.errors";
 import {
   checkedSocial,
   methodChange,

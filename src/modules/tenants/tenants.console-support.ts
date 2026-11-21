@@ -1,6 +1,7 @@
 import { denial } from "@softistx/janus-graphql";
 import { NotFoundError } from "@softistx/mongo";
 import { tenantsService } from "@/config/tenancy";
+import { refusal } from "@/console/modules/refusal";
 import {
   type effectiveQuotas,
   isPlanId,
@@ -10,7 +11,7 @@ import {
   type Tenant,
   type TenantState,
 } from "@/modules/tenants";
-import { badInput, refusal } from "./tenants.console-errors";
+import { badInput } from "@/shared/errors";
 import type { TenantParent } from "./tenants.console-parent";
 
 export const notFound = () => denial("NOT_FOUND", "No such tenant");
@@ -39,7 +40,6 @@ export const STATE = {
   SUSPENDED: "suspended",
   DELETED: "deleted",
 } as const satisfies Record<string, TenantState>;
-export const MAX_PAGE = 100;
 
 export const quotasOut = (quotas: ReturnType<typeof effectiveQuotas>) => ({
   ...quotas,

@@ -4,18 +4,13 @@ import {
   type OAuthEventListener,
   type OAuthIssuers,
 } from "@softistx/janus-oauth";
-import {
-  createOidcProvider,
-  type OidcClaims,
-  type OidcSubject,
-} from "@softistx/janus-oidc";
 import { instrumentOAuth } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
 import { tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
-import { SUPPORTED_ACR } from "./authentication-level";
 import { buildIssuer, userinfoOf } from "./building";
+import { oidcProviderOf } from "./issuers-oidc";
 import type {
   AgentCheckFor,
   AuthFor,
@@ -94,37 +89,7 @@ export function createClavixOAuthIssuers(
   // issuer -> tenant, filled by `build`: janus gives `claims` the issuer
   // `resolve` answered, and a server is always built before it answers.
   const tenantOf = new Map<string, ResolvedTenant>();
-  const oidc = createOidcProvider({
-    claims: (subject, scopes, { issuer }) => {
-      const tenant = tenantOf.get(issuer);
-      if (tenant === undefined) {
-        throw new Error(`oidc: no tenant built for issuer ${issuer}`);
-      }
-      return withRoles(
-        tenant,
-        subject,
-        options.claimsFor(tenant)(subject, scopes),
-      );
-    },
-    // `openid` releases nothing else (`sub` aside), so roles go with every
-    // OpenID Connect token, in the id_token as well as at userinfo.
-    scopeClaims: { openid: ["roles"] },
-    // D9: the `acr` values a client may ask for (`acr_values`, enforced at
-    // approval, `authentication-level.ts`).
-    acrValuesSupported: SUPPORTED_ACR,
-    idToken: { includeClaims: true },
-  });
-  const withRoles = async (
-    tenant: ResolvedTenant,
-    subject: OidcSubject,
-    claims: OidcClaims | Promise<OidcClaims>,
-  ): Promise<OidcClaims> =>
-    options.rolesFor === undefined
-      ? claims
-      : {
-          ...(await claims),
-          roles: await options.rolesFor(tenant)(subject.id, null),
-        };
+  const oidc = oidcProviderOf(options, tenantOf);
   const build = buildIssuer({
     db,
     signingKeysFor,

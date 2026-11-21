@@ -48,7 +48,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `schema.ts`, `audit.ts`, `budgets.ts`, ...) and `src/console/modules/` only the registry and shared helpers (`ids.ts`,
   `user-key.ts`, `reserved.ts`, `catalog-support.ts`) with their cross-module specs.
 - **Layout elsewhere**: `src/http/` holds the context and the schema; `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
-  introspection (`introspection: ide` of `createApp`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/shared/cli.ts` holds what the scripts share
+  introspection (`introspection: ide` of `createApp`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/shared/cli.ts` holds what the scripts share; `src/shared/html.ts` (`htmlEscape`) and `src/shared/values.ts` (`unique`, `isRecord`) hold the small helpers several modules use, and `badInput` lives in `src/shared/errors.ts`. The console's page size is `pageSize` (`src/console/modules/ids.ts`) and its tenant refusals `refusal` (`src/console/modules/refusal.ts`)
   (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below).
 - **Generated and printed files**: generated code is in `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed. The
   printed schemas `schema.graphql` (hosted) and `console.schema.graphql` (console) are committed: `bun run schema:print` rewrites
@@ -168,8 +168,8 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 
 Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:
 - Layout (A8): `sign-in-methods.resolver.ts` (+ `.resolver-support.ts`: the tenant's janus per request, the social
-  resolvers, the hosted page and the completed-flow answer), `.errors.ts` (the codes, `refusal`, `badInput`,
-  `methodDisabled`), `.rules.ts` (input checks, the method change, the first-party and usable rules, the reseal of
+  resolvers, the hosted page and the completed-flow answer), `.errors.ts` (the codes, `refusal`,
+  `methodDisabled`; `badInput` is the shared `src/shared/errors.ts` one), `.rules.ts` (input checks, the method change, the first-party and usable rules, the reseal of
   the entries), `.utils.ts`, `.types.ts`, `.schema.ts`, `.secrets.ts`, `.social.ts`, `.gate.ts`, `.sso-throttle.ts`,
   and `sign-in-methods.service.ts`: one service per domain (owner, 2026-11-20), `SignInPolicyService`, holding
   every business method of the domain (`get`, `updateMethods`, `updateMfa`, `setSocial`, `removeSocial`,

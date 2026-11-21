@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fail } from "./errors";
+import { badInput, fail } from "./errors";
 
 test("a refusal carries its code and message", () => {
   const error = fail("NOT_FOUND", "No such tenant");
@@ -47,5 +47,17 @@ test("an extra code never overrides the refusal's own", () => {
   expect(error.extensions).toEqual({
     code: "BAD_USER_INPUT",
     missing: ["mfa"],
+  });
+});
+
+test("badInput is a 400 BAD_USER_INPUT, with the field when given", () => {
+  expect(badInput("bad", "name").extensions).toEqual({
+    code: "BAD_USER_INPUT",
+    http: { status: 400 },
+    field: "name",
+  });
+  expect(badInput("bad").extensions).toEqual({
+    code: "BAD_USER_INPUT",
+    http: { status: 400 },
   });
 });

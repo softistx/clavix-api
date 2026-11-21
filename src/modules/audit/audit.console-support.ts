@@ -1,13 +1,9 @@
 import { InvalidCursorError } from "@softistx/mongo";
 import type { StoredAdminEvent } from "@/console/admin-events/reader";
 import type { ConsoleContext } from "@/console/context";
-import { badInput } from "@/modules/users";
+import { pageSize } from "@/console/modules/ids";
+import { badInput } from "@/shared/errors";
 import type { StoredAuthEvent } from "./audit.types";
-
-const MAX_PAGE = 100;
-
-export const limitOf = (first: number | null | undefined) =>
-  Math.min(Math.max(first ?? 25, 1), MAX_PAGE);
 
 /** A cursor the store refuses is the caller's mistake. */
 export async function guarded<T>(run: () => Promise<T>) {
@@ -98,7 +94,7 @@ export const adminPage = async (
   const page = await guarded(() =>
     ctx.activity.admin.page(scope, args.filter ?? {}, {
       after: args.after ?? null,
-      limit: limitOf(args.first),
+      limit: pageSize(args.first),
     }),
   );
   const admins = await resolveEach(

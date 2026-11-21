@@ -15,10 +15,6 @@ export const codes = defineCodes("sign-in-methods", [
 export const refusal = (code: ErrorCode, message: string, status: number) =>
   fail(code, message, { status });
 
-/** `BAD_USER_INPUT` (400) with the message given. */
-export const badInput = (message: string) =>
-  refusal("BAD_USER_INPUT", message, 400);
-
 /** A method the tenant did not turn on does not exist: 404, before any budget, store or mail is touched. */
 export const methodDisabled = (method: string) =>
   refusal("SIGN_IN_METHOD_DISABLED", `Sign-in by ${method} is disabled`, 404);

@@ -1,16 +1,12 @@
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
+import { pageSize } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { PLANS } from "@/modules/tenants";
 import { isMonth } from "@/modules/usage/usage.utils";
-import { badInput } from "./tenants.console-errors";
+import { badInput } from "@/shared/errors";
 import { parentOf } from "./tenants.console-parent";
-import {
-  MAX_PAGE,
-  notFound,
-  quotasOut,
-  STATE,
-} from "./tenants.console-support";
+import { notFound, quotasOut, STATE } from "./tenants.console-support";
 
 export const tenantQueries: NonNullable<Resolvers["Query"]> = {
   tenants: async (_, { q, status, after, first }) => {
@@ -21,7 +17,7 @@ export const tenantQueries: NonNullable<Resolvers["Query"]> = {
         q: q ?? undefined,
         state,
         after: after ?? undefined,
-        first: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+        first: pageSize(first),
       }),
       tenantsService.count({ q: q ?? undefined, state }),
     ]);
