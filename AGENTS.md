@@ -580,7 +580,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
   of a user's access token, so refreshes count; a client_credentials token, whose `sub` is its client id, counts nobody) and an `acceptInvitation` that signs the new account in (#176); `recordActive` never throws. Without `REDIS_URL` nothing is counted (the stored month is read). The month is snapshotted in
   `usageCounters` (tenant-owned) when read, never lowered. Clients are counted in
-  `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
+  `oauthPartitionedClients` by `partition`; domains are counted from `domainsService`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
   clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
 - **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `TenantsService.purge`
@@ -611,10 +611,22 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 ## Custom domains (`src/modules/domains`, `src/console/modules/domains`)
 
 A tenant adds a host (`addDomain`), publishes `_clavix.<host> TXT clavix-verify=<token>`, then
-`verifyDomain` reads it through the `TxtResolver` port (`dns.ts`; specs inject a fake, only
-`src/config/domains.ts` wires the real resolver). `DomainStore` (`domains.service.ts`) is the
-only way into the `domains` collection; the periodic recheck is `DomainRecheck`
-(`domains.recheck.ts`, the DNS comparison `domains.check.ts`), which the store builds and delegates to.
+`verifyDomain` reads it through the `TxtResolver` port (`domains.dns.ts`; specs inject a fake, only
+`src/config/domains.ts` wires the real resolver). `DomainsService` (`domains.service.ts`) is the
+only way into the `domains` collection and runs the periodic recheck (`recheckAll`) too; the DNS
+comparison is `domains.check.ts`.
+- Layout (A9): `domains.model.ts`, `.errors.ts` (the codes and the refusal builders), `.rules.ts` (the host rules
+  `normalizeDomainHost` / `txtNameOf`, the cooldown, the recheck grace decision `recheckOutcome`, the cache host
+  lists), `.utils.ts` (`mintToken`), `.check.ts`, `.dns.ts`, `.events.ts`, `.notice.ts`, `.tls-ask.ts`, `.tls-limit.ts`,
+  `.well-known.ts`, `.recheck-queue.ts`, `.recheck-worker.ts`, and `domains.service.ts`: one service per domain
+  (owner, 2026-11-20), `DomainsService`, holding every business method (reads, `add`, `verify`, `setPrimary`,
+  `remove`, `deleteOwnedBy`, `recheckAll`; the former `DomainRecheck` and `promoteClaim` are merged into it), its spec
+  beside it. There is no resolver (the console module is the caller). `index.ts` is the import surface;
+  `domains.recheck-queue.ts` (Redis) and `domains.tls-limit.ts` (Redis) are imported by file from `src/config/redis.ts`
+  and `src/config/domains-routes.ts`, `domains.recheck-worker.ts` from `src/server.ts` (wiring, so the barrel never loads
+  Redis), and `domains.errors.ts` by `src/i18n/codes.ts` as every module's errors are. The service is built in
+  `src/config/domains.ts` (`createDomainsService`, called by `src/config/tenancy.ts`, which gives it the resolver's
+  invalidation) and registered as `services().domains`. `domains` stays a platform collection.
 - `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
   tenants (partial unique index on `{ host }` where `status: "verified"`), which the
   tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still
@@ -628,31 +640,31 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
   (`console:domains:<tenantId>`, shared by `removeDomain` and `setPrimaryDomain`, so two
   concurrent `setPrimaryDomain` leave one primary); the post-insert recount stays as a second guard.
   `removeDomain` records `domain.remove` on a repeat too (an id the trail cannot hold is not recorded).
-  `usage.domains` is `domainStore.count`. These slice decisions stand (issue #127): pending
+  `usage.domains` is `domainsService.count`. These slice decisions stand (issue #127): pending
   claims count toward the quota; a lapsed primary keeps resolving but the TLS ask refuses it;
   recheck every 6 h with a 7-day grace.
 - `verifyDomain` is held to one check per claim per 60 s (`VERIFY_COOLDOWN_SECONDS`, from the
   claim's `checkedAt`): `VERIFY_COOLDOWN` (429) with `extensions.retryAfter`, no lookup made.
 - The platform's own changes are admin events too: `domain.lapse` (recheck, actor
   `system:domains:recheck`) and `domain.evict` (a verification removing another tenant's claim,
-  actor `system:domains:verify`), recorded through `DomainStoreOptions.record` (`events.ts`,
+  actor `system:domains:verify`), recorded through `DomainsServiceOptions.record` (`domains.events.ts`,
   wired in `src/config/domains.ts`); a failure to record is logged, never fails the write.
 - The primary is explicit (`setPrimaryDomain`, ADR-0032); the issuer follows it (resolver
   `toResolved`), the passkey rpId stays the slug host (`slugIssuer`, `src/modules/users/rp.ts`,
   ADR-0036). The primary cannot be removed. The slug host keeps serving.
-- `recheckAll` runs every 6 hours (`recheck.queue.ts`, started in `src/server.ts`). A record
+- `recheckAll` runs every 6 hours (`domains.recheck-queue.ts`, started in `src/server.ts`). A record
   missing for 7 days makes the domain `unverified` (it stops serving and no certificate is
-  issued) and the tenant's owners are e-mailed once (`notice.ts`). A lapsed primary keeps its
+  issued) and the tenant's owners are e-mailed once (`domains.notice.ts`). A lapsed primary keeps its
   flag and keeps resolving: the issuer never moves silently. A DNS failure changes nothing.
 - A host that maps to a non-live tenant behaves like the default host: callers check `isLive`.
-- **TLS ask** (`tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
+- **TLS ask** (`domains.tls-ask.ts`, `GET /internal/tls/ask?token=&domain=`): 200 only for a verified
   domain of a live tenant or a platform host (apex, `console.`, the slug host of a live tenant: `allowedPlatformHost`), 429 past `CLAVIX_TLS_ASK_LIMIT`/min (`@softistx/redis`; **fails closed**
   when Redis is down: refused, with a warning, `tlsAskGate`; **spent after the lookup**, by known hosts only, so a flood of unknown names
   cannot use up the budget real domains need, #328), a bare 404 for everything else (wrong or unset `CLAVIX_TLS_ASK_SECRET`,
   proxied requests carrying `X-Forwarded-*`, `X-Real-IP` or `Forwarded`, garbage, unknown, pending, lapsed, suspended).
   The app has one listener: keep `/internal/` off the public proxy (`deploy/Caddyfile` does). No ACME client lives here. Going live (Dockerfile, `deploy/`, `scripts/mongo-*.ts`, `/readyz`) is in `docs/operations.md`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
-  (Related Origins). The passkey layer accepts the same origins (`relatedOriginsOf`, `src/modules/domains/well-known.ts`).
+  (Related Origins). The passkey layer accepts the same origins (`relatedOriginsOf`, `src/modules/domains/domains.well-known.ts`).
 
 ## Webhooks (`src/modules/webhooks`, `src/console/modules/webhooks`, `src/config/webhooks.ts`)
 

@@ -5,7 +5,7 @@ import { type AnyCollectionDefinition, isTenantOwned } from "@softistx/mongo";
 // reads or writes them, across tenants. `adminEvents` is the console's record
 // (ADR-0037), reached through its recorder alone; `domains` (A4) is a claim
 // per tenant whose uniqueness crosses tenants (a verified host serves one),
-// reached through `DomainStore` alone (the platform scan in guards.spec.ts).
+// reached through `DomainsService` alone (the platform scan in guards.spec.ts).
 // A name is added here by a decision, never to get a guard out of the way.
 export const platformCollections: readonly string[] = [
   "adminEvents",

@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import { relatedOriginsOf } from "@/modules/domains/well-known";
+import { relatedOriginsOf } from "@/modules/domains";
 import {
   issuerOf,
   issuerOfHost,

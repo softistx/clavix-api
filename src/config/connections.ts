@@ -7,7 +7,7 @@ import {
   type IssuerChecker,
 } from "@/modules/connections/connections.discovery";
 import { ConnectionsService } from "@/modules/connections/connections.service";
-import { systemTxtResolver } from "@/modules/domains/dns";
+import { systemTxtResolver } from "@/modules/domains";
 import { hostOf } from "@/modules/tenants";
 import { socialOf } from "@/modules/users/tenant-janus";
 import { mongo } from "./db";

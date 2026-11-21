@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { tlsAskGate } from "./tls-limit";
+import { tlsAskGate } from "./domains.tls-limit";
 
 describe("tlsAskGate", () => {
   test("follows the limiter while Redis answers", async () => {

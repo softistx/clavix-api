@@ -6,11 +6,8 @@ import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
 import { createTenancy, tenantsService } from "@/config/tenancy";
 import { settled } from "@/modules/auth/outbox";
-import type { TxtAnswer } from "@/modules/domains/dns";
-import {
-  DomainStore,
-  RECHECK_GRACE_DAYS,
-} from "@/modules/domains/domains.service";
+import type { TxtAnswer } from "@/modules/domains";
+import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { issuerOf } from "./tenants.utils";
@@ -130,7 +127,7 @@ describe("a suspension and the cached custom hosts", () => {
     });
     const records = new Map<string, TxtAnswer>();
     let clock = new Date("2026-11-12T12:00:00Z");
-    const store = new DomainStore(mongo.db.domains, {
+    const store = new DomainsService(mongo.db.domains, {
       dns: {
         resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
       },

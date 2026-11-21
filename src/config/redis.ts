@@ -22,8 +22,8 @@ import {
   deviceLimits,
 } from "@/modules/consent/device-throttle";
 import { grantsRevoke } from "@/modules/consent/revoke.queue";
-import { domainRecheck } from "@/modules/domains/recheck.queue";
-import { tlsAskLimit } from "@/modules/domains/tls-limit";
+import { domainRecheck } from "@/modules/domains/domains.recheck-queue";
+import { tlsAskLimit } from "@/modules/domains/domains.tls-limit";
 import { keyRotation } from "@/modules/keys/queue";
 import {
   type PasskeyLimitConfig,

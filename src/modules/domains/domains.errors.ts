@@ -1,4 +1,5 @@
 import { defineCodes } from "@/i18n/define-codes";
+
 /** A refusal of the domains service; the console maps `code` to `extensions.code`. */
 export type DomainErrorCode =
   | "BAD_USER_INPUT"
@@ -27,3 +28,35 @@ export const codes = defineCodes("domains", [
   "DOMAIN_NOT_VERIFIED",
   "VERIFY_COOLDOWN",
 ]);
+
+export const domainNotFound = () =>
+  new DomainError("NOT_FOUND", "No such domain");
+
+export const domainTaken = () =>
+  new DomainError(
+    "DOMAIN_TAKEN",
+    "This domain is already verified by another tenant",
+  );
+
+export const domainNotVerified = () =>
+  new DomainError(
+    "DOMAIN_NOT_VERIFIED",
+    "Only a verified domain can be made primary",
+  );
+
+export const domainIsPrimary = () =>
+  new DomainError(
+    "DOMAIN_PRIMARY",
+    "Make another domain primary before removing this one",
+  );
+
+/** A claim checked `retryAfter` seconds too recently (`VERIFY_COOLDOWN`). */
+export const verifyCooldown = (retryAfter: number) =>
+  new DomainError(
+    "VERIFY_COOLDOWN",
+    "This domain was checked a moment ago; try again shortly",
+    retryAfter,
+  );
+
+export const badDomainInput = (message: string) =>
+  new DomainError("BAD_USER_INPUT", message);

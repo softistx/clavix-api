@@ -1,5 +1,5 @@
 import type { MailMessage } from "@softistx/mail";
-import { txtNameOf } from "./domain-host";
+import { txtNameOf } from "./domains.rules";
 
 const htmlEscape = (text: string) =>
   text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

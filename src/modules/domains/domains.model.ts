@@ -13,7 +13,7 @@ export type DomainStatus = (typeof DOMAIN_STATUSES)[number];
 // tenant-owned one (`src/tenancy/owned.ts`): `tenantId` says whose claim a
 // document is, but the uniqueness that matters crosses tenants (a host is
 // served by one tenant only), and the resolver and the TLS ask read by host.
-// It is reached through `DomainStore` alone (the platform scan in
+// It is reached through `DomainsService` alone (the platform scan in
 // guards.spec.ts). The purge removes a tenant's documents (`deleteOwnedBy`).
 //
 // Several tenants may hold a `pending` claim on one host (an unverified claim

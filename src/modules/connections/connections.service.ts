@@ -5,10 +5,7 @@ import {
 } from "@softistx/janus-social";
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import {
-  mintToken,
-  VERIFY_COOLDOWN_SECONDS,
-} from "@/modules/domains/domains.verify";
+import { mintToken, VERIFY_COOLDOWN_SECONDS } from "@/modules/domains";
 import {
   emptySecretResealCounts,
   type SecretBox,

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { ObjectId } from "mongodb";
 import { oauthDb } from "@/config/oauth-db";
-import { relatedOriginsOf } from "@/modules/domains/well-known";
+import { relatedOriginsOf } from "@/modules/domains";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { createTenantResolver, type TenantRecord } from "@/tenancy/resolver";
@@ -99,7 +99,7 @@ describe("passkeys on a custom domain (related origins)", () => {
   test("a verified domain's origin is accepted once the tenant's cache entry is dropped", async () => {
     verified.add("login.pk-origins.example");
     // The tenant is still cached without the origin: refused until verifyDomain
-    // drops the entry (DomainStore.changed -> resolver.invalidate).
+    // drops the entry (DomainsService.changed -> resolver.invalidate).
     expect(await registersFrom(CUSTOM, "c@x.test")).toBe(false);
     await resolver.invalidate([SLUG_HOST]);
     expect(await registersFrom(CUSTOM, "d@x.test")).toBe(true);

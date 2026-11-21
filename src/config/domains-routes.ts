@@ -1,19 +1,17 @@
 import { ObjectId } from "mongodb";
 import {
   platformHostPolicy,
+  relatedOrigins,
   TLS_ASK_PATH,
   tlsAsk,
-} from "@/modules/domains/tls-ask";
-import { tlsAskGate } from "@/modules/domains/tls-limit";
-import {
-  relatedOrigins,
   WEBAUTHN_WELL_KNOWN,
-} from "@/modules/domains/well-known";
+} from "@/modules/domains";
+import { tlsAskGate } from "@/modules/domains/domains.tls-limit";
 import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
 import { redis } from "./redis";
-import { domainStore, tenantResolver } from "./tenancy";
+import { domainsService, tenantResolver } from "./tenancy";
 
 export { TLS_ASK_PATH, WEBAUTHN_WELL_KNOWN };
 
@@ -29,7 +27,7 @@ export const tlsAskOver = (secret: string | undefined) =>
     secret,
     platformDomain: env.CLAVIX_DOMAIN,
     allowed: async (host) => {
-      if ((await domainStore.verifiedHost(host)) === undefined) return false;
+      if ((await domainsService.verifiedHost(host)) === undefined) return false;
       const tenant = await tenantResolver.resolveHost(host);
       return tenant !== null && isLive(tenant);
     },
@@ -64,7 +62,7 @@ export async function serveWebauthnOrigins(request: Request) {
   }
   const slugHost = new URL(tenant.slugIssuer).hostname;
   if (host !== slugHost) return new Response(null, { status: 404 });
-  const hosts = await domainStore.verifiedHostsOf(
+  const hosts = await domainsService.verifiedHostsOf(
     new ObjectId(tenant.tenantId),
   );
   return relatedOrigins(hosts, {

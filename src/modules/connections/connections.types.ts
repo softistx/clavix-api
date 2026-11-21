@@ -1,5 +1,5 @@
 import type { OidcConnectionsOptions } from "@softistx/janus-social";
-import type { TxtResolver } from "@/modules/domains/dns";
+import type { TxtResolver } from "@/modules/domains";
 import type { ConnectionEmailTrust } from "./connections.model";
 
 /** The accounts linked through a connection, counted by the identity store (`CONNECTION_IN_USE`). */

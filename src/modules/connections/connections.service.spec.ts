@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import type { TxtAnswer } from "@/modules/domains/dns";
+import type { TxtAnswer } from "@/modules/domains";
 import { createSecretBox } from "@/modules/sign-in-methods";
 import { QuotaExceededError } from "@/modules/usage/quota";
 import { ConnectionError } from "./connections.errors";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { lapsedDomainMail } from "./notice";
+import { lapsedDomainMail } from "./domains.notice";
 
 test("the lapsed-domain mail names the host, the record and the primary case", () => {
   const input = {
