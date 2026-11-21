@@ -19,7 +19,7 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import { createDeviceThrottle } from "./device-throttle";
+import { createDeviceThrottle } from "./consent.device-throttle";
 
 const RESOURCE = "https://api.clavix.test/mcp";
 const origin = {

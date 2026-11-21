@@ -1,6 +1,6 @@
 import { createSignInThrottle } from "@/modules/auth/auth.throttle";
 import { createVerificationThrottle } from "@/modules/auth/auth.verification-throttle";
-import { createDeviceThrottle } from "@/modules/consent/device-throttle";
+import { createDeviceThrottle } from "@/modules/consent/consent.device-throttle";
 import { createPasskeyThrottle } from "@/modules/passkeys/passkeys.throttle";
 import {
   createHomeRealmThrottle,

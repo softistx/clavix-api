@@ -4,7 +4,6 @@ import { secretBox } from "@/config/keys";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Context } from "@/http/context";
-import { revokeOnReplace } from "@/modules/consent/revoke-job";
 import { challengeAnswer } from "@/modules/mfa";
 import { services } from "@/modules/services";
 import {
@@ -182,7 +181,7 @@ export async function completedAnswer(
   // `replaced`, a retried sign-in would not revoke. A failed revocation is
   // queued and retried (clavix-api #353); unqueued, the sign-in fails.
   if (done.replaced) {
-    await revokeOnReplace(
+    await services().consent.revokeOnReplace(
       ctx,
       tenantId,
       done.userId,

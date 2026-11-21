@@ -1,5 +1,5 @@
 import type { TenantResolver } from "@/tenancy/resolver";
-import type { BrandingService } from "./branding.service";
+import type { StoredBrandingDoc } from "./branding.types";
 
 /** Where a tenant's logo is served, on its own host. */
 export const LOGO_PATH = "/branding/logo";
@@ -27,7 +27,9 @@ const REVALIDATED = "public, max-age=300, must-revalidate";
  */
 export function logoRoute(deps: {
   resolver: TenantResolver;
-  service: BrandingService;
+  service: {
+    get(tenantId: string): Promise<StoredBrandingDoc | undefined>;
+  };
 }) {
   return async (request: Request): Promise<Response> => {
     if (request.method !== "GET" && request.method !== "HEAD") {

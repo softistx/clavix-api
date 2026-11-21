@@ -7,7 +7,7 @@ import {
   type UserThrottle,
   userAndTenantLimits,
 } from "@/http/throttle/core";
-import { fail } from "@/shared/errors";
+import { deviceCodeThrottled } from "./consent.errors";
 
 export type DeviceLimitConfig = UserLimitConfig;
 export type DeviceThrottle = UserThrottle;
@@ -21,13 +21,6 @@ export const deviceLimits = (config: DeviceLimitConfig) => {
   const { ip, tenant, user } = userAndTenantLimits("device", config);
   return { deviceIp: ip, deviceTenant: tenant, deviceUser: user };
 };
-
-/** `DEVICE_CODE_THROTTLED`, 429, `retryAfter` in the error and `Retry-After` (seconds). */
-export const deviceCodeThrottled = (retryAfter: number) =>
-  fail("DEVICE_CODE_THROTTLED", "Too many device codes tried", {
-    status: 429,
-    retryAfter,
-  });
 
 /**
  * The user first (a refused user spends no address or tenant budget), then the

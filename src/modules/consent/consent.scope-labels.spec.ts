@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localeOf, type ScopeTexts, textOf } from "./scope-labels";
+import { localeOf, type ScopeTexts, textOf } from "./consent.scope-labels";
 
 const API = "https://api.example/v1";
 const texts: ScopeTexts = [
