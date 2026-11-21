@@ -549,9 +549,9 @@ describe("the social providers", () => {
       new URL(issuerOf("sim-b", origin)).host,
     );
     if (tenantA === null || tenantB === null) throw new Error("no tenant");
-    expect(Object.keys(socialProvidersOf(tenantA, secretBox))).toEqual([
-      "google",
-    ]);
+    expect(
+      Object.keys(socialProvidersOf(tenantA, secretBox, () => {})),
+    ).toEqual(["google"]);
     const skipped: string[][] = [];
     const copied = { ...tenantB, signIn: tenantA.signIn };
     expect(

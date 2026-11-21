@@ -248,7 +248,7 @@ export class DomainsService {
    * for it.
    */
   async recheckAll(
-    onUnverified: (domain: DomainDoc) => Promise<void> = async () => {},
+    onUnverified: (domain: DomainDoc) => Promise<void>,
   ): Promise<RecheckReport> {
     const report = { checked: 0, unverified: 0 };
     const verified = await this.collection.findMany({

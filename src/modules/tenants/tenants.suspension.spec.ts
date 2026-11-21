@@ -153,9 +153,9 @@ describe("a suspension and the cached custom hosts", () => {
     await store.setPrimary(created._id, second._id.toHexString());
     // The primary's record disappears for good: it lapses, and still resolves.
     records.delete(`_clavix.${primary}`);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     clock = new Date(clock.getTime() + (RECHECK_GRACE_DAYS + 1) * 86_400_000);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     expect(await store.verifiedHostsOf(created._id)).toEqual([kept]);
 
     const tenancy = createTenancy({

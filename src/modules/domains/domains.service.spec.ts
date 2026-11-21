@@ -263,7 +263,10 @@ describe("recheckAll", () => {
 
   test("a record still there keeps the domain verified", async () => {
     await addVerified(A, "auth.acme.com");
-    expect(await store.recheckAll()).toEqual({ checked: 1, unverified: 0 });
+    expect(await store.recheckAll(async () => {})).toEqual({
+      checked: 1,
+      unverified: 0,
+    });
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
   });
 
@@ -271,7 +274,7 @@ describe("recheckAll", () => {
     await addVerified(A, "auth.acme.com");
     records.set("_clavix.auth.acme.com", { kind: "failed" });
     clock = new Date(clock.getTime() + 30 * DAY);
-    expect((await store.recheckAll()).unverified).toBe(0);
+    expect((await store.recheckAll(async () => {})).unverified).toBe(0);
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
   });
 
@@ -300,9 +303,9 @@ describe("recheckAll", () => {
   test("the record coming back resets the grace", async () => {
     const claim = await addVerified(A, "auth.acme.com");
     records.clear();
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     publish("auth.acme.com", claim.txtToken);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     const stored = await collection.findById(claim._id);
     expect(stored?.failingSince).toBeNull();
   });
@@ -311,9 +314,9 @@ describe("recheckAll", () => {
     const claim = await addVerified(A, "auth.acme.com");
     await store.setPrimary(A, claim._id.toHexString());
     records.clear();
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     clock = new Date(clock.getTime() + 8 * DAY);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     expect(await store.primaryHostOf(A)).toBe("auth.acme.com");
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
     expect(await store.verifiedHostsOf(A)).toEqual([]);
