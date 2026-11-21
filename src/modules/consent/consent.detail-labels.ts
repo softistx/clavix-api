@@ -37,7 +37,7 @@ export interface ConsentRow {
   values: ConsentValue[];
 }
 
-/** One authorization detail of a pending request, in words (D5): never the raw JSON. */
+/** One authorization detail of a pending request as typed rows (D5): never the raw JSON. */
 export interface ConsentDetail {
   type: string;
   title: string;
@@ -150,10 +150,11 @@ function describe(
 
 /**
  * The details of a pending request (janus's `authorizationDetails`, a JSON
- * array string) as blocks of label/value rows in the viewer's language (D5):
- * the type's name and description, then its locations and actions, its fields
- * by their labels (an enum by the value's label, a boolean as yes/no, a number
- * in the viewer's format) and the RFC 9396 `identifier` and `datatypes`. No
+ * array string) as blocks of rows with a stable kind and typed values (D5):
+ * the type's name and description (the tenant's words, in the viewer's
+ * language), then its locations and actions, its fields by the tenant's labels
+ * (an enum by the value's label; a boolean and a number stay raw for the page
+ * to word and format) and the RFC 9396 `identifier` and `datatypes`. No
  * raw JSON is shown. `complete` is false when a detail cannot be fully
  * described (a type the tenant no longer stores, a key, action or enum value
  * its definition no longer has, an entry that is not a typed object): what is

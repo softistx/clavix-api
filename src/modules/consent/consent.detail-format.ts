@@ -31,7 +31,7 @@ const text = (value: string): ConsentValue => ({ kind: "text", text: value });
 function scalar(value: unknown): ConsentValue[] {
   if (typeof value === "boolean") return [{ kind: "boolean", boolean: value }];
   if (typeof value === "number") return [{ kind: "number", number: value }];
-  return typeof value === "string" ? [text(value)] : [];
+  return typeof value === "string" && value !== "" ? [text(value)] : [];
 }
 
 /** The values of a field's detail, one per item of a list, none when the shape does not fit. */

@@ -325,7 +325,7 @@ A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language`, then its base language, then the first stored
 translation, then janus's label; `src/shared/translations.ts`: per asked language the exact locale, then its base language, then a sibling region (`fr` finds `fr-CA`))., set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
-resolvers because janus-oauth's `scopeLabels` is one static map. No language is fixed anywhere in `src/`, with no exception: the consent rows carry a stable `kind` (`locations`, `actions`, `field`, `identifier`, `datatypes`) and typed values (`text`, `number`, `boolean`), and clavix-ui words the fixed rows and formats numbers and booleans from its own catalogue; only a tenant's own texts (field and enum labels, type names) are picked by `Accept-Language`. Passkeys are the next section.
+resolvers because janus-oauth's `scopeLabels` is one static map. No language is fixed in what the consent API returns, with no exception: the consent rows carry a stable `kind` (`locations`, `actions`, `field`, `identifier`, `datatypes`) and typed values (`text`, `number`, `boolean`), and clavix-ui words the fixed rows and formats numbers and booleans from its own catalogue; only a tenant's own texts (field and enum labels, type names) are picked by `Accept-Language`. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 

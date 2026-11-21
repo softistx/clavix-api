@@ -51,5 +51,6 @@ describe("valuesOf", () => {
     expect(valuesOf({}, { kind: "string" }, "en")).toEqual([]);
     expect(valuesOf({}, field, "en")).toEqual([]);
     expect(valuesOf([], field, "en")).toEqual([]);
+    expect(valuesOf("", { kind: "string" }, "en")).toEqual([]);
   });
 });
