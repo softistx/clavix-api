@@ -9,14 +9,14 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { resealAllTenants, resealExitCode } from "@/keys/reseal";
 import { settled } from "@/modules/auth/outbox";
+import { resealAllTenants, resealExitCode } from "@/modules/keys/reseal";
 import { emptySecretResealCounts } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { secondFactorKeysOf } from "@/users/second-factor-keys";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 const memory = mailer as MemoryMailer;
 const app = createApp();

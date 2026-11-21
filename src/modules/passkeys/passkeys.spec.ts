@@ -12,8 +12,8 @@ import { janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
-import { originOf, rpIdOf } from "@/users/rp";
-import { buildTenantJanus, SESSION_COOKIE } from "@/users/tenant-janus";
+import { originOf, rpIdOf } from "@/modules/users/rp";
+import { buildTenantJanus, SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 const app = createApp();
 const origin = {

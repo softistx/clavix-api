@@ -20,7 +20,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { socialProvidersOf } from "@/modules/sign-in-methods/social";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { socialOf } from "@/users/tenant-janus";
+import { socialOf } from "@/modules/users/tenant-janus";
 import { CONSOLE_PATH } from "../../identity";
 import { consoleSchema } from "../../schema";
 

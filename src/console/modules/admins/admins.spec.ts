@@ -10,7 +10,7 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { adminScope } from "@/invitations/scope";
+import { adminScope } from "@/modules/invitations/scope";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { verifiedCallers } from "~/console";

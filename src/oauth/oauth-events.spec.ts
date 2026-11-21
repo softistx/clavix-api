@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
-import { registerClient } from "@/clients/register-client";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { eventBus } from "@/config/events";
 import { oauthDb } from "@/config/oauth-db";
 import { oauthListener } from "@/events/oauth-listener";
+import { registerClient } from "@/modules/clients/register-client";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 
 // D14: the OAuth events of a tenant's issuer reach that tenant's sign-in log

@@ -1,8 +1,8 @@
 import type { Db } from "mongodb";
-import { CliInputError, type CliTenant } from "@/cli/errors";
-import { registerClient } from "@/clients/register-client";
+import { registerClient } from "@/modules/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import { CliInputError, type CliTenant } from "@/shared/cli";
 
 /**
  * Registers (or re-registers) a client of one tenant through the script's

@@ -17,7 +17,10 @@ import { janusIssuers } from "@/config/users";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
-import { SESSION_COOKIE, SIGN_IN_CODE_LIFESPAN } from "@/users/tenant-janus";
+import {
+  SESSION_COOKIE,
+  SIGN_IN_CODE_LIFESPAN,
+} from "@/modules/users/tenant-janus";
 import { afterAnswer, settled } from "./outbox";
 
 const memory = mailer as MemoryMailer;

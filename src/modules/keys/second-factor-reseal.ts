@@ -1,8 +1,8 @@
 import { janus, type SealingKey } from "@softistx/janus";
 import { createMongoStores } from "@softistx/janus-mongo";
 import type { Db } from "mongodb";
-import { SESSION, SESSION_COOKIE } from "@/users/tenant-janus";
-import { userSchema } from "@/users/user";
+import { SESSION, SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { userSchema } from "@/modules/users/user";
 
 /** What one tenant's pass over the TOTP secrets did (janus's `secondFactor.reseal`, summed over its batches). */
 export interface SecondFactorResealCounts {

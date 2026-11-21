@@ -1,5 +1,5 @@
-import { CliInputError, type CliTenant } from "@/cli/errors";
 import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import { CliInputError, type CliTenant } from "@/shared/cli";
 
 /**
  * The detail types a client will list (R3). `asked` replaces the list (`[]`

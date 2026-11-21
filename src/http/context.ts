@@ -15,10 +15,10 @@ import {
   verifyThrottle,
 } from "@/config/throttle";
 import type { ThrottleContext } from "@/http/throttle/context";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { isTenantless, tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
-import type { TenantJanus } from "@/users/tenant-janus";
 
 // The base: what every resolver reads, decorated or derived here.
 // The throttles of the anonymous operations (`ctx.signInThrottle`,

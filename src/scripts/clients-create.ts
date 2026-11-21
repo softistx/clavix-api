@@ -1,13 +1,13 @@
-import { CliInputError } from "@/cli/errors";
-import { parseClientArgs, USAGE } from "@/clients/cli";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
 import { clientDetailTypes } from "@/config/resources";
 import { tenantBySlug } from "@/config/tenancy";
+import { parseClientArgs, USAGE } from "@/modules/clients/cli";
+import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf } from "@/modules/tenants/identity";
+import { CliInputError } from "@/shared/cli";
 
 // Registers an OAuth client on a tenant, or updates it (idempotent on the
 // client id), until the console exists (M2). Prints the client as JSON; a

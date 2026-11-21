@@ -1,5 +1,5 @@
-import { userScope } from "@/invitations/scope";
-import { TenantUnavailableError } from "@/invitations/tenant-invitations";
+import { userScope } from "@/modules/invitations/scope";
+import { TenantUnavailableError } from "@/modules/invitations/tenant-invitations";
 import type { ConsoleUsers } from "../../context";
 import { gone, type Pool } from "./pool";
 

@@ -1,7 +1,7 @@
 import { JanusError } from "@softistx/janus";
 import type { JanusMail } from "@softistx/janus-mail";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { fail } from "@/shared/errors";
-import type { TenantJanus } from "@/users/tenant-janus";
 import { afterAnswer } from "./outbox";
 
 export interface SignInDeps {

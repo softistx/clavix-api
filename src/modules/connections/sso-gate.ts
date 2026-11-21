@@ -1,6 +1,6 @@
 import { connectionsService } from "@/config/connections";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { fail } from "@/shared/errors";
-import type { TenantJanus } from "@/users/tenant-janus";
 
 /** The address signs in through its company's identity provider only (D3). */
 export const ssoRequired = () =>

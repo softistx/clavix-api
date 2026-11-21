@@ -17,12 +17,12 @@ import { instrumentDatabase, telemetry } from "./config/telemetry";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
 import { createWebhookSecretsPrune, webhookDelivery } from "./config/webhooks";
-import { startKeyRotation } from "./keys";
 import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { startAuditRetention } from "./modules/audit/retention-worker";
 import { drain } from "./modules/auth/outbox";
 import { startGrantsRevoke } from "./modules/consent/revoke-job";
 import { startDomainRecheck } from "./modules/domains/recheck-worker";
+import { startKeyRotation } from "./modules/keys";
 import { startTenantPurge } from "./modules/tenants/purge-worker";
 import { startWebhookSecretsPrune } from "./modules/webhooks/secrets-prune-worker";
 

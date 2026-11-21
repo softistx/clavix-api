@@ -1,12 +1,15 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
-import type { CliTenant } from "@/cli/errors";
-import { clientIdOf, type registerClient } from "@/clients/register-client";
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
+import {
+  clientIdOf,
+  type registerClient,
+} from "@/modules/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
 import { partitionOf } from "@/modules/tenants/identity";
+import type { CliTenant } from "@/shared/cli";
 import { type AgentsReader, agentKindsOf, refuseAgent } from "./client-agents";
 import { deleteClientAndRules } from "./client-deletion";
 import {

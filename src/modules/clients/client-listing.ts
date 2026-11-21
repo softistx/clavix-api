@@ -4,8 +4,8 @@ import type {
   OAuthPage,
   OAuthPageOptions,
 } from "@softistx/janus-oauth";
-import { DEFAULT_GRANTS } from "@/clients/register-client";
 import type { AgentKind } from "@/modules/agents/agent-clients.model";
+import { DEFAULT_GRANTS } from "@/modules/clients/register-client";
 
 /**
  * How a client came to exist: `console` (registered by an admin or a script),

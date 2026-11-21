@@ -16,7 +16,6 @@ import type { MemoryMailer } from "@softistx/mail";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -25,10 +24,11 @@ import { openAppRedis } from "@/config/redis";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { VERIFY_EMAIL_PATH } from "@/mail/tenant-mail";
+import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import {
   confirmEmailVerification,

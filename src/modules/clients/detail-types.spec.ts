@@ -6,7 +6,6 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { scopeToTenant } from "@softistx/mongo";
-import { CliInputError } from "@/cli/errors";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog } from "@/config/resources";
@@ -16,6 +15,7 @@ import {
 } from "@/modules/resources/detail-types";
 import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { CliInputError } from "@/shared/cli";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 import { parseClientArgs } from "./cli";
 import { registerClient } from "./register-client";

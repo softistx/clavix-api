@@ -13,7 +13,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a
 // recorder that is down never fails the sign-in (D13).

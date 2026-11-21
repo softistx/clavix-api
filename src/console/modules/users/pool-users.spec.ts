@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TenantJanus } from "@/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { poolOf } from "./pool";
 import { poolUsers } from "./pool-users";
 

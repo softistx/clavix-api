@@ -1,6 +1,6 @@
 import { JanusError } from "@softistx/janus";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { fail } from "@/shared/errors";
-import type { TenantJanus } from "@/users/tenant-janus";
 import { afterAnswer } from "./outbox";
 import { createIfOpen, type SignInDeps } from "./sign-in";
 

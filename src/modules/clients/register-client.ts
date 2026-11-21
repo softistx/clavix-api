@@ -8,14 +8,14 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
+import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import { partitionOf } from "@/modules/tenants/identity";
 import {
   CliInputError,
   type CliTenant,
   SuspendedTenantError,
   UnknownTenantError,
-} from "@/cli/errors";
-import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
-import { partitionOf } from "@/modules/tenants/identity";
+} from "@/shared/cli";
 import { detailTypesOf } from "./detail-types";
 import { DEFAULT_GRANTS, usesRedirect } from "./grants";
 import { validate } from "./validate";

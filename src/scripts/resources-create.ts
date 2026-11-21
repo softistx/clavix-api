@@ -1,8 +1,8 @@
-import { CliInputError } from "@/cli/errors";
 import { mongo } from "@/config/db";
 import { redis } from "@/config/redis";
 import { registerStoredResource } from "@/config/resources";
 import { parseResourceArgs, USAGE } from "@/modules/resources/cli";
+import { CliInputError } from "@/shared/cli";
 
 // Registers a protected resource (an API audience and its scopes) on a tenant,
 // or updates it (idempotent on the URI), until the console exists (M2). Access

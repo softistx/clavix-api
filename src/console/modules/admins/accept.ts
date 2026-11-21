@@ -1,5 +1,5 @@
 import { InvitationInvalidError } from "@softistx/janus";
-import { adminTenantOf, isOperatorScope } from "@/invitations/scope";
+import { adminTenantOf, isOperatorScope } from "@/modules/invitations/scope";
 import type { Access } from "../../access";
 import type { Exclusive } from "../../exclusive";
 import { isRole } from "../../model";

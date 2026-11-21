@@ -3,7 +3,6 @@ import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import type { Db } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { createAccess } from "@/console/access";
 import {
   CONSOLE_CLIENT_ID,
@@ -11,6 +10,7 @@ import {
   consoleAudience,
   consoleRedirectUri,
 } from "@/console/identity";
+import { registerClient } from "@/modules/clients/register-client";
 import { registerResource } from "@/modules/resources/register-resource";
 import { resources } from "@/modules/resources/resources.model";
 import { scopes } from "@/modules/resources/scopes.model";

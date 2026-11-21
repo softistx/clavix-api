@@ -1,7 +1,7 @@
 import {
   type ResendRefusal,
   ResendRefusedError,
-} from "@/invitations/tenant-invitations";
+} from "@/modules/invitations/tenant-invitations";
 import { fail } from "@/shared/errors";
 
 const RESEND_STATUS = {
