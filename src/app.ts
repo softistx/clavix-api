@@ -39,7 +39,7 @@ import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 export const BODY_LIMIT = 100 * 1024;
 
 /** The highest cost of a console operation (graxia `limits.cost.max`; its default is 5 000). */
-export const CONSOLE_MAX_COST = 200_000;
+export const CONSOLE_MAX_COST = 50_000;
 
 /** The ports `createApp` requires: bound in `src/config/app-ports.ts`. */
 export interface AppPorts extends ThrottleContext {

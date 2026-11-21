@@ -923,7 +923,7 @@ A type deleted by a race with the save stays on the list but is no longer served
 `invalid_authorization_details`.
 
 **The consent API shows them in words** (R4). `oauthRequest.details` and `oauthDeviceRequest.details` give one block per
-detail, `{ type, title, description, rows: [{ label, value }] }`, from the tenant's texts in the viewer's language
+detail, `{ type, title, description, rows: [{ kind, key, label, values: [{ kind, text, number, boolean }] }] }`, from the tenant's texts in the viewer's language
 (`Accept-Language`, then its base language, then the first stored translation; see "Consent"). Approval stays all or nothing:
 `approveOAuthRequest` and `approveOAuthDeviceRequest` are called without an `authorizationDetails` selection, so the user allows every
 detail or denies. **Approval is refused when a detail cannot be fully described** (`detailsComplete`): `oauthRequest.detailsComplete` and
@@ -1141,8 +1141,15 @@ query Consent($id: ID!) {
       title
       description
       rows {
-        label
-        value
+        kind # locations | actions | field | identifier | datatypes: word it from your own catalogue
+        key # the field's key, for kind "field"
+        label # the tenant's field label, for kind "field"
+        values {
+          kind # text | number | boolean: exactly that member is set
+          text
+          number
+          boolean
+        }
       }
     }
   }
@@ -1181,8 +1188,8 @@ code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed 
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
 scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403) or `UNMET_AUTHENTICATION_REQUIREMENTS` (403, `extensions.missing`; see "Authentication level and step-up").
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
-  are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
-  enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
+  are the type's name and description in the viewer's language, `rows` its locations, actions, fields, `identifier` and `datatypes`: a stable `kind` (the page words the fixed ones from its own
+  catalogue) and typed `values`; an enum value is the tenant's label, a boolean and a number stay raw for the page to word and format), `[]` when it asked for none. Never raw JSON: a field the
   type does not define is not shown, and a type the tenant deleted shows its own name. `oauthDeviceRequest { details }` is the same for the
   device page. The tenant's texts are read once per request. Approval is all or nothing: show every block and call the approve mutation
   without `authorizationDetails`. `detailsComplete: Boolean!` (also on `oauthDeviceRequest`) is false when a detail cannot be fully described

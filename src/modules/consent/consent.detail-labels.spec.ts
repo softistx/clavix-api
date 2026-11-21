@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ConsentValue } from "./consent.detail-format";
 import {
   type DetailTexts,
   detailsOf,
@@ -52,31 +53,54 @@ describe("detailsOf", () => {
         title: "Export",
         description: "Export your data",
         rows: [
-          { label: "Format", value: "Tableur" },
-          { label: "Tags", value: "a, b" },
-          { label: "Identifier", value: "acct-1" },
-          { label: "Data", value: "x, y" },
+          {
+            kind: "field",
+            key: "format",
+            label: "Format",
+            values: [{ kind: "text", text: "Tableur" }],
+          },
+          {
+            kind: "field",
+            key: "tags",
+            label: "Tags",
+            values: [
+              { kind: "text", text: "a" },
+              { kind: "text", text: "b" },
+            ],
+          },
+          {
+            kind: "identifier",
+            key: null,
+            label: null,
+            values: [{ kind: "text", text: "acct-1" }],
+          },
+          {
+            kind: "datatypes",
+            key: null,
+            label: null,
+            values: [
+              { kind: "text", text: "x" },
+              { kind: "text", text: "y" },
+            ],
+          },
         ],
       },
     ]);
-    expect(detailsOf(json, texts, "fr")[0]?.rows[3]).toEqual({
-      label: "Données",
-      value: "x, y",
-    });
   });
 
-  test("a viewer's other languages: the base language, a language none covers", () => {
+  test("the fixed rows carry codes, never words, whatever the language", () => {
     const json = JSON.stringify([
       { type: "export", identifier: "a", datatypes: ["x"] },
     ]);
-    const labels = (language: string) =>
-      detailsOf(json, texts, language)[0]?.rows.map((row) => row.label);
-    expect(labels("fr-CA")).toEqual(["Identifiant", "Données"]);
-    expect(labels("de")).toEqual(["Identifier", "Data"]);
+    const kinds = (language: string | null) =>
+      detailsOf(json, texts, language)[0]?.rows.map((row) => row.kind);
+    expect(kinds("fr-CA")).toEqual(["identifier", "datatypes"]);
+    expect(kinds("de")).toEqual(["identifier", "datatypes"]);
     expect(detailsOf(json, texts, null)[0]?.title).toBe("Export");
+    expect(detailsOf(json, texts, "fr")[0]?.rows[0]?.label).toBeNull();
   });
 
-  test("booleans read yes or no, numbers use the viewer's format", () => {
+  test("booleans and numbers stay raw", () => {
     const typed: DetailTexts = [
       {
         type: "pay",
@@ -90,9 +114,13 @@ describe("detailsOf", () => {
     ];
     const json = JSON.stringify([{ type: "pay", ok: true, sum: 1234.5 }]);
     const values = (language: string) =>
-      detailsOf(json, typed, language)[0]?.rows.map((row) => row.value);
-    expect(values("en")).toEqual(["Yes", "1,234.5"]);
-    expect(values("fr")).toEqual(["Oui", expect.stringMatching(/^1.234,5$/)]);
+      detailsOf(json, typed, language)[0]?.rows.map((row) => row.values);
+    const raw: ConsentValue[][] = [
+      [{ kind: "boolean", boolean: true }],
+      [{ kind: "number", number: 1234.5 }],
+    ];
+    expect(values("en")).toEqual(raw);
+    expect(values("fr")).toEqual(raw);
   });
 
   test("a field with nothing to show has no row", () => {
@@ -107,7 +135,14 @@ describe("detailsOf", () => {
         type: "gone",
         title: "gone",
         description: "",
-        rows: [{ label: "Actions", value: "go" }],
+        rows: [
+          {
+            kind: "actions",
+            key: null,
+            label: null,
+            values: [{ kind: "text", text: "go" }],
+          },
+        ],
       },
     ]);
   });

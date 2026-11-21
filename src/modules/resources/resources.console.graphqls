@@ -27,6 +27,7 @@ type Scope {
   "The OAuth scope token. Unique in its resource (or among the standard scopes); never changes."
   name: String!
   description: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   "The resource it belongs to; `null` for a standard OpenID Connect scope."
   resourceId: ID
   "The claims it opens."
@@ -83,6 +84,7 @@ enum DetailFieldKind {
 type DetailValue {
   value: String!
   label: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
 }
 
 "One field of a detail type."
@@ -90,6 +92,7 @@ type DetailField {
   key: String!
   kind: DetailFieldKind!
   label: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   required: Boolean!
   "Numbers: the lowest value."
   min: Float
@@ -111,7 +114,9 @@ type DetailType {
   resourceId: ID!
   type: String!
   name: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   description: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   fields: [DetailField!]!
   "The RFC 9396 `actions` the type allows; empty when it takes none."
   actions: [DetailValue!]!

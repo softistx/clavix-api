@@ -1,7 +1,47 @@
-"One line of an authorization detail: a label and its value, in the viewer's language."
+"""
+Which line of a detail block a row is. The page words the fixed ones from its own catalogue; the API sends no
+language of its own for them.
+"""
+enum ConsentRowKind {
+  "The request's resource (RFC 9396 `locations`)."
+  locations
+  "The actions the detail asks for; each value is the type's label for it."
+  actions
+  "A field the tenant's type defines: `key` and `label` are its own."
+  field
+  "RFC 9396 `identifier`."
+  identifier
+  "RFC 9396 `datatypes`."
+  datatypes
+}
+
+"Which member of a `ConsentDetailValue` is set."
+enum ConsentValueKind {
+  text
+  number
+  boolean
+}
+
+"""
+One value of a row, typed: `text` for a string (a tenant's own label in the viewer's language for an enum or an
+action), `number` for a number and `boolean` for a boolean. Exactly the member `kind` names is set. The page formats
+numbers and words booleans (yes / no) itself.
+"""
+type ConsentDetailValue {
+  kind: ConsentValueKind!
+  text: String
+  number: Float
+  boolean: Boolean
+}
+
+"One line of an authorization detail: a stable `kind`, and its typed values (one per item of a list)."
 type ConsentDetailRow {
-  label: String!
-  value: String!
+  kind: ConsentRowKind!
+  "The field's key when `kind` is `field`, `null` otherwise."
+  key: String
+  "The field's label in the viewer's language (`Accept-Language`, the key when the tenant wrote none); `null` unless `kind` is `field`."
+  label: String
+  values: [ConsentDetailValue!]!
 }
 
 """

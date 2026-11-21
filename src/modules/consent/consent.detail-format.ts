@@ -1,9 +1,5 @@
 import type { FieldKind } from "@/modules/resources";
-import {
-  acceptedLocales,
-  pickTranslation,
-  type Translation,
-} from "@/shared/translations";
+import { pickTranslation, type Translation } from "@/shared/translations";
 
 type Text = readonly Translation[];
 
@@ -13,43 +9,15 @@ export interface FormattedField {
   values?: readonly { value: string; label: Text }[] | undefined;
 }
 
-// The viewer's languages for a number; English when none is usable, never the host's.
-const numberLocales = (acceptLanguage: string | null) => {
-  const accepted = acceptedLocales(acceptLanguage);
-  return accepted.length > 0 ? accepted : ["en"];
-};
-
-// The page's own words, with the first language the fallback of a viewer
-// whose languages none of them covers.
-export const COMMON: Record<
-  "actions" | "identifier" | "datatypes" | "locations" | "yes" | "no",
-  Text
-> = {
-  actions: [
-    { locale: "en", text: "Actions" },
-    { locale: "fr", text: "Actions" },
-  ],
-  locations: [
-    { locale: "en", text: "Location" },
-    { locale: "fr", text: "Emplacement" },
-  ],
-  identifier: [
-    { locale: "en", text: "Identifier" },
-    { locale: "fr", text: "Identifiant" },
-  ],
-  datatypes: [
-    { locale: "en", text: "Data" },
-    { locale: "fr", text: "Données" },
-  ],
-  yes: [
-    { locale: "en", text: "Yes" },
-    { locale: "fr", text: "Oui" },
-  ],
-  no: [
-    { locale: "en", text: "No" },
-    { locale: "fr", text: "Non" },
-  ],
-};
+/**
+ * One value of a row, typed and never worded: a text (a tenant's own words
+ * in the viewer's language, or a raw string), a number or a boolean. The page
+ * words and formats numbers and booleans itself, from its own catalogue.
+ */
+export type ConsentValue =
+  | { kind: "text"; text: string }
+  | { kind: "number"; number: number }
+  | { kind: "boolean"; boolean: boolean };
 
 // The viewer's language (see `pickTranslation`), else `fallback`.
 export const pick = (
@@ -58,37 +26,30 @@ export const pick = (
   fallback = "",
 ) => pickTranslation(text ?? [], acceptLanguage) ?? fallback;
 
-function scalar(value: unknown, acceptLanguage: string | null): string {
-  if (typeof value === "boolean") {
-    return pick(value ? COMMON.yes : COMMON.no, acceptLanguage);
-  }
-  if (typeof value === "number") {
-    return new Intl.NumberFormat(numberLocales(acceptLanguage)).format(value);
-  }
-  return typeof value === "string" ? value : "";
+const text = (value: string): ConsentValue => ({ kind: "text", text: value });
+
+function scalar(value: unknown): ConsentValue[] {
+  if (typeof value === "boolean") return [{ kind: "boolean", boolean: value }];
+  if (typeof value === "number") return [{ kind: "number", number: value }];
+  return typeof value === "string" ? [text(value)] : [];
 }
 
-export function formatted(
+/** The values of a field's detail, one per item of a list, none when the shape does not fit. */
+export function valuesOf(
   value: unknown,
   field: FormattedField,
   acceptLanguage: string | null,
-): string {
+): ConsentValue[] {
   const labelOf = (raw: string) =>
-    pick(
-      field.values?.find((v) => v.value === raw)?.label,
-      acceptLanguage,
-      raw,
+    text(
+      pick(
+        field.values?.find((v) => v.value === raw)?.label,
+        acceptLanguage,
+        raw,
+      ),
     );
-  if (Array.isArray(value)) {
-    return value
-      .map((item) =>
-        field.kind === "enum"
-          ? labelOf(String(item))
-          : scalar(item, acceptLanguage),
-      )
-      .join(", ");
-  }
-  return field.kind === "enum" && typeof value === "string"
-    ? labelOf(value)
-    : scalar(value, acceptLanguage);
+  const one = (item: unknown): ConsentValue[] =>
+    field.kind === "enum" ? [labelOf(String(item))] : scalar(item);
+  if (Array.isArray(value)) return value.flatMap(one);
+  return field.kind === "enum" && typeof value !== "string" ? [] : one(value);
 }

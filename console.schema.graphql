@@ -780,7 +780,7 @@ scalar DateTime @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc3339")
 type DetailField {
   key: String!
   kind: DetailFieldKind!
-  label: [Translation!]!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   """Numbers: the highest value. A string list: the most items."""
   max: Float
   """Strings (and each item of a list): the longest text."""
@@ -829,10 +829,10 @@ type DetailType {
   """The RFC 9396 `actions` the type allows; empty when it takes none."""
   actions: [DetailValue!]!
   createdAt: DateTime!
-  description: [Translation!]!
+  description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   fields: [DetailField!]!
   id: ID!
-  name: [Translation!]!
+  name: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   resourceId: ID!
   type: String!
   updatedAt: DateTime!
@@ -842,7 +842,7 @@ type DetailType {
 A value of an `enum` field or an action, with the words the consent page shows.
 """
 type DetailValue {
-  label: [Translation!]!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   value: String!
 }
 
@@ -1842,7 +1842,7 @@ language, then the first translation; the name when there is none).
 type Scope {
   """The claims it opens."""
   claims: [String!]!
-  description: [Translation!]!
+  description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   id: ID!
   """
   The OAuth scope token. Unique in its resource (or among the standard scopes); never changes.

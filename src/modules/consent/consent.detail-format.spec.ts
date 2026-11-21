@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COMMON, formatted, pick } from "./consent.detail-format";
+import { pick, valuesOf } from "./consent.detail-format";
 
 const field = {
   kind: "enum",
@@ -14,28 +14,42 @@ const field = {
   ],
 } as const;
 
+const yes = [
+  { locale: "en", text: "Yes" },
+  { locale: "fr", text: "Oui" },
+];
+
 describe("pick", () => {
   test("the viewer's language, else the first translation, else the fallback", () => {
-    expect(pick(COMMON.yes, "fr-CA")).toBe("Oui");
-    expect(pick(COMMON.yes, "de")).toBe("Yes");
+    expect(pick(yes, "fr-CA")).toBe("Oui");
+    expect(pick(yes, "de")).toBe("Yes");
     expect(pick(undefined, null, "raw")).toBe("raw");
   });
 });
 
-describe("formatted", () => {
+describe("valuesOf", () => {
   test("an enum value takes its label in the viewer's language", () => {
-    expect(formatted("eur", field, "fr")).toBe("Euro (€)");
-    expect(formatted(["eur", "usd"], field, "en")).toBe("Euro, usd");
+    expect(valuesOf("eur", field, "fr")).toEqual([
+      { kind: "text", text: "Euro (€)" },
+    ]);
+    expect(valuesOf(["eur", "usd"], field, "en")).toEqual([
+      { kind: "text", text: "Euro" },
+      { kind: "text", text: "usd" },
+    ]);
   });
 
-  test("a boolean is yes or no in the viewer's language", () => {
-    expect(formatted(false, { kind: "boolean" }, "fr")).toBe("Non");
+  test("a boolean and a number stay raw, with no word and no format", () => {
+    expect(valuesOf(false, { kind: "boolean" }, "fr")).toEqual([
+      { kind: "boolean", boolean: false },
+    ]);
+    expect(valuesOf(1500.5, { kind: "number" }, "fr")).toEqual([
+      { kind: "number", number: 1500.5 },
+    ]);
   });
 
-  test("a number follows the viewer's language, English without one", () => {
-    const plain = { kind: "number" } as const;
-    expect(formatted(1500.5, plain, "en-US")).toBe("1,500.5");
-    expect(formatted(1500.5, plain, null)).toBe("1,500.5");
-    expect(formatted(1500.5, plain, "*")).toBe("1,500.5");
+  test("a value of a shape the kind does not allow has none", () => {
+    expect(valuesOf({}, { kind: "string" }, "en")).toEqual([]);
+    expect(valuesOf({}, field, "en")).toEqual([]);
+    expect(valuesOf([], field, "en")).toEqual([]);
   });
 });

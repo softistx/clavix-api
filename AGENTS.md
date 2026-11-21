@@ -325,7 +325,7 @@ A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language`, then its base language, then the first stored
 translation, then janus's label; `src/shared/translations.ts`: per asked language the exact locale, then its base language, then a sibling region (`fr` finds `fr-CA`))., set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
-resolvers because janus-oauth's `scopeLabels` is one static map. No language is fixed for a tenant's texts; the one exception is the consent page's own row words (Actions, Location, Identifier, Data, Yes, No), kept in `en` and `fr` in `consent.detail-format.ts` (English first, the fallback) until clavix-ui words them from its catalogue. Passkeys are the next section.
+resolvers because janus-oauth's `scopeLabels` is one static map. No language is fixed anywhere in `src/`, with no exception: the consent rows carry a stable `kind` (`locations`, `actions`, `field`, `identifier`, `datatypes`) and typed values (`text`, `number`, `boolean`), and clavix-ui words the fixed rows and formats numbers and booleans from its own catalogue; only a tenant's own texts (field and enum labels, type names) are picked by `Accept-Language`. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 
@@ -935,7 +935,7 @@ An error's `extensions.http.status` and `headers` (a throttle's `Retry-After`) a
 itself (`errorHttp`, on by default since 0.10: highest status wins, `http` is stripped from the body, `spec: true` ignores
 the status under `application/json`); no plugin of this API carries it. `useWithoutQuotedValues`
 (`src/http/coercion.ts`) scrubs the coercion errors in `onResultChunk` (streams) and `onResponse` (plain JSON). The console is
-`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 200 000 in `app.ts`: the UI's nested reads of stored lists (translation lists included) cost more than graxia's default 5 000, and a refused document is a 200 with no `data`; `src/modules/resources/resources.cost.console.spec.ts`); `useInviteBudget` is
+`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 50 000 in `app.ts`: the UI's nested reads of stored lists cost more than graxia's default 5 000; a translation list holds up to 30 entries but is costed as 3 on purpose, with `@listSize(assumedSize: 3, requireOneSlicingArgument: false)` on each output translation list in `resources.console.graphqls`, so the nested Applications read stays under the limit, and a refused document is a 200 with no `data`; `src/modules/resources/resources.cost.console.spec.ts`); `useInviteBudget` is
 `fieldRateLimit`, whose 429 and `Retry-After` are graxia's. A client that sends a GET or a non-JSON POST sends
 `x-graphql-csrf: 1`. The JSON plugins match `application/json` and `application/graphql-response+json` (parameters
 ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. Unexpected resolver errors and janus 5xx errors go to the app's telemetry

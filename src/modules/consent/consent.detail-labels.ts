@@ -1,7 +1,7 @@
 import type { FieldKind } from "@/modules/resources";
 import type { Translation } from "@/shared/translations";
 import { isRecord } from "@/shared/values";
-import { COMMON, formatted, pick } from "./consent.detail-format";
+import { type ConsentValue, pick, valuesOf } from "./consent.detail-format";
 
 type Text = readonly Translation[];
 
@@ -25,10 +25,16 @@ export type DetailTexts = readonly DetailText[];
 /** Reads the detail type texts of the tenant the request's host names (none for an unknown host). */
 export type DetailTextsFor = (request: Request) => Promise<DetailTexts>;
 
-/** One line of a detail block: a label and the value in words. */
+/**
+ * One line of a detail block. `kind` is a stable code the page words from its
+ * own catalogue (locations, actions, identifier, datatypes); a `field` row
+ * carries its `key` and the tenant's `label`. Values are typed, never worded.
+ */
 export interface ConsentRow {
-  label: string;
-  value: string;
+  kind: "locations" | "actions" | "field" | "identifier" | "datatypes";
+  key: string | null;
+  label: string | null;
+  values: ConsentValue[];
 }
 
 /** One authorization detail of a pending request, in words (D5): never the raw JSON. */
@@ -91,53 +97,49 @@ function describe(
 ): ConsentDetail {
   const type = String(detail["type"]);
   const rows: ConsentRow[] = [];
-  const locations = detail["locations"];
-  if (Array.isArray(locations) && locations.length > 0) {
-    rows.push({
-      label: pick(COMMON.locations, acceptLanguage),
-      value: locations.map(String).join(", "),
-    });
-  }
+  const row = (
+    kind: ConsentRow["kind"],
+    values: ConsentValue[],
+    key: string | null = null,
+    label: string | null = null,
+  ) => {
+    // An empty list, or a value of a shape the kind does not allow, has no row.
+    if (values.length > 0) rows.push({ kind, key, label, values });
+  };
+  const strings = (items: unknown): ConsentValue[] =>
+    Array.isArray(items)
+      ? items.map((item) => ({ kind: "text", text: String(item) }))
+      : [];
+  row("locations", strings(detail["locations"]));
   const actions = detail["actions"];
-  if (Array.isArray(actions) && actions.length > 0) {
-    rows.push({
-      label: pick(COMMON.actions, acceptLanguage),
-      value: actions
-        .map((action) =>
-          pick(
+  row(
+    "actions",
+    Array.isArray(actions)
+      ? actions.map((action) => ({
+          kind: "text",
+          text: pick(
             text?.actions?.find((a) => a.value === action)?.label,
             acceptLanguage,
             String(action),
           ),
-        )
-        .join(", "),
-    });
-  }
+        }))
+      : [],
+  );
   for (const field of text?.fields ?? []) {
     const value = detail[field.key];
     if (value === undefined || value === null) continue;
-    const shown = formatted(value, field, acceptLanguage);
-    // An empty list, or a value of a shape the kind does not allow, has no row.
-    if (shown === "") continue;
-    rows.push({
-      label: pick(field.label, acceptLanguage, field.key),
-      value: shown,
-    });
+    row(
+      "field",
+      valuesOf(value, field, acceptLanguage),
+      field.key,
+      pick(field.label, acceptLanguage, field.key),
+    );
   }
   const identifier = detail["identifier"];
   if (typeof identifier === "string") {
-    rows.push({
-      label: pick(COMMON.identifier, acceptLanguage),
-      value: identifier,
-    });
+    row("identifier", [{ kind: "text", text: identifier }]);
   }
-  const datatypes = detail["datatypes"];
-  if (Array.isArray(datatypes) && datatypes.length > 0) {
-    rows.push({
-      label: pick(COMMON.datatypes, acceptLanguage),
-      value: datatypes.map(String).join(", "),
-    });
-  }
+  row("datatypes", strings(detail["datatypes"]));
   return {
     type,
     title: pick(text?.name, acceptLanguage, type),

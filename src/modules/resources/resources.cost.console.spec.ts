@@ -8,7 +8,7 @@ import { jsonOf } from "~/json";
 
 // The console UI's Applications read (clavix-ui `app/api/resources.server.ts`): every resource with
 // its scopes and detail types, nested four lists deep. With graxia's default cost limit (5 000, ten
-// items assumed per list) it costs 24 530 (about 135 000 with translation lists) and was refused before any resolver ran.
+// items assumed per list) it costs 24 530 and was refused before any resolver ran.
 const TEXT = "{ locale text }";
 const VALUE = `{ value label ${TEXT} }`;
 const DETAIL_TYPE = `id resourceId type name ${TEXT} description ${TEXT} createdAt updatedAt

@@ -106,11 +106,30 @@ const redirected = z.object({ redirectTo: z.string() });
 const withDetails = z.object({ details: z.array(z.unknown()) });
 const withComplete = z.object({ detailsComplete: z.boolean() });
 
-const DETAILS = `details { type title description rows { label value } }`;
+const DETAILS = `details { type title description rows { kind key label values { kind text number boolean } } }`;
 const REQUEST = `query($id: ID!) { oauthRequest(id: $id) { authorizationDetails ${DETAILS} } }`;
 const APPROVE = `mutation($id: ID!) { approveOAuthRequest(id: $id) { redirectTo } }`;
 const DEVICE = `query($c: String!) { oauthDeviceRequest(userCode: $c) { authorizationDetails ${DETAILS} } }`;
 const APPROVE_DEVICE = `mutation($c: String!) { approveOAuthDeviceRequest(userCode: $c) }`;
+
+// A row as the API sends it: a stable kind and typed values, no word of its own.
+const value = (v: { text?: string; number?: number; boolean?: boolean }) => ({
+  kind:
+    v.number !== undefined
+      ? "number"
+      : v.boolean !== undefined
+        ? "boolean"
+        : "text",
+  text: null,
+  number: null,
+  boolean: null,
+  ...v,
+});
+const row = (
+  kind: string,
+  values: ReturnType<typeof value>[],
+  field: { key: string; label: string } | null = null,
+) => ({ kind, key: field?.key ?? null, label: field?.label ?? null, values });
 
 const transfer = (amount: number, extra: Record<string, unknown> = {}) => ({
   type: "payment",
@@ -339,21 +358,43 @@ describe("authorization details through consent", () => {
       expect(view.errors).toBeUndefined();
       return fieldOf(view, "oauthRequest", withDetails).details;
     };
+    const rows = (words: {
+      initiate: string;
+      amount: string;
+      currency: string;
+      urgent: string;
+      memo: string;
+    }) => [
+      row("actions", [value({ text: words.initiate })]),
+      row("field", [value({ number: 1500.5 })], {
+        key: "amount",
+        label: words.amount,
+      }),
+      row("field", [value({ text: "Euro" })], {
+        key: "currency",
+        label: words.currency,
+      }),
+      row("field", [value({ boolean: true })], {
+        key: "urgent",
+        label: words.urgent,
+      }),
+      row("field", [value({ text: "Rent" })], {
+        key: "memo",
+        label: words.memo,
+      }),
+    ];
     expect(await detailsIn("fr-CA,en;q=0.8")).toEqual([
       {
         type: "payment",
         title: "Paiement",
         description: "Initier des virements",
-        rows: [
-          { label: "Actions", value: "Initier" },
-          {
-            label: "Montant",
-            value: new Intl.NumberFormat("fr-CA").format(1500.5),
-          },
-          { label: "Devise", value: "Euro" },
-          { label: "Urgent", value: "Oui" },
-          { label: "Motif", value: "Rent" },
-        ],
+        rows: rows({
+          initiate: "Initier",
+          amount: "Montant",
+          currency: "Devise",
+          urgent: "Urgent",
+          memo: "Motif",
+        }),
       },
     ]);
     expect(await detailsIn("en-US")).toEqual([
@@ -361,13 +402,13 @@ describe("authorization details through consent", () => {
         type: "payment",
         title: "Payment",
         description: "Start transfers",
-        rows: [
-          { label: "Actions", value: "Initiate" },
-          { label: "Amount", value: "1,500.5" },
-          { label: "Currency", value: "Euro" },
-          { label: "Urgent", value: "Yes" },
-          { label: "Memo", value: "Rent" },
-        ],
+        rows: rows({
+          initiate: "Initiate",
+          amount: "Amount",
+          currency: "Currency",
+          urgent: "Urgent",
+          memo: "Memo",
+        }),
       },
     ]);
   });
@@ -410,7 +451,12 @@ describe("authorization details through consent", () => {
         type: "ledger",
         title: "Ledger",
         description: "",
-        rows: [{ label: "Account", value: "A-1" }],
+        rows: [
+          row("field", [value({ text: "A-1" })], {
+            key: "account",
+            label: "Account",
+          }),
+        ],
       },
     ]);
   });
