@@ -70,9 +70,9 @@ export const endpointShape = (
   disabledReason:
     doc.disabledReason === null
       ? null
-      : ((doc.disabledReason === "givenUp" ? "GIVEN_UP" : "MANUAL") as
-          | "GIVEN_UP"
-          | "MANUAL"),
+      : doc.disabledReason === "givenUp"
+        ? "GIVEN_UP"
+        : "MANUAL",
   consecutiveGiveUps: doc.consecutiveGiveUps,
   secrets: doc.secrets.map(({ createdAt, expiresAt }) => ({
     createdAt,

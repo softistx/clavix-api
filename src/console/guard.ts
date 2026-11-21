@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { requireVerifiedEmail } from "@/modules/users";
 import { fail } from "@/shared/errors";
-import type { ConsoleContext } from "./context";
+import { type ConsoleContext, consoleContextOf } from "./context";
 import type { Permission } from "./model";
 
 /**
@@ -166,7 +166,7 @@ export function guardSchema(
       return {
         ...config,
         resolve: async (source, args, ctx, info) => {
-          await check(args, ctx as ConsoleContext);
+          await check(args, consoleContextOf(ctx));
           return resolve === undefined
             ? source?.[fieldName]
             : resolve(source, args, ctx, info);

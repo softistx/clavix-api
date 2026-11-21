@@ -40,8 +40,19 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   await syncMongoInvitationsPartitioned(oauthDb);
   // The seed, once for the run (`clearDatabase` keeps what it wrote).
   const { migrate } = await import("@softistx/mongo/migrations");
-  const { migrations } = await import("@/migrations");
-  await migrate(mongo.db, migrations);
+  const { env } = await import("@/config/env");
+  const { migrationsOf } = await import("@/migrations");
+  await migrate(
+    mongo.db,
+    migrationsOf({
+      origin: {
+        scheme: env.CLAVIX_PUBLIC_SCHEME,
+        domain: env.CLAVIX_DOMAIN,
+        port: env.CLAVIX_PUBLIC_PORT,
+      },
+      announce: () => undefined,
+    }),
+  );
   // The `console-par-dpop` migration makes the `clavix` tenant require PAR and
   // DPoP, as production does. The specs mint plain tokens for it: relax it for
   // the run (the specs of the requirement set it themselves, then restore it).

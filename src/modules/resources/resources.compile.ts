@@ -1,10 +1,16 @@
 import { z } from "zod";
+import { isNonEmpty } from "@/shared/values";
 import {
   DETAIL_LIMITS,
   type DetailFieldDefinition,
   type DetailTypeDefinition,
   detailTypeProblem,
 } from "./resources.compile-rules";
+
+/** One of the listed values; no list, no value (a definition the rules refuse before it compiles). */
+export function oneOf(values: readonly string[]): z.ZodType<string> {
+  return isNonEmpty(values) ? z.enum(values) : z.never();
+}
 
 function fieldSchema(field: DetailFieldDefinition): z.ZodType {
   switch (field.kind) {
@@ -20,9 +26,7 @@ function fieldSchema(field: DetailFieldDefinition): z.ZodType {
     case "boolean":
       return z.boolean();
     case "enum":
-      return z.enum(
-        (field.values ?? []).map((v) => v.value) as [string, ...string[]],
-      );
+      return oneOf((field.values ?? []).map((v) => v.value));
     case "string[]":
       return z
         .array(
@@ -75,9 +79,7 @@ export function compileDetailType(definition: DetailTypeDefinition): z.ZodType {
   };
   if (definition.actions !== undefined && definition.actions.length > 0) {
     shape["actions"] = z
-      .array(
-        z.enum(definition.actions.map((a) => a.value) as [string, ...string[]]),
-      )
+      .array(oneOf(definition.actions.map((a) => a.value)))
       .min(1)
       .max(definition.actions.length)
       .optional();

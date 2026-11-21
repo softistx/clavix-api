@@ -1,5 +1,6 @@
 import type { SigningKeyStore } from "@softistx/janus-oauth";
 import { emptySecretResealCounts } from "@/modules/sign-in-methods";
+import { isNonEmpty } from "@/shared/values";
 import type { KeyGenerations } from "./keys.generations";
 import {
   type ResealCounts,
@@ -9,8 +10,12 @@ import {
 } from "./keys.types";
 
 /** The key, or the keyring, as the signing-key store takes it: a lone key as is, a list as a non-empty tuple. */
-export const encryptionKeyOf = (key: Uint8Array | readonly Uint8Array[]) =>
-  key instanceof Uint8Array ? key : ([...key] as [Uint8Array, ...Uint8Array[]]);
+export const encryptionKeyOf = (key: Uint8Array | readonly Uint8Array[]) => {
+  if (key instanceof Uint8Array) return key;
+  const keys = [...key];
+  if (!isNonEmpty(keys)) throw new TypeError("The keyring holds no key");
+  return keys;
+};
 
 /** The store with every write that changes the published set counted. */
 export function observed(

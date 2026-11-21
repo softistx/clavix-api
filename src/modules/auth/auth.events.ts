@@ -2,6 +2,7 @@ import { JanusError } from "@softistx/janus";
 import { eventBus } from "@/config/events";
 import type { Context } from "@/http/context";
 import type { AuthMethod } from "@/modules/audit";
+import { extensionCodeOf } from "@/shared/errors";
 
 // One id per HTTP request, ours: a client's `x-request-id` is never believed.
 const requestIds = new WeakMap<Request, string>();
@@ -17,8 +18,7 @@ const requestIdOf = (request: Request) => {
 /** A short code for why a sign-in was refused: janus's error code, else `error`. */
 export const reasonOf = (error: unknown): string => {
   if (error instanceof JanusError) return error.code;
-  const code = (error as { extensions?: { code?: unknown } } | null)?.extensions
-    ?.code;
+  const code = extensionCodeOf(error);
   return typeof code === "string" ? code : "error";
 };
 

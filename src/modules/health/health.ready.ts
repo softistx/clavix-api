@@ -4,7 +4,7 @@ export type ReadyCheck = () => Promise<boolean | undefined>;
 export interface ReadyDeps {
   /** A Mongo `ping`. */
   mongo: ReadyCheck;
-  /** A Redis `PING`; `undefined` when the app has no Redis (development only). */
+  /** A Redis `PING`; `null` when the app has no Redis (development only). */
   redis: ReadyCheck | null;
   /** Longest wait per dependency, in ms. */
   timeoutMs?: number;
@@ -44,7 +44,7 @@ export async function readiness(deps: ReadyDeps): Promise<ReadyReport> {
     ...(deps.redis === null ? [] : [run(deps.redis, timeoutMs)]),
   ]);
   const checks = Object.fromEntries(
-    names.map((name, i) => [name, results[i] as "ok" | "down"]),
+    names.map((name, i) => [name, results[i] ?? "down"]),
   );
   return {
     status: results.every((r) => r === "ok") ? "ok" : "unavailable",

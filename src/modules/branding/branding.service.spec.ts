@@ -72,7 +72,14 @@ const users = {
 
 const ctxFor = (userId: string): ConsoleContext =>
   ({
+    request: new Request("https://console.clavix.test/graphql"),
     principal: { userId },
+    admins: {},
+    members: {},
+    users: {},
+    exclusive: async <T>(_key: string, work: () => Promise<T>) => work(),
+    budgets: {},
+    activity: {},
     access,
     // Every id is an ordinary tenant (not `clavix`): the tenant-level guard decides.
     directory: {

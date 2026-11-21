@@ -392,7 +392,9 @@ export class DomainsService {
     try {
       return normalizeDomainHost(raw, this.options.platformDomain);
     } catch (error) {
-      throw badDomainInput((error as Error).message);
+      throw badDomainInput(
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 

@@ -1,6 +1,7 @@
 import type { ErrorHttp } from "@softistx/graxia";
 import { GraphQLError } from "graphql";
 import type { ErrorCode } from "@/i18n/codes";
+import { propertyOf } from "./values";
 
 /**
  * The JSON body of a refusal answered outside GraphQL (a route, a plugin's
@@ -9,6 +10,10 @@ import type { ErrorCode } from "@/i18n/codes";
  */
 export const errorBody = (code: ErrorCode, message: string): string =>
   JSON.stringify({ errors: [{ message, extensions: { code } }] });
+
+/** The `extensions.code` of a thrown value, `undefined` when it carries none (a GraphQL error does). */
+export const extensionCodeOf = (error: unknown): unknown =>
+  propertyOf(propertyOf(error, "extensions"), "code");
 
 export interface FailOptions {
   /** The HTTP status graxia answers a single operation with (`extensions.http.status`). */

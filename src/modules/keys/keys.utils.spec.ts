@@ -15,6 +15,10 @@ describe("encryptionKeyOf", () => {
     expect(encryptionKeyOf(key)).toBe(key);
     expect(encryptionKeyOf([key])).toEqual([key]);
   });
+
+  test("an empty keyring is refused, not passed to the store", () => {
+    expect(() => encryptionKeyOf([])).toThrow("The keyring holds no key");
+  });
 });
 
 describe("errorText", () => {

@@ -139,29 +139,28 @@ export function socialConfigOf(
   const realms = connectionsOfTenant(tenant, connections, log);
   const hasStatic = Object.keys(providers).length > 0;
   if (!hasStatic && realms === undefined) return { config: undefined };
-  return {
-    config: {
-      ...(hasStatic ? { providers } : {}),
-      ...(realms === undefined
-        ? {}
-        : {
-            resolveProvider: trustingUpstreamMfa(
-              realms.resolve,
-              connections.sourceOf(tenant.tenantId),
-            ),
-          }),
-      unverifiedHolder: unverifiedHolderOf((name) =>
-        Object.hasOwn(providers, name),
-      ),
-      signUp:
-        realms === undefined && !tenant.signUp
-          ? (false as const)
-          : signUpOf(
-              tenant,
-              (name) => Object.hasOwn(providers, name),
-              connections,
-            ),
-    } as SocialConfig,
-    ...(realms === undefined ? {} : { realms }),
+  const options = {
+    unverifiedHolder: unverifiedHolderOf((name) =>
+      Object.hasOwn(providers, name),
+    ),
+    signUp:
+      realms === undefined && !tenant.signUp
+        ? (false as const)
+        : signUpOf(
+            tenant,
+            (name) => Object.hasOwn(providers, name),
+            connections,
+          ),
   };
+  if (realms === undefined) {
+    return { config: { ...options, providers } };
+  }
+  const resolveProvider = trustingUpstreamMfa(
+    realms.resolve,
+    connections.sourceOf(tenant.tenantId),
+  );
+  const config: SocialConfig = hasStatic
+    ? { ...options, providers, resolveProvider }
+    : { ...options, resolveProvider };
+  return { config, realms };
 }

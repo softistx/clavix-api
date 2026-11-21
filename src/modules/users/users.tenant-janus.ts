@@ -16,6 +16,7 @@ import { instrumentJanus } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
 import type { SecretBox } from "@/modules/sign-in-methods";
 import { isEnabled } from "@/modules/sign-in-methods";
+import { isRecord } from "@/shared/values";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { originOf, rpIdOf } from "./users.rp";
 import { userSchema } from "./users.schema";
@@ -50,13 +51,14 @@ export type InvitationHooksFor = (tenant: ResolvedTenant) => InvitationHooks;
  * http (`<slug>.clavix.localhost`) has passkeys like any other.
  */
 function passkeysOf(tenant: ResolvedTenant) {
+  const origins: [string] = [originOf(tenant)];
   return {
     rpId: rpIdOf(tenant),
     rpName: tenant.name,
     // The slug host's own origin; each verified custom domain is a related
     // origin (WebAuthn Related Origins, ADR-0036), on another host than the
     // rpId. `/.well-known/webauthn` serves the same list (`relatedOriginsOf`).
-    origins: [originOf(tenant)] as [string],
+    origins,
     relatedOrigins: tenant.relatedOrigins,
     verifier: simpleWebAuthnVerifier(),
     firstFactor: true as const,
@@ -166,11 +168,11 @@ export function buildTenantJanus(
 }
 
 function hasPasskeyStepUp(instance: BuiltJanus): instance is TenantJanus {
-  const { stepUp, secondFactor } = instance as {
-    stepUp: Partial<Record<string, unknown>>;
-    secondFactor: Partial<Record<string, unknown>>;
-  };
+  const stepUp: unknown = instance.stepUp;
+  const secondFactor: unknown = instance.secondFactor;
   return (
+    isRecord(stepUp) &&
+    isRecord(secondFactor) &&
     typeof stepUp["confirmPasskey"] === "function" &&
     typeof stepUp["request"] === "function" &&
     typeof secondFactor["confirmPasskey"] === "function" &&
@@ -180,6 +182,12 @@ function hasPasskeyStepUp(instance: BuiltJanus): instance is TenantJanus {
 
 /** The instance when the tenant has at least one social provider, else `null`. */
 export const socialOf = (auth: TenantJanus): TenantSocialJanus | null =>
-  "social" in auth && auth.social !== undefined
-    ? (auth as TenantSocialJanus)
-    : null;
+  hasSocial(auth) ? auth : null;
+
+function hasSocial(auth: TenantJanus): auth is TenantSocialJanus {
+  return (
+    "social" in auth &&
+    isRecord(auth.social) &&
+    typeof auth.social["countLinks"] === "function"
+  );
+}

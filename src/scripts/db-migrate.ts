@@ -1,6 +1,6 @@
 import { migrate, migrationStatus } from "@softistx/mongo/migrations";
 import { mongo } from "@/config/db";
-import { migrations } from "@/migrations";
+import { migrations } from "@/config/migrations";
 
 // A deployment step, after `bun run db:sync` and before the new code rolls:
 // applies the pending migrations (src/migrations) and prints each one's state.

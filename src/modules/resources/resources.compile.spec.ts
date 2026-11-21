@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
-import { compileDetailType, digestOf } from "./resources.compile";
+import { compileDetailType, digestOf, oneOf } from "./resources.compile";
 import {
   DETAIL_LIMITS,
   type DetailFieldDefinition,
@@ -202,5 +202,17 @@ describe("detailTypeProblem", () => {
     expect(() => compileDetailType({ type: "", fields: [] })).toThrow(
       TypeError,
     );
+  });
+});
+
+describe("oneOf", () => {
+  test("accepts the listed values only", () => {
+    const schema = oneOf(["a", "b"]);
+    expect(schema.safeParse("a").success).toBe(true);
+    expect(schema.safeParse("c").success).toBe(false);
+  });
+
+  test("accepts nothing when no value is listed", () => {
+    expect(oneOf([]).safeParse("a").success).toBe(false);
   });
 });

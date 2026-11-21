@@ -70,11 +70,10 @@ export const storedOf = <K extends string, V extends string>(
   names: Record<K, V>,
   value: V,
 ): K => {
-  const key = (Object.keys(names) as K[]).find((k) => names[k] === value);
-  if (key === undefined) {
-    throw new Error(`No stored name for the enum value "${String(value)}"`);
+  for (const key in names) {
+    if (names[key] === value) return key;
   }
-  return key;
+  throw new Error(`No stored name for the enum value "${String(value)}"`);
 };
 
 /** The policy as the console shows it: no secret, only that one is stored. */

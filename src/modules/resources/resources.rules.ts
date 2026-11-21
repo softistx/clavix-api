@@ -1,5 +1,5 @@
 import { CliInputError } from "@/shared/cli";
-import { unique } from "@/shared/values";
+import { isOneOf, unique } from "@/shared/values";
 import { CatalogError } from "./resources.errors";
 import type { RegisterResourceInput, StoredScopeDoc } from "./resources.types";
 
@@ -16,7 +16,7 @@ const MAX_CLAIMS = 50;
 export const OIDC_SCOPES = ["openid", "profile", "email"] as const;
 
 export const isOidcScope = (name: string): boolean =>
-  (OIDC_SCOPES as readonly string[]).includes(name);
+  isOneOf(OIDC_SCOPES, name);
 
 /** Loopback hosts: `localhost` and `*.localhost` (RFC 6761), 127.0.0.1, [::1]. */
 function isLoopbackHost(hostname: string): boolean {

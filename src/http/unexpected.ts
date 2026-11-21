@@ -1,4 +1,5 @@
 import { createLogger } from "@softistx/telemetry";
+import { propertyOf } from "@/shared/values";
 
 const log = createLogger("graphql");
 
@@ -10,7 +11,7 @@ const log = createLogger("graphql");
 export function scrubbed(error: unknown): Error {
   const source =
     error instanceof Error ? error : new Error(String(typeof error));
-  const code = (source as { code?: unknown }).code;
+  const code = propertyOf(source, "code");
   const safe = new Error(
     `${source.name}${code === undefined ? "" : ` (${String(code)})`}`,
   );

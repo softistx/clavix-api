@@ -76,7 +76,8 @@ async function readBody(request: Request): Promise<unknown> {
   }
   const text = new TextDecoder().decode(Buffer.concat(chunks));
   try {
-    return JSON.parse(text) as unknown;
+    const body: unknown = JSON.parse(text);
+    return body;
   } catch {
     return undefined;
   }

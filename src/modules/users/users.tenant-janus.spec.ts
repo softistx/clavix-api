@@ -41,9 +41,9 @@ describe("buildTenantJanus", () => {
 
 describe("socialOf", () => {
   test("the instance when it has a social API, else null", () => {
-    const withSocial = { social: {} } as unknown as Parameters<
-      typeof socialOf
-    >[0];
+    const withSocial = {
+      social: { countLinks: async () => 0 },
+    } as unknown as Parameters<typeof socialOf>[0];
     const without = {} as unknown as Parameters<typeof socialOf>[0];
     expect(socialOf(withSocial)).toBe(withSocial as never);
     expect(socialOf(without)).toBeNull();

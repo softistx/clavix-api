@@ -1,5 +1,6 @@
 import { defineCollection, id, tenantField } from "@softistx/mongo";
 import { z } from "zod";
+import { isOneOf } from "@/shared/values";
 
 /**
  * What the sign-in log records (D14), closed. A type is `<noun>.<verb>`. Per-token
@@ -28,7 +29,7 @@ export const AUTH_EVENT_TYPES = [
 export type AuthEventType = (typeof AUTH_EVENT_TYPES)[number];
 
 export const isAuthEventType = (value: string): value is AuthEventType =>
-  (AUTH_EVENT_TYPES as readonly string[]).includes(value);
+  isOneOf(AUTH_EVENT_TYPES, value);
 
 export const AUTH_OUTCOMES = ["success", "failure"] as const;
 export type AuthOutcome = (typeof AUTH_OUTCOMES)[number];

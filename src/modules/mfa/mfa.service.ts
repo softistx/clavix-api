@@ -4,7 +4,7 @@ import {
   type SecondFactorResolvers,
   secondFactorResolvers,
 } from "@softistx/janus-graphql";
-import type { Context } from "@/http/context";
+import { type Context, contextOf } from "@/http/context";
 import type { AuthMethod } from "@/modules/audit";
 import { recordingSignIn } from "@/modules/auth";
 import { revokeIfSso } from "@/modules/connections";
@@ -36,13 +36,13 @@ import {
  */
 export class MfaService {
   private readonly janus: SecondFactorResolvers = secondFactorResolvers({
-    auth: (ctx) => this.authOf(ctx as Context),
+    auth: (ctx) => this.authOf(contextOf(ctx)),
     freshWithin: FRESH_WITHIN,
     sendStepUpCode: (issued, ctx) =>
-      this.sendStepUpCode(issued, ctx as Context),
+      this.sendStepUpCode(issued, contextOf(ctx)),
     guard: async (action, _user, ctx) => {
       if (action !== "enroll" && action !== "activate") return;
-      const tenant = await (ctx as Context).tenant();
+      const tenant = await contextOf(ctx).tenant();
       if (tenant === null || !tenant.signIn.mfa.totp) {
         throw secondFactorDisabled();
       }

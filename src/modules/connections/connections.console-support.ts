@@ -47,12 +47,16 @@ export const claimsIn = (
       }
     | null
     | undefined,
-) =>
-  claims === null || claims === undefined
-    ? undefined
-    : (Object.fromEntries(
-        Object.entries(claims).filter(([, value]) => typeof value === "string"),
-      ) as Record<string, string>);
+) => (claims === null || claims === undefined ? undefined : stringsOf(claims));
+
+/** The entries of an object that hold a string, as a record. */
+const stringsOf = (source: object): Record<string, string> => {
+  const strings: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string") strings[key] = value;
+  }
+  return strings;
+};
 
 /** What `checkConnection` asks the issuer checker, a record that is never stored. */
 export const checkOf = (input: CheckConnectionInput) => ({

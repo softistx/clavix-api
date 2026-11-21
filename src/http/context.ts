@@ -5,6 +5,7 @@ import type { JanusContext } from "@softistx/janus-graphql";
 import { type Telemetry, withAttributes } from "@softistx/telemetry";
 import type { ThrottleContext } from "@/http/throttle/context";
 import type { TenantJanus } from "@/modules/users/users.tenant-janus";
+import { isRecord } from "@/shared/values";
 import { isTenantless, tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
@@ -69,3 +70,20 @@ export type Base = ReturnType<typeof createBase>;
 // A resolver's context: graxia's and the base's. The generated `Resolvers` takes
 // it (codegen.ts: `contextType`).
 export type Context = Readonly<GraphQLContext<Base, JanusContext<TenantJanus>>>;
+
+/** Whether a context is the app's GraphQL context: the tenant reader, janus and the throttles. */
+export const isContext = (ctx: unknown): ctx is Context =>
+  isRecord(ctx) &&
+  typeof ctx["tenant"] === "function" &&
+  isRecord(ctx["janus"]) &&
+  isRecord(ctx["deviceThrottle"]);
+
+/**
+ * The app's GraphQL context. A context that is not it means the app is wired
+ * wrong (a package called back with another one): a plain `Error`, a masked
+ * 500 that is reported, never a `NOT_FOUND`.
+ */
+export const contextOf = (ctx: unknown): Context => {
+  if (!isContext(ctx)) throw new Error("The resolver context is not the app's");
+  return ctx;
+};

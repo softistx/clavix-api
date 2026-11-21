@@ -1,6 +1,6 @@
 import { definePlugin } from "@softistx/graxia";
-import type { ExecutionResult } from "graphql";
 import { GraphQLError } from "graphql";
+import { isRecord, propertyOf } from "@/shared/values";
 import { isJsonAnswer } from "./media";
 
 // graphql-js words a variable coercion failure as
@@ -28,11 +28,21 @@ export function withoutQuotedValue(error: GraphQLError): GraphQLError {
   );
 }
 
+/** A result's error: a `GraphQLError` on a stream chunk, a parsed JSON object on a plain answer. */
+const scrubbed = (error: unknown): unknown => {
+  if (error instanceof GraphQLError) return withoutQuotedValue(error);
+  const message = propertyOf(error, "message");
+  return typeof message === "string" && COERCION.test(message)
+    ? withoutQuotedValue(new GraphQLError(message))
+    : error;
+};
+
 const scrub = (chunk: unknown): unknown => {
-  const result = chunk as ExecutionResult | null;
-  return result?.errors === undefined
-    ? chunk
-    : { ...result, errors: result.errors.map(withoutQuotedValue) };
+  if (!isRecord(chunk) || !Array.isArray(chunk["errors"])) return chunk;
+  return {
+    ...chunk,
+    errors: chunk["errors"].map(scrubbed),
+  };
 };
 
 /**
@@ -55,14 +65,12 @@ export const useWithoutQuotedValues = () =>
       } catch {
         return;
       }
-      const scrubbed = Array.isArray(parsed)
-        ? parsed.map(scrub)
-        : scrub(parsed);
-      if (JSON.stringify(scrubbed) === body) return;
+      const cleaned = Array.isArray(parsed) ? parsed.map(scrub) : scrub(parsed);
+      if (JSON.stringify(cleaned) === body) return;
       const headers = new Headers(response.headers);
       headers.delete("content-length");
       setResponse(
-        new Response(JSON.stringify(scrubbed), {
+        new Response(JSON.stringify(cleaned), {
           status: response.status,
           statusText: response.statusText,
           headers,

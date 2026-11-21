@@ -39,9 +39,17 @@ const KINDS = {
   enum: "ENUM",
   "string[]": "STRING_LIST",
 } as const;
-const KIND_OF = Object.fromEntries(
-  Object.entries(KINDS).map(([stored, graphql]) => [graphql, stored]),
-) as Record<(typeof KINDS)[keyof typeof KINDS], keyof typeof KINDS>;
+const KIND_OF = {
+  STRING: "string",
+  NUMBER: "number",
+  INTEGER: "integer",
+  BOOLEAN: "boolean",
+  ENUM: "enum",
+  STRING_LIST: "string[]",
+} as const satisfies Record<
+  (typeof KINDS)[keyof typeof KINDS],
+  keyof typeof KINDS
+>;
 
 export const detailTypeShape = (doc: StoredDetailTypeDoc) => ({
   id: doc._id.toHexString(),

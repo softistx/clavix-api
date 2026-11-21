@@ -1,3 +1,4 @@
+import { propertyOf } from "@/shared/values";
 /** How long a session counts as freshly confirmed for the writes of the factor. */
 export const FRESH_WITHIN = "10m" as const;
 
@@ -9,7 +10,7 @@ export const iso = (value: string) => new Date(value);
 
 /** The name of a janus user, `null` when it has none or a blank one. */
 export const nameOf = (user: object): string | null => {
-  const name = (user as { name?: unknown }).name;
+  const name = propertyOf(user, "name");
   return typeof name === "string" && name !== "" ? name : null;
 };
 

@@ -100,5 +100,5 @@ export function guardedFetch(
     await checkAddress(url.hostname, policy);
     return send(input, { ...init, redirect: "manual" });
   };
-  return guarded as typeof fetch;
+  return Object.assign(guarded, { preconnect: send.preconnect });
 }

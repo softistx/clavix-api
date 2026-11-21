@@ -58,7 +58,8 @@ export function normalizeDomainHost(
     throw new DomainHostError("Not a valid domain name");
   }
   // 192.168.0.1, 0x7f.1 and 2130706433.1 all end in a number: no TLD does.
-  const tld = labels[labels.length - 1] as string;
+  const tld = labels.at(-1);
+  if (tld === undefined) throw new DomainHostError("Not a valid domain name");
   if (NUMERIC.test(tld) || /^0x[0-9a-f]*$/.test(tld)) {
     throw new DomainHostError("An IP address cannot be claimed");
   }
