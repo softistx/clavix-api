@@ -4,9 +4,9 @@ import { adminEventReader } from "@/config/admin-events";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { eventBus, eventFailures } from "@/config/events";
-import { tenantAdmin, tenantsService } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
+import { purgeAtOf } from "@/modules/tenants";
 import { DAY, run, seed, useTenantPurgeHooks } from "~/tenant-purge";
-import { purgeAtOf } from "../tenants/trash.schema";
 import { enforceRetention } from "./retention";
 
 useTenantPurgeHooks();
@@ -179,8 +179,11 @@ describe("the retention", () => {
     const free = await seed("retfree");
     const pro = await seed("retpro");
     const enterprise = await seed("retent");
-    await tenantAdmin.setPlan(idOf(pro), { plan: "pro", quotaOverrides: {} });
-    await tenantAdmin.setPlan(idOf(enterprise), {
+    await tenantsService.setPlan(idOf(pro), {
+      plan: "pro",
+      quotaOverrides: {},
+    });
+    await tenantsService.setPlan(idOf(enterprise), {
       plan: "enterprise",
       quotaOverrides: {},
     });
@@ -205,13 +208,13 @@ describe("the retention", () => {
   test("a plan change applies at the next run, in both directions", async () => {
     const tenant = await seed("retplan");
     await record(idOf(tenant), 60);
-    await tenantAdmin.setPlan(idOf(tenant), {
+    await tenantsService.setPlan(idOf(tenant), {
       plan: "pro",
       quotaOverrides: {},
     });
     await enforceRetention(deps(), NOW);
     expect(await authCount(tenant)).toBe(1); // pro keeps 90 days
-    await tenantAdmin.setPlan(idOf(tenant), {
+    await tenantsService.setPlan(idOf(tenant), {
       plan: "free",
       quotaOverrides: {},
     });
@@ -280,7 +283,7 @@ describe("a tenant purge", () => {
     await record(idOf(a), 1);
     await record(idOf(b), 1);
     await adminEvent(a._id, 1);
-    const trashed = await tenantAdmin.trash(idOf(a));
+    const trashed = await tenantsService.trash(idOf(a));
     const due = purgeAtOf(trashed.deletedAt as Date);
     expect((await run(due)).purged).toContain(idOf(a));
     expect(await authCount(a)).toBe(0);

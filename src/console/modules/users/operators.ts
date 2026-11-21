@@ -1,5 +1,5 @@
 import { denial } from "@softistx/janus-graphql";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../../context";
 import {

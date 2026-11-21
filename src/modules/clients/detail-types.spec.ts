@@ -13,8 +13,7 @@ import {
   consentReadyOf,
   mongoClientDetailTypes,
 } from "@/modules/resources/detail-types";
-import { partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 import { parseClientArgs } from "./cli";

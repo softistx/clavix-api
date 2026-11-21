@@ -3,7 +3,7 @@ import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 
 // ADR-0039: a suspended tenant's console stays readable by its admins, every

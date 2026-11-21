@@ -10,9 +10,11 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { settled } from "@/modules/auth/outbox";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a

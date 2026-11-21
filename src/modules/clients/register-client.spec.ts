@@ -11,9 +11,11 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  PLATFORM_TENANT_SLUG,
+  partitionOf,
+  TenantsService,
+} from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import {
   CliInputError,

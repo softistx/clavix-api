@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RESERVED_SLUGS, slugProblem } from "./slug";
+import { RESERVED_SLUGS, slugProblem } from "./tenants.rules";
 
 describe("slugProblem", () => {
   test("accepts DNS labels", () => {

@@ -1,4 +1,4 @@
-import type { PurgeReport } from "./purge";
+import type { PurgeReport } from "./tenants.types";
 
 /** The queue surface the worker needs (`redis.queues.tenantPurge`). */
 export interface PurgeQueue {

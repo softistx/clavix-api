@@ -8,7 +8,7 @@ import {
   secretContext,
 } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import { TenantsService } from "@/modules/tenants";
 import { WebhookEndpointsService } from "@/modules/webhooks/webhook-endpoints.service";
 import { clearDatabase } from "~/db";
 import {

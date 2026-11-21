@@ -6,7 +6,7 @@ import { clientDetailTypes } from "@/config/resources";
 import { tenantBySlug } from "@/config/tenancy";
 import { parseClientArgs, USAGE } from "@/modules/clients/cli";
 import { registerClient } from "@/modules/clients/register-client";
-import { issuerOf } from "@/modules/tenants/identity";
+import { issuerOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 
 // Registers an OAuth client on a tenant, or updates it (idempotent on the

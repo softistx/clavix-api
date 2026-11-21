@@ -13,9 +13,11 @@ import { env } from "@/config/env";
 import { openAppRedis } from "@/config/redis";
 import { tenantResolver } from "@/config/tenancy";
 import { createSignInThrottle } from "@/modules/auth/throttle";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { createPasskeyThrottle, type PasskeyLimitConfig } from "./throttle";
 
 const origin = {

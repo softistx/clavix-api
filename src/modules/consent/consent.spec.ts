@@ -12,12 +12,14 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog } from "@/config/resources";
-import { tenantAdmin, tenantResolver } from "@/config/tenancy";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { registerClient } from "@/modules/clients/register-client";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantParOff } from "../../../test/tenant-par-off";
@@ -483,7 +485,7 @@ describe("a tenant that is not live", () => {
       const result = await gql("initech", APPROVE, { id }, cookieOf("initech"));
       expectRefused(result, "TENANT_SUSPENDED");
     } finally {
-      await tenantAdmin.restore(initech._id.toHexString());
+      await tenantsService.restore(initech._id.toHexString());
       await tenants.reactivate(initech._id);
     }
     const restored = await gql("initech", APPROVE, { id }, cookieOf("initech"));

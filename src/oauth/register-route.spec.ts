@@ -5,9 +5,9 @@ import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { tenantAdmin, tenantResolver, tenantsService } from "@/config/tenancy";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
 import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
-import { partitionOf } from "@/modules/tenants/identity";
+import { partitionOf } from "@/modules/tenants";
 import { createFlow, DOMAIN } from "~/oauth-flow";
 import { createRegisterRoute } from "./register-route";
 import {
@@ -275,7 +275,7 @@ describe("agents quota", () => {
   test("403 access_denied once the tenant's quota is reached, other tenants unaffected", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-quota" });
     if (found == null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 2 },
     });
@@ -296,7 +296,7 @@ describe("agents quota under concurrency", () => {
   test("at most N of many simultaneous registrations pass a quota of N", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-race" });
     if (found == null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 3 },
     });
@@ -605,7 +605,7 @@ describe("metadata documents: abuse limits", () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-quota" });
     const tenant = await tenantResolver.resolveHost(`ag-docs-quota.${DOMAIN}`);
     if (found == null || tenant === null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 1 },
     });
@@ -632,7 +632,7 @@ describe("metadata documents: abuse limits", () => {
   test("simultaneous first uses of one new client under a quota of 1 all pass and record it once", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-race" });
     if (found == null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 1 },
     });

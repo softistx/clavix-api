@@ -1,6 +1,6 @@
 import type { Resolvers } from "@/generated/console/resolvers";
 import { agentsNeedPushOrProof } from "@/modules/oauth-policy/agents-input";
-import type { Tenant } from "@/modules/tenants/tenants.model";
+import type { Tenant } from "@/modules/tenants";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { tenantArg } from "../ids";

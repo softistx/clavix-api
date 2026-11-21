@@ -1,5 +1,5 @@
 import { mongo } from "@/config/db";
-import type { TenantsService } from "@/modules/tenants/tenants.service";
+import type { TenantsService } from "@/modules/tenants";
 
 // New tenants require PAR; specs that call /authorize directly create their
 // tenants with it off. Written straight to the document, without a version

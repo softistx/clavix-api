@@ -17,7 +17,7 @@ import {
   CONSOLE_EXPORT_PATH,
   CONSOLE_PATH,
 } from "@/console/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
 
@@ -82,7 +82,7 @@ const as =
     });
     return (await response.json()) as ConsoleResult;
   };
-const tenantAdmin = as(() => ADMIN);
+const adminCaller = as(() => ADMIN);
 const tenantViewer = as(() => VIEWER);
 const platformOwner = as(() => OWNER);
 
@@ -151,7 +151,7 @@ afterAll(async () => {
 describe("writes on the clavix tenant", () => {
   test("a tenant-level owner of clavix is FORBIDDEN on every write", async () => {
     for (const [name, query] of Object.entries(writes(clavix, victim))) {
-      expect([name, codeOf(await tenantAdmin(query))]).toEqual([
+      expect([name, codeOf(await adminCaller(query))]).toEqual([
         name,
         "FORBIDDEN",
       ]);
@@ -162,7 +162,7 @@ describe("writes on the clavix tenant", () => {
     for (const [name, query] of Object.entries(
       writes(clavix.toUpperCase(), victim),
     )) {
-      expect([name, codeOf(await tenantAdmin(query))]).toEqual([
+      expect([name, codeOf(await adminCaller(query))]).toEqual([
         name,
         "FORBIDDEN",
       ]);
@@ -201,7 +201,7 @@ describe("writes on the clavix tenant", () => {
 
   test("another tenant's writes keep the tenant-level guard", async () => {
     // A tenant admin of an ordinary tenant still writes there.
-    expect(codeOf(await tenantAdmin(writes(other, "ghost").disableUser))).toBe(
+    expect(codeOf(await adminCaller(writes(other, "ghost").disableUser))).toBe(
       "NOT_FOUND",
     );
     expect(codeOf(await tenantViewer(writes(other, "ghost").disableUser))).toBe(
@@ -309,7 +309,7 @@ describe("the sign-in log export of the clavix tenant", () => {
     });
     expect(
       codeOf(
-        await tenantAdmin(
+        await adminCaller(
           `{ authEvents(tenantId: "${clavix}") { totalCount } }`,
         ),
       ),

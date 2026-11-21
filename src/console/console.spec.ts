@@ -23,9 +23,12 @@ import { registerClient } from "@/modules/clients/register-client";
 import { registerResource } from "@/modules/resources/register-resource";
 import { resources } from "@/modules/resources/resources.model";
 import { scopes } from "@/modules/resources/scopes.model";
-import { issuerOf, partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { tenants } from "@/modules/tenants/tenants.model";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  partitionOf,
+  tenants,
+} from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { createConsoleAuthenticator } from "./auth";

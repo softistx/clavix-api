@@ -4,7 +4,7 @@ import {
 } from "@softistx/janus-mongo";
 import { purgeMongoOAuthPartition } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
-import type { PartitionPurger } from "@/modules/tenants/purge";
+import type { PartitionPurger } from "@/modules/tenants";
 
 /**
  * The janus partition purges (OAuth, stores, invitations) over the database

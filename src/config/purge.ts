@@ -1,16 +1,12 @@
 import type { Collection, ObjectId } from "mongodb";
 import * as appCollections from "@/modules/collections";
-import {
-  type OwnedCollectionPurger,
-  type PartitionPurger,
-  purgeTenants,
-} from "@/modules/tenants/purge";
+import type { OwnedCollectionPurger, PartitionPurger } from "@/modules/tenants";
 import { isOwned } from "@/tenancy/owned";
 import { access } from "./access";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { createPartitionPurger } from "./partition-purger";
-import { domainStore, tenantAdmin } from "./tenancy";
+import { domainStore, tenantsService } from "./tenancy";
 
 /**
  * The tenant-owned collections of the app (`isOwned`: `adminEvents`, the
@@ -33,8 +29,7 @@ export const ownedPurgers = (): OwnedCollectionPurger[] =>
 export const createTenantPurge =
   (partitions: PartitionPurger = createPartitionPurger(oauthDb)) =>
   () =>
-    purgeTenants({
-      registry: tenantAdmin,
+    tenantsService.purge({
       // The custom domains are a platform collection (`domains`), emptied too.
       owned: [
         ...ownedPurgers(),

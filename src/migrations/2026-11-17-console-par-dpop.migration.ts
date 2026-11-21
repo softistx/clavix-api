@@ -3,9 +3,7 @@ import { getCollection } from "@softistx/mongo";
 import { defineMigration } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
-import { partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { tenants } from "@/modules/tenants/tenants.model";
+import { PLATFORM_TENANT_SLUG, partitionOf, tenants } from "@/modules/tenants";
 
 export const id = "2026-11-17-console-par-dpop";
 

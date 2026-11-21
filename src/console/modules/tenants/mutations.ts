@@ -1,12 +1,12 @@
-import { tenantAdmin, tenantBySlug, tenantsService } from "@/config/tenancy";
+import { tenantBySlug, tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
   isPlanId,
   type PlanId,
   QUOTA_KEYS,
   type QuotaOverrides,
-} from "@/modules/tenants/plan.schema";
-import { SlugTakenError } from "@/modules/tenants/tenants.errors";
+  SlugTakenError,
+} from "@/modules/tenants";
 import { badInput, refusal } from "./errors";
 import { asNotFound, notFound, writable } from "./lookup";
 import { parentOf } from "./parent";
@@ -85,7 +85,7 @@ export const tenantMutations: NonNullable<Resolvers["Mutation"]> = {
   updateTenant: async (_, { id, input }, ctx) => {
     const current = await writable(id);
     // A suspended tenant's own admins never get here: the guard refuses them.
-    const updated = await tenantAdmin
+    const updated = await tenantsService
       .update(current._id, {
         name: input.name ?? undefined,
         signUp: input.signUp ?? undefined,
@@ -106,7 +106,7 @@ export const tenantMutations: NonNullable<Resolvers["Mutation"]> = {
     const plan = planOrFail(input.plan);
     const quotaOverrides = overridesOrFail(input.quotaOverrides);
     const current = await writable(id);
-    const updated = await tenantAdmin
+    const updated = await tenantsService
       .setPlan(current._id, { plan, quotaOverrides })
       .catch((error: unknown) => {
         throw asNotFound(error);
@@ -151,9 +151,9 @@ export const tenantMutations: NonNullable<Resolvers["Mutation"]> = {
   },
   deleteTenant: async (_, { id: given }, ctx) => {
     const id = given.toLowerCase();
-    const current = await tenantAdmin.find(id);
+    const current = await tenantsService.find(id);
     if (current === undefined) throw notFound();
-    const deleted = await tenantAdmin.trash(id).catch((error: unknown) => {
+    const deleted = await tenantsService.trash(id).catch((error: unknown) => {
       throw asNotFound(error);
     });
     const tenantId = deleted._id.toHexString();
@@ -165,7 +165,7 @@ export const tenantMutations: NonNullable<Resolvers["Mutation"]> = {
     return parentOf(deleted);
   },
   restoreTenant: async (_, { id }, ctx) => {
-    const restored = await tenantAdmin
+    const restored = await tenantsService
       .restore(id.toLowerCase())
       .catch((error: unknown) => {
         throw asNotFound(error);

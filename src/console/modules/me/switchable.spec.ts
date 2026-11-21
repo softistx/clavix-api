@@ -11,9 +11,9 @@ import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { tenantAdmin, tenantsService } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { verifiedCallers } from "~/console";
 import { CONSOLE_PATH } from "../../identity";
 
@@ -163,7 +163,7 @@ describe("Me.switchableTenants", () => {
 
   test("a suspended tenant stays listed with its status, a deleted one is left out", async () => {
     await tenantsService.suspend(ids["sw-alpha"] as string);
-    await tenantAdmin.trash(ids["sw-beta"] as string);
+    await tenantsService.trash(ids["sw-beta"] as string);
     const member = await as(MULTI, LIST());
     expect(pageOf(member).items).toMatchObject([
       { tenant: { slug: "sw-alpha", status: "SUSPENDED" } },

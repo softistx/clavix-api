@@ -5,7 +5,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { domainStore, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 
 const admin = consoleAs("dom-admin-a");

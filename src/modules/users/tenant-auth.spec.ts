@@ -8,8 +8,7 @@ import {
 } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantResolver } from "@/tenancy/resolver";

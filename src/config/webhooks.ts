@@ -1,7 +1,7 @@
 import { createMemoryWebhookQueue } from "@softistx/janus-webhooks";
 import { createRedisWebhookQueue } from "@softistx/janus-webhooks-redis";
 import { senderAddress } from "@/mail/mailer";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import {
   createWebhookDelivery,
   DISABLE_ACTOR,
@@ -16,7 +16,7 @@ import { env } from "./env";
 import { eventBus } from "./events";
 import { mailer } from "./mail";
 import { redis } from "./redis";
-import { tenantAdmin, tenantResolver, tenantsService } from "./tenancy";
+import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 import {
   urlPolicy,
@@ -67,7 +67,7 @@ export const webhookDelivery = createWebhookDelivery({
       requestId: crypto.randomUUID(),
     });
     const [tenant, endpoint] = await Promise.all([
-      tenantAdmin.find(tenantId),
+      tenantsService.find(tenantId),
       webhookEndpoints.find(tenantId, endpointId),
     ]);
     if (tenant === undefined || endpoint === undefined) return;

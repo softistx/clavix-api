@@ -6,8 +6,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog, registerStoredResource } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
-import { partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 
 const REDIRECT = "https://app.example/callback";

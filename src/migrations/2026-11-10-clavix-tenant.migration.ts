@@ -1,7 +1,6 @@
 import { getCollection } from "@softistx/mongo";
 import { defineMigration } from "@softistx/mongo/migrations";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { tenants } from "@/modules/tenants/tenants.model";
+import { PLATFORM_TENANT_SLUG, tenants } from "@/modules/tenants";
 
 export const id = "2026-11-10-clavix-tenant";
 

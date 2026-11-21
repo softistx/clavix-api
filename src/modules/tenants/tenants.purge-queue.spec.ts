@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { tenantPurge } from "./purge-queue";
+import { tenantPurge } from "./tenants.purge-queue";
 
 describe("tenantPurge queue", () => {
   it("ticks daily at 03:17 UTC and retries a failed pass 3 times with a 5 minute backoff", () => {

@@ -1,4 +1,4 @@
-import { slugProblem } from "@/modules/tenants/slug";
+import { slugProblem } from "@/modules/tenants";
 
 // The host a request was addressed to, and the tenant slug it names. The host
 // comes from the request URL (`new URL(request.url).host`: the `Host` header);

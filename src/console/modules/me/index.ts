@@ -1,6 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
 import { InvalidCursorError } from "@softistx/mongo";
-import { tenantAdmin } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { fail } from "@/shared/errors";
 import {
@@ -84,13 +84,13 @@ export const me: Resolvers = {
       if (platform !== null) {
         const [page, totalCount] = await listing(() =>
           Promise.all([
-            tenantAdmin.list({
+            tenantsService.list({
               q: text,
               state: "live",
               after: after ?? undefined,
               first: limit,
             }),
-            tenantAdmin.count({ q: text, state: "live" }),
+            tenantsService.count({ q: text, state: "live" }),
           ]),
         );
         return {
@@ -111,14 +111,14 @@ export const me: Resolvers = {
       const ids = [...direct.keys()];
       const [page, totalCount] = await listing(() =>
         Promise.all([
-          tenantAdmin.list({
+          tenantsService.list({
             q: text,
             state: "live",
             ids,
             after: after ?? undefined,
             first: limit,
           }),
-          tenantAdmin.count({ q: text, state: "live", ids }),
+          tenantsService.count({ q: text, state: "live", ids }),
         ]),
       );
       return {

@@ -1,8 +1,7 @@
 import { OptimisticLockError } from "@softistx/mongo";
 import type { ErrorCode } from "@/i18n/codes";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import type { Tenant } from "@/modules/tenants/tenants.model";
-import type { TenantsService } from "@/modules/tenants/tenants.service";
+import type { Tenant, TenantsService } from "@/modules/tenants";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import {
   emptySecretResealCounts,

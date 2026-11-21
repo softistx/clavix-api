@@ -3,7 +3,7 @@ import {
   connectionsService as connections,
   issuerChecker,
 } from "@/config/connections";
-import { tenantAdmin } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
   type ConnectionDoc,
@@ -11,7 +11,7 @@ import {
   txtNameOf,
 } from "@/modules/connections";
 import { callbackUrlOf } from "@/modules/sign-in-methods/social";
-import { effectiveQuotas } from "@/modules/tenants/plan.schema";
+import { effectiveQuotas } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
@@ -188,7 +188,7 @@ export const connectionsModule: Resolvers = {
   Mutation: {
     createConnection: async (_, { tenantId, input }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const stored = await tenantAdmin.find(tenant._id.toHexString());
+      const stored = await tenantsService.find(tenant._id.toHexString());
       const quota =
         stored === undefined ? 0 : effectiveQuotas(stored).connections;
       const created = await ctx.exclusive(connectionsKey(tenant), () =>

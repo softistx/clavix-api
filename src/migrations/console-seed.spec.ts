@@ -5,7 +5,7 @@ import { migrate } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { tenants } from "@/modules/collections";
-import { type PublicOrigin, partitionOf } from "@/modules/tenants/identity";
+import { type PublicOrigin, partitionOf } from "@/modules/tenants";
 import { freshMigrationDb } from "~/migrations";
 import { clavixTenant } from "./2026-11-10-clavix-tenant.migration";
 import { seedConsole, unseedConsole } from "./console-seed";

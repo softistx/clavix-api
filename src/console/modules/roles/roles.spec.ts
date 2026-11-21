@@ -8,7 +8,7 @@ import { registerStoredResource } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 
 const owner = consoleAs("rl-owner-a");

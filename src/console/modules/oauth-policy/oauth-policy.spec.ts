@@ -12,7 +12,7 @@ import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { OAuthPolicyService } from "@/modules/oauth-policy/service";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { CONSOLE_PATH } from "../../identity";
 
 interface Policy {

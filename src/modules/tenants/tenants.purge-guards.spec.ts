@@ -3,7 +3,7 @@ import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { ownedPurgers } from "@/config/purge";
-import { tenantAdmin, tenantsService } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import {
   at,
   can,
@@ -17,7 +17,7 @@ import {
   seedJanus,
   useTenantPurgeHooks,
 } from "~/tenant-purge";
-import { purgeAtOf } from "./trash.schema";
+import { purgeAtOf } from "./tenants.trash";
 
 useTenantPurgeHooks();
 
@@ -79,7 +79,7 @@ describe("the tenant purge guards", () => {
   test("refuses a tenant before its purgeAt and a tenant not in the trash", async () => {
     const a = await seed("alpha");
     await seed("bravo"); // not deleted
-    const trashed = await tenantAdmin.trash(a._id.toHexString());
+    const trashed = await tenantsService.trash(a._id.toHexString());
     const due = purgeAtOf(trashed.deletedAt as Date);
     expect(await run(at(due, -1))).toEqual({ purged: [], failed: [] });
     expect(await janusCount(a._id.toHexString())).toBeGreaterThanOrEqual(
@@ -87,13 +87,13 @@ describe("the tenant purge guards", () => {
     );
     expect(await ownedCount(a)).toBe(2);
     expect(
-      (await tenantAdmin.find(a._id.toHexString()))?.purgeStartedAt,
+      (await tenantsService.find(a._id.toHexString()))?.purgeStartedAt,
     ).toBeUndefined();
   });
   test("a tenant deleted 29 days ago is left alone, whole", async () => {
     const a = await seed("alpha");
     const id = a._id.toHexString();
-    const trashed = await tenantAdmin.trash(id);
+    const trashed = await tenantsService.trash(id);
     const before = await janusOf(id);
     expect(await run(at(trashed.deletedAt as Date, 29))).toEqual({
       purged: [],
@@ -108,8 +108,8 @@ describe("the tenant purge guards", () => {
     const live = await seed("bravo");
     const paused = await seed("charlie");
     await tenantsService.suspend(paused._id.toHexString());
-    const trashed = await tenantAdmin.trash(restored._id.toHexString());
-    await tenantAdmin.restore(restored._id.toHexString());
+    const trashed = await tenantsService.trash(restored._id.toHexString());
+    await tenantsService.restore(restored._id.toHexString());
     const far = at(trashed.deletedAt as Date, 400);
     expect(await run(far)).toEqual({ purged: [], failed: [] });
     for (const tenant of [restored, live, paused]) {

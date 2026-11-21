@@ -8,7 +8,7 @@ import {
 } from "@/modules/clients/register-client";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
-import { partitionOf } from "@/modules/tenants/identity";
+import { partitionOf } from "@/modules/tenants";
 import type { CliTenant } from "@/shared/cli";
 import { type AgentsReader, agentKindsOf, refuseAgent } from "./client-agents";
 import { deleteClientAndRules } from "./client-deletion";

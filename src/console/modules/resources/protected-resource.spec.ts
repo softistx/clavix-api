@@ -5,8 +5,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { consoleAs } from "~/console";
 
 const admin = consoleAs("prm-admin");

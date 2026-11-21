@@ -8,9 +8,11 @@ import {
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients/register-client";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";

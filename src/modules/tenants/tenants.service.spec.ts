@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import { mongo } from "@/config/db";
-import { PLATFORM_TENANT_SLUG } from "./slug";
 import {
   InvalidSlugError,
   PlatformTenantProtectedError,
   SlugTakenError,
 } from "./tenants.errors";
+import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { TenantsService } from "./tenants.service";
 
 // The wired collection: it carries the slug hooks (src/config/db.ts).

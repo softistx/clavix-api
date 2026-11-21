@@ -14,7 +14,7 @@ import {
   operatorGrantDeps,
   parseOperatorArgs,
 } from "@/console/operators";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 
 // Grants a platform role (default owner) to a user of the clavix tenant, until

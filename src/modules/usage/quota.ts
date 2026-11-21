@@ -1,4 +1,4 @@
-import type { QuotaKey } from "@/modules/tenants/plan.schema";
+import type { QuotaKey } from "@/modules/tenants";
 
 /** A hard quota (`clients`, `domains`) would be passed by the creation. */
 export class QuotaExceededError extends Error {

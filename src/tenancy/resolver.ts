@@ -5,7 +5,7 @@ import {
   issuerOfHost,
   type PublicOrigin,
   partitionOf,
-} from "@/modules/tenants/identity";
+} from "@/modules/tenants";
 import { hostOfRequest, normalizeHost, slugOfHost } from "./host";
 import type { ResolvedTenant } from "./resolved-tenant";
 import { noTenantCache, type TenantCache } from "./tenant-cache";

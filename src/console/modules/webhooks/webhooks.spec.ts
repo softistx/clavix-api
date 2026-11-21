@@ -4,7 +4,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { webhookDeliveries } from "@/config/webhook-endpoints";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 
 const admin = consoleAs("wh-admin-a");
