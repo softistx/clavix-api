@@ -6,7 +6,7 @@ import {
   discoverIssuer,
   type IssuerChecker,
 } from "@/modules/connections/connections.discovery";
-import { ConnectionsService } from "@/modules/connections/services";
+import { ConnectionsService } from "@/modules/connections/connections.service";
 import { systemTxtResolver } from "@/modules/domains/dns";
 import { hostOf } from "@/modules/tenants/identity";
 import { socialOf } from "@/modules/users/tenant-janus";

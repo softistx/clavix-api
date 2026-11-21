@@ -5,6 +5,7 @@ export type { IssuerChecker, IssuerSummary } from "./connections.discovery";
 export { discoverIssuer } from "./connections.discovery";
 export { ConnectionError } from "./connections.errors";
 export type { ConnectionDoc } from "./connections.model";
+export { ConnectionsService } from "./connections.service";
 export {
   type OpenedSession,
   requireNoSso,
@@ -18,4 +19,3 @@ export type {
   LinkCounter,
 } from "./connections.types";
 export { txtNameOf } from "./connections.utils";
-export { ConnectionsService } from "./services";

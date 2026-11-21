@@ -690,10 +690,16 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 ## Enterprise OIDC connections (`src/modules/connections`, `src/console/modules/connections`, `src/config/connections.ts`)
 
 - Layout (A4): `connections.resolver.ts` (+ `.resolver-support.ts`), `.errors.ts`, `.rules.ts`, `.utils.ts`,
-  `.types.ts`, `.record.ts`, `.discovery.ts`, `.sso-gate.ts`, and `services/` (`ConnectionsService` is the facade over
-  the reader, records, domains, sign-in and reseal services); `index.ts` is the import surface for other modules, and
+  `.types.ts`, `.record.ts`, `.discovery.ts`, `.sso-gate.ts`, and `connections.service.ts`: one service per domain
+  (owner, 2026-11-20), `ConnectionsService`, holding every business method of the domain and the single entry point,
+  with no split by action and no facade; the 250-line cap is per method there (a method of 50 lines or more is a
+  finding, 80 is the hard cap), and pure parts go to `.rules.ts` / `.utils.ts` / `.errors.ts`; its spec
+  `connections.service.spec.ts` sits beside it. `index.ts` is the import surface for other modules, and
   `src/modules/services.ts` wires `connections` (D10; the service stays built in `src/config/connections.ts`, which
-  holds the specs-only seams).
+  holds the specs-only seams, so `services()` returns the process-wide instance until a consumer needs a per-request
+  one: D10 follow-up). Deep imports allowed: `src/config/connections.ts` (the wiring that builds the service) and
+  `src/i18n/codes.ts` (the code inventory). `modules/index.ts` imports `connections.resolver.ts` by file, because the
+  barrel would close an import cycle with the config wiring.
 - A tenant registers upstream OIDC identity providers (F1 of M4, Part of #19). `connections` is
   tenant-owned (`src/modules/collections.ts`, allowed files in `src/tenancy/guards.spec.ts`):
   `connectionId` unique per tenant, `domains[]` (`domain`, `txtToken`, `verifiedAt`), and a partial
@@ -714,7 +720,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
 - **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
-  (`services/records.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
+  (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
   (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
   whenever the metadata advertises it). Each connection has its own redirect URI
   (`ssoCallbackUrlOf(issuer, id)`: janus-social's function form, nxgt-janus#975), and `socialResolvers`'s
@@ -726,7 +732,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `<issuer>/sign-in/social/<id>/callback` with each identity provider.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
 - **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
-  enabled connection owning the address's verified domain (`ownerOf` in `services/sign-in.service.ts`: two claimants answer none), else null; it
+  enabled connection owning the address's verified domain (`ownerOf` in `connections.service.ts`: two claimants answer none), else null; it
   spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods/sso-throttle.ts`,
   `CLAVIX_SSO_*`, refusal `MAIL_THROTTLED`), never the mail-sending `signInThrottle` (#328: a flood of lookups must not close
   a tenant's sign-in codes), and is `no-store`. The federated sign-in is janus's
