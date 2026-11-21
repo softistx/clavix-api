@@ -6,8 +6,8 @@ import {
   clientIdOf,
   type registerClient,
 } from "@/modules/clients/register-client";
-import { CatalogError } from "@/modules/resources/catalog.errors";
-import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import type { ClientDetailTypes } from "@/modules/resources";
+import { CatalogError } from "@/modules/resources";
 import { partitionOf } from "@/modules/tenants";
 import type { CliTenant } from "@/shared/cli";
 import { type AgentsReader, agentKindsOf, refuseAgent } from "./client-agents";

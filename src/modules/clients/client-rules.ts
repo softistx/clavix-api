@@ -1,4 +1,4 @@
-import { CatalogError } from "@/modules/resources/catalog.errors";
+import { CatalogError } from "@/modules/resources";
 import type { ClientView } from "./client-listing";
 
 /** The size limits and the "same client" test of the clients service. */

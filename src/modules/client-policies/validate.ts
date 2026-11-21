@@ -1,4 +1,4 @@
-import { CatalogError } from "@/modules/resources/catalog.errors";
+import { CatalogError } from "@/modules/resources";
 
 const MAX_TARGETS = 20;
 const MAX_SUBJECT_CLIENTS = 50;

@@ -1,5 +1,5 @@
 import type { OAuthIssuerKey, OAuthResource } from "@softistx/janus-oauth";
-import { digestOf } from "@/modules/resources/detail-types/compile";
+import { digestOf } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import type { ResourcesFor } from "./ports";

@@ -3,7 +3,7 @@ import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { catalog } from "@/config/resources";
+import { resourcesService } from "@/config/resources";
 import { rolesFor, rolesService } from "@/config/roles";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createFlow } from "~/oauth-flow";
@@ -21,7 +21,7 @@ const claimsOf = (token: string | undefined) =>
 beforeAll(async () => {
   a = new ObjectId((await flow.setUp("roles-a", [X, Y])).tenantId);
   b = new ObjectId((await flow.setUp("roles-b", [X])).tenantId);
-  const resources = await catalog.listResources(a);
+  const resources = await resourcesService.listResources(a);
   const resourceX = resources.find((r) => r.uri === X);
   const wide = await rolesService.create(a, { name: "member" });
   const onX = await rolesService.create(a, {

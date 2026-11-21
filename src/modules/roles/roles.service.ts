@@ -4,7 +4,7 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import type { resources } from "../resources/resources.model";
+import type { resources } from "@/modules/resources";
 import { assign, members, removeUser, unassign } from "./role-assignments";
 import { claimRoles, rolesOfUser } from "./role-claims";
 import { memberCounts } from "./role-counts";

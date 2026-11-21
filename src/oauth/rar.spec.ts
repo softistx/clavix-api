@@ -17,14 +17,14 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import {
-  catalog,
   registerStoredResource,
   resourcesFor,
+  resourcesService,
 } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { registerClient } from "@/modules/clients/register-client";
-import { mongoClientDetailTypes } from "@/modules/resources/detail-types";
+import { mongoClientDetailTypes } from "@/modules/resources";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
@@ -227,7 +227,7 @@ beforeAll(async () => {
     tenantId: tenant._id,
   });
   if (pay === undefined) throw new Error("no resource");
-  await catalog.createDetailType(tenant._id, pay._id.toHexString(), {
+  await resourcesService.createDetailType(tenant._id, pay._id.toHexString(), {
     type: "payment",
     name: text("Paiement", "Payment"),
     description: text("Initier des virements", "Start transfers"),
@@ -372,11 +372,17 @@ describe("authorization details through consent", () => {
       tenantId: tenant._id,
     });
     if (resource === undefined) throw new Error("none");
-    await catalog.createDetailType(tenant._id, resource._id.toHexString(), {
-      type: "ledger",
-      name: text("", "Ledger"),
-      fields: [{ key: "account", kind: "string", label: text("", "Account") }],
-    });
+    await resourcesService.createDetailType(
+      tenant._id,
+      resource._id.toHexString(),
+      {
+        type: "ledger",
+        name: text("", "Ledger"),
+        fields: [
+          { key: "account", kind: "string", label: text("", "Account") },
+        ],
+      },
+    );
     await registerClient(
       { db: oauthDb, findTenant, detailTypes: ready },
       {
@@ -558,7 +564,7 @@ describe("details the page cannot fully describe", () => {
       tenantId: tenant._id,
     });
     if (resource === undefined) throw new Error("none");
-    const created = await catalog.createDetailType(
+    const created = await resourcesService.createDetailType(
       tenant._id,
       resource._id.toHexString(),
       {
@@ -655,7 +661,7 @@ describe("details the page cannot fully describe", () => {
     const tenantId = await createGift("gift-edit");
     const id = await pushed([gifted("gift-edit")], { client: "gifter" });
     const codes = await deviceCode([gifted("gift-edit")]);
-    await catalog.updateDetailType(tenantId, giftId, {
+    await resourcesService.updateDetailType(tenantId, giftId, {
       fields: [{ key: "note", kind: "string", label: text("Note", "Note") }],
     });
     const view = await gql(VIEW, { id });

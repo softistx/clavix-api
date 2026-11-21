@@ -1,5 +1,5 @@
 import { consoleResource } from "@/config/console";
-import { CatalogError } from "@/modules/resources/catalog.errors";
+import { CatalogError } from "@/modules/resources";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { CONSOLE_CLIENT_ID } from "../identity";
 

@@ -1,7 +1,7 @@
 import { mongo } from "@/config/db";
 import { redis } from "@/config/redis";
 import { registerStoredResource } from "@/config/resources";
-import { parseResourceArgs, USAGE } from "@/modules/resources/cli";
+import { parseResourceArgs, USAGE } from "@/modules/resources";
 import { CliInputError } from "@/shared/cli";
 
 // Registers a protected resource (an API audience and its scopes) on a tenant,

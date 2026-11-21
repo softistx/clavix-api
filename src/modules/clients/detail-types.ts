@@ -1,4 +1,4 @@
-import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import type { ClientDetailTypes } from "@/modules/resources";
 import { CliInputError, type CliTenant } from "@/shared/cli";
 
 /**

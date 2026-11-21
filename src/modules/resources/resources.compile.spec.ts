@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
+import { compileDetailType, digestOf } from "./resources.compile";
 import {
-  compileDetailType,
   DETAIL_LIMITS,
   type DetailFieldDefinition,
   type DetailTypeDefinition,
   detailTypeProblem,
-  digestOf,
-} from "./compile";
+} from "./resources.compile-rules";
 
 const payment: DetailTypeDefinition = {
   type: "payment",

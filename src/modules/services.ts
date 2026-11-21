@@ -1,4 +1,5 @@
 import { connectionsService } from "@/config/connections";
+import { resourcesService } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
 
@@ -11,6 +12,7 @@ import { webhooksService } from "@/config/webhooks-service";
  */
 export const services = () => ({
   connections: connectionsService,
+  resources: resourcesService,
   tenants: tenantsService,
   webhooks: webhooksService,
 });

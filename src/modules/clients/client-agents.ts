@@ -1,5 +1,5 @@
 import type { AgentClientsService } from "@/modules/agents/agent-clients.service";
-import { CatalogError } from "@/modules/resources/catalog.errors";
+import { CatalogError } from "@/modules/resources";
 import type { CliTenant } from "@/shared/cli";
 import type { AgentKinds, AgentKindsOf } from "./client-listing";
 

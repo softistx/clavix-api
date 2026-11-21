@@ -9,8 +9,7 @@ import {
 } from "@softistx/janus-oauth-mongo";
 import type { createOidcProvider } from "@softistx/janus-oidc";
 import type { Db } from "mongodb";
-import { DPOP_ALGORITHMS } from "@/modules/resources/protected-resource-document";
-import { OIDC_SCOPES } from "@/modules/resources/scope-name";
+import { DPOP_ALGORITHMS, OIDC_SCOPES } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { lifetimes } from "./lifetimes";
 import type {

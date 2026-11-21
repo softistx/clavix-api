@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { clientPoliciesService } from "@/config/client-policies";
 import { env } from "@/config/env";
-import { catalog } from "@/config/resources";
+import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { tenantResolver } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
@@ -11,8 +11,8 @@ import type {
   StoredResourceDoc,
   StoredScopeDoc,
   ValueDraft,
-} from "@/modules/resources/catalog";
-import { protectedResourceDocument } from "@/modules/resources/protected-resource-document";
+} from "@/modules/resources";
+import { protectedResourceDocument } from "@/modules/resources";
 import { hostOf } from "@/modules/tenants";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
@@ -189,9 +189,9 @@ export const resources: Resolvers = {
     resources: async (_, { tenantId }, ctx) => {
       const { _id, slug } = await catalogTenant(ctx, tenantId);
       const [found, scopes, types] = await Promise.all([
-        catalog.listResources(_id),
-        catalog.listScopes(_id),
-        catalog.listDetailTypes(_id),
+        resourcesService.listResources(_id),
+        resourcesService.listScopes(_id),
+        resourcesService.listDetailTypes(_id),
       ]);
       const documentOf = documentsOf(slug);
       return Promise.all(
@@ -207,34 +207,36 @@ export const resources: Resolvers = {
     },
     resource: async (_, { tenantId, id }, ctx) => {
       const { _id, slug } = await catalogTenant(ctx, tenantId);
-      const found = await catalog.findResource(_id, id);
+      const found = await resourcesService.findResource(_id, id);
       if (found === undefined) return null;
-      const scopes = await catalog.listScopes(_id, { resourceId: found._id });
+      const scopes = await resourcesService.listScopes(_id, {
+        resourceId: found._id,
+      });
       return resourceShape(
         found,
         scopes,
-        await catalog.listDetailTypes(_id, { resourceId: found._id }),
+        await resourcesService.listDetailTypes(_id, { resourceId: found._id }),
         await documentsOf(slug)(found, scopes),
       );
     },
     scopes: async (_, { tenantId, resourceId }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
       if (resourceId === undefined || resourceId === null) {
-        return (await catalog.listScopes(_id)).map(scopeShape);
+        return (await resourcesService.listScopes(_id)).map(scopeShape);
       }
-      const owner = await catalog.findResource(_id, resourceId);
+      const owner = await resourcesService.findResource(_id, resourceId);
       return owner === undefined
         ? []
-        : (await catalog.listScopes(_id, { resourceId: owner._id })).map(
-            scopeShape,
-          );
+        : (
+            await resourcesService.listScopes(_id, { resourceId: owner._id })
+          ).map(scopeShape);
     },
   },
   Mutation: {
     createResource: async (_, { tenantId, input }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const created = await refusing(() =>
-        catalog.createResource(tenant._id, tenant.slug, {
+        resourcesService.createResource(tenant._id, tenant.slug, {
           uri: input.uri,
           name: input.name ?? undefined,
         }),
@@ -256,20 +258,24 @@ export const resources: Resolvers = {
       const updated = await refusing(async () => {
         refuseMachineConsole(
           tenant,
-          await catalog.findResource(_id, id),
+          await resourcesService.findResource(_id, id),
           input.allowClientCredentials,
         );
-        return catalog.updateResource(_id, id, {
+        return resourcesService.updateResource(_id, id, {
           name: input.name ?? undefined,
           allowClientCredentials: input.allowClientCredentials ?? undefined,
         });
       });
       await ctx.audit("resource.update", target("resource", _id, updated._id));
-      const scopes = await catalog.listScopes(_id, { resourceId: updated._id });
+      const scopes = await resourcesService.listScopes(_id, {
+        resourceId: updated._id,
+      });
       return resourceShape(
         updated,
         scopes,
-        await catalog.listDetailTypes(_id, { resourceId: updated._id }),
+        await resourcesService.listDetailTypes(_id, {
+          resourceId: updated._id,
+        }),
         await documentsOf(slug)(updated, scopes),
       );
     },
@@ -278,13 +284,13 @@ export const resources: Resolvers = {
       let scopes: StoredScopeDoc[] = [];
       let types: StoredDetailTypeDoc[] = [];
       const removed = await refusing(async () => {
-        const found = await catalog.findResource(tenant._id, id);
+        const found = await resourcesService.findResource(tenant._id, id);
         keepConsoleResource(tenant, found);
         if (found !== undefined) {
-          scopes = await catalog.listScopes(tenant._id, {
+          scopes = await resourcesService.listScopes(tenant._id, {
             resourceId: found._id,
           });
-          types = await catalog.listDetailTypes(tenant._id, {
+          types = await resourcesService.listDetailTypes(tenant._id, {
             resourceId: found._id,
           });
           // The roles scoped to it go first: were the resource gone before them
@@ -305,7 +311,7 @@ export const resources: Resolvers = {
             });
           }
         }
-        return catalog.deleteResource(tenant._id, id);
+        return resourcesService.deleteResource(tenant._id, id);
       });
       // Its scopes go with it: one event each, then the resource's, which is
       // recorded on a repeat too (it may be the event the first run missed).
@@ -329,7 +335,7 @@ export const resources: Resolvers = {
     createScope: async (_, { tenantId, input }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
       const created = await refusing(() =>
-        catalog.createScope(_id, {
+        resourcesService.createScope(_id, {
           name: input.name,
           description: {
             fr: input.description?.fr ?? undefined,
@@ -345,7 +351,7 @@ export const resources: Resolvers = {
     updateScope: async (_, { tenantId, id, input }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
-        catalog.updateScope(_id, id, {
+        resourcesService.updateScope(_id, id, {
           description:
             input.description === undefined || input.description === null
               ? undefined
@@ -362,17 +368,17 @@ export const resources: Resolvers = {
     deleteScope: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const removed = await refusing(async () => {
-        const scope = await catalog.findScope(tenant._id, id);
+        const scope = await resourcesService.findScope(tenant._id, id);
         if (scope !== undefined && scope.resourceId !== null) {
           keepConsoleResource(
             tenant,
-            await catalog.findResource(
+            await resourcesService.findResource(
               tenant._id,
               scope.resourceId.toHexString(),
             ),
           );
         }
-        return catalog.deleteScope(tenant._id, id);
+        return resourcesService.deleteScope(tenant._id, id);
       });
       if (ObjectId.isValid(id)) {
         await ctx.audit(
@@ -385,7 +391,7 @@ export const resources: Resolvers = {
     createDetailType: async (_, { tenantId, input }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
       const created = await refusing(() =>
-        catalog.createDetailType(_id, input.resourceId, {
+        resourcesService.createDetailType(_id, input.resourceId, {
           type: input.type,
           name: {
             fr: input.name.fr ?? undefined,
@@ -408,7 +414,7 @@ export const resources: Resolvers = {
     updateDetailType: async (_, { tenantId, id, input }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
-        catalog.updateDetailType(_id, id, {
+        resourcesService.updateDetailType(_id, id, {
           name:
             input.name === undefined || input.name === null
               ? undefined
@@ -435,7 +441,9 @@ export const resources: Resolvers = {
     },
     deleteDetailType: async (_, { tenantId, id }, ctx) => {
       const { _id } = await catalogTenant(ctx, tenantId);
-      const removed = await refusing(() => catalog.deleteDetailType(_id, id));
+      const removed = await refusing(() =>
+        resourcesService.deleteDetailType(_id, id),
+      );
       if (ObjectId.isValid(id)) {
         await ctx.audit(
           "detailType.delete",

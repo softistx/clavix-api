@@ -11,7 +11,7 @@ import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
-import { catalog } from "@/config/resources";
+import { resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { registerClient } from "@/modules/clients/register-client";
@@ -196,7 +196,7 @@ describe("the consent screen's data", () => {
   test("a scope's label is the tenant's description, in the viewer's language", async () => {
     const acme = await mongo.db.tenants.findFirst({ slug: "acme" });
     if (acme === undefined) throw new Error("no tenant");
-    await catalog.createScope(acme._id, {
+    await resourcesService.createScope(acme._id, {
       name: "email",
       description: { fr: "Votre adresse e-mail", en: "Your email address" },
       resourceId: null,
