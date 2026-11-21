@@ -346,7 +346,7 @@ describe("a keyring rotation", () => {
     const tenant = await tenantOf(SLUGS.a);
     const newMaster = new Uint8Array(32).fill(9);
     const ring = [newMaster, ...masterKeys] as [Uint8Array, ...Uint8Array[]];
-    // The tenant's own sealed stores are another spec's (src/keys/reseal.spec.ts).
+    // The tenant's own sealed stores are another spec's (src/modules/keys/reseal.spec.ts).
     const none = async () => emptySecretResealCounts();
     const noStores = {
       webhookSecrets: none,
