@@ -15,7 +15,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a

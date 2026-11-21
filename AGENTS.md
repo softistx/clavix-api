@@ -38,7 +38,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   and `index.ts`, the only entry other modules import. Other files stay under 250 lines, a function under 80. No helper function at the top of a
   service, resolver or data-loader (it goes to `<m>.utils.ts`). Ports and clocks are passed
   explicitly, never defaulted (`src/config/runtime.ts` binds `clock`, `clockMs`, `janusClock`, `warn` and `reportError` once, at the composition root; only the CLI scripts and the server's startup banner print through `console` directly, and the frozen data migrations read `new Date()`). Known overruns of the 250 lines outside services, to split when touched:
-  `users/tenant-janus.ts`, `clients/register-client.ts`, `keys/reseal.ts`, `config/env.ts`, `console/context.ts`.
+  `clients/register-client.ts`, `config/env.ts`, `console/context.ts`.
   `src/modules/index.ts` merges the resolvers, `services.ts` holds the per-request services (D10: the
   process-lifetime objects, such as the janus issuers, keys, `oauthDb`, Redis and telemetry, stay in `src/config/`), `collections.ts` the collections.
 - **Console face**: the console's SDL is `src/modules/<m>/<m>.console.graphqls`, its resolvers
@@ -180,10 +180,10 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   `src/i18n/codes.ts`.
 - **One field, one schema**: `signIn: signInPolicySchema` (`sign-in-methods.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (`mfa: { mode: passkeySufficient|required, totp }` goes beside it, with zod defaults so a cached tenant without it still parses: `totp` off, mode `passkeySufficient`) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
 - **Every write goes through `SignInPolicyService`** (`sign-in-methods.service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
-- **Gates**: `requireMethod(tenant, method)` (`sign-in-methods.gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`AuthService`, `src/modules/auth/auth.service.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked first in the service, before the throttle. Registering a passkey while signed in is not gated.
+- **Gates**: `requireMethod(tenant, method)` (`sign-in-methods.gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `users.tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`AuthService`, `src/modules/auth/auth.service.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked first in the service, before the throttle. Registering a passkey while signed in is not gated.
 - **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `sign-in-methods.secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`sign-in-methods.social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
 - **A social sign-in may replace an unverified holder (nxgt-janus #978)**. **Assumed, not answered**:
-  `social.unverifiedHolder` (`unverifiedHolderOf`, `tenant-janus.ts`) answers `'replace'` for the tenant's built-in
+  `social.unverifiedHolder` (`unverifiedHolderOf`, `users.social.ts`) answers `'replace'` for the tenant's built-in
   social apps (Google, GitHub, Microsoft: the static providers, which vouch for the addresses they hold) and
   `'refuse'` for an enterprise connection (the tenant's own identity provider could vouch for an address it does
   not control). janus asks only once the provider reported the e-mail verified, and never replaces a verified
@@ -210,11 +210,19 @@ tokens are the tenant's partition (`syncMongoStoresPartitioned` and `syncMongoIn
 (`src/config/users.ts`, wired in `src/server.ts`): both go through the tenant's own instance, so a
 user id or session of another tenant is unknown or anonymous. Relations, API keys and janus-kit are not
 partitioned: never use them for tenant users.
+Its files (A23): `users.tenant-janus.ts` (one tenant's `janus()` and the `TenantJanus` types),
+`users.issuers.ts` (`createTenantJanusIssuers`, its options), `users.social.ts` (the social apps and
+enterprise connections of a tenant), `users.sso.ts` (home-realm discovery, the callback's connection),
+`users.session.ts` (the cookie and session constants), `users.rp.ts` (rpId, origin), `users.schema.ts`
+(the user schema), `users.second-factor-keys.ts`, `users.verified-email.ts` and `users.tenant-auth.ts`
+(`authFor`, `claimsFor`). `index.ts` is the import surface (registered as `services().users`); the console resolvers,
+`users.service.ts` and `users.types.ts` are imported by file (they read the invitations types, which
+import the barrel: a cycle otherwise).
 - **Cookie**: `__Host-clavix-session`, no `Domain`, Secure, SameSite=Lax. Session 14 days sliding,
   capped at 30 days after sign-in (`session.absolute`, janus 0.53).
 - **Assumed, not answered (2026-11-12), confirm before first production passkey**: the passkey rpId is
   the tenant's host and the origin `https://<slug>.<CLAVIX_DOMAIN>`, in one place, `rpIdOf` /
-  `originOf` (`src/modules/users/rp.ts`). A verified custom domain is a WebAuthn related origin of it
+  `originOf` (`src/modules/users/users.rp.ts`). A verified custom domain is a WebAuthn related origin of it
   (ADR-0036): `ResolvedTenant.relatedOrigins` (the same `relatedOriginsOf` list the well-known document
   serves) joins janus's `passkeys.origins`, and the janus issuer cache's version carries its digest, so
   verifying or removing a domain rebuilds the instance. A passkey is scoped to its rpId for good. The janus and OAuth issuer cache versions start with `tenantId`, so a tenant recreated under a purged slug never gets the old instance, bound to the old partition (#290).
@@ -276,7 +284,7 @@ janus refusal except `STORE_FAILED` is `EMAIL_VERIFICATION_INVALID` 400. janus's
 
 Passwordless passkey sign-in and registration on `/graphql` (README, "Passkey sign-in and
 registration"). janus passkeys are the first factor (`passkeys.firstFactor: true`,
-`@softistx/janus-passkeys`), rpId and origin from `src/modules/users/rp.ts`; janus-graphql's passkey SDL is
+`@softistx/janus-passkeys`), rpId and origin from `src/modules/users/users.rp.ts`; janus-graphql's passkey SDL is
 not used: its resolvers bind to one janus instance and it has no first-factor sign-in, and ours is
 per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 - The passkey sign-in is janus-graphql's `passkeyResolvers({ auth, firstFactor: true })`, called from
@@ -284,7 +292,7 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
   its names, arguments and errors, so the janus refusals (`CREDENTIALS_INVALID`, `TOKEN_*`, a non-JSON
   response) are answered as one `PASSKEY_INVALID` 401 (`asPasskeyInvalid`; `STORE_FAILED` stays 503).
   Registration lets janus's errors through (`janusMasking`). Cookie as `verifySignInCode`.
-- **TOTP second factor (M4 M1)**: every tenant's janus is built with `secondFactor` (`tenant-janus.ts`), so a user who holds a factor gets a challenge instead of a session. The sealing keys come from the keyring (`src/modules/users/second-factor-keys.ts`: HKDF-SHA256 of each master key, info `second-factor`, key id = another 8 bytes of the same master key): the first key seals, every key opens, so a rotation of `CLAVIX_KEYS_MASTER_KEY` keeps TOTP working. `keys:reseal` seals the TOTP secrets again with janus's `secondFactor.reseal` (`src/modules/keys/second-factor-reseal.ts`) and counts what is still under an older key (`secondFactor.behind` for secrets, `recoveryCodesBehind` for the recovery-code hashes, which cannot be re-hashed): keep the old key until `recoveryCodesBehind` is 0. `MfaService` (`src/modules/mfa/mfa.service.ts`) binds janus-graphql's `secondFactorResolvers` (bound once, `auth` a function of the context answering the request's tenant janus (nxgt-janus#914), `NOT_FOUND` for an unknown host, `freshWithin: '10m'`) behind our own SDL; its guard refuses `enroll` and `activate` with 403 `SECOND_FACTOR_DISABLED` when the policy's `mfa.totp` is off (a factor that exists is kept; disabling and new recovery codes stay allowed). The code, link and social completions answer a union (`SignInResult`, `SocialSignInResult`: the session or a `SecondFactorChallenge`), recorded as a sign-in only when a session opened; `confirmSecondFactor` / `recoverSecondFactor` record `session.signIn` by `totp` / `recoveryCode`, and `confirmSecondFactorWithPasskey` by `passkey` (janus-graphql's `passkeyResolvers().Mutation.confirmSecondFactorPasskey`, the same five attempts; clavix-api#293). `requestSecondFactorPasskeyOptions` re-reads the passkey options of a challenge: no attempt is counted, it shares `ctx.passkeyThrottle`, and runs `requireLive` then `requireMethod("passkey")`. A passkey sign-in stays `SignedIn` (a passkey is multi-factor). Console: `updateMfaPolicy` (`edit`, event `mfaPolicy.update`), `TenantUser.secondFactor`, `resetUserSecondFactor` (`edit`, event `user.resetSecondFactor`). `TenantUser.secondFactor` reads through a per-request DataLoader (`secondFactorLoader` in `users.data-loader.ts`, `ConsoleUsers.secondFactors`: one `findMany`, the recovery codes of the holders only); the users module resolvers are wrapped in `freshPerMutation`, so a field read after a reset sees the write.
+- **TOTP second factor (M4 M1)**: every tenant's janus is built with `secondFactor` (`users.tenant-janus.ts`), so a user who holds a factor gets a challenge instead of a session. The sealing keys come from the keyring (`src/modules/users/users.second-factor-keys.ts`: HKDF-SHA256 of each master key, info `second-factor`, key id = another 8 bytes of the same master key): the first key seals, every key opens, so a rotation of `CLAVIX_KEYS_MASTER_KEY` keeps TOTP working. `keys:reseal` seals the TOTP secrets again with janus's `secondFactor.reseal` (`src/modules/keys/keys.second-factor-reseal.ts`) and counts what is still under an older key (`secondFactor.behind` for secrets, `recoveryCodesBehind` for the recovery-code hashes, which cannot be re-hashed): keep the old key until `recoveryCodesBehind` is 0. `MfaService` (`src/modules/mfa/mfa.service.ts`) binds janus-graphql's `secondFactorResolvers` (bound once, `auth` a function of the context answering the request's tenant janus (nxgt-janus#914), `NOT_FOUND` for an unknown host, `freshWithin: '10m'`) behind our own SDL; its guard refuses `enroll` and `activate` with 403 `SECOND_FACTOR_DISABLED` when the policy's `mfa.totp` is off (a factor that exists is kept; disabling and new recovery codes stay allowed). The code, link and social completions answer a union (`SignInResult`, `SocialSignInResult`: the session or a `SecondFactorChallenge`), recorded as a sign-in only when a session opened; `confirmSecondFactor` / `recoverSecondFactor` record `session.signIn` by `totp` / `recoveryCode`, and `confirmSecondFactorWithPasskey` by `passkey` (janus-graphql's `passkeyResolvers().Mutation.confirmSecondFactorPasskey`, the same five attempts; clavix-api#293). `requestSecondFactorPasskeyOptions` re-reads the passkey options of a challenge: no attempt is counted, it shares `ctx.passkeyThrottle`, and runs `requireLive` then `requireMethod("passkey")`. A passkey sign-in stays `SignedIn` (a passkey is multi-factor). Console: `updateMfaPolicy` (`edit`, event `mfaPolicy.update`), `TenantUser.secondFactor`, `resetUserSecondFactor` (`edit`, event `user.resetSecondFactor`). `TenantUser.secondFactor` reads through a per-request DataLoader (`secondFactorLoader` in `users.data-loader.ts`, `ConsoleUsers.secondFactors`: one `findMany`, the recovery codes of the holders only); the users module resolvers are wrapped in `freshPerMutation`, so a field read after a reset sees the write.
 - janus (0.55+) accepts
   `http://<name>.localhost` origins, so a development tenant on http (`<slug>.clavix.localhost`) gets its
   real rpId and origin like any other: no http special case.
@@ -339,7 +347,9 @@ becomes the default. Every spec request to these paths sends `clientHeaders` (`t
 
 `src/modules/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in
 `src/config/keys.ts`; a tenant's partition is its hex id), the rotation policy and the hourly
-`key-rotation` queue (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, which must cover **every store sealed under the keyring** (signing keys, TOTP secrets, and the `createSecretBox` stores in `SECRET_STORES`, `src/modules/keys/reseal.ts`: each service's `resealSecrets(tenantId)`; a new sealed store adds its entry there, and the old key is dropped only when the report's `oldKeyNeededBy` is empty), and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). `withPublicDocuments` (`src/oauth/public-documents.ts`) serves the JWKS and discovery documents from memory (key `<tenantId>.<version>.<keys generation>`, 60 s TTL, ETag and 304); `createTenantKeys` bumps the generation on every key insert, promote or retire, so a key write goes through `signingKeysFor`; a write from another process (the `keys:rotate` CLI, another instance) shows only when the TTL ends. Sign and
+`key-rotation` queue (files: `keys.service.ts` for the rotation and the emergency rotation, `keys.signing-keys.ts`,
+`keys.rules.ts`, `keys.queue.ts`, `keys.worker.ts`, `keys.reseal.ts`, `keys.second-factor-reseal.ts`, `keys.types.ts`,
+`keys.utils.ts` and `keys.cli.ts`; `index.ts` is the import surface; registered as `services().keys`) (Redis only; without it the pass at server start is the only one). `CLAVIX_KEYS_MASTER_KEY` encrypts them: one key or a comma-separated keyring, first = current (README, "Signing keys"; rotation runbook in `docs/operations.md`: `bun run keys:reseal`, which must cover **every store sealed under the keyring** (signing keys, TOTP secrets, and the `createSecretBox` stores in `SECRET_STORES`, `src/modules/keys/keys.types.ts`, run by `keys.reseal.ts`: each service's `resealSecrets(tenantId)`; a new sealed store adds its entry there, and the old key is dropped only when the report's `oldKeyNeededBy` is empty), and `bun run keys:rotate <tenant>|--all [--drop-old]` for the emergency rotation). `withPublicDocuments` (`src/oauth/public-documents.ts`) serves the JWKS and discovery documents from memory (key `<tenantId>.<version>.<keys generation>`, 60 s TTL, ETag and 304); `createTenantKeys` bumps the generation on every key insert, promote or retire, so a key write goes through `signingKeysFor`; a write from another process (the `keys:rotate` CLI, another instance) shows only when the TTL ends. Sign and
 verify through the janus store; never log a key record, never read `oauthSigningKeys` raw
 outside the specs.
 
@@ -552,7 +562,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   sign-up and invitation paths.
 - **The console needs a verified e-mail** (ADR-0041, #179): `console/guard.ts` refuses every root
   field whose guard is not `aboutCaller()` (only `Query.me`) with `EMAIL_UNVERIFIED` (403), before the
-  role check, through `requireVerifiedEmail` (`src/modules/users/verified-email.ts`, reusable by the
+  role check, through `requireVerifiedEmail` (`src/modules/users/users.verified-email.ts`, reusable by the
   future e-mail change) and `ConsoleDirectory.emailVerified(id)` (false for an unknown user, throws when the clavix tenant is unavailable), read once per request
   (`callerProved`). `Me.memberships` and `Me.switchableTenants` call `verifiedCaller` themselves: they
   are tenant data under the open `me`. `signedIn()` also needs the proof; a new field never opts out. Operators are held to it (the
@@ -744,7 +754,7 @@ comparison is `domains.check.ts`.
   actor `system:domains:verify`), recorded through `DomainsServiceOptions.record` (`domains.events.ts`,
   wired in `src/config/domains.ts`); a failure to record is logged, never fails the write.
 - The primary is explicit (`setPrimaryDomain`, ADR-0032); the issuer follows it (resolver
-  `toResolved`), the passkey rpId stays the slug host (`slugIssuer`, `src/modules/users/rp.ts`,
+  `toResolved`), the passkey rpId stays the slug host (`slugIssuer`, `src/modules/users/users.rp.ts`,
   ADR-0036). The primary cannot be removed. The slug host keeps serving.
 - `recheckAll` runs every 6 hours (`domains.recheck-queue.ts`, started in `src/server.ts`). A record
   missing for 7 days makes the domain `unverified` (it stops serving and no certificate is
@@ -841,7 +851,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `checkConnection:` TypeError becomes `BAD_USER_INPUT` with the field names, no values. Ids `google`,
   `github`, `microsoft` are refused (they are the static apps). `emailTrust` offers `claimAndDomain`
   and `domain` only. `upstreamMfa.acr` is enforced (D6): it becomes the connection's `stepUp.acrValues`, so an ID token without that `acr` is `SOCIAL_STEP_UP_UNMET`.
-- `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `tenant-janus.ts` wires it as
+- `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `users.social.ts` wires it as
   `social.resolveProvider` through `oidcConnections` (one redirect URI per connection:
   `<issuer>/sign-in/social/<id>/callback`, the hosted UI's callback route). Every tenant's janus instance carries it, so the static-social
   gate in `sign-in-methods` also checks the tenant's offered providers.
@@ -879,7 +889,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `acceptInvitation`'s sign-in are not gated. `login_hint` waits for J2; the callback route is F3.
 - `domainOfEmail` is janus-social's (exported since 0.9); `federation.spec.ts` injects `resolveHost`. janus has no
   API to mark `mfa` amr from a federated step-up proof for tenant connections (`oidcConnections` takes no `federatedAmr`
-  by design): D6 uses the acr check, and `trustingUpstreamMfa` (`tenant-janus.ts`) wraps the resolved provider with
+  by design): D6 uses the acr check, and `trustingUpstreamMfa` (`users.social.ts`) wraps the resolved provider with
   `federatedAmr` for a connection whose `stepUp.acrValues` is set, so such a session is `["fed", "mfa"]` (acr `mfa`).
 
 ## OAuth clients

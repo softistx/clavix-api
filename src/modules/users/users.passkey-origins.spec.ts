@@ -7,8 +7,9 @@ import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { createTenantResolver, type TenantRecord } from "@/tenancy/resolver";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
-import { createTenantAuth } from "./tenant-auth";
-import { buildTenantJanus, SESSION_COOKIE } from "./tenant-janus";
+import { SESSION_COOKIE } from "./users.session";
+import { createTenantAuth } from "./users.tenant-auth";
+import { buildTenantJanus } from "./users.tenant-janus";
 
 // ADR-0036: the rpId stays the slug host; a verified custom domain is a related
 // origin, so a ceremony run on it is accepted. janus-passkeys compares

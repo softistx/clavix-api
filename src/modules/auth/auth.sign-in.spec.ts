@@ -19,10 +19,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import {
-  SESSION_COOKIE,
-  SIGN_IN_CODE_LIFESPAN,
-} from "@/modules/users/tenant-janus";
+import { SESSION_COOKIE, SIGN_IN_CODE_LIFESPAN } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 import { afterAnswer, settled } from "./auth.outbox";
 

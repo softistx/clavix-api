@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { createKeyGenerations } from "@/modules/keys/generations";
-import { ensureSigningKey } from "@/modules/keys/rotation";
-import { createTenantKeys, type TenantKeys } from "@/modules/keys/signing-keys";
+import {
+  createKeyGenerations,
+  createTenantKeys,
+  ensureSigningKey,
+  type TenantKeys,
+} from "@/modules/keys";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { withPublicDocuments } from "./public-documents";
 

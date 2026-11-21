@@ -1,7 +1,7 @@
 import { InvalidCursorError } from "@softistx/mongo";
 import type { StoredAdminEvent } from "@/console/admin-events/reader";
 import type { ConsoleContext } from "@/console/context";
-import { badInput } from "@/modules/users/users.errors";
+import { badInput } from "@/modules/users";
 import type { StoredAuthEvent } from "./audit.types";
 
 const MAX_PAGE = 100;

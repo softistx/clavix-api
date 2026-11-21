@@ -1,5 +1,5 @@
 import type { JanusMail } from "@softistx/janus-mail";
-import type { TenantJanus } from "@/modules/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 
 /** What `AuthService` is built over: the tenants' janus instances, their mail and the activity counter. */

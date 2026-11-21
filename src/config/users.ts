@@ -2,8 +2,7 @@ import { userKey } from "@/console/modules/user-key";
 import { janusListener } from "@/events/janus-listener";
 import { adminInvitationHooks } from "@/modules/admins/admins.hooks";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
-import { createTenantAuth } from "@/modules/users/tenant-auth";
+import { createTenantAuth, secondFactorKeysOf } from "@/modules/users";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { access } from "./access";
 import { connectionsService } from "./connections";
@@ -45,3 +44,6 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
       tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks(tenant) : undefined,
   },
 );
+
+/** The users module as the services registry hands it out: the per-tenant janus instances and the OAuth ports built on them. */
+export const usersService = { janusIssuers, authFor, claimsFor, forTenant };

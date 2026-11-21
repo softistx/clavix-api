@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SocialProfile } from "@softistx/janus";
-import { unverifiedHolderOf } from "./tenant-janus";
+import { unverifiedHolderOf } from "./users.social";
 
 const holder = { id: "u1", type: "customer" } as const;
 const profile = (provider: string) =>

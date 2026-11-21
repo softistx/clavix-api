@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { CliInputError } from "@/shared/cli";
-import { parseRotateArgs } from "./cli";
+import { parseRotateArgs } from "./keys.cli";
 
 test("keys:rotate takes a slug or --all, and --drop-old", () => {
   expect(parseRotateArgs(["acme"])).toEqual({

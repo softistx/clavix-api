@@ -27,8 +27,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { originOf, rpIdOf } from "@/modules/users/rp";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";

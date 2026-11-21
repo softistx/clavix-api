@@ -13,7 +13,7 @@ import {
   operatorScope,
 } from "@/modules/invitations/invitations.rules";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { buildTenantJanus } from "@/modules/users/tenant-janus";
+import { buildTenantJanus } from "@/modules/users";
 import { adminInvitationHooks } from "./admins.hooks";
 import { changeRole, removeMember } from "./admins.service";
 

@@ -8,7 +8,7 @@ import {
 } from "@/modules/connections";
 import { challengeOf } from "@/modules/mfa/mfa.challenge";
 import { requireMethod } from "@/modules/sign-in-methods";
-import type { TenantJanus } from "@/modules/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users";
 import { requireLive } from "@/tenancy/live";
 import {
   codeInvalid,

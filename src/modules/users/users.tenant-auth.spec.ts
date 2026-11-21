@@ -14,9 +14,10 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import { originOf, rpIdOf } from "./rp";
-import { createTenantAuth } from "./tenant-auth";
-import { buildTenantJanus, SESSION_COOKIE } from "./tenant-janus";
+import { originOf, rpIdOf } from "./users.rp";
+import { SESSION_COOKIE } from "./users.session";
+import { createTenantAuth } from "./users.tenant-auth";
+import { buildTenantJanus } from "./users.tenant-janus";
 
 const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";

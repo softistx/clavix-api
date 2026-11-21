@@ -1,5 +1,5 @@
-import type { RotationDeps } from "./rotation";
-import { rotateAllTenants } from "./rotation";
+import type { RotationDeps } from "./keys.service";
+import { rotateAllTenants } from "./keys.service";
 
 /** The queue surface the worker needs (`redis.queues.keyRotation`). */
 export interface RotationQueue {

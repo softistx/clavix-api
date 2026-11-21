@@ -1,6 +1,6 @@
 import { liveTenant, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { badInput } from "@/modules/users/users.errors";
+import { badInput } from "@/modules/users";
 import {
   adminEventOf,
   adminPage,

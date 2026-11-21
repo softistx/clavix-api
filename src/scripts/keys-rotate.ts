@@ -3,8 +3,7 @@ import { signingKeysFor } from "@/config/keys";
 import { redis } from "@/config/redis";
 import { clock, warn } from "@/config/runtime";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
-import { rotateNow } from "@/modules/keys";
-import { parseRotateArgs, ROTATE_USAGE } from "@/modules/keys/cli";
+import { parseRotateArgs, ROTATE_USAGE, rotateNow } from "@/modules/keys";
 import { partitionOf } from "@/modules/tenants";
 import { CliInputError, UnknownTenantError } from "@/shared/cli";
 

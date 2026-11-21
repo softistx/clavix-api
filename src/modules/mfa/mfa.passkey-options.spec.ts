@@ -13,8 +13,7 @@ import { settled } from "@/modules/auth";
 import { passkeyThrottled } from "@/modules/passkeys";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { originOf, rpIdOf } from "@/modules/users/rp";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the

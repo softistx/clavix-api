@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { TenantUnavailableError } from "@/modules/invitations/invitations.errors";
 import type { TenantInvitations } from "@/modules/invitations/invitations.types";
-import type { TenantJanus } from "./tenant-janus";
 import { UsersService } from "./users.service";
+import type { TenantJanus } from "./users.tenant-janus";
 
 // A tenant suspended or deleted between the console's own check and the call
 // is "not found", like any other call that names it, never a plain 500.

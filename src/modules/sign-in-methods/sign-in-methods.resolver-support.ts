@@ -10,7 +10,7 @@ import {
   bindSsoCallback,
   connectionIdOfCallbackUrl,
   socialOf,
-} from "@/modules/users/tenant-janus";
+} from "@/modules/users";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { methodDisabled } from "./sign-in-methods.errors";
 import {

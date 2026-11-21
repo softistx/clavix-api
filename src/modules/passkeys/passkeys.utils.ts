@@ -1,6 +1,6 @@
 import type { Passkey } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
-import type { TenantJanus } from "@/modules/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users";
 import { fail } from "@/shared/errors";
 
 /** The session of the request, or UNAUTHENTICATED (401). */

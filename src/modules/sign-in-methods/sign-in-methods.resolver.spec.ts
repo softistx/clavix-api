@@ -25,7 +25,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";

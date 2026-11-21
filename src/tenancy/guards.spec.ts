@@ -86,7 +86,7 @@ const allowed = [
   "src/tenancy/",
   "src/migrations/",
   // Key rotation walks every tenant's partition of janus's own collections.
-  "src/modules/keys/reseal.ts",
+  "src/modules/keys/keys.second-factor-reseal.ts",
   "src/modules/tenants/",
   "src/modules/resources/",
   "src/config/resources.ts",
@@ -116,7 +116,7 @@ const platformAllowed = [
   "src/modules/domains/",
   "src/config/domains.ts",
   // Key rotation walks every tenant's partition of janus's own collections.
-  "src/modules/keys/reseal.ts",
+  "src/modules/keys/keys.second-factor-reseal.ts",
 ];
 // Where the platform `tenants` collection may be reached: every writer
 // there goes through the service, which invalidates the resolver's cache.

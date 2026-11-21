@@ -11,14 +11,11 @@ import {
 import { TenantsService } from "@/modules/tenants";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
-import {
-  type ResealDeps,
-  type ResealReport,
-  resealAllTenants,
-  resealExitCode,
-} from "./reseal";
-import { ensureSigningKey } from "./rotation";
-import { createTenantKeys } from "./signing-keys";
+import { resealAllTenants } from "./keys.reseal";
+import { ensureSigningKey } from "./keys.service";
+import { createTenantKeys } from "./keys.signing-keys";
+import type { ResealDeps, ResealReport } from "./keys.types";
+import { resealExitCode } from "./keys.utils";
 
 const oldKey = new Uint8Array(32).fill(1);
 const newKey = new Uint8Array(32).fill(2);

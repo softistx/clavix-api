@@ -1,4 +1,4 @@
-import type { TenantJanus } from "@/modules/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users";
 
 /** What `PasskeysService` is built over: the tenants' janus instances and the activity counter. */
 export interface PasskeysPorts {

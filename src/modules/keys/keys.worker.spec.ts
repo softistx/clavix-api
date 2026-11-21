@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { keyRotation } from "./queue";
-import { startKeyRotation } from "./worker";
+import { keyRotation } from "./keys.queue";
+import { startKeyRotation } from "./keys.worker";
 
 describe("startKeyRotation", () => {
   test("runs a pass at start, then one per tick on the queue", async () => {
