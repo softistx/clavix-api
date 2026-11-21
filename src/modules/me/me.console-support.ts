@@ -1,9 +1,23 @@
+import { InvalidCursorError } from "@softistx/mongo";
 import { tenantsService } from "@/config/tenancy";
 import type { ConsoleContext } from "@/console/context";
 import type { Role } from "@/console/model";
 import { GRAPHQL_ROLE } from "@/modules/admins/admins.utils";
 import { parentOf } from "@/modules/tenants/tenants.console-parent";
-import { limitOf, listing, stronger } from "./me.utils";
+import { fail } from "@/shared/errors";
+import { limitOf, stronger } from "./me.utils";
+
+/** A page of tenants; a cursor that is not valid is the caller's mistake. */
+async function listing<T>(page: () => Promise<T>): Promise<T> {
+  try {
+    return await page();
+  } catch (error) {
+    if (error instanceof InvalidCursorError) {
+      throw fail("BAD_USER_INPUT", "The cursor is not valid", { status: 400 });
+    }
+    throw error;
+  }
+}
 
 interface Page {
   q?: string | null | undefined;
