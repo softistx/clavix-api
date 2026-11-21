@@ -40,7 +40,7 @@ const refused = () =>
 
 /**
  * A graxia plugin for `/graphql` and `/console/graphql`. `required` comes from
- * the caller (`env.CLAVIX_REQUIRE_CLIENT_HEADER` in `createApp`), never a
+ * the caller (`appPorts.requireClientHeader` in `createApp`), never a
  * default here. Off, nothing is checked: any value, or none, passes (no allow
  * list exists, so a present header is never refused either). On, a request with
  * no non-blank header is answered 403 `CLIENT_HEADER_REQUIRED` before it is

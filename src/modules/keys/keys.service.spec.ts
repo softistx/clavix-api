@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
 import { quietKeys } from "~/ports";
+import { createKeyGenerations } from "./keys.generations";
 import { retireAfterMs, rotationPolicy } from "./keys.rules";
 import { createTenantKeys } from "./keys.signing-keys";
 
@@ -9,6 +10,7 @@ describe("rotation", () => {
   const keys = createTenantKeys({
     db: mongo.db,
     masterKey: new Uint8Array(32).fill(3),
+    generations: createKeyGenerations(),
   });
   const T = "t".repeat(24);
   const HOUR = 3_600_000;
@@ -93,6 +95,7 @@ describe("emergency rotation", () => {
   const keys = createTenantKeys({
     db: mongo.db,
     masterKey: new Uint8Array(32).fill(5),
+    generations: createKeyGenerations(),
   });
   const A = "a".repeat(24);
   const B = "b".repeat(24);

@@ -17,7 +17,6 @@ import {
   TLS_ASK_PATH,
   WEBAUTHN_WELL_KNOWN,
 } from "./config/domains-routes";
-import { env } from "./config/env";
 import { readyz } from "./config/ready";
 import { telemetry as appTelemetry } from "./config/telemetry";
 import { tenantResolver } from "./config/tenancy";
@@ -46,6 +45,10 @@ export const CONSOLE_MAX_COST = 50_000;
 export interface AppPorts extends ThrottleContext {
   /** How many reverse proxies stand in front of the app (`CLAVIX_TRUSTED_PROXIES`). */
   trustedProxies: number;
+  /** The GraphQL IDE (Apollo Sandbox) and introspection (`CLAVIX_GRAPHQL_IDE`). */
+  ide: boolean;
+  /** Refuse a GraphQL request without `x-clavix-client` (`CLAVIX_REQUIRE_CLIENT_HEADER`). */
+  requireClientHeader: boolean;
   /** Where the consent page reads the tenants' scope texts. */
   scopeTexts: ScopeTextsFor;
   /** The same for the tenants' detail type texts (the request's `details`). */
@@ -54,7 +57,7 @@ export interface AppPorts extends ThrottleContext {
   agents: AgentsFor;
 }
 
-/** What `createApp` takes: the ports, and the entry-point options (the last four default from env or the app's config). */
+/** What `createApp` takes: the ports, and the entry-point options (their defaults are the app's config). */
 export interface AppOptions extends AppPorts {
   oauth?: OAuthHandle;
   // The console API (`/console/graphql`, src/console): bearer token, its own
@@ -64,10 +67,6 @@ export interface AppOptions extends AppPorts {
   telemetry?: Telemetry;
   // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
   ready?: () => Promise<ReadyReport>;
-  // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
-  ide?: boolean;
-  // Refuse a GraphQL request without `x-clavix-client`; `CLAVIX_REQUIRE_CLIENT_HEADER` by default.
-  requireClientHeader?: boolean;
 }
 
 /** The base app: context, health and readiness probes, the logo, the TLS ask and the body limit. */
@@ -99,9 +98,7 @@ function baseOf(options: AppOptions) {
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.
 export function createApp(options: AppOptions) {
-  const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
-  const requireClient =
-    options.requireClientHeader ?? env.CLAVIX_REQUIRE_CLIENT_HEADER;
+  const { ide, requireClientHeader: requireClient } = options;
   const base = baseOf(options);
   const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)

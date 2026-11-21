@@ -15,7 +15,9 @@ import { domainsService, tenantsService } from "./tenancy";
  */
 export const ownedPurgers = (): OwnedCollectionPurger[] => {
   const registry = { ...appCollections };
-  return (Object.keys(registry) as (keyof typeof registry)[])
+  const isKey = (key: string): key is keyof typeof registry => key in registry;
+  return Object.keys(registry)
+    .filter(isKey)
     .filter((key) => isOwned(registry[key]))
     .map((key) => ({
       name: registry[key].name,

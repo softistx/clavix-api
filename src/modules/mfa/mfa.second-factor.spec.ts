@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { masterKeys } from "@/config/keys";
@@ -124,7 +125,7 @@ async function signInByCode(slug: string, email: string) {
   const before = memory.sent.length;
   const asked = await gql(slug, REQUEST, { email });
   await settled();
-  const challenge = at<string>(asked.data, "requestSignInCode.challenge");
+  const challenge = at(asked.data, "requestSignInCode.challenge", z.string());
   const mail = memory.sent
     .slice(before)
     .filter((m) => JSON.stringify(m.to).includes(email))
@@ -147,7 +148,7 @@ async function sessionOf(slug: string, email: string) {
   expect(at(answer.data, "verifySignInCode.__typename")).toBe("SignedIn");
   return {
     cookie: cookieOf(answer),
-    id: at<string>(answer.data, "verifySignInCode.user.id"),
+    id: at(answer.data, "verifySignInCode.user.id", z.string()),
   };
 }
 
@@ -160,7 +161,7 @@ async function offerTotp(slug: string, totp = true) {
 /** Enrols and activates TOTP for a signed-in user; the secret and the recovery codes. */
 async function turnOn(slug: string, cookie: string) {
   const enrolled = await gql(slug, ENROLL, {}, cookie);
-  const secret = at<string>(enrolled.data, "enrollSecondFactor.secret");
+  const secret = at(enrolled.data, "enrollSecondFactor.secret", z.string());
   const activated = await gql(
     slug,
     ACTIVATE,
@@ -169,9 +170,10 @@ async function turnOn(slug: string, cookie: string) {
   );
   return {
     secret,
-    recoveryCodes: at<string[]>(
+    recoveryCodes: at(
       activated.data,
       "activateSecondFactor.recoveryCodes",
+      z.array(z.string()),
     ),
     enrolled,
     activated,
@@ -240,11 +242,15 @@ describe("enrol, activate, sign in with the challenge", () => {
 
     // Next sign-in: a challenge, no session.
     const stopped = await signInByCode(SLUGS.a, ADA);
-    const challenge = at<{
-      __typename: string;
-      methods: string[];
-      challenge: string;
-    }>(stopped.data, "verifySignInCode");
+    const challenge = at(
+      stopped.data,
+      "verifySignInCode",
+      z.looseObject({
+        __typename: z.string(),
+        methods: z.array(z.string()),
+        challenge: z.string(),
+      }),
+    );
     expect(challenge.__typename).toBe("SecondFactorChallenge");
     expect(challenge.methods).toContain("totp");
     expect(cookieOf(stopped)).toBe("");
@@ -276,7 +282,11 @@ describe("enrol, activate, sign in with the challenge", () => {
     const { cookie } = await sessionOf(SLUGS.a, "rec@example.test");
     const on = await turnOn(SLUGS.a, cookie);
     const stopped = await signInByCode(SLUGS.a, "rec@example.test");
-    const challenge = at<string>(stopped.data, "verifySignInCode.challenge");
+    const challenge = at(
+      stopped.data,
+      "verifySignInCode.challenge",
+      z.string(),
+    );
     const code = on.recoveryCodes[0] as string;
     const recovered = await gql(SLUGS.a, RECOVER, {
       challenge,
@@ -292,7 +302,7 @@ describe("enrol, activate, sign in with the challenge", () => {
     expect(proved).toContain("mfa");
 
     const again = await signInByCode(SLUGS.a, "rec@example.test");
-    const next = at<string>(again.data, "verifySignInCode.challenge");
+    const next = at(again.data, "verifySignInCode.challenge", z.string());
     expect(
       codeOf(
         await gql(SLUGS.a, RECOVER, { challenge: next, recoveryCode: code }),

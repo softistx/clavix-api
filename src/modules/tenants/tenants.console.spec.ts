@@ -6,6 +6,7 @@ import {
   expect,
   test,
 } from "bun:test";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -90,7 +91,7 @@ async function create(slug = "acme") {
     `mutation { createTenant(input: { slug: "${slug}", name: "${slug} Inc" }) { ${FIELDS} } }`,
   );
   expect(r.errors).toBeUndefined();
-  return at(r.data, "createTenant") as { id: string };
+  return at(r.data, "createTenant", z.looseObject({ id: z.string() }));
 }
 
 describe("createTenant", () => {
@@ -247,9 +248,14 @@ describe("suspend, resume, delete, restore", () => {
       OPERATOR,
       `mutation { deleteTenant(id: "${id}") { status deletedAt purgeAt } }`,
     );
-    const d = at<{ status: string; purgeAt: string; deletedAt: string }>(
+    const d = at(
       first.data,
       "deleteTenant",
+      z.looseObject({
+        status: z.string(),
+        purgeAt: z.string(),
+        deletedAt: z.string(),
+      }),
     );
     expect(d.status).toBe("DELETED");
     expect(
@@ -303,11 +309,15 @@ describe("queries", () => {
       OPERATOR,
       "{ tenants(first: 2) { items { slug status } nextCursor totalCount } }",
     );
-    const page = at<{
-      items: { slug: string; status: string }[];
-      nextCursor: string;
-      totalCount: number;
-    }>(all.data, "tenants");
+    const page = at(
+      all.data,
+      "tenants",
+      z.looseObject({
+        items: z.array(z.looseObject({ slug: z.string(), status: z.string() })),
+        nextCursor: z.string(),
+        totalCount: z.number(),
+      }),
+    );
     expect(page.items.map((t) => t.slug)).toEqual(["alpha", "bravo"]);
     expect(page.items[0]?.status).toBe("DELETED");
     const next = await as(
@@ -315,7 +325,11 @@ describe("queries", () => {
       `{ tenants(first: 2, after: "${page.nextCursor}") { items { slug } nextCursor } }`,
     );
     expect(
-      at<{ slug: string }[]>(next.data, "tenants.items").map((t) => t.slug),
+      at(
+        next.data,
+        "tenants.items",
+        z.array(z.looseObject({ slug: z.string() })),
+      ).map((t) => t.slug),
     ).toEqual(["charlie", PLATFORM_TENANT_SLUG].sort());
     // totalCount ignores the page and the cursor, and follows q and status.
     expect(page.totalCount).toBe(4);

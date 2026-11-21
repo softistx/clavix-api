@@ -17,7 +17,7 @@ export interface TenantKeysOptions {
    */
   masterKey: Uint8Array | readonly Uint8Array[];
   /** Bumped for a tenant each time one of its keys is inserted, promoted or retired. */
-  generations?: KeyGenerations;
+  generations: KeyGenerations;
 }
 
 /**

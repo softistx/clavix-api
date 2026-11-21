@@ -10,6 +10,7 @@ import {
 } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -156,7 +157,7 @@ async function signInByLink(slug: string, email: string) {
 /** Enrols and activates TOTP for the session's user; the secret. */
 async function turnOn(slug: string, cookie: string) {
   const enrolled = await gql(slug, ENROLL, {}, cookie);
-  const secret = at<string>(enrolled.data, "enrollSecondFactor.secret");
+  const secret = at(enrolled.data, "enrollSecondFactor.secret", z.string());
   const activated = await gql(
     slug,
     ACTIVATE,
@@ -206,10 +207,11 @@ function github(email: string) {
 
 async function socialSignIn(slug: string, email: string, returnTo?: string) {
   const started = await gql(slug, SOCIAL_START, { r: returnTo ?? null });
-  const start = at<{
-    url: string;
-    flow: string;
-  }>(started.data, "socialSignInStart");
+  const start = at(
+    started.data,
+    "socialSignInStart",
+    z.looseObject({ url: z.string(), flow: z.string() }),
+  );
   const { url: to, flow } = start;
   const state = new URL(to).searchParams.get("state") ?? "";
   return github(email)(() =>
@@ -275,9 +277,10 @@ describe("a magic link to a TOTP holder", () => {
     const active = spyOn(usageService, "recordActive");
 
     const stopped = await signInByLink(SLUG.link, "link@chp.test");
-    const challenge = at<{ methods: string[]; challenge: string }>(
+    const challenge = at(
       stopped.data,
       "confirmMagicLink",
+      z.looseObject({ methods: z.array(z.string()), challenge: z.string() }),
     );
     expect(challenge).toMatchObject({
       __typename: "SecondFactorChallenge",
@@ -292,7 +295,11 @@ describe("a magic link to a TOTP holder", () => {
       code: nextCode(secret),
     });
     expect(confirmed.errors).toBeUndefined();
-    const userId = at<string>(confirmed.data, "confirmSecondFactor.user.id");
+    const userId = at(
+      confirmed.data,
+      "confirmSecondFactor.user.id",
+      z.string(),
+    );
     expect(active).toHaveBeenCalledTimes(1);
     expect(active.mock.calls[0]?.[1]).toBe(userId);
     const session = cookieOf(confirmed);
@@ -315,9 +322,10 @@ describe("a social sign-in of a TOTP holder", () => {
       "social@chp.test",
       "/account",
     );
-    const challenge = at<{ methods: string[]; challenge: string }>(
+    const challenge = at(
       stopped.data,
       "socialSignInComplete",
+      z.looseObject({ methods: z.array(z.string()), challenge: z.string() }),
     );
     expect(challenge).toMatchObject({
       __typename: "SecondFactorChallenge",
@@ -341,12 +349,13 @@ describe("the freshness window (freshWithin 10m)", () => {
   test("a fresh session is confirmed for ten minutes; past them enrolment is STEP_UP_REQUIRED", async () => {
     const signed = await signInByCode(SLUG.fresh, "fresh@chp.test");
     const cookie = cookieOf(signed);
-    const userId = at<string>(signed.data, "verifySignInCode.user.id");
+    const userId = at(signed.data, "verifySignInCode.user.id", z.string());
     const until = async () =>
       new Date(
         at(
           (await gql(SLUG.fresh, CONFIRMED_UNTIL, {}, cookie)).data,
           "sessionConfirmedUntil",
+          z.string(),
         ),
       ).getTime();
 
@@ -371,7 +380,11 @@ describe("a tenant suspended between the challenge and its answer", () => {
   test("is TENANT_SUSPENDED with no session; reactivated, the same challenge opens one", async () => {
     const secret = await holder(SLUG.paused, "paused@chp.test");
     const stopped = await signInByCode(SLUG.paused, "paused@chp.test");
-    const challenge = at<string>(stopped.data, "verifySignInCode.challenge");
+    const challenge = at(
+      stopped.data,
+      "verifySignInCode.challenge",
+      z.string(),
+    );
     const active = spyOn(usageService, "recordActive");
 
     await tenantsService.suspend(pausedId);

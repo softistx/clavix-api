@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -89,7 +90,7 @@ let tenantA = "";
 let tenantB = "";
 
 const roleIn = async (tenant: string, user: string) =>
-  at<{ user: { id: string }; role: string }[]>(
+  at(
     (
       await asConsole(
         ownA,
@@ -97,6 +98,14 @@ const roleIn = async (tenant: string, user: string) =>
       )
     ).data,
     "memberships",
+    z
+      .array(
+        z.looseObject({
+          user: z.looseObject({ id: z.string() }),
+          role: z.string(),
+        }),
+      )
+      .optional(),
   )?.find((m) => m.user.id === user)?.role;
 
 // The code of the invitation mailed to an address.
@@ -237,7 +246,7 @@ describe("tenant A / B isolation", () => {
 
   test("an invitation id of A does nothing on B, and B does not list A's", async () => {
     const issued = await invite(ownA, tenantA, "iso@adm.test", "VIEWER");
-    const id = at<string>(issued.data, "inviteAdmin.id");
+    const id = at(issued.data, "inviteAdmin.id", z.string());
     await asConsole(
       ownB,
       `mutation { revokeAdminInvitation(tenantId: "${tenantB}", invitationId: "${id}") }`,
@@ -252,7 +261,11 @@ describe("tenant A / B isolation", () => {
       `{ adminInvitations(tenantId: "${tenantA}") { id email } }`,
     );
     expect(
-      at<{ id: string }[]>(listedA.data, "adminInvitations").map((i) => i.id),
+      at(
+        listedA.data,
+        "adminInvitations",
+        z.array(z.looseObject({ id: z.string() })),
+      ).map((i) => i.id),
     ).toContain(id);
   });
 
@@ -322,7 +335,7 @@ describe("inviting and accepting", () => {
     });
     expect(accepted.cookies.join(";")).toContain("__Host-clavix-session=");
 
-    const members = at<{ user: { email: string }; role: string }[]>(
+    const members = at(
       (
         await asConsole(
           ownA,
@@ -330,6 +343,12 @@ describe("inviting and accepting", () => {
         )
       ).data,
       "memberships",
+      z.array(
+        z.looseObject({
+          user: z.looseObject({ email: z.string() }),
+          role: z.string(),
+        }),
+      ),
     );
     expect(members.filter((m) => m.user.email === email)).toEqual([
       { user: { email }, role: "ADMIN" },
@@ -355,9 +374,15 @@ describe("inviting and accepting", () => {
         `{ memberships(tenantId: "${tenantA}") { role } adminInvitations(tenantId: "${tenantA}") { email } }`,
       )
     ).data;
-    expect(at<unknown[]>(after, "memberships")).toHaveLength(members.length);
+    expect(at(after, "memberships", z.array(z.unknown()))).toHaveLength(
+      members.length,
+    );
     expect(
-      at<{ email: string }[]>(after, "adminInvitations").map((i) => i.email),
+      at(
+        after,
+        "adminInvitations",
+        z.array(z.looseObject({ email: z.string() })),
+      ).map((i) => i.email),
     ).not.toContain(email);
   });
 
@@ -401,9 +426,10 @@ describe("inviting and accepting", () => {
       `{ adminInvitations(tenantId: "${tenantA}") { email role } }`,
     );
     expect(
-      at<{ email: string; role: string }[]>(
+      at(
         listed.data,
         "adminInvitations",
+        z.array(z.looseObject({ email: z.string(), role: z.string() })),
       ).filter((i) => i.email === email),
     ).toEqual([{ email, role: "ADMIN" }]);
     expect(
@@ -427,9 +453,10 @@ describe("inviting and accepting", () => {
       "ALREADY_MEMBER",
     );
     const email = "revoked@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenantA, email)).data,
       "inviteAdmin.id",
+      z.string(),
     );
     const secret = codeMailedTo(email);
     const revoke = `mutation { revokeAdminInvitation(tenantId: "${tenantA}", invitationId: "${id}") }`;
@@ -709,7 +736,7 @@ describe("admin events", () => {
 
   test("each mutation stores its event: the actor, the action, the target by id", async () => {
     const invited = await invite(ownB, tenant, "ev@adm.test");
-    const invitationId = at<string>(invited.data, "inviteAdmin.id");
+    const invitationId = at(invited.data, "inviteAdmin.id", z.string());
     await asConsole(
       ownB,
       `mutation { revokeAdminInvitation(tenantId: "${tenant}", invitationId: "${invitationId}") }`,
@@ -863,18 +890,20 @@ describe("resending an invitation", () => {
       `{ adminInvitations(tenantId: "${tenant}") { email invitedBy { id name } } }`,
     );
     expect(
-      at<{ email: string; invitedBy: unknown }[]>(
+      at(
         listed.data,
         "adminInvitations",
+        z.array(z.looseObject({ email: z.string(), invitedBy: z.unknown() })),
       ).find((i) => i.email === "by@adm.test")?.invitedBy,
     ).toEqual({ id: ownA, name: "own-a@adm.test" });
   });
 
   test("a resend renews the invitation: new code and mail, the old code stops, invitedBy stays", async () => {
     const email = "renew@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenant, email, "VIEWER")).data,
       "inviteAdmin.id",
+      z.string(),
     );
     renewedId = id;
     const first = codeMailedTo(email);
@@ -884,7 +913,9 @@ describe("resending an invitation", () => {
     expect(at(sent.data, "resendAdminInvitation.id")).toBe(id);
     expect(at(sent.data, "resendAdminInvitation.invitedBy.id")).toBe(ownA);
     expect(
-      new Date(at(sent.data, "resendAdminInvitation.expiresAt")).getTime(),
+      new Date(
+        at(sent.data, "resendAdminInvitation.expiresAt", z.string()),
+      ).getTime(),
     ).toBeGreaterThan(Date.now() + 24 * 3_600_000);
     const second = codeMailedTo(email);
     expect(second).toBeDefined();
@@ -906,9 +937,10 @@ describe("resending an invitation", () => {
 
   test("a lapsed invitation can be sent again", async () => {
     const email = "lapsed@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenant, email)).data,
       "inviteAdmin.id",
+      z.string(),
     );
     await age(email, { expiresAt: new Date(Date.now() - 1000) });
     expect((await resend(ownA, id)).errors).toBeUndefined();
@@ -916,9 +948,10 @@ describe("resending an invitation", () => {
 
   test("a second resend within a minute is RESEND_TOO_SOON (429): nothing sent, no event", async () => {
     const email = "soon@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenant, email)).data,
       "inviteAdmin.id",
+      z.string(),
     );
     // Just invited: the invitation's own send counts.
     const before = memory.sent.length;
@@ -936,9 +969,10 @@ describe("resending an invitation", () => {
 
   test("two concurrent resends send one mail", async () => {
     const email = "race@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenant, email)).data,
       "inviteAdmin.id",
+      z.string(),
     );
     await age(email);
     const before = memory.sent.length;
@@ -950,9 +984,10 @@ describe("resending an invitation", () => {
 
   test("an accepted or revoked invitation is INVITATION_NOT_PENDING (409)", async () => {
     const email = "revoked@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenant, email)).data,
       "inviteAdmin.id",
+      z.string(),
     );
     await asConsole(
       ownA,
@@ -966,9 +1001,10 @@ describe("resending an invitation", () => {
 
   test("an unknown invitation, another tenant's, a malformed id: NOT_FOUND / BAD_USER_INPUT", async () => {
     const email = "other@adm.test";
-    const id = at<string>(
+    const id = at(
       (await invite(ownB, tenantB, email)).data,
       "inviteAdmin.id",
+      z.string(),
     );
     await age(email);
     expect(code(await resend(ownA, id))).toBe("NOT_FOUND");
@@ -979,9 +1015,10 @@ describe("resending an invitation", () => {
   });
 
   test("only an owner of the tenant resends", async () => {
-    const id = at<string>(
+    const id = at(
       (await invite(ownA, tenant, "perm@adm.test")).data,
       "inviteAdmin.id",
+      z.string(),
     );
     await age("perm@adm.test");
     expect(code(await resend(admA, id))).toBe("FORBIDDEN");

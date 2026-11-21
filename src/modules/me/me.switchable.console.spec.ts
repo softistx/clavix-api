@@ -6,6 +6,7 @@ import {
   expect,
   test,
 } from "bun:test";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -62,15 +63,21 @@ const as = async (userId: string, query: string) =>
 
 const LIST = (args = "") =>
   `{ me { switchableTenants${args} { items { role tenant { slug name status } } nextCursor totalCount } } }`;
-interface Page {
-  items: {
-    role: string;
-    tenant: { slug: string; name: string; status: string };
-  }[];
-  nextCursor: string | null;
-  totalCount: number;
-}
-const pageOf = (r: GqlResult) => at<Page>(r.data, "me.switchableTenants");
+const PageSchema = z.looseObject({
+  items: z.array(
+    z.looseObject({
+      role: z.string(),
+      tenant: z.looseObject({
+        slug: z.string(),
+        name: z.string(),
+        status: z.string(),
+      }),
+    }),
+  ),
+  nextCursor: z.string().or(z.null()),
+  totalCount: z.number(),
+});
+const pageOf = (r: GqlResult) => at(r.data, "me.switchableTenants", PageSchema);
 const slugs = (r: GqlResult) => pageOf(r).items.map((i) => i.tenant.slug);
 
 const ids: Record<string, string> = {};

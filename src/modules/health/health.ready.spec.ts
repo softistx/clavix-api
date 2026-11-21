@@ -35,7 +35,9 @@ describe("readiness", () => {
   });
 
   test("no Redis configured: only Mongo is checked", async () => {
-    expect((await readiness({ mongo: up })).checks).toEqual({ mongo: "ok" });
+    expect((await readiness({ mongo: up, redis: null })).checks).toEqual({
+      mongo: "ok",
+    });
   });
 });
 

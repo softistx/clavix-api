@@ -3,10 +3,15 @@ import { StoreFailure } from "@softistx/janus";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
 import { quietKeys } from "~/ports";
+import { createKeyGenerations } from "./keys.generations";
 import { createTenantKeys } from "./keys.signing-keys";
 
 const masterKey = new Uint8Array(32).fill(1);
-const keys = createTenantKeys({ db: mongo.db, masterKey });
+const keys = createTenantKeys({
+  db: mongo.db,
+  masterKey,
+  generations: createKeyGenerations(),
+});
 const now = new Date("2026-11-12T12:00:00Z");
 const A = "a".repeat(24);
 const B = "b".repeat(24);
@@ -52,6 +57,7 @@ describe("tenant signing keys", () => {
     const other = createTenantKeys({
       db: mongo.db,
       masterKey: new Uint8Array(32).fill(2),
+      generations: createKeyGenerations(),
     });
     await expect(other.signingKeysFor(A).findKeys(now)).rejects.toThrow(
       StoreFailure,

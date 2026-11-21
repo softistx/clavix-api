@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { localeOfCtx, perRequest, requestOf } from "./consent.utils";
+import {
+  appCtxOf,
+  isServerCtx,
+  localeOfCtx,
+  perRequest,
+  requestOf,
+} from "./consent.utils";
 
 describe("perRequest", () => {
   test("reads once per request and keeps requests apart", async () => {
@@ -16,6 +22,26 @@ describe("perRequest", () => {
   test("reads nothing without a request", () => {
     const read = perRequest<number>();
     expect(read(undefined, async () => 1)).toBeUndefined();
+  });
+});
+
+describe("isServerCtx", () => {
+  test("accepts a context with a tenant reader, refuses anything else", () => {
+    expect(isServerCtx({ tenant: async () => null })).toBe(true);
+    expect(isServerCtx({ request: new Request("https://a.test/") })).toBe(
+      false,
+    );
+    expect(isServerCtx({ tenant: "t" })).toBe(false);
+    expect(isServerCtx(null)).toBe(false);
+    expect(isServerCtx(undefined)).toBe(false);
+  });
+});
+
+describe("appCtxOf", () => {
+  test("returns the app's context, refuses another as NOT_FOUND", () => {
+    const ctx = { tenant: async () => null };
+    expect(appCtxOf(ctx)).toBe(ctx);
+    expect(() => appCtxOf({})).toThrow();
   });
 });
 

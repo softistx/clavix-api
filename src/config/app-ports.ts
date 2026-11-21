@@ -17,6 +17,8 @@ import {
  */
 export const appPorts = {
   trustedProxies: env.CLAVIX_TRUSTED_PROXIES,
+  ide: env.CLAVIX_GRAPHQL_IDE,
+  requireClientHeader: env.CLAVIX_REQUIRE_CLIENT_HEADER,
   signInThrottle,
   passkeyThrottle,
   homeRealmThrottle,

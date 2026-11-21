@@ -18,7 +18,7 @@ import type {
   ServerCtx,
 } from "./consent.types";
 import { denyUnreachable, isUnreachable } from "./consent.unmet";
-import { localeOfCtx, perRequest, requestOf } from "./consent.utils";
+import { appCtxOf, localeOfCtx, perRequest, requestOf } from "./consent.utils";
 
 /**
  * The consent API of the hosted `/consent` page: the request host's OAuth
@@ -45,7 +45,7 @@ export class ConsentService {
   /** The OAuth server of the request's host, for a live tenant (`NOT_FOUND` otherwise). */
   async serverOf(janusCtx: unknown) {
     // janus types its context without the tenant; the app's base puts it there.
-    const ctx = janusCtx as ServerCtx;
+    const ctx = appCtxOf(janusCtx);
     // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
     const request = requestOf(ctx);
     const server = (await ctx.oauthServers?.serverFor(request)) ?? null;
