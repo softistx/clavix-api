@@ -26,18 +26,44 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 ## Conventions
 
 - The conventions are those of the `alxia-graphql-api` plugin (enabled in
-  `.claude/settings.json`); healthix-api is the worked example this skeleton was cut from.
-  Known drift, being removed ([#401](https://github.com/softistx/clavix-api/issues/401)): no committed `schema.graphql`, modules not yet in
-  `<name>.<role>.ts` form, a parallel console tree, UPPER_SNAKE codes without `fail()`; the
-  worked example is schoolz-api.
-- Layout: `src/modules/<name>/` holds a module's `*.graphqls`, resolvers and services,
-  merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
-  `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
+  `.claude/settings.json`); **schoolz-api is the reference** (its `AGENTS.md` and its
+  modules are the worked example). The alignment effort
+  ([#401](https://github.com/softistx/clavix-api/issues/401)) put this API on that layout; the
+  differences that remain are the named exceptions below.
+- **Modules**: `src/modules/<m>/` holds one subject, both faces (hosted and console), in
+  `<m>.<role>.ts` files (each when the module needs it): `<m>.graphqls`, `<m>.model.ts`, `<m>.errors.ts` (+ spec),
+  `<m>.rules.ts`, `<m>.utils.ts` (the shapes, input mapping and every helper of the module), ONE `<m>.service.ts` per domain
+  (no split by action; it may pass 250 lines, but a method stays under 50 lines), resolvers
+  `<m>.resolver.ts` split `-queries` / `-mutations` / `-support` / `-guards` when they grow, `<m>.data-loader.ts`,
+  and `index.ts`, the only entry other modules import. Other files stay under 250 lines, a function under 80. No helper function at the top of a
+  service, resolver or data-loader (it goes to `<m>.utils.ts`). Ports and clocks are passed
+  explicitly, never defaulted. Known overruns of the 250 lines outside services, to split when touched:
+  `users/tenant-janus.ts`, `clients/register-client.ts`, `keys/reseal.ts`, `config/env.ts`, `console/context.ts`.
+  `src/modules/index.ts` merges the resolvers, `services.ts` holds the per-request services (D10: the
+  process-lifetime objects, such as the janus issuers, keys, `oauthDb`, Redis and telemetry, stay in `src/config/`), `collections.ts` the collections.
+- **Console face**: the console's SDL is `src/modules/<m>/<m>.console.graphqls`, its resolvers
+  `<m>.console-resolver.ts` (with `-queries`, `-mutations`, `-support`, `-guards` as above), its specs
+  `<m>.<topic>.console.spec.ts` (or `<m>.console.spec.ts`). `codegen.ts` and `src/http/schema.ts` exclude `*.console.graphqls` and `src/console/**`;
+  `codegen.console.ts` includes them. `src/console/` keeps the transport (`plugin.ts`, `auth.ts`, `context.ts`, `guard.ts`,
+  `schema.ts`, `audit.ts`, `budgets.ts`, ...) and `src/console/modules/` only the registry and shared helpers (`ids.ts`,
+  `user-key.ts`, `reserved.ts`, `catalog-support.ts`) with their cross-module specs.
+- **Layout elsewhere**: `src/http/` holds the context and the schema; `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
   introspection (`introspection: ide` of `createApp`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/shared/cli.ts` holds what the scripts share
-  (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below); generated code is in
-  `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed. The printed schemas `schema.graphql` and
-  `console.schema.graphql` are committed: `bun run schema:print` rewrites them and `verify` runs
-  `schema:print --check`, which fails when either is stale (the UI generates its documents from them).
+  (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below).
+- **Generated and printed files**: generated code is in `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed. The
+  printed schemas `schema.graphql` (hosted) and `console.schema.graphql` (console) are committed: `bun run schema:print` rewrites
+  them (sorted, with directives) and `verify` runs `schema:print --check`, which fails when either is stale. clavix-ui syncs its schema copies from them.
+- **Import cycles**: `bunx madge --circular --extensions ts --ts-config tsconfig.json src` reports 7 today
+  (`webhooks` events/delivery, `i18n/codes` with `auth.errors` and `sign-in-methods.errors`, `console/budgets` with `console/context`,
+  `clients/register-client` with `validate`, `config/connections` with `config/users`); a change adds none (not run by `verify`).
+- **Named exceptions** (owner decisions D1, D2 and D8 of the alignment plan, not the RAR D1/D2 below; each is deliberate, not drift):
+  - **D1, two schemas**: the hosted `/graphql` (cookie, tenant from the Host) and the console `/console/graphql` (bearer or DPoP JWT of the
+    `clavix` tenant, its own cost limit, deny-by-default guard) stay two endpoints and two printed schemas, since one merged schema
+    would expose console fields on tenant hosts.
+  - **D2, protocol endpoints**: the OAuth/OIDC routes (`src/oauth`, `mountOAuth`: authorize, token, PAR, device, JWKS, discovery,
+    userinfo, registration) are plain Request/Response routes beside `/graphql`; they are RFC-defined and cannot be GraphQL.
+  - **D8, a console face per module**: each console resolver lives in its owning module as role files (`<m>.console*`), not in a parallel tree.
+- Errors keep their UPPER_SNAKE values (D3, see Errors); the client header and `CLAVIX_REQUIRE_CLIENT_HEADER` are in "Same-origin guard and shutdown".
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
@@ -96,7 +122,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
   bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
 - **The fingerprint** comes from what `storedFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
-- **Detail types** (`resources.compile*.ts`, `resources.detail-rules.ts`, README "Authorization details", D1/D2, softistx/clavix-api#17 and #18):
+- **Detail types** (`resources.compile*.ts`, `resources.detail-rules.ts`, README "Authorization details", RAR D1/D2, softistx/clavix-api#17 and #18):
   `ResourcesService` is the only writer: the type name is immutable, labels hold 100 and descriptions 300 characters (`MAX_LABEL`, `MAX_DESCRIPTION`), deleting a type a client lists throws `DETAIL_TYPE_IN_USE` (D6), and deleting a resource removes its types and prunes them from the clients' lists (`DetailTypeClients`);
   the tenant-owned `detailTypes` collection (unique on `(tenantId, type)`, so a name is unique in the
   tenant) holds a bounded field list, compiled by the pure `resources.compile.ts` (limits and checks in `resources.compile-rules.ts`) into a `z.strictObject` (no
@@ -869,14 +895,15 @@ one is refused (docs/troubleshooting.md).
 
 ## Green bar
 
-`bun run verify` = `generate`, `check:ci` (Biome), `typecheck` (`bun check`), `test`; CI
-(`.github/workflows/ci.yml`, on pull requests into `develop` only) runs it, then `build`.
-The `@softistx/*` packages come from npmjs (public): `bun install` needs no token.
+`bun run verify` = `generate` (scalars and validation SDL, then both codegen configs), `schema:print --check`, `check:ci` (`biome ci`),
+`typecheck` (`bun check`), `test` (`bun test --timeout=30000`); run `bun run build` too before a PR (CI does: `generate`, then the bundle).
+CI (`.github/workflows/ci.yml`, on pull requests into `develop` only) runs `verify`, then `build`. `bunx biome ci .` on the head catches
+what a lint-only run misses (import order, format). The `@softistx/*` packages come from npmjs (public): `bun install` needs no token.
 
 ## Tests and the machine
 
 A spec connects to no service the CI runner lacks. The skeleton has no store; the slice
-that adds MongoDB or Redis starts an in-memory one in `test/setup.ts` (as healthix-api's
+that adds MongoDB or Redis starts an in-memory one in `test/setup.ts` (as schoolz-api's
 does) rather than reading `.env`. A slice runs the specs of the code it changed.
 
 ## Errors
