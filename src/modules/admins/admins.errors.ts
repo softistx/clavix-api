@@ -20,6 +20,17 @@ const RESEND_MESSAGE = {
   PENDING_INVITATIONS_LIMIT: "Too many pending invitations; revoke some first",
 } as const satisfies Record<ResendRefusal, string>;
 
+const conflict = (code: "LAST_OWNER" | "ALREADY_MEMBER", message: string) =>
+  fail(code, message, { status: 409 });
+
+/** The refusal of a change that would leave a tenant, or the platform, with no owner who can sign in. */
+export const lastOwnerError = (of: "tenant" | "platform" = "tenant") =>
+  conflict("LAST_OWNER", `A ${of} keeps at least one owner`);
+
+/** The refusal of an invitation, or a role, for a user who already holds one on the tenant. */
+export const alreadyMember = () =>
+  conflict("ALREADY_MEMBER", "Already an admin of this tenant");
+
 // A resend's or an invite's refusals as the contract's GraphQL errors.
 export async function refusing<T>(call: () => Promise<T>): Promise<T> {
   try {

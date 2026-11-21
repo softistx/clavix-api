@@ -1,6 +1,21 @@
 import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
+  admins,
+  adminsAudits,
+  adminsGuards,
+} from "@/modules/admins/admins.console-resolver";
+import {
+  audit,
+  auditAudits,
+  auditGuards,
+} from "@/modules/audit/audit.console-resolver";
+import {
+  branding,
+  brandingAudits,
+  brandingGuards,
+} from "@/modules/branding/branding.console-resolver";
+import {
   clients,
   clientsAudits,
   clientsGuards,
@@ -15,6 +30,11 @@ import {
   domainsAudits,
   domainsGuards,
 } from "@/modules/domains/domains.console-resolver";
+import {
+  oauthPolicy,
+  oauthPolicyAudits,
+  oauthPolicyGuards,
+} from "@/modules/oauth-policy/oauth-policy.console-resolver";
 import {
   resources,
   resourcesAudits,
@@ -42,15 +62,7 @@ import {
 } from "@/modules/webhooks/webhooks.console-resolver";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
-import { admins, adminsAudits, adminsGuards } from "./admins";
-import { audit, auditAudits, auditGuards } from "./audit";
-import { branding, brandingAudits, brandingGuards } from "./branding";
 import { me, meGuards } from "./me";
-import {
-  oauthPolicy,
-  oauthPolicyAudits,
-  oauthPolicyGuards,
-} from "./oauth-policy";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 
 // One entry per module: its resolvers, the guard of each root field it adds

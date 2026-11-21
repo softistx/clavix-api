@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { createExclusive } from "@/console/exclusive";
 import {
   adminScope,
   operatorScope,
 } from "@/modules/invitations/invitations.rules";
-import { createExclusive } from "../../exclusive";
-import { adminInvitationHooks } from "./accept";
+import { adminInvitationHooks } from "./admins.hooks";
 
 const TENANT = "6553f1c2a1b2c3d4e5f60718";
 

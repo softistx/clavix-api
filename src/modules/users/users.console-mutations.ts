@@ -1,10 +1,10 @@
 import { denial } from "@softistx/janus-graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
-import { refusing } from "@/console/modules/admins/errors";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { refusing } from "@/modules/admins/admins.errors";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import { setActive } from "./users.console-support";

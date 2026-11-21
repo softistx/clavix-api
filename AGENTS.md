@@ -123,7 +123,7 @@ client of the same tenant, `client_secret_basic`) answers only for tokens of the
 resources (`resourcesFor`), never for userinfo's. janus-oauth's `NoSigningKeyError` is a 503 `temporarily_unavailable` on these paths
 too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 
-## OAuth policy (`src/modules/oauth-policy`, `src/console/modules/oauth-policy/`)
+## OAuth policy (`src/modules/oauth-policy`, with its `oauth-policy.console-*` files)
 
 `tenant.oauth` (`oauthPolicySchema`: `{ par: { required }, dpop: { required } }`, every flag defaults to `false`) is on the tenant document and on `ResolvedTenant`, so an entry cached before the field parses off. `building.ts` passes `pushedAuthorizationRequests: { required: tenant.oauth.par.required }` (`/par` is always served, and is in `OAUTH_PATHS`, `REFUSED_PATHS` and the Caddyfile `@api` matcher).
 - **Every write goes through `OAuthPolicyService`** (over `TenantsService.updateOAuth`, optimistic lock, no write when nothing changes, `version` bump), modelled on `SignInPolicyService`. The `clavix` tenant accepts `par.required` / `dpop.required` like any tenant (the 409 guard is lifted, #233): migration `2026-11-17-console-par-dpop` sets both on the tenant and marks the `console` client `requirePar` + `dpopBound` (idempotent, version bumped only on a change; its `down` relaxes them). The console (clavix-ui#228) pushes (PAR) and proves (DPoP ES256), so **deploy clavix-ui first or together**: an older console is locked out once the migration has run. `test/setup.ts` relaxes the platform tenant after the migrations, so the specs keep minting plain tokens; `console.spec.ts` sets `dpop.required` itself and restores it.
@@ -346,7 +346,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
 - **A slice adds a module** under `src/modules/<name>/` (`<name>.console.graphqls`, `<name>.console-resolver.ts`,
   `<name>.console-guards.ts` with the guards and the audit action of each mutation: "Admin events" below) and lists it in
-  `src/console/modules/index.ts`. The modules not yet folded (A16) still sit in `src/console/modules/<name>/`.
+  `src/console/modules/index.ts`. A16 folded the admins, audit, branding and oauth-policy modules the same way (admins: `admins.service.ts`, `.hooks`, `.janus`, `.utils`, `.errors`, with the console resolver split into `-queries`, `-mutations` and `-support`); `codegen.ts` leaves every `*.console.graphqls` out of the hosted types, as the hosted schema does.
 - **`clients` and `resources`** (issue #9) are thin: their console resolvers (A14: `<name>.console-resolver.ts`, with
   `-guards`, `-support`, and for resources `-queries` and `-mutations`; the SDL is `<name>.console.graphqls`, the shapes
   and the input mapping `<name>.utils.ts`) call `ClientsService`
@@ -378,16 +378,16 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   that names nothing (a retry may be the event the first run missed); an id no client can have, and an
   untouched foreign record, name nothing to record. A deleted client's grants are revoked, so its
   access and refresh tokens stop working (`clients.spec.ts`).
-- **Admins of a tenant and invitations** (`modules/admins/`, README "Admins of a tenant"): a
+- **Admins of a tenant and invitations** (`src/modules/admins/`, README "Admins of a tenant"): a
   membership is a relation (`access.holders` / `grantTenant` / `revokeTenant`). Every write of a
   tenant's memberships runs under `ctx.exclusive(membersKey(tenantId), ...)` (`exclusive.ts`: a queue
   per key in the process, plus the app's Redis lock when there is one, `config/exclusive.ts`): the
   relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
-  Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
-  **One owner rule** (`otherLiveOwners`, `service.ts`): an owner counts only while they exist and can
+  Go through `changeRole` / `removeMember` (`admins.service.ts`); never grant or revoke a tenant role bare.
+  **One owner rule** (`otherLiveOwners`, `admins.service.ts`): an owner counts only while they exist and can
   sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`src/modules/users/users.owners.ts`: disable,
   delete and un-verify of a `clavix` user (`OwnerChange`; `touch` checks the caller only, no count), tenant ownerships and the last live platform owner, under
-  `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
+  `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`admins.hooks.ts`: no `owner` for a
   ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` or un-verify is never `LAST_OWNER`.
   Invitations are **not** the console's own: `InvitationsService` (`src/modules/invitations/invitations.service.ts`;
   `bind(source)` gives the per-tenant `TenantInvitations`, wired by `invitationsOf` in `src/config/invitations.ts`) issues,
@@ -530,7 +530,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 - `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
   read a token's content).
 
-## Branding (`src/modules/branding`, `src/console/modules/branding`)
+## Branding (`src/modules/branding`, with its `branding.console-*` files)
 
 A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`), reached only through
 `BrandingService` (`branding.service.ts`, built in `config/branding.ts`), which scopes every read and write with `scopeToTenant`.
@@ -553,7 +553,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   magic bytes and stored inline; never SVG (it runs script on the tenant's own host). Its sha256 is the
   `ETag`, and `immutable` is sent only when `?v=` names the current image (`logoUrl`).
 - **Two schemas**: the console's `branding` / `updateBranding` (guards `view` / `edit` on the tenant)
-  live in `src/console/modules/branding`; the anonymous `tenantBranding` by host is in
+  live in `src/modules/branding` (`branding.console-resolver.ts`, `-guards`, `-support`); the anonymous `tenantBranding` by host is in
   `src/modules/branding` and shows only what a hosted page draws (no seed, no tenant id).
 
 ## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`, `src/console/modules/tenants`)

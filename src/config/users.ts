@@ -1,6 +1,6 @@
-import { adminInvitationHooks } from "@/console/modules/admins/accept";
 import { userKey } from "@/console/modules/user-key";
 import { janusListener } from "@/events/janus-listener";
+import { adminInvitationHooks } from "@/modules/admins/admins.hooks";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
 import { createTenantAuth } from "@/modules/users/tenant-auth";

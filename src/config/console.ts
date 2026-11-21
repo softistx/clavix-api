@@ -6,8 +6,8 @@ import {
   consoleAudience,
   consoleOrigin,
 } from "@/console/identity";
-import { createJanusAdmins } from "@/console/modules/admins/janus-admins";
 import type { ConsoleDeps } from "@/console/plugin";
+import { createJanusAdmins } from "@/modules/admins/admins.janus";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { UsersService } from "@/modules/users/users.service";
 import type { OAuthHandle } from "@/oauth/routes";

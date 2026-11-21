@@ -1,6 +1,6 @@
 import type { Resolvers } from "@/generated/console/resolvers";
-import { auditQueries } from "./queries";
+import { auditQueries } from "./audit.console-queries";
 
-export { auditAudits, auditGuards } from "./guards";
+export { auditAudits, auditGuards } from "./audit.console-guards";
 
 export const audit: Resolvers = { Query: auditQueries };

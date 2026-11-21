@@ -10,10 +10,10 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
+import { CONSOLE_PATH } from "@/console/identity";
 import { adminScope } from "@/modules/invitations/invitations.rules";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { verifiedCallers } from "~/console";
-import { CONSOLE_PATH } from "../../identity";
 
 // The bearer token is the user id: tokens are console.spec's business, this
 // file is about who may change the admins of a tenant.
