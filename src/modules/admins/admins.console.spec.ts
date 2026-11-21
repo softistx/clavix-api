@@ -293,6 +293,51 @@ describe("tenant A / B isolation", () => {
   });
 });
 
+const membersOfA = async () =>
+  at(
+    (
+      await asConsole(
+        ownA,
+        `{ memberships(tenantId: "${tenantA}") { user { email } role } }`,
+      )
+    ).data,
+    "memberships",
+    z.array(
+      z.looseObject({
+        user: z.looseObject({ email: z.string() }),
+        role: z.string(),
+      }),
+    ),
+  );
+
+// The code is spent: a second accept and a preview are refused, nothing changes.
+const expectSpent = async (secret: string, email: string, members: number) => {
+  const again = await post(
+    hosted,
+    `mutation { acceptInvitation(code: "${secret}") { signedIn } }`,
+  );
+  expect(code(again)).toBe("INVITATION_INVALID");
+  expect(
+    code(
+      await post(hosted, `{ invitationPreview(code: "${secret}") { email } }`),
+    ),
+  ).toBe("INVITATION_INVALID");
+  const after = (
+    await asConsole(
+      ownA,
+      `{ memberships(tenantId: "${tenantA}") { role } adminInvitations(tenantId: "${tenantA}") { email } }`,
+    )
+  ).data;
+  expect(at(after, "memberships", z.array(z.unknown()))).toHaveLength(members);
+  expect(
+    at(
+      after,
+      "adminInvitations",
+      z.array(z.looseObject({ email: z.string() })),
+    ).map((i) => i.email),
+  ).not.toContain(email);
+};
+
 describe("inviting and accepting", () => {
   test("accepting grants the relation, exactly once", async () => {
     const email = "newadmin@adm.test";
@@ -328,55 +373,12 @@ describe("inviting and accepting", () => {
     });
     expect(accepted.cookies.join(";")).toContain("__Host-clavix-session=");
 
-    const members = at(
-      (
-        await asConsole(
-          ownA,
-          `{ memberships(tenantId: "${tenantA}") { user { email } role } }`,
-        )
-      ).data,
-      "memberships",
-      z.array(
-        z.looseObject({
-          user: z.looseObject({ email: z.string() }),
-          role: z.string(),
-        }),
-      ),
-    );
+    const members = await membersOfA();
     expect(members.filter((m) => m.user.email === email)).toEqual([
       { user: { email }, role: "ADMIN" },
     ]);
 
-    // The code is spent: a second accept and a preview are refused, nothing changes.
-    const again = await post(
-      hosted,
-      `mutation { acceptInvitation(code: "${secret}") { signedIn } }`,
-    );
-    expect(code(again)).toBe("INVITATION_INVALID");
-    expect(
-      code(
-        await post(
-          hosted,
-          `{ invitationPreview(code: "${secret}") { email } }`,
-        ),
-      ),
-    ).toBe("INVITATION_INVALID");
-    const after = (
-      await asConsole(
-        ownA,
-        `{ memberships(tenantId: "${tenantA}") { role } adminInvitations(tenantId: "${tenantA}") { email } }`,
-      )
-    ).data;
-    expect(at(after, "memberships", z.array(z.unknown()))).toHaveLength(
-      members.length,
-    );
-    expect(
-      at(
-        after,
-        "adminInvitations",
-        z.array(z.looseObject({ email: z.string() })),
-      ).map((i) => i.email),
-    ).not.toContain(email);
+    await expectSpent(secret ?? "", email, members.length);
   });
 
   test("the new admin is the invitee's, not the platform's: no access to B", async () => {

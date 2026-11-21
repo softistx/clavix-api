@@ -121,17 +121,25 @@ afterAll(async () => {
   }
 });
 
-test("auth_time is present in the id_token after a passkey sign-in", async () => {
+type Auth = NonNullable<Awaited<ReturnType<typeof janusIssuers.forRequest>>>;
+type Tenant = NonNullable<
+  Awaited<ReturnType<typeof tenantResolver.resolveHost>>
+>;
+
+const hostOf = async () => {
   const tenant = await tenantResolver.resolveHost(new URL(url("/")).host);
   if (tenant === null) throw new Error("no tenant");
   const auth = await janusIssuers.forRequest(new Request(url("/")));
   if (auth === null) throw new Error("no janus");
+  return { tenant, auth };
+};
+
+// A verified user with a first session and a registered passkey.
+const userWithPasskey = async (auth: Auth, tenant: Tenant) => {
   const user = await auth.create({ email: "ada@example.test" });
   await auth.verifyEmail.confirm((await auth.verifyEmail.send(user)).token);
   const first = await auth.signInProven((await auth.findUser(user.id)) ?? user);
   if (first.status !== "signedIn") throw new Error("no session");
-
-  // Register a passkey, then sign in with it alone.
   const authenticator = await softwareAuthenticator();
   const asked = await auth.passkeys.registrationOptions(user);
   const current = await auth.authenticate(
@@ -149,6 +157,15 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
     }),
     name: "Laptop",
   });
+  return { user, first, authenticator };
+};
+
+// Signs in with the passkey alone; returns the session cookie.
+const passkeySignIn = async (
+  tenant: Tenant,
+  userId: string,
+  authenticator: Awaited<ReturnType<typeof softwareAuthenticator>>,
+) => {
   const issued = await gql(
     "mutation { passkeySignInOptions { options challenge } }",
   );
@@ -167,7 +184,7 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
           challenge: challengeOfOptions(options),
           origin: originOf(tenant),
           rpId: rpIdOf(tenant),
-          userHandle: Buffer.from(user.id).toString("base64url"),
+          userHandle: Buffer.from(userId).toString("base64url"),
         }),
       ),
     },
@@ -176,13 +193,11 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
   const header = signedIn.cookies.find((c) =>
     c.startsWith(`${SESSION_COOKIE}=`),
   );
-  const cookie = header?.split(";")[0] ?? "";
-  const session = await auth.authenticate(
-    new Request(url("/"), { headers: { cookie } }),
-  );
-  if (session === null) throw new Error("passkey session is anonymous");
+  return header?.split(";")[0] ?? "";
+};
 
-  // /authorize, approve, token.
+// /authorize, approve, token: the id_token of the signed-in cookie.
+const idTokenFor = async (cookie: string) => {
   const authorize = await issuers.handle(
     new Request(
       url(
@@ -230,10 +245,18 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
     }),
   );
   expect(token.status).toBe(200);
-  const idToken = defined(
-    (await jsonOf(token, tokenBody)).id_token,
-    "id_token",
+  return defined((await jsonOf(token, tokenBody)).id_token, "id_token");
+};
+
+test("auth_time is present in the id_token after a passkey sign-in", async () => {
+  const { tenant, auth } = await hostOf();
+  const { user, first, authenticator } = await userWithPasskey(auth, tenant);
+  const cookie = await passkeySignIn(tenant, user.id, authenticator);
+  const session = await auth.authenticate(
+    new Request(url("/"), { headers: { cookie } }),
   );
+  if (session === null) throw new Error("passkey session is anonymous");
+  const idToken = await idTokenFor(cookie);
   expect(decodeJwt(idToken)["auth_time"]).toBe(
     Math.floor(session.session.authenticatedAt.getTime() / 1000),
   );

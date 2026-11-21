@@ -300,6 +300,38 @@ describe("listing", () => {
   });
 });
 
+const expectPrefixScope = async () => {
+  // The other tenant's pool is not searched.
+  expect(
+    at(
+      (
+        await asConsole(
+          ownB,
+          `{ users(tenantId: "${tenantB}", emailPrefix: "prefix.") { totalCount } }`,
+        )
+      ).data,
+      "users.totalCount",
+    ),
+  ).toBe(0);
+  expect(
+    code(
+      await asConsole(
+        ownA,
+        `{ users(tenantId: "${tenantA}", emailPrefix: "${"a".repeat(255)}") { totalCount } }`,
+      ),
+    ),
+  ).toBe("BAD_USER_INPUT");
+  // Both filters at once is ambiguous.
+  expect(
+    code(
+      await asConsole(
+        ownA,
+        `{ users(tenantId: "${tenantA}", email: "a@b.test", emailPrefix: "a") { totalCount } }`,
+      ),
+    ),
+  ).toBe("BAD_USER_INPUT");
+};
+
 describe("search by e-mail prefix", () => {
   test("matches any case, counts, pages, and keeps the exact e-mail working", async () => {
     const a = await poolOf(SLUG.a);
@@ -362,35 +394,7 @@ describe("search by e-mail prefix", () => {
       items: [{ email: "prefix.two@find.test" }],
       totalCount: 1,
     });
-    // The other tenant's pool is not searched.
-    expect(
-      at(
-        (
-          await asConsole(
-            ownB,
-            `{ users(tenantId: "${tenantB}", emailPrefix: "prefix.") { totalCount } }`,
-          )
-        ).data,
-        "users.totalCount",
-      ),
-    ).toBe(0);
-    expect(
-      code(
-        await asConsole(
-          ownA,
-          `{ users(tenantId: "${tenantA}", emailPrefix: "${"a".repeat(255)}") { totalCount } }`,
-        ),
-      ),
-    ).toBe("BAD_USER_INPUT");
-    // Both filters at once is ambiguous.
-    expect(
-      code(
-        await asConsole(
-          ownA,
-          `{ users(tenantId: "${tenantA}", email: "a@b.test", emailPrefix: "a") { totalCount } }`,
-        ),
-      ),
-    ).toBe("BAD_USER_INPUT");
+    await expectPrefixScope();
   });
 });
 
@@ -498,6 +502,40 @@ describe("user lookup for the role member picker", () => {
   });
 });
 
+const revokeSession = (userId: string, sessionId: string) =>
+  asConsole(
+    admA,
+    `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${userId}", sessionId: "${sessionId}") }`,
+  );
+
+const expectSessionsLeft = async (id: string, other: string) => {
+  const after = await asConsole(
+    ownA,
+    `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
+  );
+  expect(at(after.data, "userSessions")).toHaveLength(2);
+  expect(
+    at(
+      (
+        await asConsole(
+          ownA,
+          `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { device } }`,
+        )
+      ).data,
+      "userSessions",
+    ),
+  ).toEqual([{ device: "Not yours" }]);
+  // An unknown user has none.
+  expect(
+    (
+      await asConsole(
+        ownA,
+        `{ userSessions(tenantId: "${tenantA}", userId: "ghost") { id } }`,
+      )
+    ).data,
+  ).toEqual({ userSessions: [] });
+};
+
 describe("user sessions", () => {
   test("lists a user's sessions with their device, newest first; revokes one", async () => {
     const a = await poolOf(SLUG.a);
@@ -546,56 +584,17 @@ describe("user sessions", () => {
       z.array(z.looseObject({ id: z.string() })),
     );
     const foreign = defined(foreignRows[0], "a foreign session").id;
-    expect(
-      (
-        await asConsole(
-          admA,
-          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${id}", sessionId: "${foreign}") }`,
-        )
-      ).data,
-    ).toEqual({ revokeUserSession: false });
-    expect(
-      (
-        await asConsole(
-          admA,
-          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${id}", sessionId: "${target}") }`,
-        )
-      ).data,
-    ).toEqual({ revokeUserSession: true });
+    expect((await revokeSession(id, foreign)).data).toEqual({
+      revokeUserSession: false,
+    });
+    expect((await revokeSession(id, target)).data).toEqual({
+      revokeUserSession: true,
+    });
     // Revoked once: a repeat is false.
-    expect(
-      (
-        await asConsole(
-          admA,
-          `mutation { revokeUserSession(tenantId: "${tenantA}", userId: "${id}", sessionId: "${target}") }`,
-        )
-      ).data,
-    ).toEqual({ revokeUserSession: false });
-    const after = await asConsole(
-      ownA,
-      `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
-    );
-    expect(at(after.data, "userSessions")).toHaveLength(2);
-    expect(
-      at(
-        (
-          await asConsole(
-            ownA,
-            `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { device } }`,
-          )
-        ).data,
-        "userSessions",
-      ),
-    ).toEqual([{ device: "Not yours" }]);
-    // An unknown user has none.
-    expect(
-      (
-        await asConsole(
-          ownA,
-          `{ userSessions(tenantId: "${tenantA}", userId: "ghost") { id } }`,
-        )
-      ).data,
-    ).toEqual({ userSessions: [] });
+    expect((await revokeSession(id, target)).data).toEqual({
+      revokeUserSession: false,
+    });
+    await expectSessionsLeft(id, other);
   });
 
   test("a user of B has no sessions listed or revoked under A", async () => {

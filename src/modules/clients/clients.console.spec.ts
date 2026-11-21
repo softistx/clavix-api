@@ -700,33 +700,38 @@ const GET_EXCHANGE = `query($tenantId: ID!, $id: ID!) {
 }`;
 const API_URI = "https://exchange-target.example/api";
 
+// The "Exchanger" client with a stored target resource and no rules yet.
+const createExchanger = async () => {
+  await registerStoredResource({
+    tenant: "cli-a",
+    uri: API_URI,
+    scopes: ["read"],
+  });
+  const created = await create(admin, tenantA, {
+    name: "Exchanger",
+    type: "CONFIDENTIAL",
+    redirectUris: undefined,
+    grantTypes: ["TOKEN_EXCHANGE"],
+  });
+  expect(created.errors).toBeUndefined();
+  expect(created.data?.["createClient"]).toMatchObject({
+    client: {
+      id: "exchanger",
+      grantTypes: ["TOKEN_EXCHANGE"],
+      redirectUris: [],
+    },
+  });
+  // No rules yet: the client cannot exchange.
+  const before = await admin(GET_EXCHANGE, {
+    tenantId: tenantA,
+    id: "exchanger",
+  });
+  expect(before.data?.["client"]).toEqual({ tokenExchange: null });
+};
+
 describe("setClientTokenExchange", () => {
   test("sets the rules, reads them back, replaces them and records its event", async () => {
-    await registerStoredResource({
-      tenant: "cli-a",
-      uri: API_URI,
-      scopes: ["read"],
-    });
-    const created = await create(admin, tenantA, {
-      name: "Exchanger",
-      type: "CONFIDENTIAL",
-      redirectUris: undefined,
-      grantTypes: ["TOKEN_EXCHANGE"],
-    });
-    expect(created.errors).toBeUndefined();
-    expect(created.data?.["createClient"]).toMatchObject({
-      client: {
-        id: "exchanger",
-        grantTypes: ["TOKEN_EXCHANGE"],
-        redirectUris: [],
-      },
-    });
-    // No rules yet: the client cannot exchange.
-    const before = await admin(GET_EXCHANGE, {
-      tenantId: tenantA,
-      id: "exchanger",
-    });
-    expect(before.data?.["client"]).toEqual({ tokenExchange: null });
+    await createExchanger();
 
     await mongo.db.adminEvents.raw.deleteMany({});
     const set = await admin(EXCHANGE, {

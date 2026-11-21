@@ -42,7 +42,7 @@ import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { type GqlResult, gqlOf } from "~/gql";
 import { errorBody, tokenBody } from "~/json";
 import { defined } from "~/narrow";
-import { serverAuthenticating } from "~/oauth-server-authenticating";
+import { serverAuthenticating } from "~/oauth-server-double";
 import { quietOAuth } from "~/ports";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
