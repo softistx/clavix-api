@@ -3,7 +3,7 @@ import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { webhookDeliveries } from "@/config/webhook-endpoints";
+import { webhooksService } from "@/config/webhooks-service";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 
@@ -234,7 +234,7 @@ describe("deliveries", () => {
     );
     const id = made.endpoint.id;
     for (let n = 1; n <= 3; n++) {
-      await webhookDeliveries.record(tenantA, {
+      await webhooksService.recordAttempt(tenantA, {
         endpointId: id,
         eventId: `evt-${n}`,
         type: "user.created",
@@ -266,7 +266,7 @@ describe("deliveries", () => {
       await admin(CREATE, { tenantId: tenantA, input: { url: URL_1 } }),
     );
     const id = made.endpoint.id;
-    await webhookDeliveries.record(tenantA, {
+    await webhooksService.recordAttempt(tenantA, {
       endpointId: id,
       eventId: "e",
       type: "user.created",
@@ -278,7 +278,7 @@ describe("deliveries", () => {
       willRetry: false,
     });
     await admin(DELETE, { tenantId: tenantA, id });
-    expect(await webhookDeliveries.list(tenantA, id)).toEqual([]);
+    expect(await webhooksService.listAttempts(tenantA, id)).toEqual([]);
   });
 });
 

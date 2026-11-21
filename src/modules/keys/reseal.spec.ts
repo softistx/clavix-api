@@ -9,7 +9,7 @@ import {
 } from "@/modules/sign-in-methods/secrets";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { TenantsService } from "@/modules/tenants";
-import { WebhookEndpointsService } from "@/modules/webhooks/webhook-endpoints.service";
+import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
 import {
   type ResealDeps,
@@ -38,8 +38,9 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
     webhooks: createSecretBox(ring, "webhook-secrets"),
     connections: createSecretBox(ring, "connection-secrets"),
   };
-  const webhooks = new WebhookEndpointsService(
+  const webhooks = new WebhooksService(
     mongo.db.webhookEndpoints,
+    mongo.db.webhookDeliveries,
     boxes.webhooks,
     {
       policy: { allowPrivate: false, resolve: async () => ["93.184.216.34"] },
@@ -259,8 +260,12 @@ describe("every sealed store follows the rotation (clavix-api#329)", () => {
     await policy.setSocial(liveId, social);
     await policy.setSocial(trashedId, social);
     await tenants.delete(trashedId);
-    const created = await webhooks.create(liveId, { url: WEBHOOK_URL }, null);
-    const rolled = await webhooks.roll(
+    const created = await webhooks.createEndpoint(
+      liveId,
+      { url: WEBHOOK_URL },
+      null,
+    );
+    const rolled = await webhooks.rollSecret(
       liveId,
       created.endpoint._id.toHexString(),
       true,

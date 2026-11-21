@@ -8,7 +8,7 @@ import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { redis } from "./redis";
 import { domainStore } from "./tenancy";
-import { webhookEndpoints } from "./webhook-endpoints";
+import { webhooksService } from "./webhooks-service";
 
 // The tenant's partition of the janus store counts its own registered clients
 // (`countClients({ source })`, on the `source` index `db:sync` creates).
@@ -42,7 +42,7 @@ export const usageService = new UsageService(
       return Math.max(0, registered - agents);
     },
     agents: (tenantId) => agentClientsService.count(tenantId),
-    webhooks: (tenantId) => webhookEndpoints.count(tenantId),
+    webhooks: (tenantId) => webhooksService.countEndpoints(tenantId),
     connections: (tenantId) => connectionsService.count(tenantId),
     domains: (tenantId) => domainStore.count(new ObjectId(tenantId)),
   },

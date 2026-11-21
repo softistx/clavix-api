@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { disabledEndpointMail } from "./notice";
+import { disabledEndpointMail } from "./webhooks.notice";
 
 describe("disabledEndpointMail", () => {
   test("names the origin only, never the path", () => {

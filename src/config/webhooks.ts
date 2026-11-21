@@ -5,11 +5,11 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import {
   createWebhookDelivery,
   DISABLE_ACTOR,
+  disabledEndpointMail,
+  guardedFetch,
+  pruneWebhookSecrets,
   webhookQueueLimits,
-} from "@/modules/webhooks/delivery";
-import { disabledEndpointMail } from "@/modules/webhooks/notice";
-import { pruneWebhookSecrets } from "@/modules/webhooks/secrets-prune";
-import { guardedFetch } from "@/modules/webhooks/url-policy";
+} from "@/modules/webhooks";
 import { access } from "./access";
 import { adminEventRecorder } from "./admin-events";
 import { env } from "./env";
@@ -18,11 +18,7 @@ import { mailer } from "./mail";
 import { redis } from "./redis";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
-import {
-  urlPolicy,
-  webhookDeliveries,
-  webhookEndpoints,
-} from "./webhook-endpoints";
+import { urlPolicy, webhooksService } from "./webhooks-service";
 
 // The console's users are the `clavix` tenant's; its owners are mailed.
 const findOwner = async (id: string) => {
@@ -48,8 +44,7 @@ const queueLimits = webhookQueueLimits({
  * tenant's owners.
  */
 export const webhookDelivery = createWebhookDelivery({
-  endpoints: webhookEndpoints,
-  deliveries: webhookDeliveries,
+  webhooks: webhooksService,
   fetch: guardedFetch(urlPolicy),
   queue:
     redis === undefined
@@ -68,7 +63,7 @@ export const webhookDelivery = createWebhookDelivery({
     });
     const [tenant, endpoint] = await Promise.all([
       tenantsService.find(tenantId),
-      webhookEndpoints.find(tenantId, endpointId),
+      webhooksService.findEndpoint(tenantId, endpointId),
     ]);
     if (tenant === undefined || endpoint === undefined) return;
     const owners = await Promise.all(
@@ -99,7 +94,7 @@ export const createWebhookSecretsPrune =
       {
         tenantIds: () => tenantsService.activeIds(),
         prune: (tenantId, at) =>
-          webhookEndpoints.pruneExpiredSecrets(tenantId, at),
+          webhooksService.pruneExpiredSecrets(tenantId, at),
       },
       now(),
     );

@@ -13,10 +13,10 @@ import {
   queueEndpointId,
   webhookGroupOf,
   webhookQueueLimits,
-} from "./delivery";
-import { userWebhookEvent } from "./events";
-import { guardedFetch, type UrlPolicy } from "./url-policy";
-import { WebhookEndpointsService } from "./webhook-endpoints.service";
+} from "./webhooks.delivery";
+import { userWebhookEvent } from "./webhooks.events";
+import { WebhooksService } from "./webhooks.service";
+import { guardedFetch, type UrlPolicy } from "./webhooks.url-policy";
 
 // Tenant FLOOD's receiver never answers until it is released: its requests stay
 // in flight. Tenant CALM's receiver answers at once. The queue's caps are the
@@ -27,8 +27,9 @@ const policy: UrlPolicy = {
   allowPrivate: false,
   resolve: async () => ["93.184.216.34"],
 };
-const endpoints = new WebhookEndpointsService(
+const endpoints = new WebhooksService(
   mongo.db.webhookEndpoints,
+  mongo.db.webhookDeliveries,
   createSecretBox(
     crypto.getRandomValues(new Uint8Array(32)),
     "webhook-secrets",
@@ -55,7 +56,7 @@ const open: ReturnType<typeof createWebhookDelivery>[] = [];
 const refused: string[] = [];
 const makeDelivery = (caps: { maxInFlight: number; maxPending: number }) => {
   const delivery = createWebhookDelivery({
-    endpoints,
+    webhooks: endpoints,
     fetch: guardedFetch(policy, receiver),
     queue: createMemoryWebhookQueue(
       webhookQueueLimits(caps, (line) => refused.push(line)),
@@ -109,9 +110,21 @@ const stall = () => {
 describe("webhook queue caps (G2-03)", () => {
   test("one tenant flooding a stalled endpoint holds at most its cap and starves no other tenant", async () => {
     stall();
-    await endpoints.create(FLOOD, { url: "https://flood.example.com/in" }, 5);
-    await endpoints.create(FLOOD, { url: "https://flood2.example.com/in" }, 5);
-    await endpoints.create(CALM, { url: "https://calm.example.com/in" }, 5);
+    await endpoints.createEndpoint(
+      FLOOD,
+      { url: "https://flood.example.com/in" },
+      5,
+    );
+    await endpoints.createEndpoint(
+      FLOOD,
+      { url: "https://flood2.example.com/in" },
+      5,
+    );
+    await endpoints.createEndpoint(
+      CALM,
+      { url: "https://calm.example.com/in" },
+      5,
+    );
     const delivery = makeDelivery({ maxInFlight: 2, maxPending: 1000 });
     for (let i = 0; i < 12; i++) await delivery.relay(created(FLOOD));
     await until(() => inFlight === 2);
@@ -125,8 +138,16 @@ describe("webhook queue caps (G2-03)", () => {
 
   test("past maxPending the flooding tenant's deliveries are refused, the other tenant's are not", async () => {
     stall();
-    await endpoints.create(FLOOD, { url: "https://flood.example.com/in" }, 5);
-    await endpoints.create(CALM, { url: "https://calm.example.com/in" }, 5);
+    await endpoints.createEndpoint(
+      FLOOD,
+      { url: "https://flood.example.com/in" },
+      5,
+    );
+    await endpoints.createEndpoint(
+      CALM,
+      { url: "https://calm.example.com/in" },
+      5,
+    );
     const delivery = makeDelivery({ maxInFlight: 1, maxPending: 3 });
     for (let i = 0; i < 6; i++) await delivery.relay(created(FLOOD));
     await delivery.relay(created(CALM));

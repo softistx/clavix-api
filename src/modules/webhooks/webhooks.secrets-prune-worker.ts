@@ -1,4 +1,4 @@
-import type { SecretsPruneReport } from "./secrets-prune";
+import type { SecretsPruneReport } from "./webhooks.secrets-prune";
 
 /** The queue surface the worker needs (`redis.queues.webhookSecretsPrune`). */
 export interface SecretsPruneQueue {

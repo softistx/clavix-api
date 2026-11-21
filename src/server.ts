@@ -24,7 +24,7 @@ import { startGrantsRevoke } from "./modules/consent/revoke-job";
 import { startDomainRecheck } from "./modules/domains/recheck-worker";
 import { startKeyRotation } from "./modules/keys";
 import { startTenantPurge } from "./modules/tenants/tenants.purge-worker";
-import { startWebhookSecretsPrune } from "./modules/webhooks/secrets-prune-worker";
+import { startWebhookSecretsPrune } from "./modules/webhooks/webhooks.secrets-prune-worker";
 
 // Longest wait for a sign-in code mail in flight when the server stops.
 const MAIL_DRAIN_MS = 10_000;

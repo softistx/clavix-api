@@ -5,7 +5,7 @@ import {
   parseWebhookUrl,
   type UrlPolicy,
   WebhookUrlError,
-} from "./url-policy";
+} from "./webhooks.url-policy";
 
 const answers = new Map<string, string[]>();
 const policy = (allowPrivate = false): UrlPolicy => ({

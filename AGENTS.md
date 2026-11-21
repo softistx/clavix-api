@@ -646,21 +646,28 @@ only way into the `domains` collection; the periodic recheck is `DomainRecheck`
 ## Webhooks (`src/modules/webhooks`, `src/console/modules/webhooks`, `src/config/webhooks.ts`)
 
 A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
-- `webhookEndpoints` is tenant-owned: reached only through `WebhookEndpointsService`
+- Layout (A6): `webhooks.model.ts` (both collections), `.errors.ts`, `.rules.ts` (input rules, the roll),
+  `.utils.ts`, `.types.ts`, `.events.ts`, `.notice.ts`, `.url-policy.ts`, `.delivery.ts`, the secrets-prune
+  files (`.secrets-prune.ts`, `.secrets-prune-queue.ts`, `.secrets-prune-worker.ts`), and `webhooks.service.ts`:
+  one service per domain (owner, 2026-11-20) holding the endpoint methods (`listEndpoints`, `createEndpoint`,
+  `rollSecret`, `deliveryEndpoints`, `resealSecrets`, `recordDelivered`, `recordGiveUp`, ...) and the attempt
+  log (`recordAttempt`, `listAttempts`, `deleteAttempts`). `index.ts` is the import surface; the prune queue and
+  worker are imported by file. Registered as `services().webhooks`.
+- `webhookEndpoints` and `webhookDeliveries` are tenant-owned: reached only through `WebhooksService`
   (`scopeToTenant`; the files allowed in `guards.spec.ts` are `src/modules/webhooks/` and
-  `src/config/webhook-endpoints.ts`). Its quota is `webhooks` (free 2, pro 10, enterprise 50),
+  `src/config/webhooks-service.ts`). Its quota is `webhooks` (free 2, pro 10, enterprise 50),
   checked on create under `ctx.exclusive("console:webhooks:<tenantId>")`.
-- One process-wide `webhooks()` (`delivery.ts`, wired in `src/config/webhooks.ts`) serves every
+- One process-wide `webhooks()` (`webhooks.delivery.ts`, wired in `src/config/webhooks.ts`) serves every
   tenant: its endpoint resolver reads the endpoints of `event.data.tenantId` at each attempt, so a
   rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
   reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
   prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
-- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/modules/webhooks/delivery.ts`, applied in `src/config/webhooks.ts`) gives both
+- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/modules/webhooks/webhooks.delivery.ts`, applied in `src/config/webhooks.ts`) gives both
   queues (Redis and memory) `maxInFlight` (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, 4), `maxPending`
   (`CLAVIX_WEBHOOKS_MAX_PENDING`, 5000) and `groupOf`. **Assumed, not answered**: the caps are per tenant, not
   per endpoint, because janus-webhooks counts per group once `groupOf` is set (one queue cannot cap both). So the
   queue's endpoint name is `<tenantId>.<endpointId>` (`queueEndpointId`, `webhookGroupOf`, `endpointIdOf` in
-  `delivery.ts`): the resolver adds the prefix and every callback strips it before it touches a store. The
+  `webhooks.delivery.ts`): the resolver adds the prefix and every callback strips it before it touches a store. The
   claim also rotates over endpoints, so one endpoint of a tenant does not take the tenant's whole share.
 - **Console budgets (`src/console/budgets.ts`, #328)**: `ctx.budgets` (`ConsoleDeps.budgets`; undefined without Redis) holds the
   `@softistx/redis` limits of the console mutations that act outside the platform. `sendTestWebhook` spends
@@ -671,7 +678,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
   `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
   that sends a mail or queues outbound work gets its budget here, never a counter of its own.
-- The catalogue (D22, `events.ts`) is janus's 16 user events (without `user.apiKeyCreated` / `user.apiKeyRevoked`, which never fire until API keys are adopted, and `user.passwordReset` / `user.passwordChanged`, which cannot fire while password sign-in is unavailable; #336) plus `session.signedIn`; `data` holds ids
+- The catalogue (D22, `webhooks.events.ts`) is janus's 16 user events (without `user.apiKeyCreated` / `user.apiKeyRevoked`, which never fire until API keys are adopted, and `user.passwordReset` / `user.passwordChanged`, which cannot fire while password sign-in is unavailable; #336) plus `session.signedIn`; `data` holds ids
   only, never an address or an e-mail (D15). `tenantId` is in `data` because the wire body has no
   top-level field for it. Console admin events are not delivered. `webhook.test` is outside the
   catalogue and goes to one endpoint, whatever its types.
@@ -679,15 +686,15 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `<tenantId>:<endpointId>`, returned once by `createWebhookEndpoint` and `rollWebhookSecret`. A roll with
   `keepPrevious` keeps the old secret signing for 24 h (both signatures sent); without it, it is dropped
   at once. `webhookSecretsPrune` (daily 04:37) removes expired ones; they are ignored at send time anyway.
-- URL policy (D21, `url-policy.ts`): `https`, no credentials, public addresses only, checked on save
+- URL policy (D21, `webhooks.url-policy.ts`): `https`, no credentials, public addresses only, checked on save
   and again by `guardedFetch` on every send (a DNS rebinding is refused; redirects are never followed).
   `CLAVIX_WEBHOOKS_ALLOW_PRIVATE` lifts the address check for development and is refused in production.
-  A check and the connection resolve the name separately (documented in `url-policy.ts`).
+  A check and the connection resolve the name separately (documented in `webhooks.url-policy.ts`).
 - Auto-disable (D20): 5 given-up deliveries in a row (`retriesRanOut` only; a 2xx resets the run)
   switch the endpoint off, record the admin event `webhook.disable` (actor `system:webhooks:disable`)
-  and e-mail the owners (`notice.ts`, origin only). An admin switches it on again with
+  and e-mail the owners (`webhooks.notice.ts`, origin only). An admin switches it on again with
   `updateWebhookEndpoint(enabled: true)`, which re-checks the address.
-- Deliveries log (W2): `onAttempt` writes `webhookDeliveries` through `WebhookDeliveriesService`
+- Deliveries log (W2): `onAttempt` writes `webhookDeliveries` through `WebhooksService.recordAttempt`
   (tenant-owned, same allowed files): event id and type, attempt, status or failure name, duration,
   `delivered`, `willRetry`, `at`; never the URL, a header or a body. A TTL index on `at` (7 days) and a trim
   to the newest 100 per endpoint on each write; a failed write is only logged. `WebhookEndpoint.deliveries(first:)`
