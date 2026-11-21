@@ -126,7 +126,7 @@ nxgt-janus release says which.
   a tenant describes the authorization detail types of an API (a payment, a transfer) from the console;
   a client lists the types it may ask for (console and `clients:create --detail-types`, PAR required)
   and asks for them with a pushed request. Clavix checks each request against its type, and the consent
-  API shows every detail in words (`oauthRequest.details`, `oauthDeviceRequest.details`), refusing an
+  API shows every detail as typed rows (`oauthRequest.details`, `oauthDeviceRequest.details`), refusing an
   approval whose details cannot be fully described (`detailsComplete`, `invalid_authorization_details`).
 
 - **MCP agents** ([#18](https://github.com/softistx/clavix-api/issues/18)) — a tenant can opt in to

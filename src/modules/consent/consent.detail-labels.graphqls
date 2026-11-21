@@ -17,8 +17,11 @@ enum ConsentRowKind {
 
 "Which member of a `ConsentDetailValue` is set."
 enum ConsentValueKind {
+  "`text` holds a label or a raw string."
   TEXT
+  "`number` holds a number the UI formats."
   NUMBER
+  "`boolean` holds a yes or no the UI words."
   BOOLEAN
 }
 
@@ -45,7 +48,7 @@ type ConsentDetailRow {
 }
 
 """
-One authorization detail (RFC 9396) of a pending request, in words: the type's name and description from the
+One authorization detail (RFC 9396) of a pending request, as typed rows: the type's name and description from the
 tenant's texts, and its rows. Never raw JSON. Approval allows every detail or none (D4).
 """
 type ConsentDetail {
@@ -59,7 +62,7 @@ type ConsentDetail {
 }
 
 extend type OAuthRequest {
-  "The request's authorization details in words, one block each; empty when it asked for none."
+  "The request's authorization details as typed rows, one block each; empty when it asked for none."
   details: [ConsentDetail!]!
   """
   False when a detail cannot be fully described (its type was deleted, or it carries a key, action or value its
@@ -70,7 +73,7 @@ extend type OAuthRequest {
 }
 
 extend type OAuthDeviceRequest {
-  "The device's authorization details in words, one block each; empty when it asked for none."
+  "The device's authorization details as typed rows, one block each; empty when it asked for none."
   details: [ConsentDetail!]!
   "As `OAuthRequest.detailsComplete`."
   detailsComplete: Boolean!

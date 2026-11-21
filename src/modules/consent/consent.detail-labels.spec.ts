@@ -147,6 +147,7 @@ describe("detailsOf", () => {
         identifier: "",
         locations: [""],
         datatypes: ["", "x"],
+        actions: [""],
       },
     ]);
     expect(detailsOf(json, texts, "en")[0]?.rows).toEqual([

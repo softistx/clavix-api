@@ -44,7 +44,7 @@ describe("authorization details through consent", () => {
         details: z.array(z.unknown()),
       }),
     );
-    // Every detail reaches the hosted API, in words, none raw.
+    // Every detail reaches the hosted API, as typed rows, none raw.
     expect(request.details).toHaveLength(2);
     expect(JSON.parse(request.authorizationDetails)).toHaveLength(2);
 

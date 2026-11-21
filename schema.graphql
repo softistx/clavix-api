@@ -169,7 +169,7 @@ scalar CIDRv4 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4632")
 scalar CIDRv6 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4291")
 
 """
-One authorization detail (RFC 9396) of a pending request, in words: the type's name and description from the
+One authorization detail (RFC 9396) of a pending request, as typed rows: the type's name and description from the
 tenant's texts, and its rows. Never raw JSON. Approval allows every detail or none (D4).
 """
 type ConsentDetail {
@@ -233,8 +233,11 @@ enum ConsentRowKind {
 
 """Which member of a `ConsentDetailValue` is set."""
 enum ConsentValueKind {
+  """`boolean` holds a yes or no the UI words."""
   BOOLEAN
+  """`number` holds a number the UI formats."""
   NUMBER
+  """`text` holds a label or a raw string."""
   TEXT
 }
 
@@ -820,7 +823,7 @@ type OAuthDeviceRequest {
   """
   client: OAuthClient!
   """
-  The device's authorization details in words, one block each; empty when it asked for none.
+  The device's authorization details as typed rows, one block each; empty when it asked for none.
   """
   details: [ConsentDetail!]!
   """As `OAuthRequest.detailsComplete`."""
@@ -850,7 +853,7 @@ type OAuthRequest {
   """The application asking for access."""
   client: OAuthClient!
   """
-  The request's authorization details in words, one block each; empty when it asked for none.
+  The request's authorization details as typed rows, one block each; empty when it asked for none.
   """
   details: [ConsentDetail!]!
   """

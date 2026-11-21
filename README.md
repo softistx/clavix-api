@@ -922,7 +922,7 @@ off on a client that lists types is refused too. Any other case is `BAD_USER_INP
 A type deleted by a race with the save stays on the list but is no longer served: its requests are
 `invalid_authorization_details`.
 
-**The consent API shows them in words** (R4). `oauthRequest.details` and `oauthDeviceRequest.details` give one block per
+**The consent API shows them as typed rows** (R4). `oauthRequest.details` and `oauthDeviceRequest.details` give one block per
 detail, `{ type, title, description, rows: [{ kind, key, label, values: [{ kind, text, number, boolean }] }] }`, from the tenant's texts in the viewer's language
 (`Accept-Language`, then its base language, then the first stored translation; see "Consent"). Approval stays all or nothing:
 `approveOAuthRequest` and `approveOAuthDeviceRequest` are called without an `authorizationDetails` selection, so the user allows every
@@ -1136,7 +1136,7 @@ query Consent($id: ID!) {
     }
     detailsComplete # false: show Deny only, approval is refused (see "Authorization details")
     details {
-      # the authorization details (RFC 9396) in words: render every block
+      # the authorization details (RFC 9396) as typed rows: render every block
       type
       title
       description

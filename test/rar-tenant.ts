@@ -27,6 +27,42 @@ import {
 } from "~/rar";
 import { createTenantParOff } from "~/tenant-par-off";
 
+/** Registers the three clients (payer, tv, svc) and the token-exchange rule of the service client. */
+async function registerClients(
+  tenant: NonNullable<Awaited<ReturnType<typeof findTenant>>>,
+) {
+  const register = async (
+    clientId: string,
+    input: Partial<Parameters<typeof registerClient>[1]>,
+  ) => {
+    const done = await registerClient(
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
+      {
+        tenant: SLUG,
+        name: clientId,
+        clientId,
+        redirectUris: [],
+        type: "confidential",
+        requirePar: true,
+        ...input,
+      },
+    );
+    secrets[clientId] = done.clientSecret ?? "";
+  };
+  await register("payer", {
+    redirectUris: [REDIRECT],
+    detailTypes: ["payment"],
+  });
+  await register("tv", { grants: [DEVICE_GRANT], detailTypes: ["payment"] });
+  await register("svc", { grants: [TOKEN_EXCHANGE_GRANT] });
+  await clientPoliciesService.setTokenExchange(tenant._id, "svc", {
+    targetResources: [PAY, OTHER],
+    subjectClients: ["payer"],
+    subjectAgents: false,
+    mode: "delegation",
+  });
+}
+
 /** Registers the `rar` tenant, its resource, detail type, clients and a signed-in user for the spec file that calls it. */
 export function useRarTenant() {
   beforeAll(async () => {
@@ -67,36 +103,7 @@ export function useRarTenant() {
         { key: "memo", kind: "string", label: text("Motif", "Memo") },
       ],
     });
-    const register = async (
-      clientId: string,
-      input: Partial<Parameters<typeof registerClient>[1]>,
-    ) => {
-      const done = await registerClient(
-        { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
-        {
-          tenant: SLUG,
-          name: clientId,
-          clientId,
-          redirectUris: [],
-          type: "confidential",
-          requirePar: true,
-          ...input,
-        },
-      );
-      secrets[clientId] = done.clientSecret ?? "";
-    };
-    await register("payer", {
-      redirectUris: [REDIRECT],
-      detailTypes: ["payment"],
-    });
-    await register("tv", { grants: [DEVICE_GRANT], detailTypes: ["payment"] });
-    await register("svc", { grants: [TOKEN_EXCHANGE_GRANT] });
-    await clientPoliciesService.setTokenExchange(tenant._id, "svc", {
-      targetResources: [PAY, OTHER],
-      subjectClients: ["payer"],
-      subjectAgents: false,
-      mode: "delegation",
-    });
+    await registerClients(tenant);
     const auth = await janusIssuers.forRequest(new Request(url()));
     if (auth === null) throw new Error("no janus");
     const user = await auth.create({ email: "ada@example.test" });
