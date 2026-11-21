@@ -24,7 +24,7 @@ export interface RequestDemands {
 export async function assessment(
   ctx: Context,
   request: RequestDemands,
-  now: Date = new Date(),
+  now: Date,
 ): Promise<Assessment & { authTime: Date }> {
   const [session, user, tenant] = await Promise.all([
     ctx.janus.session(),

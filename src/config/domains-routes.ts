@@ -11,6 +11,7 @@ import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
 import { redis } from "./redis";
+import { warn } from "./runtime";
 import { domainsService, tenantResolver } from "./tenancy";
 
 export { TLS_ASK_PATH, WEBAUTHN_WELL_KNOWN };
@@ -25,6 +26,7 @@ const askLimits = redis?.limits;
 export const tlsAskOver = (secret: string | undefined) =>
   tlsAsk({
     secret,
+    log: warn,
     platformDomain: env.CLAVIX_DOMAIN,
     allowed: async (host) => {
       if ((await domainsService.verifiedHost(host)) === undefined) return false;

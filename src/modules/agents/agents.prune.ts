@@ -26,7 +26,7 @@ export interface PruneDeps {
   locked?<T>(tenantId: string, work: () => Promise<T>): Promise<T>;
   /** The admin event of one deleted agent. */
   emit(event: AgentPruneEvent): Promise<void>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 export interface PruneReport {
@@ -48,9 +48,9 @@ export interface PruneReport {
  */
 export async function pruneAgents(
   deps: PruneDeps,
-  now: Date = new Date(),
+  now: Date,
 ): Promise<PruneReport> {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   const before = new Date(now.getTime() - AGENT_GRACE_DAYS * DAY_MS);
   const report: PruneReport = { pruned: 0, failed: 0 };
   for (const tenantId of await deps.tenantIds()) {

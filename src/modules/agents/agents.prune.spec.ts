@@ -173,16 +173,20 @@ describe("startAgentsPrune", () => {
       runs += 1;
       return { pruned: 0, failed: 0 };
     };
-    startAgentsPrune(countRun);
+    startAgentsPrune(countRun, undefined, () => {});
     const q = queueOf();
-    startAgentsPrune(countRun, q.queue);
+    startAgentsPrune(countRun, q.queue, () => {});
     expect(runs).toBe(0);
   });
 
   test("a tick runs the pass; unfinished agents make it throw so the queue retries", async () => {
     const q = queueOf();
     let report = { pruned: 1, failed: 0 };
-    startAgentsPrune(async () => report, q.queue);
+    startAgentsPrune(
+      async () => report,
+      q.queue,
+      () => {},
+    );
     await q.tick();
     report = { pruned: 0, failed: 2 };
     await expect(q.tick()).rejects.toThrow("2 agent(s) unfinished");

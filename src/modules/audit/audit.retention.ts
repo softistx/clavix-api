@@ -15,7 +15,7 @@ export interface RetentionDeps {
   deleteAuthBefore(tenantId: string, before: Date): Promise<number>;
   /** Removes the console events about the tenant (`null`: the platform's own) recorded before `before`. */
   deleteAdminBefore(tenantId: string | null, before: Date): Promise<number>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 export interface RetentionReport {
@@ -38,9 +38,9 @@ const cutoff = (now: Date, days: number) =>
  */
 export async function enforceRetention(
   deps: RetentionDeps,
-  now: Date = new Date(),
+  now: Date,
 ): Promise<RetentionReport> {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   const report: RetentionReport = { removed: 0, failed: 0 };
   const step = async (label: string, run: () => Promise<number>) => {
     try {

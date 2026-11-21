@@ -47,6 +47,7 @@ const issuers = createClavixOAuthIssuers({
 const app = createApp({ oauth: issuers });
 const url = (path: string) => `${issuerOf("acme", origin)}${path}`;
 const tenants = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
 
@@ -81,7 +82,11 @@ beforeAll(async () => {
     retireAfter: "2h",
   });
   const registered = await registerClient(
-    { db: oauthDb, findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }) },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
+    },
     {
       tenant: "acme",
       name: "Back end",

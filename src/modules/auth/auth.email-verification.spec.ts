@@ -448,6 +448,7 @@ describe("the OIDC email_verified claim follows the flag", () => {
     });
     const registered = await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
       },

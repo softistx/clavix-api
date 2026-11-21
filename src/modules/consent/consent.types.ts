@@ -48,8 +48,10 @@ export interface LabelledScope {
 
 /** What `ConsentService` is built with. */
 export interface ConsentOptions {
-  /** Where a queued or failed revocation is logged (a warning by default). */
-  log?: (message: string) => void;
+  /** Where a queued or failed revocation is logged (`console.warn` bound at the composition root). */
+  log: (message: string) => void;
+  /** The clock the authentication assessment reads. */
+  now: () => Date;
 }
 
 /** What janus-oauth hands the approval hooks: the pending request and a selection of details, if any. */

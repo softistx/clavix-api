@@ -45,6 +45,7 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
     {
       policy: { allowPrivate: false, resolve: async () => ["93.184.216.34"] },
       log,
+      now: () => new Date(),
     },
   );
   const connections = new ConnectionsService(
@@ -54,6 +55,7 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
       txt: { resolveTxt: async () => ({ kind: "none" }) },
       links: async () => 0,
       log,
+      now: () => new Date(),
     },
   );
   const policy = new SignInPolicyService(tenants, boxes.social, log);

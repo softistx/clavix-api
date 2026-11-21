@@ -102,7 +102,7 @@ export interface InviteInput {
 
 export interface InvitationsOptions {
   /** The clock; tests move it. */
-  now?: () => number;
+  now: () => number;
   /** Least time before a pending invitation of an address is replaced or resent (60 s). */
   cooldownMs?: number;
   /** Most pending invitations per scope (500); a new address past it is refused. */

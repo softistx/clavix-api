@@ -7,6 +7,7 @@ import type {
 import { withRegistration } from "@/oauth/with-registration";
 import { agentClientsService, isMetadataClient } from "./agent-clients";
 import { exclusive } from "./exclusive";
+import { warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { metadataThrottle, registerThrottle } from "./throttle";
 import { usageService } from "./usage";
@@ -28,10 +29,12 @@ export function withAgentRegistration<
     return tenant === undefined ? 0 : usageService.quotasOf(tenant).agents;
   };
   return withRegistration(issuers, {
+    log: warn,
     resolver: tenantResolver,
     agents: agentClientsService,
     isMetadataClient,
     register: createRegisterRoute({
+      log: warn,
       resolver: tenantResolver,
       serverFor: issuers.serverFor,
       throttle,

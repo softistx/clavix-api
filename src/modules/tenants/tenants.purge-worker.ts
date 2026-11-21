@@ -15,8 +15,8 @@ export interface PurgeQueue {
  */
 export async function startTenantPurge(
   run: () => Promise<PurgeReport>,
-  queue?: PurgeQueue,
-  log: (message: string) => void = (m) => console.warn(m),
+  queue: PurgeQueue | undefined,
+  log: (message: string) => void,
 ) {
   const pass = async () => {
     const { failed } = await run();

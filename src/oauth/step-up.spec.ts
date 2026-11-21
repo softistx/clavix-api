@@ -278,6 +278,7 @@ beforeAll(async () => {
     });
     const registered = await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },
@@ -481,6 +482,7 @@ describe("the device flow", () => {
   const device = async (slug: string) => {
     await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },

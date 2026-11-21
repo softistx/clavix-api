@@ -13,6 +13,7 @@ import { socialOf } from "@/modules/users/tenant-janus";
 import { mongo } from "./db";
 import { env } from "./env";
 import { connectionSecretBox } from "./keys";
+import { clock, warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 
 // The accounts linked through a connection, counted by the tenant's own janus
@@ -50,7 +51,13 @@ const advertisesIss = (issuer: string) =>
 export const connectionsService = new ConnectionsService(
   mongo.db.connections,
   connectionSecretBox,
-  { txt: systemTxtResolver(), links: linkCount, advertisesIss },
+  {
+    txt: systemTxtResolver(),
+    links: linkCount,
+    advertisesIss,
+    now: clock,
+    log: warn,
+  },
 );
 
 /** Reads an issuer's discovery document for the console's check (the network). */

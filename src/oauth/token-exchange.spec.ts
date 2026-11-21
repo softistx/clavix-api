@@ -43,7 +43,7 @@ async function tenant(slug: string, rules: boolean | "none" = true) {
   await registerStoredResource({ tenant: slug, uri: TARGET, scopes: ["read"] });
   await registerStoredResource({ tenant: slug, uri: OTHER, scopes: ["read"] });
   const exch = await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: slug,
       name: "Exchanger",
@@ -153,7 +153,7 @@ describe("the token exchange grant", () => {
 
   test("a subject client that is not listed is refused", async () => {
     const second = await registerClient(
-      { db: oauthDb, findTenant },
+      { now: () => new Date(), db: oauthDb, findTenant },
       {
         tenant: "tx-a",
         name: "Second",
@@ -203,7 +203,7 @@ describe("the token exchange grant", () => {
     const register = async (clientId: string) =>
       (
         await registerClient(
-          { db: oauthDb, findTenant },
+          { now: () => new Date(), db: oauthDb, findTenant },
           {
             tenant: slug,
             name: clientId,
@@ -302,7 +302,7 @@ describe("the token exchange grant", () => {
     // A public client cannot hold the grant at all.
     await expect(
       registerClient(
-        { db: oauthDb, findTenant },
+        { now: () => new Date(), db: oauthDb, findTenant },
         {
           tenant: "tx-a",
           name: "Public",
@@ -314,7 +314,7 @@ describe("the token exchange grant", () => {
       ),
     ).rejects.toThrow("confidential client");
     await registerClient(
-      { db: oauthDb, findTenant },
+      { now: () => new Date(), db: oauthDb, findTenant },
       {
         tenant: "tx-a",
         name: "Public",

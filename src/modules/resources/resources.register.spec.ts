@@ -43,11 +43,13 @@ const build = (resources = mongo.db.resources) =>
 const service = build();
 
 const resolver = createTenantResolver({
+  log: () => {},
   lookup: findTenant,
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
@@ -157,7 +159,7 @@ beforeAll(async () => {
       retireAfter: "2h",
     });
     await registerClient(
-      { db: oauthDb, findTenant },
+      { now: () => new Date(), db: oauthDb, findTenant },
       { tenant: slug, name: "App", redirectUris: [REDIRECT] },
     );
   }

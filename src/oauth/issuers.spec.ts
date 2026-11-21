@@ -23,11 +23,13 @@ const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 
 const resolver = createTenantResolver({
+  log: () => {},
   lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });

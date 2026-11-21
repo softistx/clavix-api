@@ -57,13 +57,13 @@ export class TenantsService {
 
   constructor(
     private readonly collection: TypedCollection<typeof tenants>,
-    options: TenantsServiceOptions = {},
+    options: TenantsServiceOptions,
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
     this.hostsOf = options.hostsOf ?? (() => []);
     this.onCreated = options.onCreated ?? (() => {});
-    this.log = options.log ?? ((message) => console.warn(message));
+    this.log = options.log;
   }
 
   async create(input: {
@@ -438,8 +438,8 @@ export class TenantsService {
    * tenant that fails is left claimed and resumed by the next run; the others
    * go on. Refuses a tenant before its `purgeAt` (`claimPurge` says no).
    */
-  async purge(deps: PurgeDeps, now: Date = new Date()): Promise<PurgeReport> {
-    const log = deps.log ?? ((message) => console.info(message));
+  async purge(deps: PurgeDeps, now: Date): Promise<PurgeReport> {
+    const log = deps.log;
     const report: PurgeReport = { purged: [], failed: [] };
     for (const tenant of await this.purgeDue(now)) {
       const id = tenant._id.toHexString();

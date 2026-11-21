@@ -226,7 +226,7 @@ beforeAll(async () => {
     { now: clock.now(), lead: "1h", retireAfter: "2h" },
   );
   const registered = await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: PLATFORM_TENANT_SLUG,
       name: "Spec console",
@@ -241,7 +241,7 @@ beforeAll(async () => {
   FOREIGN.secret =
     (
       await registerClient(
-        { db: oauthDb, findTenant },
+        { now: () => new Date(), db: oauthDb, findTenant },
         {
           tenant: PLATFORM_TENANT_SLUG,
           name: "Spec foreign",

@@ -32,14 +32,16 @@ const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const options = { db: oauthDb, findTenant };
+const options = { db: oauthDb, findTenant, now: () => new Date() };
 
 const resolver = createTenantResolver({
   lookup: findTenant,
   cache: noTenantCache,
   config,
+  log: () => {},
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });

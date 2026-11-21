@@ -18,6 +18,7 @@ import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
 import { redis } from "./redis";
+import { clock } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
@@ -62,6 +63,7 @@ export function createConsoleDeps(
       },
     }),
     access,
+    now: clock,
     admins: createJanusAdmins(invitationsOf(clavixTenant)),
     users: new UsersService({
       janusOf: async (id) => {

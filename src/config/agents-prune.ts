@@ -9,6 +9,7 @@ import { agentClientsService } from "./agent-clients";
 import { clientsService } from "./clients";
 import { exclusive } from "./exclusive";
 import { oauthDb } from "./oauth-db";
+import { warn } from "./runtime";
 import { tenantsService } from "./tenancy";
 
 const PAGE = 100;
@@ -39,8 +40,7 @@ async function hasStandingGrant(tenantId: string, clientId: string) {
  * and tokens, its rules and its agent record).
  */
 export const createAgentsPrune =
-  (now: () => Date = () => new Date()) =>
-  (): Promise<PruneReport> =>
+  (now: () => Date) => (): Promise<PruneReport> =>
     pruneAgents(
       {
         tenantIds: () => tenantsService.activeIds(),
@@ -59,6 +59,7 @@ export const createAgentsPrune =
             )
           ).removed,
         emit: (event) => adminEventRecorder.record(agentPruneEventInput(event)),
+        log: warn,
       },
       now(),
     );

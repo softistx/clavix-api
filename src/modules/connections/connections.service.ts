@@ -51,8 +51,8 @@ export class ConnectionsService {
     private readonly box: SecretBox,
     private readonly options: ConnectionsOptions,
   ) {
-    this.now = options.now ?? (() => new Date());
-    this.log = options.log ?? ((message) => console.warn(message));
+    this.now = options.now;
+    this.log = options.log;
   }
 
   private scoped(tenantId: string) {

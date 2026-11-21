@@ -14,7 +14,7 @@ const config = {
 
 function setup(
   records: TenantRecord[],
-  cache: TenantCache = memoryTenantCache(),
+  cache: TenantCache = memoryTenantCache(Date.now),
 ) {
   const lookups: string[] = [];
   const logged: string[] = [];
@@ -64,8 +64,9 @@ describe("resolveHost", () => {
   test("the issuer carries a configured scheme and port", async () => {
     const resolver = createTenantResolver({
       lookup: async () => acme,
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config: { scheme: "http", domain: "clavix.test", port: 3000 },
+      log: () => {},
     });
     expect((await resolver.resolveHost("acme.clavix.test"))?.issuer).toBe(
       "http://acme.clavix.test:3000",
@@ -84,7 +85,7 @@ describe("resolveHost", () => {
   test("a hit is stored for 60 s, none for 30 s", async () => {
     const stored: [string, unknown, number][] = [];
     const cache: TenantCache = {
-      ...memoryTenantCache(),
+      ...memoryTenantCache(Date.now),
       get: async () => undefined,
       set: (host, value, ttl) => {
         stored.push([host, value, ttl]);
@@ -197,7 +198,7 @@ describe("invalidate", () => {
 describe("cache-aside race", () => {
   test("a suspension between the read and the set does not leave a stale entry", async () => {
     const records: TenantRecord[] = [acme];
-    const inner = memoryTenantCache();
+    const inner = memoryTenantCache(Date.now);
     let resolver: ReturnType<typeof createTenantResolver>;
     let raced = false;
     const cache: TenantCache = {
@@ -229,7 +230,7 @@ describe("cache-aside race", () => {
 
   test("a creation between the read and the set drops the cached null", async () => {
     const records: TenantRecord[] = [];
-    const inner = memoryTenantCache();
+    const inner = memoryTenantCache(Date.now);
     let raced = false;
     const cache: TenantCache = {
       ...inner,
@@ -256,7 +257,7 @@ describe("invalidate failure", () => {
   test("a failed delete is retried once", async () => {
     let calls = 0;
     const cache: TenantCache = {
-      ...memoryTenantCache(),
+      ...memoryTenantCache(Date.now),
       delete: async () => {
         calls++;
         if (calls === 1) throw new Error("down");
@@ -269,7 +270,7 @@ describe("invalidate failure", () => {
 
   test("two failures reach the caller", async () => {
     const cache: TenantCache = {
-      ...memoryTenantCache(),
+      ...memoryTenantCache(Date.now),
       delete: async () => {
         throw new Error("down");
       },
@@ -295,7 +296,7 @@ describe("custom domains", () => {
         primaryHostOf: async () => primary,
         verifiedHostsOf: async () => [],
       },
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config,
       log: () => {},
     });
@@ -329,7 +330,7 @@ describe("custom domains", () => {
         primaryHostOf: async () => undefined,
         verifiedHostsOf: async () => ["login.acme.test", "auth.acme.com"],
       },
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config,
       log: () => {},
     });

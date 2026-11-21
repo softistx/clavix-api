@@ -8,6 +8,7 @@ import { createSecretBox } from "@/modules/sign-in-methods";
 import { mongo } from "./db";
 import { env } from "./env";
 import { parseMasterKeys } from "./master-keys";
+import { clock } from "./runtime";
 
 // The tenants' signing keys, encrypted with CLAVIX_KEYS_MASTER_KEY. Slice C
 // (the OAuth endpoints) signs with `signingKeysFor(tenantId)`; the JWKS route
@@ -41,7 +42,7 @@ export const connectionSecretBox = createSecretBox(
 
 /** A tenant's first (or replacement) key; `TenantsService.create` calls it. */
 export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {
-  await ensureSigningKey(signingKeysFor, tenantId);
+  await ensureSigningKey(signingKeysFor, tenantId, clock());
 };
 
 /**

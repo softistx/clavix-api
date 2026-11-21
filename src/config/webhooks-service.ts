@@ -3,6 +3,7 @@ import { type UrlPolicy, WebhooksService } from "@/modules/webhooks";
 import { mongo } from "./db";
 import { env } from "./env";
 import { webhookSecretBox } from "./keys";
+import { clock, warn } from "./runtime";
 
 /**
  * Where an endpoint may point (D21): public addresses only, every name looked
@@ -20,5 +21,5 @@ export const webhooksService = new WebhooksService(
   mongo.db.webhookEndpoints,
   mongo.db.webhookDeliveries,
   webhookSecretBox,
-  { policy: urlPolicy },
+  { policy: urlPolicy, now: clock, log: warn },
 );

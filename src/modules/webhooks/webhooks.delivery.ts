@@ -47,7 +47,7 @@ export const endpointIdOf = (queueEndpoint: string) => {
  */
 export const webhookQueueLimits = (
   caps: { maxInFlight: number; maxPending: number },
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): WebhookQueueLimits => ({
   ...caps,
   groupOf: webhookGroupOf,
@@ -79,7 +79,7 @@ export interface DeliveryDeps {
   poll?: Duration;
   /** An endpoint was switched off after `GIVE_UP_LIMIT` given-up deliveries in a row. */
   onDisabled(endpoint: DisabledEndpoint): Promise<void>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 type Log = (message: string) => void;
@@ -172,7 +172,7 @@ function giveUpHandler(
  * retry. It is fed by the event bus (`relay`) and by `sendTest`.
  */
 export function createWebhookDelivery(deps: DeliveryDeps) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   const listener = webhooks<ClavixWebhookEvent>({
     endpoints: endpointResolver(deps),
     fetch: deps.fetch,

@@ -12,7 +12,7 @@ import { CliInputError, type CliTenant } from "@/shared/cli";
 export function registerForTenant(
   options: {
     db: Db;
-    now: (() => Date) | undefined;
+    now: () => Date;
     detailTypes: ClientDetailTypes | undefined;
   },
   tenant: CliTenant,
@@ -22,7 +22,7 @@ export function registerForTenant(
     {
       db: options.db,
       findTenant: async (slug) => (slug === tenant.slug ? tenant : undefined),
-      ...(options.now === undefined ? {} : { now: options.now }),
+      now: options.now,
       ...(options.detailTypes === undefined
         ? {}
         : { detailTypes: options.detailTypes }),

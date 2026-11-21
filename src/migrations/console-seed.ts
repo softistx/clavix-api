@@ -3,6 +3,7 @@ import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import type { Db } from "mongodb";
+import { clock } from "@/config/runtime";
 import { createAccess } from "@/console/access";
 import {
   CONSOLE_CLIENT_ID,
@@ -57,7 +58,7 @@ export async function seedConsole(
     scopes: CONSOLE_SCOPES,
   });
   const client = await registerClient(
-    { db, findTenant },
+    { db, findTenant, now: clock },
     {
       tenant: PLATFORM_TENANT_SLUG,
       name: NAME,

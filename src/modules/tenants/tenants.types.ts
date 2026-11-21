@@ -32,8 +32,8 @@ export interface TenantsServiceOptions {
    * the rotation job creates the key within the hour.
    */
   onCreated?: (tenantId: string) => void | Promise<void>;
-  /** Where a hook failure is logged. Default `console.warn`. */
-  log?: (message: string) => void;
+  /** Where a hook failure is logged. */
+  log: (message: string) => void;
 }
 
 /** Where a tenant stands for the console: `deleted` is the trash. */
@@ -96,7 +96,7 @@ export interface PurgeDeps {
   /** The tenant's roles and platform link in the console's permissions. */
   memberships: { removeTenant(tenantId: string): Promise<unknown> };
   partitions: PartitionPurger;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 export interface PurgeReport {

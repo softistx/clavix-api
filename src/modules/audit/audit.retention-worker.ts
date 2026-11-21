@@ -14,8 +14,8 @@ export interface RetentionQueue {
  */
 export function startAuditRetention(
   run: () => Promise<RetentionReport>,
-  queue?: RetentionQueue,
-  log: (message: string) => void = (m) => console.warn(m),
+  queue: RetentionQueue | undefined,
+  log: (message: string) => void,
 ) {
   queue
     ?.work(async () => {

@@ -12,6 +12,7 @@ import { partitionOf } from "./tenants.utils";
 const collection = mongo.db.tenants;
 const created: string[] = [];
 const service = new TenantsService(collection, {
+  log: () => {},
   domain: "clavix.test",
   onCreated: (id) => {
     created.push(id);
@@ -108,7 +109,7 @@ describe("isolation between tenants", () => {
 
     const findTenant = (slug: string) => collection.findFirst({ slug });
     await registerClient(
-      { db: oauthDb, findTenant },
+      { now: () => new Date(), db: oauthDb, findTenant },
       { tenant: "isoa", name: "App", redirectUris: ["https://a.example/cb"] },
     );
     const storeOf = (tenantId: string) =>

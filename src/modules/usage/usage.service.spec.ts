@@ -146,6 +146,7 @@ describe("hard quotas", () => {
 describe("the clients count over the real OAuth store", () => {
   test("counts a tenant's registered clients and no other tenant's", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      log: () => {},
       domain: "clavix.test",
     });
     const a = await service.create({ slug: "usea", name: "A" });
@@ -153,6 +154,7 @@ describe("the clients count over the real OAuth store", () => {
     const options = {
       db: oauthDb,
       findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+      now: () => new Date(),
     };
     const redirect = "https://app.example/callback";
     await registerClient(options, {
@@ -179,6 +181,7 @@ describe("the clients count over the real OAuth store", () => {
   });
   test("agents are not clients: dynamic agents leave the clients count and fill the agents count", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      log: () => {},
       domain: "clavix.test",
     });
     const t = await service.create({ slug: "usec", name: "C" });
@@ -186,6 +189,7 @@ describe("the clients count over the real OAuth store", () => {
     const options = {
       db: oauthDb,
       findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+      now: () => new Date(),
     };
     const redirect = "https://app.example/callback";
     await registerClient(options, {

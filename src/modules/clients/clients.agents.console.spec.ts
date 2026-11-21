@@ -60,6 +60,7 @@ const tenantOf = (tenantId: string) => {
 async function dynamicAgent(slug: string, tenantId: string, name: string) {
   const made = await registerClient(
     {
+      now: () => new Date(),
       db: oauthDb,
       findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
     },
@@ -99,18 +100,30 @@ beforeAll(async () => {
     { $set: { quotaOverrides: { clients: 1000 } } },
   );
   await registerClient(
-    { db: oauthDb, findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }) },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
+    },
     { tenant: "agc-a", name: "Console one", redirectUris: [REDIRECT] },
   );
   await registerClient(
-    { db: oauthDb, findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }) },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
+    },
     { tenant: "agc-a", name: "Console two", redirectUris: [REDIRECT] },
   );
   await dynamicAgent("agc-a", tenantA, "Dynamic one");
   await metadataAgent(tenantA, DOC);
   // Tenant B: one console client and one agent, never seen from A.
   await registerClient(
-    { db: oauthDb, findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }) },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
+    },
     { tenant: "agc-b", name: "B console", redirectUris: [REDIRECT] },
   );
   await dynamicAgent("agc-b", tenantB, "B agent");

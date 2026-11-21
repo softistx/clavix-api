@@ -28,6 +28,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
 const policy = new SignInPolicyService(service, secretBox);

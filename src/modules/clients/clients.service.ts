@@ -42,7 +42,7 @@ export interface ClientsServiceOptions {
   agents?: AgentsReader;
   /** The tenants' detail types a client may list (R3); without it none can be listed. */
   detailTypes?: ClientDetailTypes;
-  now?: () => Date;
+  now: () => Date;
 }
 
 /**
@@ -332,7 +332,7 @@ export class ClientsService {
       this.options.policies,
       tenant,
       clientId,
-      (this.options.now ?? (() => new Date()))(),
+      this.options.now(),
       agent,
     );
     // On a repeat too: a run that stopped between the two is finished.

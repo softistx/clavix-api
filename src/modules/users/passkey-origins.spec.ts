@@ -40,7 +40,7 @@ const resolver = createTenantResolver({
     primaryHostOf: async () => undefined,
     verifiedHostsOf: async () => [...verified],
   },
-  cache: memoryTenantCache(),
+  cache: memoryTenantCache(Date.now),
   config,
   log: () => {},
 });

@@ -37,7 +37,7 @@ beforeAll(async () => {
     ids[slug] = (await flow.setUp(slug)).tenantId;
   }
   await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: "oev-a",
       name: "TV",

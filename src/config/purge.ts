@@ -6,6 +6,7 @@ import { access } from "./access";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { createPartitionPurger } from "./partition-purger";
+import { warn } from "./runtime";
 import { domainsService, tenantsService } from "./tenancy";
 
 /**
@@ -27,17 +28,24 @@ export const ownedPurgers = (): OwnedCollectionPurger[] =>
 
 /** The purge job over the real stores: the janus partition purges, the owned collections, the roles. */
 export const createTenantPurge =
-  (partitions: PartitionPurger = createPartitionPurger(oauthDb)) =>
+  (
+    now: () => Date,
+    partitions: PartitionPurger = createPartitionPurger(oauthDb),
+  ) =>
   () =>
-    tenantsService.purge({
-      // The custom domains are a platform collection (`domains`), emptied too.
-      owned: [
-        ...ownedPurgers(),
-        {
-          name: "domains",
-          deleteOwnedBy: (id) => domainsService.deleteOwnedBy(id),
-        },
-      ],
-      memberships: access,
-      partitions,
-    });
+    tenantsService.purge(
+      {
+        // The custom domains are a platform collection (`domains`), emptied too.
+        owned: [
+          ...ownedPurgers(),
+          {
+            name: "domains",
+            deleteOwnedBy: (id) => domainsService.deleteOwnedBy(id),
+          },
+        ],
+        memberships: access,
+        partitions,
+        log: warn,
+      },
+      now(),
+    );

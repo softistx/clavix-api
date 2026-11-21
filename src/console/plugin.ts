@@ -68,10 +68,11 @@ export interface ConsoleDeps {
   adminEvents: AdminEventRecorder;
   /** The readers of the activity logs. */
   activity: ConsoleActivity;
-  /** The audit export's limits; the real ones (100 000 rows, the clock) by default. */
+  /** The clock (the audit export's range floor). */
+  now: () => Date;
+  /** The audit export's limits; the real ones (100 000 rows) by default. */
   auditExport?: {
     maxRows?: number;
-    now?: () => Date;
     /** Per-tenant export budget; none without Redis. */
     throttle?: ExportThrottle;
   };

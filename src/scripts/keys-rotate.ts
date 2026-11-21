@@ -1,6 +1,7 @@
 import { mongo } from "@/config/db";
 import { signingKeysFor } from "@/config/keys";
 import { redis } from "@/config/redis";
+import { clock, warn } from "@/config/runtime";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
 import { rotateNow } from "@/modules/keys";
 import { parseRotateArgs, ROTATE_USAGE } from "@/modules/keys/cli";
@@ -35,6 +36,8 @@ try {
   const { rotated, failed } = await rotateNow({
     signingKeysFor,
     tenantIds,
+    now: clock,
+    log: warn,
     dropOld: target.dropOld,
   });
   console.log(JSON.stringify({ rotated, failed }, null, 2));

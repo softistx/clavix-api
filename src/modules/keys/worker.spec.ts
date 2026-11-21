@@ -18,6 +18,7 @@ describe("startKeyRotation", () => {
         throw new Error("down");
       },
       activeTenantIds: async () => ["x"],
+      now: () => new Date(),
       log: () => {},
     };
     await startKeyRotation(deps, queue);
@@ -34,6 +35,7 @@ describe("startKeyRotation", () => {
         throw new Error("x");
       },
       activeTenantIds: async () => ["x"],
+      now: () => new Date(),
       log: () => {},
     });
     expect(n).toBe(1);

@@ -34,6 +34,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const tenants = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
 const keys = new Map<string, SigningKeyStore>();
@@ -149,6 +150,7 @@ beforeAll(async () => {
     });
     const registered = await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },

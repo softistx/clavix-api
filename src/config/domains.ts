@@ -6,6 +6,7 @@ import {
 import { adminEventRecorder } from "./admin-events";
 import { mongo } from "./db";
 import { env } from "./env";
+import { clock, warn } from "./runtime";
 
 /**
  * The real domain store over the `domains` collection (a platform collection:
@@ -20,6 +21,8 @@ export const createDomainsService = (
 ) =>
   new DomainsService(mongo.db.domains, {
     ...options,
+    now: clock,
+    log: warn,
     record: (event) => adminEventRecorder.record(domainEventInput(event)),
     dns: systemTxtResolver(),
     platformDomain: env.CLAVIX_DOMAIN,

@@ -47,10 +47,10 @@ export class InvitationsService {
   constructor(
     private readonly ports: InvitationsPorts,
     {
-      now = Date.now,
+      now,
       cooldownMs = RESEND_COOLDOWN_MS,
       maxPending = DEFAULT_MAX_PENDING,
-    }: InvitationsOptions = {},
+    }: InvitationsOptions,
   ) {
     this.now = now;
     this.cooldownMs = cooldownMs;

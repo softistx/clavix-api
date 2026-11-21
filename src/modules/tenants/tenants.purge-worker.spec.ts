@@ -32,10 +32,14 @@ describe("startTenantPurge", () => {
 
   test("with no queue only the start pass runs", async () => {
     let runs = 0;
-    await startTenantPurge(async () => {
-      runs += 1;
-      return { purged: [], failed: [] };
-    });
+    await startTenantPurge(
+      async () => {
+        runs += 1;
+        return { purged: [], failed: [] };
+      },
+      undefined,
+      () => {},
+    );
     expect(runs).toBe(1);
   });
 });

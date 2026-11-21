@@ -15,8 +15,8 @@ export interface PruneQueue {
  */
 export function startAgentsPrune(
   run: () => Promise<PruneReport>,
-  queue?: PruneQueue,
-  log: (message: string) => void = (m) => console.warn(m),
+  queue: PruneQueue | undefined,
+  log: (message: string) => void,
 ) {
   queue
     ?.work(async () => {

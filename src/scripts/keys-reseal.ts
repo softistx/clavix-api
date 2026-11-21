@@ -2,6 +2,7 @@ import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { masterKeys } from "@/config/keys";
 import { redis } from "@/config/redis";
+import { warn } from "@/config/runtime";
 import { signInPolicyService } from "@/config/sign-in-policy";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
@@ -26,6 +27,7 @@ try {
   const report = await resealAllTenants({
     db: mongo.db,
     masterKeys,
+    log: warn,
     tenantIds: () => tenantsService.allIds(),
     secretStores: {
       webhookSecrets: (tenantId) => webhooksService.resealSecrets(tenantId),

@@ -34,7 +34,7 @@ export interface RegistrationOptions {
   agentQuotaOf: (tenantId: string) => Promise<number | null>;
   /** Serializes a tenant's new agents (count, fetch, record); see `agentsQuotaKey`. */
   exclusive?: Exclusive | undefined;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 const NO_STORE = { "cache-control": "no-store" } as const;
@@ -74,7 +74,7 @@ export function withRegistration<
     throttle,
     agentQuotaOf,
     exclusive = (_key, work) => work(),
-    log = console.warn,
+    log,
   }: RegistrationOptions,
 ): Omit<T, "handle"> & {
   register: RegisterHandler;

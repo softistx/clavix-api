@@ -50,7 +50,7 @@ export interface TenantResolverOptions {
   lookupById?: (id: ObjectId) => Promise<TenantRecord | undefined>;
   /** Where issuers live (`CLAVIX_DOMAIN`, scheme, port). */
   config: PublicOrigin;
-  log?: (message: string) => void;
+  log: (message: string) => void;
   /**
    * Seconds a resolved tenant stays cached. Default 60: also the bound on how
    * long a suspension can take to apply when its invalidation was lost.
@@ -193,7 +193,7 @@ export function createTenantResolver(
   options: TenantResolverOptions,
 ): TenantResolver {
   const { cache, config } = options;
-  const log = options.log ?? ((message) => console.warn(message));
+  const log = options.log;
 
   const resolveHost = async (raw: string) => {
     const host = normalizeHost(raw);

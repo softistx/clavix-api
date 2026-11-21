@@ -61,6 +61,7 @@ const IDP_ISSUER = `https://${IDP_HOST}`;
 const memory = mailer as MemoryMailer;
 
 const tenants = new TenantsService(mongo.db.tenants, {
+  log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
 const policies = new SignInPolicyService(tenants, {
@@ -88,6 +89,7 @@ const app = createApp({
 
 // The upstream: its own OAuth issuers over the same database, like oidc.spec.
 const idpResolver = (await import("@/tenancy/resolver")).createTenantResolver({
+  log: () => {},
   lookup: (slug: string) => mongo.db.tenants.findFirst({ slug }),
   cache: (await import("@/tenancy/tenant-cache")).noTenantCache,
   config: { scheme: "https", domain: IDP_DOMAIN },
@@ -297,7 +299,11 @@ beforeAll(async () => {
     retireAfter: "2h",
   });
   const registered = await registerClient(
-    { db: oauthDb, findTenant: (slug) => mongo.db.tenants.findFirst({ slug }) },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+    },
     {
       tenant: "fedidp",
       name: "Clavix",

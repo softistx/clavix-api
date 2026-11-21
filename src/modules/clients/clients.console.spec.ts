@@ -230,6 +230,7 @@ describe("clients and client", () => {
   test("the grant types a script recorded are shown", async () => {
     await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
       },
@@ -418,6 +419,7 @@ describe("clients and client", () => {
   test("a client made by the script is listed too", async () => {
     await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
       },

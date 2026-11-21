@@ -12,7 +12,7 @@ const down = async (): Promise<number> => {
 
 // A service whose inline revocation is `revoke`, and whose log is silent.
 const serviceRevoking = (revoke: () => Promise<number>) => {
-  const service = new ConsentService({ log: quiet });
+  const service = new ConsentService({ log: quiet, now: () => new Date() });
   spyOn(service, "revokeGrants").mockImplementation(revoke);
   return service;
 };
@@ -57,7 +57,7 @@ describe("startRevokeWorker", () => {
         }) => Promise<unknown>)
       | undefined;
     let calls = 0;
-    new ConsentService({ log: quiet }).startRevokeWorker(
+    new ConsentService({ log: quiet, now: () => new Date() }).startRevokeWorker(
       async () => {
         calls += 1;
         if (calls === 1) throw new Error("down");

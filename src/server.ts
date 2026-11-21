@@ -13,6 +13,7 @@ import { signingKeysFor } from "./config/keys";
 import { createIssuers } from "./config/oauth";
 import { createTenantPurge } from "./config/purge";
 import { redis } from "./config/redis";
+import { clock, warn } from "./config/runtime";
 import { instrumentDatabase, telemetry } from "./config/telemetry";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
@@ -36,13 +37,19 @@ await startKeyRotation(
   {
     signingKeysFor,
     activeTenantIds: () => tenantsService.activeIds(),
+    now: clock,
+    log: warn,
   },
   redis?.queues.keyRotation,
 );
 
 // The trash is emptied daily: a pass at start (it finishes a purge left claimed),
 // then one per tick on the Redis queue. Only tenants deleted 30 days ago or more.
-await startTenantPurge(createTenantPurge(), redis?.queues.tenantPurge);
+await startTenantPurge(
+  createTenantPurge(clock),
+  redis?.queues.tenantPurge,
+  warn,
+);
 
 // One client span per MongoDB command, when a collector is set (D24).
 instrumentDatabase();
@@ -58,14 +65,19 @@ startDomainRecheck(
 );
 // Daily, the agents that registered themselves and still have no grant after
 // 7 days are deleted (D10).
-startAgentsPrune(createAgentsPrune(), redis?.queues.agentsPrune);
+startAgentsPrune(createAgentsPrune(clock), redis?.queues.agentsPrune, warn);
 // Daily, the sign-in log and the console activity are cut at each tenant's
 // plan retention, the platform's own events at 400 days (D16).
-startAuditRetention(createAuditRetention(), redis?.queues.auditRetention);
+startAuditRetention(
+  createAuditRetention(clock),
+  redis?.queues.auditRetention,
+  warn,
+);
 // Daily, the rolled webhook secrets past their 24 hours are dropped (D19).
 startWebhookSecretsPrune(
-  createWebhookSecretsPrune(),
+  createWebhookSecretsPrune(clock),
   redis?.queues.webhookSecretsPrune,
+  warn,
 );
 // A grant revocation that failed at a social replace is retried with backoff
 // (#353).

@@ -42,8 +42,8 @@ export interface DomainsServiceOptions {
    * as an admin event. A failure is logged and never fails the write.
    */
   record?: (event: DomainSystemEvent) => Promise<void>;
-  now?: () => Date;
-  log?: (message: string) => void;
+  now: () => Date;
+  log: (message: string) => void;
 }
 
 /** What one recheck pass did: the claims looked at and the ones that lapsed. */
@@ -66,8 +66,8 @@ export class DomainsService {
     private readonly collection: TypedCollection<typeof domains>,
     private readonly options: DomainsServiceOptions,
   ) {
-    this.now = options.now ?? (() => new Date());
-    this.log = options.log ?? ((message) => console.warn(message));
+    this.now = options.now;
+    this.log = options.log;
   }
 
   // -- reads ---------------------------------------------------------------

@@ -25,7 +25,7 @@ export interface PublicDocumentsOptions {
   ttlSeconds?: number;
   /** Entries kept at most; the oldest inserted goes first. Default 5000. */
   maxEntries?: number;
-  now?: () => number;
+  now: () => number;
 }
 
 const matches = (header: string, etag: string) =>
@@ -51,7 +51,7 @@ export function withPublicDocuments<
   const { resolver, generations } = options;
   const ttl = (options.ttlSeconds ?? 60) * 1000;
   const max = options.maxEntries ?? 5000;
-  const now = options.now ?? Date.now;
+  const now = options.now;
   const entries = new Map<string, Entry>();
   // One janus call per slot and key at a time: a cold or expired entry is not
   // refilled by every concurrent request (7 store reads each).

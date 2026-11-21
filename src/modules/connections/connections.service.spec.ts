@@ -297,6 +297,7 @@ describe("the iss response parameter (RFC 9207, IdP mix-up)", () => {
       return answer;
     },
     now: () => clock,
+    log: () => {},
   });
   const verified = async (id: string) => {
     const added = await pinning.addDomain(A, id, `${id}.test`);

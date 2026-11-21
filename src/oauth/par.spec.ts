@@ -39,7 +39,7 @@ beforeAll(async () => {
   await flow.setUp("par-off");
   await flow.setUp("par-client");
   const registered = await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: "par-client",
       name: "Pushing",

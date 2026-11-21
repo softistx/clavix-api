@@ -9,8 +9,9 @@ import { memoryTenantCache } from "@/tenancy/tenant-cache";
 
 // createTenancy (the wiring of src/config/tenancy.ts) on the wired collection,
 // with the in-memory cache in place of Redis.
-const cache = memoryTenantCache();
+const cache = memoryTenantCache(Date.now);
 const { tenantResolver: resolver, tenantsService: service } = createTenancy({
+  log: () => {},
   tenants: mongo.db.tenants,
   cache,
   config: {
@@ -58,10 +59,12 @@ describe("custom domains in the production wiring", () => {
       },
       platformDomain: env.CLAVIX_DOMAIN,
       log: () => {},
+      now: () => new Date(),
     });
     const tenancy = createTenancy({
+      log: () => {},
       tenants: mongo.db.tenants,
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config: {
         scheme: env.CLAVIX_PUBLIC_SCHEME,
         domain: env.CLAVIX_DOMAIN,

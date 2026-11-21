@@ -163,6 +163,7 @@ beforeAll(async () => {
     });
     await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },

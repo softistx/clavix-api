@@ -23,7 +23,7 @@ interface TokenAnswer {
 /** A public client of the tenant, DPoP-bound or not. */
 async function publicClient(slug: string, dpopBound?: boolean) {
   await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: slug,
       name: "Pub",
@@ -97,7 +97,7 @@ beforeAll(async () => {
   }));
   // A confidential client that must bind its tokens, on a tenant that does not require it.
   const bound = await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: "dp-client",
       name: "Bound",

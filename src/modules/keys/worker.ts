@@ -17,7 +17,7 @@ export async function startKeyRotation(
   deps: RotationDeps,
   queue?: RotationQueue,
 ) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   const pass = async () => {
     const { failed } = await rotateAllTenants(deps);
     if (failed > 0)

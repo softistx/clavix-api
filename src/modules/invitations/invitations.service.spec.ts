@@ -11,9 +11,11 @@ import type {
 // The hosted-page ports are not read by the per-tenant methods under test.
 const createTenantInvitations = (
   source: () => Promise<InvitationSource | null>,
-  options: InvitationsOptions = {},
+  options: Partial<InvitationsOptions> = {},
 ): TenantInvitations =>
-  new InvitationsService({} as never, options).bind(source);
+  new InvitationsService({} as never, { now: Date.now, ...options }).bind(
+    source,
+  );
 
 const at = (day: number) => new Date(Date.UTC(2026, 0, day));
 const stored = (id: string, scope: string) => ({
