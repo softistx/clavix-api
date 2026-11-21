@@ -54,7 +54,7 @@ otherwise; `ratioSampler(0.1)` in production), `config/telemetry.ts` installs it
 `telemetry/tenant.ts`); `/healthz`, `/readyz` and `/internal/*` are neither traced nor resolved. `buildTenantJanus` returns
 `instrumentJanus(...)`; `createClavixOAuthIssuers` passes `instrument` (`instrumentOAuth`, tenant attributes via `tenantAttributes`; spec `src/oauth/telemetry.spec.ts`); the MongoDB command spans (`instrumentDatabase`, `server.ts`) need `monitorCommands`, set in `db.ts` only
 with an endpoint. **Never written:** tokens, codes, secrets, e-mails, logins, IPs: `createBase` passes `clientAddress: false`
-to `@softistx/alxia-telemetry` (>= 0.9.0), so the server span leaves `client.address` off. A new attribute is
+to `@softistx/alxia-telemetry` (>= 0.10.0), so the server span leaves `client.address` off. A new attribute is
 added to `tenantAttributes` or to the span that owns it, never from a request body. Spec: `telemetry/telemetry.spec.ts`.
 
 ## Console pages carry `totalCount: Int!`
