@@ -48,6 +48,6 @@ describe("oauthServerDouble", () => {
     const answer = await server.authenticateRequest(request, {
       resource: "https://api.acme.test/mcp",
     });
-    expect("ok" in answer).toBeFalse();
+    expect(answer).toHaveProperty("refused");
   });
 });

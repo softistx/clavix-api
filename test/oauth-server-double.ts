@@ -27,12 +27,10 @@ export interface ServerOverrides {
   principal?: OAuthPrincipal;
 }
 
-/** A real OAuth server over memory stores with the members `overrides` names replaced. */
-export function oauthServerDouble(
-  overrides: ServerOverrides = {},
-): OAuthServer {
-  const server = memoryServer();
-  const { revokeAll, principal } = overrides;
+/** An `authenticateRequest` that always answers `principal`. */
+function answering(
+  principal: OAuthPrincipal,
+): OAuthServer["authenticateRequest"] {
   async function authenticateRequest(
     request: Request,
     options: OAuthClientAuthenticateOptions,
@@ -42,12 +40,20 @@ export function oauthServerDouble(
     options: OAuthAuthenticateOptions,
   ): Promise<OAuthUserAuthentication>;
   async function authenticateRequest(): Promise<OAuthAuthentication> {
-    if (!principal) throw new Error("no principal to answer");
     return { ok: principal };
   }
+  return authenticateRequest;
+}
+
+/** A real OAuth server over memory stores with the members `overrides` names replaced. */
+export function oauthServerDouble(
+  overrides: ServerOverrides = {},
+): OAuthServer {
+  const server = memoryServer();
+  const { revokeAll, principal } = overrides;
   return {
     ...server,
-    ...(principal ? { authenticateRequest } : {}),
+    ...(principal ? { authenticateRequest: answering(principal) } : {}),
     grants: revokeAll ? { ...server.grants, revokeAll } : server.grants,
   };
 }
