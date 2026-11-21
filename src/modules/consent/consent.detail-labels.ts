@@ -1,3 +1,4 @@
+import type { ConsentRowKind } from "@/generated/graphql/resolvers";
 import type { FieldKind } from "@/modules/resources";
 import type { Translation } from "@/shared/translations";
 import { isRecord } from "@/shared/values";
@@ -31,7 +32,7 @@ export type DetailTextsFor = (request: Request) => Promise<DetailTexts>;
  * carries its `key` and the tenant's `label`. Values are typed, never worded.
  */
 export interface ConsentRow {
-  kind: "locations" | "actions" | "field" | "identifier" | "datatypes";
+  kind: ConsentRowKind;
   key: string | null;
   label: string | null;
   values: ConsentValue[];
@@ -98,7 +99,7 @@ function describe(
   const type = String(detail["type"]);
   const rows: ConsentRow[] = [];
   const row = (
-    kind: ConsentRow["kind"],
+    kind: ConsentRowKind,
     values: ConsentValue[],
     key: string | null = null,
     label: string | null = null,
