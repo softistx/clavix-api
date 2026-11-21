@@ -95,9 +95,15 @@ export const createOf = (input: CreateConnectionInput) => ({
 
 /** What `updateConnection` hands the service: only the fields the caller sent (`null` clears an optional one). */
 export const patchOf = (input: UpdateConnectionInput) => ({
-  ...(input.name == null ? {} : { name: input.name }),
-  ...(input.issuer == null ? {} : { issuer: input.issuer }),
-  ...(input.clientId == null ? {} : { clientId: input.clientId }),
+  ...(input.name === null || input.name === undefined
+    ? {}
+    : { name: input.name }),
+  ...(input.issuer === null || input.issuer === undefined
+    ? {}
+    : { issuer: input.issuer }),
+  ...(input.clientId === null || input.clientId === undefined
+    ? {}
+    : { clientId: input.clientId }),
   ...(input.clientAuthentication === undefined
     ? {}
     : {
@@ -110,15 +116,21 @@ export const patchOf = (input: UpdateConnectionInput) => ({
     ? {}
     : { idTokenSignedResponseAlg: input.idTokenSignedResponseAlg }),
   ...(input.scopes === undefined ? {} : { scopes: input.scopes }),
-  ...(input.emailTrust == null
+  ...(input.emailTrust === null || input.emailTrust === undefined
     ? {}
     : { emailTrust: TRUST_IN[input.emailTrust] }),
   ...(input.claims === undefined ? {} : { claims: input.claims }),
-  ...(input.requireSso == null ? {} : { requireSso: input.requireSso }),
-  ...(input.jit == null ? {} : { jit: input.jit }),
-  ...(input.showButton == null ? {} : { showButton: input.showButton }),
+  ...(input.requireSso === null || input.requireSso === undefined
+    ? {}
+    : { requireSso: input.requireSso }),
+  ...(input.jit === null || input.jit === undefined ? {} : { jit: input.jit }),
+  ...(input.showButton === null || input.showButton === undefined
+    ? {}
+    : { showButton: input.showButton }),
   ...(input.upstreamMfa === undefined
     ? {}
     : { upstreamMfa: input.upstreamMfa }),
-  ...(input.enabled == null ? {} : { enabled: input.enabled }),
+  ...(input.enabled === null || input.enabled === undefined
+    ? {}
+    : { enabled: input.enabled }),
 });

@@ -3,6 +3,7 @@ import type { StoredAdminEvent } from "@/console/admin-events/reader";
 import type { ConsoleContext } from "@/console/context";
 import { pageSize } from "@/console/modules/ids";
 import { badInput } from "@/shared/errors";
+import { unique } from "@/shared/values";
 import type { StoredAuthEvent } from "./audit.types";
 
 /** A cursor the store refuses is the caller's mistake. */
@@ -22,7 +23,7 @@ export async function resolveEach<T>(
   ids: readonly string[],
   find: (id: string) => Promise<T | null>,
 ) {
-  const distinct = [...new Set(ids)];
+  const distinct = unique(ids);
   const found = await Promise.all(distinct.map((id) => find(id)));
   return new Map(distinct.map((id, index) => [id, found[index] ?? null]));
 }

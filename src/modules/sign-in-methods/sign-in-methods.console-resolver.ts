@@ -57,10 +57,12 @@ export const signInMethods: Resolvers = {
     },
     updateMfaPolicy: async (_, { tenantId, input }, ctx) => {
       const tenant = await service.updateMfa(tenantId.toLowerCase(), {
-        ...(input.mode == null
+        ...(input.mode === null || input.mode === undefined
           ? {}
           : { mode: storedOf(CONSOLE_MODE, input.mode) }),
-        ...(input.totp == null ? {} : { totp: input.totp }),
+        ...(input.totp === null || input.totp === undefined
+          ? {}
+          : { totp: input.totp }),
       });
       const id = tenant._id.toHexString();
       await ctx.audit("mfaPolicy.update", {

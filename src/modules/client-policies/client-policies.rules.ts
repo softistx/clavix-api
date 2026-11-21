@@ -1,4 +1,5 @@
 import { CatalogError } from "@/modules/resources";
+import { unique } from "@/shared/values";
 
 const MAX_TARGETS = 20;
 const MAX_SUBJECT_CLIENTS = 50;
@@ -19,7 +20,7 @@ export function validateTokenExchange(
   },
   resourceUris: readonly string[],
 ): { targets: string[]; subjects: string[] | "any"; agents: boolean } {
-  const targets = [...new Set(input.targetResources)];
+  const targets = unique(input.targetResources);
   if (targets.length > MAX_TARGETS) {
     throw new CatalogError(
       "BAD_USER_INPUT",
@@ -34,7 +35,7 @@ export function validateTokenExchange(
     );
   }
   const subjects =
-    input.subjectClients === "any" ? "any" : [...new Set(input.subjectClients)];
+    input.subjectClients === "any" ? "any" : unique(input.subjectClients);
   if (subjects !== "any") {
     if (subjects.length > MAX_SUBJECT_CLIENTS) {
       throw new CatalogError(

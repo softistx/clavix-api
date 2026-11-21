@@ -1,5 +1,6 @@
 import type { ClientDetailTypes } from "@/modules/resources";
 import { CliInputError, type CliTenant } from "@/shared/cli";
+import { unique } from "@/shared/values";
 
 /**
  * The detail types a client will list (R3). `asked` replaces the list (`[]`
@@ -19,7 +20,7 @@ export async function detailTypesOf(
   kept: readonly string[],
   client: { requirePar: boolean; hasConsent: boolean },
 ): Promise<string[]> {
-  const listed = [...new Set(asked ?? kept)];
+  const listed = unique(asked ?? kept);
   if (listed.length === 0) return [];
   if (asked !== undefined) {
     if (port === undefined) {

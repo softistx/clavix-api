@@ -1,4 +1,5 @@
 import { CliInputError } from "@/shared/cli";
+import { unique } from "@/shared/values";
 import { CatalogError } from "./resources.errors";
 import type { RegisterResourceInput, StoredScopeDoc } from "./resources.types";
 
@@ -70,7 +71,7 @@ function refuse(message: string): never {
 }
 
 export function cleanClaims(claims: readonly string[] | undefined): string[] {
-  const clean = [...new Set((claims ?? []).map((claim) => claim.trim()))];
+  const clean = unique((claims ?? []).map((claim) => claim.trim()));
   if (clean.length > MAX_CLAIMS || clean.some((c) => c.length > MAX_NAME)) {
     refuse(
       `a scope has at most ${MAX_CLAIMS} claims of ${MAX_NAME} characters`,
@@ -152,7 +153,7 @@ export function checkRegistration(input: RegisterResourceInput) {
   if (problem !== null) {
     throw new CliInputError(`resource URI "${uri}": ${problem}`);
   }
-  const scopes = [...new Set(input.scopes.map((scope) => scope.trim()))];
+  const scopes = unique(input.scopes.map((scope) => scope.trim()));
   if (scopes.length === 0 || scopes.includes("")) {
     throw new CliInputError("a resource needs at least one scope");
   }
