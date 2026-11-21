@@ -12,9 +12,9 @@ import {
 import { TenantsService } from "@/modules/tenants";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
+import { keysServiceOf } from "~/keys";
 import { quietTenants } from "~/ports";
 import { resealAllTenants } from "./keys.reseal";
-import { ensureSigningKey } from "./keys.service";
 import { createTenantKeys } from "./keys.signing-keys";
 import type { ResealDeps, ResealReport } from "./keys.types";
 import { resealExitCode } from "./keys.utils";
@@ -91,8 +91,8 @@ afterEach(async () => {
 describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
   test("reseals every tenant, then reports nothing left, and the new key alone opens them", async () => {
     const before = under([oldKey]);
-    await ensureSigningKey(before.signingKeysFor, A, now);
-    await ensureSigningKey(before.signingKeysFor, B, now);
+    await keysServiceOf(before).ensureSigningKey(A, now);
+    await keysServiceOf(before).ensureSigningKey(B, now);
     const kidA = (await before.signingKeysFor(A).findCurrentKey(now))?.kid;
 
     // Deploy [new, old]: both tenants still open.
@@ -133,8 +133,8 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
 
   test("a tenant no key opens is counted as failed and the exit code is non-zero; the others are resealed", async () => {
     const stranger = new Uint8Array(32).fill(7);
-    await ensureSigningKey(under([stranger]).signingKeysFor, A, now);
-    await ensureSigningKey(under([oldKey]).signingKeysFor, B, now);
+    await keysServiceOf(under([stranger])).ensureSigningKey(A, now);
+    await keysServiceOf(under([oldKey])).ensureSigningKey(B, now);
     const logs: string[] = [];
     const report = await resealAllTenants({
       db: mongo.db,
@@ -187,8 +187,8 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
   });
 
   test("the second factor's counts of every tenant are summed", async () => {
-    await ensureSigningKey(under([newKey]).signingKeysFor, A, now);
-    await ensureSigningKey(under([newKey]).signingKeysFor, B, now);
+    await keysServiceOf(under([newKey])).ensureSigningKey(A, now);
+    await keysServiceOf(under([newKey])).ensureSigningKey(B, now);
     const report = await resealAllTenants({
       db: mongo.db,
       masterKeys: [newKey],

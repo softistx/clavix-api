@@ -3,8 +3,6 @@ import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import type { Db } from "mongodb";
-import { noDetailTypes } from "@/config/no-ops";
-import { clock } from "@/config/runtime";
 import { createAccess } from "@/console/access";
 import {
   CONSOLE_CLIENT_ID,
@@ -13,6 +11,7 @@ import {
   consoleRedirectUri,
 } from "@/console/identity";
 import { registerClient } from "@/modules/clients";
+import type { ClientDetailTypes } from "@/modules/resources";
 import {
   detailTypes,
   mongoDetailTypeClients,
@@ -30,6 +29,13 @@ import {
 import { userinfoOf } from "@/oauth/building";
 
 export const NAME = "Clavix console";
+
+// A frozen migration reads nothing from `src/config`: the console's own client
+// lists no detail types, and the clock is `new Date()`.
+const noDetailTypes: ClientDetailTypes = {
+  namesOf: async () => new Set<string>(),
+  consentReady: () => false,
+};
 
 /**
  * Seeds what the console signs in with, in the `clavix` tenant: the console
@@ -59,7 +65,7 @@ export async function seedConsole(
     scopes: CONSOLE_SCOPES,
   });
   const client = await registerClient(
-    { db, findTenant, now: clock, detailTypes: noDetailTypes },
+    { db, findTenant, now: () => new Date(), detailTypes: noDetailTypes },
     {
       tenant: PLATFORM_TENANT_SLUG,
       name: NAME,
@@ -86,7 +92,7 @@ export async function unseedConsole(db: Db, origin: PublicOrigin) {
   const partition = partitionOf(tenant._id);
   // The console client has live sessions: its grants and tokens go with it.
   await deleteClient(createMongoOAuth(db, { partition }), CONSOLE_CLIENT_ID, {
-    now: clock(),
+    now: new Date(),
   });
   await db
     .collection("resources")

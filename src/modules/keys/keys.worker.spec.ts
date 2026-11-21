@@ -14,12 +14,13 @@ describe("startKeyRotation", () => {
       },
     };
     const deps = {
-      signingKeysFor: () => {
-        passes.push("rotate");
-        throw new Error("down");
+      keys: {
+        rotateAll: async () => {
+          passes.push("rotate");
+          return { rotated: 0, failed: 1 };
+        },
       },
       activeTenantIds: async () => ["x"],
-      now: () => new Date(),
       log: () => {},
     };
     await startKeyRotation(deps, queue);
@@ -32,12 +33,13 @@ describe("startKeyRotation", () => {
     let n = 0;
     await startKeyRotation(
       {
-        signingKeysFor: () => {
-          n += 1;
-          throw new Error("x");
+        keys: {
+          rotateAll: async () => {
+            n += 1;
+            return { rotated: 0, failed: 1 };
+          },
         },
         activeTenantIds: async () => ["x"],
-        now: () => new Date(),
         log: () => {},
       },
       noQueue,

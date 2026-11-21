@@ -1,7 +1,7 @@
-import { denial } from "@softistx/janus-graphql";
 import type { ConsoleContext } from "@/console/context";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
+import { fail } from "@/shared/errors";
 import { keepOwners } from "./users.owners";
 import { shape, target } from "./users.utils";
 
@@ -26,7 +26,7 @@ export async function setActive(
     active ? "touch" : "disable",
     userKey(tenantId, userId),
   );
-  if (user === null) throw denial("NOT_FOUND", "No such user");
+  if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
   await ctx.audit(
     active ? "user.enable" : "user.disable",
     target("user", userId, tenantId),

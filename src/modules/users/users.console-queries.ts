@@ -5,6 +5,7 @@ import { badInput } from "@/shared/errors";
 import { grantShape, shape } from "./users.utils";
 
 const MAX_PREFIX = 254;
+/** The suggestions a lookup returns at most (10 by default). */
 const MAX_LOOKUP = 20;
 
 export const userQueries: NonNullable<Resolvers["Query"]> = {
@@ -60,7 +61,7 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
     const found = await ctx.users.lookup(
       tenantId,
       text,
-      Math.min(Math.max(first ?? 10, 1), MAX_LOOKUP),
+      pageSize(first, 10, MAX_LOOKUP),
     );
     return found.map(({ id, email, name }) => ({
       id,

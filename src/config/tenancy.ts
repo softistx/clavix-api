@@ -12,7 +12,7 @@ import { linkTenantToPlatform } from "./access";
 import { mongo } from "./db";
 import { createDomainsService } from "./domains";
 import { env } from "./env";
-import { ensureSigningKeyOf } from "./keys";
+import { keysService } from "./keys";
 import { redis } from "./redis";
 import { clock, warn } from "./runtime";
 
@@ -93,7 +93,7 @@ export const { tenantResolver, tenantsService } = createTenancy({
   onCreated: async (tenantId) => {
     // The link first: cheap and idempotent, so a failing key never leaves a tenant unseen by operators.
     await linkTenantToPlatform(tenantId);
-    await ensureSigningKeyOf(tenantId);
+    await keysService.ensureSigningKey(tenantId);
   },
   cache:
     redis === undefined

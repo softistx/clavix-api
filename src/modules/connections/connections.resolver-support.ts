@@ -1,7 +1,7 @@
-import { denial } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
 import type { Context } from "@/http/context";
 import { services } from "@/modules/services";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 
 /**
@@ -15,7 +15,7 @@ export async function homeRealmScope(ctx: Context) {
     ctx.tenant(),
   ]);
   if (auth === null || tenant === null) {
-    throw denial("NOT_FOUND", "No such tenant");
+    throw fail("NOT_FOUND", "No such tenant", { status: 404 });
   }
   requireLive(tenant);
   ctx.set.headers.set("cache-control", "no-store");

@@ -18,7 +18,7 @@ import { createConsoleDeps } from "./config/console";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
 import { createGrantsRevoke } from "./config/grants-revoke";
-import { signingKeysFor } from "./config/keys";
+import { keysService } from "./config/keys";
 import { noQueue } from "./config/no-ops";
 import { createIssuers } from "./config/oauth";
 import { createTenantPurge } from "./config/purge";
@@ -37,9 +37,8 @@ const MAIL_DRAIN_MS = 10_000;
 // no Redis (development) the pass at start is the only one.
 await startKeyRotation(
   {
-    signingKeysFor,
+    keys: keysService,
     activeTenantIds: () => tenantsService.activeIds(),
-    now: clock,
     log: warn,
   },
   redis?.queues.keyRotation ?? noQueue,

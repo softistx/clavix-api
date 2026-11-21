@@ -1,4 +1,3 @@
-import { denial } from "@softistx/janus-graphql";
 import { janusIssuers } from "@/config/users";
 import type { Context } from "@/http/context";
 import {
@@ -8,6 +7,7 @@ import {
   assess,
   type Demands,
 } from "@/oauth/authentication-level";
+import { fail } from "@/shared/errors";
 
 /** What a pending request asks of the authentication: its `acr_values`, `max_age` and `prompt`. The device flow's request carries none. */
 export interface RequestDemands {
@@ -32,7 +32,7 @@ export async function assessment(
     ctx.tenant(),
   ]);
   if (session === null || user === null || tenant === null) {
-    throw denial("UNAUTHENTICATED");
+    throw fail("UNAUTHENTICATED", "Not signed in", { status: 401 });
   }
   const demands: Demands = {
     acrValues: request.acrValues ?? [],
@@ -45,7 +45,7 @@ export async function assessment(
   let passkey = true;
   if (acrOf(session.amr) !== ACR.phishingResistant) {
     const auth = await janusIssuers.forRequest(ctx.request);
-    if (auth === null) throw denial("NOT_FOUND");
+    if (auth === null) throw fail("NOT_FOUND", "Not found", { status: 404 });
     const [passkeys, codesLeft] = await Promise.all([
       auth.passkeys.list(user),
       auth.secondFactor.recoveryCodesLeft(user),

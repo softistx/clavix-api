@@ -1,6 +1,6 @@
-import { denial } from "@softistx/janus-graphql";
 import type { Exclusive } from "@/console/exclusive";
 import { ROLES, type Role } from "@/console/model";
+import { fail } from "@/shared/errors";
 import { alreadyMember, lastOwnerError } from "./admins.errors";
 import type {
   AdminsDirectory,
@@ -67,7 +67,7 @@ export class AdminsService {
   changeRole(tenantId: string, userId: string, role: Role): Promise<Role> {
     return this.exclusive(membersKey(tenantId), async () => {
       if ((await this.roleOf(tenantId, userId)) === null) {
-        throw denial("NOT_FOUND", "Not a member of this tenant");
+        throw fail("NOT_FOUND", "Not a member of this tenant", { status: 404 });
       }
       await this.setRole(tenantId, userId, role);
       return (await this.roleOf(tenantId, userId)) ?? role;

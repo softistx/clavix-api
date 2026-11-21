@@ -1,9 +1,9 @@
-import { denial } from "@softistx/janus-graphql";
 import { rolesService } from "@/config/roles";
 import { refusing } from "@/console/modules/catalog-support";
 import { idArg } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { fail } from "@/shared/errors";
 import {
   memberPage,
   shapeOne,
@@ -87,7 +87,7 @@ export const roles: Resolvers = {
       // assignments be swept) between the check and the write.
       await ctx.exclusive(userKey(tenant.hex, userId), async () => {
         if ((await ctx.users.find(tenant.hex, userId)) === null) {
-          throw denial("NOT_FOUND", "No such user");
+          throw fail("NOT_FOUND", "No such user", { status: 404 });
         }
         await refusing(() => rolesService.assign(tenant.id, roleId, userId));
       });

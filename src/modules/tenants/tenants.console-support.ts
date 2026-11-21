@@ -1,8 +1,7 @@
-import { denial } from "@softistx/janus-graphql";
 import { NotFoundError } from "@softistx/mongo";
 import { tenantsService } from "@/config/tenancy";
 import { refusal } from "@/console/modules/refusal";
-import { badInput } from "@/shared/errors";
+import { badInput, fail } from "@/shared/errors";
 import type { TenantParent } from "./tenants.console-parent";
 import type { Tenant } from "./tenants.model";
 import {
@@ -14,7 +13,8 @@ import {
 } from "./tenants.plan";
 import type { TenantState } from "./tenants.types";
 
-export const notFound = () => denial("NOT_FOUND", "No such tenant");
+export const notFound = () =>
+  fail("NOT_FOUND", "No such tenant", { status: 404 });
 
 // The stored tenant of a parent: the one it carries, else read once.
 export async function docOf(parent: TenantParent): Promise<Tenant> {

@@ -1,4 +1,3 @@
-import { denial } from "@softistx/janus-graphql";
 import { clientsService } from "@/config/clients";
 import { resourcesService } from "@/config/resources";
 import { catalogTenant, refusing } from "@/console/modules/catalog-support";
@@ -6,6 +5,7 @@ import { pageSize } from "@/console/modules/ids";
 import { keepConsoleClient } from "@/console/modules/reserved";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { CatalogError } from "@/modules/resources";
+import { fail } from "@/shared/errors";
 import { assertClientQuota } from "./clients.console-support";
 import {
   clientsKey,
@@ -56,7 +56,8 @@ const setClientTokenExchange: NonNullable<
   );
   await ctx.audit("client.tokenExchange.set", target(tenant, id));
   const client = await clientsService.find(tenant, id);
-  if (client === null) throw denial("NOT_FOUND", "No such client");
+  if (client === null)
+    throw fail("NOT_FOUND", "No such client", { status: 404 });
   return shape(client, rules);
 };
 

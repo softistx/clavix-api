@@ -3,12 +3,14 @@ import { tenantsService } from "@/config/tenancy";
 import { webhookDelivery } from "@/config/webhooks";
 import { webhooksService } from "@/config/webhooks-service";
 import { catalogTenant } from "@/console/modules/catalog-support";
+import { pageSize } from "@/console/modules/ids";
 import { refusal } from "@/console/modules/refusal";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { effectiveQuotas } from "@/modules/tenants";
 import { refusing } from "./webhooks.console-support";
 import { WebhookError } from "./webhooks.errors";
 import { WEBHOOK_EVENT_TYPES } from "./webhooks.events";
+import { DELIVERIES_PER_ENDPOINT } from "./webhooks.model";
 import {
   attemptShape,
   endpointShape,
@@ -26,7 +28,7 @@ export const webhooks: Resolvers = {
         await webhooksService.listAttempts(
           endpoint.tenantId,
           endpoint.id,
-          first ?? undefined,
+          pageSize(first, DELIVERIES_PER_ENDPOINT, DELIVERIES_PER_ENDPOINT),
         )
       ).map(attemptShape),
   },

@@ -1,4 +1,3 @@
-import { denial } from "@softistx/janus-graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
@@ -61,7 +60,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     }
     await liveTenant(ctx.directory, tenantId);
     const user = await ctx.users.rename(tenantId, userId, name);
-    if (user === null) throw denial("NOT_FOUND", "No such user");
+    if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
     await ctx.audit("user.update", target("user", userId, tenantId));
     return shape(user, tenantId);
   },
@@ -129,7 +128,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
       verified ? "touch" : "unverify",
       userKey(tenantId, userId),
     );
-    if (user === null) throw denial("NOT_FOUND", "No such user");
+    if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
     await ctx.audit("user.setEmailVerified", target("user", userId, tenantId));
     return shape(user, tenantId);
   },
@@ -145,7 +144,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
       "touch",
       userKey(tenantId, userId),
     );
-    if (user === null) throw denial("NOT_FOUND", "No such user");
+    if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
     await ctx.audit("user.resetSecondFactor", target("user", userId, tenantId));
     return shape(user, tenantId);
   },

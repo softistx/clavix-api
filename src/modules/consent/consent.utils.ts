@@ -1,4 +1,4 @@
-import { denial } from "@softistx/janus-graphql";
+import { fail } from "@/shared/errors";
 import { localeOf } from "./consent.scope-labels";
 import type { ConsentCtx } from "./consent.types";
 
@@ -19,7 +19,8 @@ export function perRequest<T>() {
 /** The request a context carries; `NOT_FOUND` when it carries none. */
 export const requestOf = (ctx: unknown): Request => {
   const { request } = ctx as { request?: Request };
-  if (request === undefined) throw denial("NOT_FOUND");
+  if (request === undefined)
+    throw fail("NOT_FOUND", "Not found", { status: 404 });
   return request;
 };
 

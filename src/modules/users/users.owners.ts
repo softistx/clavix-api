@@ -1,4 +1,3 @@
-import { denial } from "@softistx/janus-graphql";
 import type { ConsoleContext } from "@/console/context";
 import {
   lastOwnerError,
@@ -71,7 +70,7 @@ export async function keepOwners<T>(
       (owns || (await ctx.access.platformRole(userId)) !== null) &&
       !(await ctx.canPlatform("manage"))
     ) {
-      throw denial("FORBIDDEN", "Not allowed");
+      throw fail("FORBIDDEN", "Not allowed", { status: 403 });
     }
   };
   let held = await memberTenants(ctx, userId);

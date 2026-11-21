@@ -1,5 +1,4 @@
 import { MapperKind, mapSchema } from "@graphql-tools/utils";
-import { denial } from "@softistx/janus-graphql";
 import type { GraphQLSchema } from "graphql";
 import { ObjectId } from "mongodb";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
@@ -134,7 +133,7 @@ export async function verifiedCaller(ctx: ConsoleContext) {
   requireVerifiedEmail({ emailVerified: await callerProved(ctx) });
 }
 
-const deny = () => denial("FORBIDDEN", "Not allowed");
+const deny = () => fail("FORBIDDEN", "Not allowed", { status: 403 });
 
 /**
  * Wraps every root field (query, mutation, subscription) of the schema so its

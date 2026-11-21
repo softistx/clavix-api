@@ -1,9 +1,8 @@
 import { mongo } from "@/config/db";
-import { signingKeysFor } from "@/config/keys";
+import { keysService } from "@/config/keys";
 import { redis } from "@/config/redis";
-import { clock, warn } from "@/config/runtime";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
-import { parseRotateArgs, ROTATE_USAGE, rotateNow } from "@/modules/keys";
+import { parseRotateArgs, ROTATE_USAGE } from "@/modules/keys";
 import { partitionOf } from "@/modules/tenants";
 import { CliInputError, UnknownTenantError } from "@/shared/cli";
 
@@ -32,11 +31,7 @@ try {
     }
     tenantIds = [partitionOf(tenant._id)];
   }
-  const { rotated, failed } = await rotateNow({
-    signingKeysFor,
-    tenantIds,
-    now: clock,
-    log: warn,
+  const { rotated, failed } = await keysService.rotateNow(tenantIds, {
     dropOld: target.dropOld,
   });
   console.log(JSON.stringify({ rotated, failed }, null, 2));
