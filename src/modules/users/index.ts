@@ -1,6 +1,6 @@
 // The module's import surface (users: each tenant's janus instance over its
 // own partition of the user stores, the OAuth ports built on it, and the
-// console's users). Imported by file, never through here, to keep madge at 7:
+// console's users). Imported by file, never through here, to keep madge at 6:
 // the console resolvers (`console/modules/index.ts`, so this barrel never loads
 // the console back), `users.service.ts` and `users.types.ts` (both read the
 // invitations types, which import this barrel). `config/users.ts` builds the
