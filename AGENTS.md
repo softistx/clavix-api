@@ -32,7 +32,9 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
   introspection (`introspection: ide` of `createApp`) only when `CLAVIX_GRAPHQL_IDE` is on (`createApp({ ide })`: on under `bun dev`, off elsewhere, refused in production; the console API has `ide: false`), since the page runs a third-party script on the session cookie's origin; `src/cli/` holds what the scripts share
   (`CliInputError`, `CliTenant`); `src/http/throttle/` is the rate-limit core (below); generated code is in
-  `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed.
+  `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed. The printed schemas `schema.graphql` and
+  `console.schema.graphql` are committed: `bun run schema:print` rewrites them and `verify` runs
+  `schema:print --check`, which fails when either is stale (the UI generates its documents from them).
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
