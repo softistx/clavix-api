@@ -30,10 +30,8 @@ import { checkWebhookUrl, WebhookUrlError } from "./webhooks.url-policy";
 import {
   attemptDoc,
   behindCount,
-  clampLimit,
   contextOf,
   deliveryEndpointOf,
-  MAX_LISTED,
 } from "./webhooks.utils";
 
 /**
@@ -330,16 +328,16 @@ export class WebhooksService {
     await scoped.deleteMany({ ...filter, _id: { $lt: oldestKept._id } });
   }
 
-  /** The endpoint's attempts, newest first. */
+  /** The endpoint's attempts, newest first; the console page clamps `limit` (`pageSize`). */
   async listAttempts(
     tenantId: string,
     endpointId: string,
-    limit = MAX_LISTED,
+    limit = DELIVERIES_PER_ENDPOINT,
   ): Promise<WebhookDeliveryDoc[]> {
     return this.scopedAttempts(tenantId).findMany({
       filter: { endpointId },
       sort: { _id: -1 },
-      limit: clampLimit(limit),
+      limit,
     });
   }
 

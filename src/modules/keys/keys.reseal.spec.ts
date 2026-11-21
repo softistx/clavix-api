@@ -10,11 +10,12 @@ import {
   secretContext,
 } from "@/modules/sign-in-methods";
 import { TenantsService } from "@/modules/tenants";
+import { secondFactorKeysOf } from "@/modules/users";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
-import { quietTenants } from "~/ports";
+import { quietKeys, quietTenants } from "~/ports";
 import { resealAllTenants } from "./keys.reseal";
-import { ensureSigningKey } from "./keys.service";
+import { resealSecondFactorOf } from "./keys.second-factor-reseal";
 import { createTenantKeys } from "./keys.signing-keys";
 import type { ResealDeps, ResealReport } from "./keys.types";
 import { resealExitCode } from "./keys.utils";
@@ -72,6 +73,10 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
   return { tenants, boxes, webhooks, connections, policy, secretStores };
 };
 
+/** The real second-factor pass under a keyring. */
+const sealUnder = (ring: Ring) =>
+  resealSecondFactorOf(mongo.db, secondFactorKeysOf(ring));
+
 /** No sealed secret of Clavix's own: the specs of the signing keys and the second factor. */
 const noStores: ResealDeps["secretStores"] = {
   webhookSecrets: async () => emptySecretResealCounts(),
@@ -91,8 +96,8 @@ afterEach(async () => {
 describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
   test("reseals every tenant, then reports nothing left, and the new key alone opens them", async () => {
     const before = under([oldKey]);
-    await ensureSigningKey(before.signingKeysFor, A, now);
-    await ensureSigningKey(before.signingKeysFor, B, now);
+    await quietKeys(before).ensureSigningKey(A, now);
+    await quietKeys(before).ensureSigningKey(B, now);
     const kidA = (await before.signingKeysFor(A).findCurrentKey(now))?.kid;
 
     // Deploy [new, old]: both tenants still open.
@@ -106,6 +111,7 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
     const deps = {
       db: mongo.db,
       masterKeys: ring as Ring,
+      resealSecondFactor: sealUnder(ring as Ring),
       tenantIds: async () => [A, B],
       log: quiet,
       secretStores: noStores,
@@ -133,12 +139,13 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
 
   test("a tenant no key opens is counted as failed and the exit code is non-zero; the others are resealed", async () => {
     const stranger = new Uint8Array(32).fill(7);
-    await ensureSigningKey(under([stranger]).signingKeysFor, A, now);
-    await ensureSigningKey(under([oldKey]).signingKeysFor, B, now);
+    await quietKeys(under([stranger])).ensureSigningKey(A, now);
+    await quietKeys(under([oldKey])).ensureSigningKey(B, now);
     const logs: string[] = [];
     const report = await resealAllTenants({
       db: mongo.db,
       masterKeys: [newKey, oldKey],
+      resealSecondFactor: sealUnder([newKey, oldKey]),
       tenantIds: async () => [A, B],
       log: (message) => logs.push(message),
       secretStores: noStores,
@@ -187,8 +194,8 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
   });
 
   test("the second factor's counts of every tenant are summed", async () => {
-    await ensureSigningKey(under([newKey]).signingKeysFor, A, now);
-    await ensureSigningKey(under([newKey]).signingKeysFor, B, now);
+    await quietKeys(under([newKey])).ensureSigningKey(A, now);
+    await quietKeys(under([newKey])).ensureSigningKey(B, now);
     const report = await resealAllTenants({
       db: mongo.db,
       masterKeys: [newKey],
@@ -292,6 +299,7 @@ describe("every sealed store follows the rotation (clavix-api#329)", () => {
   ): ResealDeps => ({
     db: mongo.db,
     masterKeys: ring,
+    resealSecondFactor: sealUnder(ring),
     tenantIds: async () => ids,
     log,
     secretStores: storesUnder(ring, log).secretStores,

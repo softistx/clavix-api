@@ -1,12 +1,12 @@
 import type { Passkey } from "@softistx/janus";
-import { denial } from "@softistx/janus-graphql";
 import type { TenantJanus } from "@/modules/users";
-import { badInput } from "@/shared/errors";
+import { badInput, fail } from "@/shared/errors";
 
 /** The session of the request, or UNAUTHENTICATED (401). */
 export async function currentOf(auth: TenantJanus, request: Request) {
   const current = await auth.authenticate(request);
-  if (current === null) throw denial("UNAUTHENTICATED");
+  if (current === null)
+    throw fail("UNAUTHENTICATED", "Not signed in", { status: 401 });
   return current;
 }
 

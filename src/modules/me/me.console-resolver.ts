@@ -1,7 +1,7 @@
-import { denial } from "@softistx/janus-graphql";
 import { callerProved, verifiedCaller } from "@/console/guard";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { GRAPHQL_ROLE } from "@/modules/admins";
+import { fail } from "@/shared/errors";
 import {
   directRoles,
   memberTenants,
@@ -16,7 +16,8 @@ export const me: Resolvers = {
   Me: {
     user: async (_, __, ctx) => {
       const user = await ctx.directory.findUser(ctx.principal.userId);
-      if (user === null) throw denial("UNAUTHENTICATED", "No such user");
+      if (user === null)
+        throw fail("UNAUTHENTICATED", "No such user", { status: 401 });
       return { id: user.id, email: user.email, name: user.name ?? null };
     },
     emailVerified: (_, __, ctx) => callerProved(ctx),

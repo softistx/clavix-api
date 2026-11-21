@@ -6,6 +6,7 @@
 export { parseRotateArgs, RESEAL_USAGE, ROTATE_USAGE } from "./keys.cli";
 export { createKeyGenerations, type KeyGenerations } from "./keys.generations";
 export { resealAllTenants } from "./keys.reseal";
-export { ensureSigningKey, rotateNow } from "./keys.service";
+export { resealSecondFactorOf } from "./keys.second-factor-reseal";
+export { KeysService } from "./keys.service";
 export { createTenantKeys, type TenantKeys } from "./keys.signing-keys";
 export { resealExitCode } from "./keys.utils";

@@ -1,15 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import type { EndpointSecret } from "./webhooks.model";
-import { DELIVERIES_PER_ENDPOINT } from "./webhooks.model";
 import type { AttemptRecord, WebhookEndpointDoc } from "./webhooks.types";
 import {
   attemptDoc,
   behindCount,
-  clampLimit,
   contextOf,
   deliveryEndpointOf,
-  MAX_LISTED,
 } from "./webhooks.utils";
 
 const doc = (patch: Partial<WebhookEndpointDoc> = {}) =>
@@ -24,15 +21,6 @@ const doc = (patch: Partial<WebhookEndpointDoc> = {}) =>
 describe("contextOf", () => {
   test("binds a secret to its tenant and endpoint", () => {
     expect(contextOf("t1", "e1")).toBe("t1:e1");
-  });
-});
-
-describe("clampLimit", () => {
-  test("holds the page size between 1 and the kept attempts", () => {
-    expect(MAX_LISTED).toBe(DELIVERIES_PER_ENDPOINT);
-    expect(clampLimit(0)).toBe(1);
-    expect(clampLimit(10)).toBe(10);
-    expect(clampLimit(10_000)).toBe(DELIVERIES_PER_ENDPOINT);
   });
 });
 

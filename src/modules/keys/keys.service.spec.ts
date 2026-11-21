@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
+import { quietKeys } from "~/ports";
 import { retireAfterMs, rotationPolicy } from "./keys.rules";
-import { ensureSigningKey, rotateAllTenants, rotateNow } from "./keys.service";
 import { createTenantKeys } from "./keys.signing-keys";
 
 describe("rotation", () => {
@@ -23,7 +23,7 @@ describe("rotation", () => {
 
   describe("rotation lifecycle (90 d, 48 h lead, 24 h retirement)", () => {
     test("next -> current -> retired -> gone on a fixed clock", async () => {
-      const pass = (now: Date) => ensureSigningKey(keys.signingKeysFor, T, now);
+      const pass = (now: Date) => quietKeys(keys).ensureSigningKey(T, now);
 
       // The first pass creates the first key, which signs at once.
       await pass(t0);
@@ -65,19 +65,22 @@ describe("rotation", () => {
     });
   });
 
-  describe("rotateAllTenants", () => {
+  describe("rotateAll", () => {
     test("rotates every tenant it is given, and goes on past one that fails", async () => {
       const logged: string[] = [];
       const U = "u".repeat(24);
-      const result = await rotateAllTenants({
-        signingKeysFor: (id) => {
+      const broken = {
+        ...keys,
+        signingKeysFor: (id: string) => {
           if (id === "bad") throw new Error("boom");
           return keys.signingKeysFor(id);
         },
-        activeTenantIds: async () => [T, "bad", U],
-        now: () => t0,
-        log: (message) => logged.push(message),
-      });
+      };
+      const result = await quietKeys(
+        broken,
+        () => t0,
+        (message) => logged.push(message),
+      ).rotateAll([T, "bad", U]);
       expect(result).toEqual({ rotated: 2, failed: 1 });
       expect(logged).toEqual(["keys: rotation failed for tenant bad: boom"]);
       expect(await kids(T, t0)).toHaveLength(1);
@@ -103,18 +106,15 @@ describe("emergency rotation", () => {
 
   describe("emergency rotation", () => {
     test("a new key signs at once and the old one stays published for the retirement window", async () => {
-      await ensureSigningKey(keys.signingKeysFor, A, t0);
-      await ensureSigningKey(keys.signingKeysFor, B, t0);
+      await quietKeys(keys).ensureSigningKey(A, t0);
+      await quietKeys(keys).ensureSigningKey(B, t0);
       const oldA = await signing(A, t0);
       const oldB = await signing(B, t0);
 
       const at = new Date(t0.getTime() + 1000);
-      const { rotated, failed } = await rotateNow({
-        signingKeysFor: keys.signingKeysFor,
-        tenantIds: [A],
-        now: () => at,
-        log: () => {},
-      });
+      const { rotated, failed } = await quietKeys(keys, () => at).rotateNow([
+        A,
+      ]);
       expect(failed).toBe(0);
       expect(rotated).toHaveLength(1);
       expect(rotated[0]).toMatchObject({ tenantId: A, retired: oldA });
@@ -138,16 +138,10 @@ describe("emergency rotation", () => {
     });
 
     test("--drop-old unpublishes the retired key at once", async () => {
-      await ensureSigningKey(keys.signingKeysFor, A, t0);
+      await quietKeys(keys).ensureSigningKey(A, t0);
       const oldA = await signing(A, t0);
       const at = new Date(t0.getTime() + 1000);
-      await rotateNow({
-        signingKeysFor: keys.signingKeysFor,
-        tenantIds: [A],
-        dropOld: true,
-        now: () => at,
-        log: () => {},
-      });
+      await quietKeys(keys, () => at).rotateNow([A], { dropOld: true });
       const published = await kids(A, new Date(at.getTime() + 1));
       expect(published).not.toContain(oldA as string);
       expect(published).toHaveLength(1);
@@ -155,35 +149,32 @@ describe("emergency rotation", () => {
     });
 
     test("a published next key takes over at once", async () => {
-      await ensureSigningKey(keys.signingKeysFor, A, t0);
+      await quietKeys(keys).ensureSigningKey(A, t0);
       const oldA = await signing(A, t0);
       // 90 d - 48 h later the next key is published, not yet signing.
       const pre = new Date(t0.getTime() + (90 * 24 - 48) * 3_600_000);
-      await ensureSigningKey(keys.signingKeysFor, A, pre);
+      await quietKeys(keys).ensureSigningKey(A, pre);
       const [, next] = await kids(A, pre);
       expect(next).toBeDefined();
-      await rotateNow({
-        signingKeysFor: keys.signingKeysFor,
-        tenantIds: [A],
-        now: () => pre,
-        log: () => {},
-      });
+      await quietKeys(keys, () => pre).rotateNow([A]);
       expect(await signing(A, pre)).toBe(next as string);
       expect(await kids(A, pre)).toContain(oldA as string);
     });
 
     test("a tenant with no key gets one; a failing tenant is counted and the others go on", async () => {
       const logs: string[] = [];
-      const broken = (id: string) => {
-        if (id === A) throw new Error("boom");
-        return keys.signingKeysFor(id);
+      const broken = {
+        ...keys,
+        signingKeysFor: (id: string) => {
+          if (id === A) throw new Error("boom");
+          return keys.signingKeysFor(id);
+        },
       };
-      const { rotated, failed } = await rotateNow({
-        signingKeysFor: broken,
-        tenantIds: [A, B],
-        now: () => t0,
-        log: (message) => logs.push(message),
-      });
+      const { rotated, failed } = await quietKeys(
+        broken,
+        () => t0,
+        (message) => logs.push(message),
+      ).rotateNow([A, B]);
       expect(failed).toBe(1);
       expect(logs[0]).toContain(A);
       expect(rotated).toHaveLength(1);

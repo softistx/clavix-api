@@ -1,7 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { WebhookEndpointParent } from "./webhooks.console-parent";
 import type { EndpointSecret } from "./webhooks.model";
-import { DELIVERIES_PER_ENDPOINT } from "./webhooks.model";
 import type {
   AttemptRecord,
   DeliveryEndpoint,
@@ -12,13 +11,6 @@ import type {
 /** The context a secret is sealed with: its tenant and its endpoint. */
 export const contextOf = (tenantId: string, endpointId: string) =>
   `${tenantId}:${endpointId}`;
-
-/** The attempts a console page shows at most. */
-export const MAX_LISTED = DELIVERIES_PER_ENDPOINT;
-
-/** The page size asked for, held between 1 and `MAX_LISTED`. */
-export const clampLimit = (limit: number) =>
-  Math.min(Math.max(limit, 1), MAX_LISTED);
 
 /** An endpoint as `webhooks()` takes it, from its opened secrets; `undefined` with none. */
 export function deliveryEndpointOf(

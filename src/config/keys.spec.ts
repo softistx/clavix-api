@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
-import { jwksFor, signingKeysFor } from "@/config/keys";
+import { keysService } from "@/config/keys";
 import { tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { clearDatabase } from "~/db";
@@ -16,9 +16,11 @@ describe("signing keys wiring", () => {
   test("a new tenant has a signing key before its first token", async () => {
     const tenant = await tenantsService.create({ slug: "acme", name: "Acme" });
     const id = tenant._id.toHexString();
-    const current = await signingKeysFor(id).findCurrentKey(new Date());
+    const current = await keysService
+      .signingKeysFor(id)
+      .findCurrentKey(new Date());
     expect(current).not.toBeNull();
-    const { keys } = await jwksFor(id, new Date());
+    const { keys } = await keysService.jwksFor(id, new Date());
     expect(keys.map((k) => k.kid)).toEqual([current?.kid as string]);
   });
 

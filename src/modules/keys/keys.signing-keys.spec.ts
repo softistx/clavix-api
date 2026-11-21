@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { StoreFailure } from "@softistx/janus";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
-import { ensureSigningKey } from "./keys.service";
+import { quietKeys } from "~/ports";
 import { createTenantKeys } from "./keys.signing-keys";
 
 const masterKey = new Uint8Array(32).fill(1);
@@ -15,7 +15,7 @@ afterEach(clearDatabase);
 
 describe("tenant signing keys", () => {
   test("a tenant's JWKS holds its own kid and no private member", async () => {
-    await ensureSigningKey(keys.signingKeysFor, A, now);
+    await quietKeys(keys).ensureSigningKey(A, now);
     const { keys: published } = await keys.jwksFor(A, now);
     expect(published).toHaveLength(1);
     expect(published[0]).toMatchObject({ kty: "EC", alg: "ES256", use: "sig" });
@@ -23,8 +23,8 @@ describe("tenant signing keys", () => {
   });
 
   test("A's kid is never in B's JWKS, and B's store cannot read A's private key", async () => {
-    await ensureSigningKey(keys.signingKeysFor, A, now);
-    await ensureSigningKey(keys.signingKeysFor, B, now);
+    await quietKeys(keys).ensureSigningKey(A, now);
+    await quietKeys(keys).ensureSigningKey(B, now);
     const kidA = (await keys.jwksFor(A, now)).keys[0]?.kid;
     const kidB = (await keys.jwksFor(B, now)).keys[0]?.kid;
     expect(kidA).toBeDefined();
@@ -45,7 +45,7 @@ describe("tenant signing keys", () => {
   });
 
   test("the private JWK is encrypted at rest and a wrong master key cannot read it", async () => {
-    await ensureSigningKey(keys.signingKeysFor, A, now);
+    await quietKeys(keys).ensureSigningKey(A, now);
     const raw = await mongo.db.oauthSigningKeys.raw.find({}).toArray();
     expect(raw).toHaveLength(1);
     expect(JSON.stringify(raw[0])).not.toContain('"d":');

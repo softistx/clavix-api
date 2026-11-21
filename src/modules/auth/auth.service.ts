@@ -1,5 +1,4 @@
 import { JanusError, MailThrottledError } from "@softistx/janus";
-import { denial } from "@softistx/janus-graphql";
 import type { Context } from "@/http/context";
 import {
   requireNoSso,
@@ -9,6 +8,7 @@ import {
 import { challengeOf } from "@/modules/mfa/mfa.challenge";
 import { requireMethod } from "@/modules/sign-in-methods";
 import type { TenantJanus } from "@/modules/users";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import {
   codeInvalid,
@@ -44,7 +44,7 @@ export class AuthService {
       ctx.tenant(),
     ]);
     if (auth === null || tenant === null) {
-      throw denial("NOT_FOUND", "No such tenant");
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     }
     return { auth, tenant };
   }
@@ -52,7 +52,8 @@ export class AuthService {
   /** The signed-in user of the request, or UNAUTHENTICATED (401). */
   private async signedIn(auth: TenantJanus, request: Request) {
     const current = await auth.authenticate(request);
-    if (current === null) throw denial("UNAUTHENTICATED");
+    if (current === null)
+      throw fail("UNAUTHENTICATED", "Not signed in", { status: 401 });
     return current;
   }
 

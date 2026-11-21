@@ -1,8 +1,9 @@
-import { denial, passkeyResolvers } from "@softistx/janus-graphql";
+import { passkeyResolvers } from "@softistx/janus-graphql";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth";
 import { requireNoSsoForUser } from "@/modules/connections";
 import { requireMethod } from "@/modules/sign-in-methods";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import { asPasskeyInvalid, passkeyInvalid } from "./passkeys.errors";
 import type { PasskeysPorts } from "./passkeys.types";
@@ -32,7 +33,8 @@ export class PasskeysService {
         this.authOf(ctx),
         ctx.tenant(),
       ]);
-      if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+      if (tenant === null)
+        throw fail("NOT_FOUND", "No such tenant", { status: 404 });
       await requireNoSsoForUser(auth, tenant.tenantId, user.id);
     },
   });
@@ -45,7 +47,7 @@ export class PasskeysService {
       ctx.tenant(),
     ]);
     if (auth === null || tenant === null) {
-      throw denial("NOT_FOUND", "No such tenant");
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     }
     return auth;
   }
@@ -53,7 +55,8 @@ export class PasskeysService {
   /** The live tenant of the request that offers passkeys, or the refusal. */
   private async passkeyTenant(ctx: Context) {
     const tenant = await ctx.tenant();
-    if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+    if (tenant === null)
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     requireLive(tenant);
     requireMethod(tenant, "passkey");
     return tenant;

@@ -7,7 +7,7 @@ import { withAgentRegistration } from "./agents-registration";
 import { agentCheckFor, exchangeRulesFor } from "./client-policies";
 import { env } from "./env";
 import { eventBus } from "./events";
-import { dpopNonceSecret, keyGenerations, signingKeysFor } from "./keys";
+import { dpopNonceSecret, keyGenerations, keysService } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor } from "./resources";
 import { rolesFor } from "./roles";
@@ -29,7 +29,7 @@ export const createIssuers = (authFor: AuthFor, claimsFor: ClaimsFor) =>
         createClavixOAuthIssuers({
           resolver: tenantResolver,
           db: oauthDb,
-          signingKeysFor,
+          signingKeysFor: keysService.signingKeysFor,
           dpopNonceSecret,
           authFor,
           clock: janusClock,

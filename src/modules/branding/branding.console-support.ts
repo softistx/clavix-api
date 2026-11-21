@@ -1,4 +1,3 @@
-import { denial } from "@softistx/janus-graphql";
 import type { brandingService } from "@/config/branding";
 import { tenantsService } from "@/config/tenancy";
 import { fail } from "@/shared/errors";
@@ -15,7 +14,7 @@ import {
 // tenant is readable; the guard refuses its writes).
 export async function requireTenant(tenantId: string) {
   if ((await tenantsService.liveByIds([tenantId])).length === 0) {
-    throw denial("NOT_FOUND", "No such tenant");
+    throw fail("NOT_FOUND", "No such tenant", { status: 404 });
   }
 }
 

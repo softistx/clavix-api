@@ -1,5 +1,5 @@
-import { denial } from "@softistx/janus-graphql";
 import type { Context } from "@/http/context";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { agentMarksReader, markOf } from "./consent.agent-marker";
@@ -48,7 +48,7 @@ export class ConsentService {
     // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
     const request = requestOf(ctx);
     const server = await (ctx as WithServers).oauthServers.serverFor(request);
-    if (server === null) throw denial("NOT_FOUND");
+    if (server === null) throw fail("NOT_FOUND", "Not found", { status: 404 });
     // A code is not minted for a suspended or deleted tenant.
     requireLive(
       await (
@@ -67,7 +67,8 @@ export class ConsentService {
   async countLookup(ctx: unknown): Promise<void> {
     const { tenant, ip, deviceThrottle, janus } = ctx as Context;
     const [current, resolved] = await Promise.all([janus.user(), tenant()]);
-    if (current === null || resolved === null) throw denial("NOT_FOUND");
+    if (current === null || resolved === null)
+      throw fail("NOT_FOUND", "Not found", { status: 404 });
     await deviceThrottle.check({
       tenantId: resolved.tenantId,
       userId: current.id,

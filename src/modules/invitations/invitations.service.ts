@@ -1,8 +1,8 @@
-import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
 import type { Context } from "@/http/context";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import type { TenantJanus } from "@/modules/users/users.tenant-janus";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import {
   goneCode,
@@ -260,7 +260,7 @@ export class InvitationsService {
       ctx.tenant(),
     ]);
     if (auth === null || tenant === null) {
-      throw denial("NOT_FOUND", "No such tenant");
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     }
     return { auth, tenant };
   }

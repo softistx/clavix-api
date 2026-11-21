@@ -1,4 +1,3 @@
-import { denial } from "@softistx/janus-graphql";
 import {
   guardGraxiaSchema,
   janusGraxia,
@@ -6,8 +5,8 @@ import {
 } from "@softistx/janus-graphql/graxia";
 import { createLogger } from "@softistx/telemetry";
 import { janusIssuers } from "@/config/users";
-
 import { scrubbed } from "@/http/unexpected";
+import { fail } from "@/shared/errors";
 
 const log = createLogger("janus");
 
@@ -21,7 +20,8 @@ const options = {
       ctx.request === undefined
         ? null
         : await janusIssuers.forRequest(ctx.request);
-    if (auth === null) throw denial("NOT_FOUND", "No such tenant");
+    if (auth === null)
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     return auth;
   },
 };

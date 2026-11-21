@@ -1,4 +1,4 @@
-import { denial, socialResolvers } from "@softistx/janus-graphql";
+import { socialResolvers } from "@softistx/janus-graphql";
 import { grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { usageService } from "@/config/usage";
@@ -11,6 +11,7 @@ import {
   connectionIdOfCallbackUrl,
   socialOf,
 } from "@/modules/users";
+import { fail } from "@/shared/errors";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { methodDisabled } from "./sign-in-methods.errors";
 import {
@@ -33,7 +34,8 @@ const HOSTED = {
 /** The tenant the request's host names, or NOT_FOUND. */
 export async function tenantOf(ctx: Context) {
   const tenant = await ctx.tenant();
-  if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+  if (tenant === null)
+    throw fail("NOT_FOUND", "No such tenant", { status: 404 });
   return tenant;
 }
 
@@ -94,7 +96,7 @@ const social = socialResolvers({
  */
 export async function socialOfTenant(ctx: Context) {
   const auth = await authOf(ctx.request);
-  if (auth === null) throw denial("NOT_FOUND", "No such tenant");
+  if (auth === null) throw fail("NOT_FOUND", "No such tenant", { status: 404 });
   const instance = socialOf(auth);
   if (instance === null) throw methodDisabled("social");
   const { signIn, tenantId } = await tenantOf(ctx);
@@ -173,7 +175,7 @@ export async function completedAnswer(
     return challengeAnswer(done, done.returnTo);
   }
   if (done.status !== "signedIn") {
-    throw denial("FORBIDDEN", "Sign-in could not be completed");
+    throw fail("FORBIDDEN", "Sign-in could not be completed", { status: 403 });
   }
   // The address was taken from an unverified holder: janus dropped their
   // sessions, not the OAuth grants and refresh tokens (clavix-api #346).
@@ -191,7 +193,7 @@ export async function completedAnswer(
   // janus types the user as an id and a type only: read the profile.
   const user = await auth.findUser(done.userId);
   if (user === null) {
-    throw denial("FORBIDDEN", "Sign-in could not be completed");
+    throw fail("FORBIDDEN", "Sign-in could not be completed", { status: 403 });
   }
   await usageService.recordActive(tenantId, user.id);
   return {

@@ -1,9 +1,6 @@
 import { resealMongoSigningKeys } from "@softistx/janus-oauth-mongo";
 import { secondFactorKeysOf } from "@/modules/users";
-import {
-  countSecondFactorSeals,
-  resealSecondFactorOf,
-} from "./keys.second-factor-reseal";
+import { countSecondFactorSeals } from "./keys.second-factor-reseal";
 import {
   type ResealCounts,
   type ResealDeps,
@@ -83,11 +80,10 @@ function stepsOf(
 export async function resealAllTenants(
   deps: ResealDeps,
 ): Promise<ResealReport> {
-  const { db, masterKeys, tenantIds, log, resealSecondFactor } = deps;
+  const { masterKeys, tenantIds, log, resealSecondFactor } = deps;
   const report = emptyResealCounts();
   const keys = secondFactorKeysOf(masterKeys);
   const [first] = keys;
-  const sealAgain = resealSecondFactor ?? resealSecondFactorOf(db, keys);
   for (const partition of await tenantIds()) {
     report.tenants += 1;
     let failed = false;
@@ -95,7 +91,7 @@ export async function resealAllTenants(
       report,
       partition,
       deps,
-      sealAgain,
+      resealSecondFactor,
       first.id,
     )) {
       try {

@@ -1,6 +1,6 @@
-import { denial } from "@softistx/janus-graphql";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { fail } from "@/shared/errors";
 import { one } from "./admins.console-support";
 import { refusing } from "./admins.errors";
 import { memberOf, ROLE_OF, resendKey } from "./admins.utils";
@@ -39,7 +39,7 @@ export const adminsMutations: NonNullable<Resolvers["Mutation"]> = {
     await liveTenant(ctx.directory, tenantId);
     // Before any write: a refusal leaves no change and no event.
     const user = await ctx.directory.findUser(userId);
-    if (user === null) throw denial("NOT_FOUND", "No such user");
+    if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
     const stored = await ctx.members.changeRole(
       tenantId,
       userId,

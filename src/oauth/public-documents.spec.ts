@@ -4,10 +4,10 @@ import { mongo } from "@/config/db";
 import {
   createKeyGenerations,
   createTenantKeys,
-  ensureSigningKey,
   type TenantKeys,
 } from "@/modules/keys";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { quietKeys } from "~/ports";
 import { withPublicDocuments } from "./public-documents";
 
 const store = (keys: TenantKeys, tenantId: string) =>
@@ -178,7 +178,7 @@ describe("key generations", () => {
     const tenantId = new ObjectId().toHexString();
     await store(keys, tenantId).retire("missing", new Date(), new Date());
     expect(generations.of(tenantId)).toBe(0);
-    await ensureSigningKey(keys.signingKeysFor, tenantId, new Date());
+    await quietKeys(keys).ensureSigningKey(tenantId, new Date());
     expect(generations.of(tenantId)).toBeGreaterThan(0);
     expect(generations.of(new ObjectId().toHexString())).toBe(0);
   });
@@ -194,18 +194,18 @@ describe("key generations", () => {
     const day = 24 * 60 * 60 * 1000;
     const start = new Date();
     const at = (days: number) => new Date(start.getTime() + days * day);
-    await ensureSigningKey(keys.signingKeysFor, tenantId, start);
+    await quietKeys(keys).ensureSigningKey(tenantId, start);
     const inserted = generations.of(tenantId);
     // Inside the 48 h lead: the next key is inserted and published.
-    await ensureSigningKey(keys.signingKeysFor, tenantId, at(89));
+    await quietKeys(keys).ensureSigningKey(tenantId, at(89));
     const leading = generations.of(tenantId);
     expect(leading).toBeGreaterThan(inserted);
     // Past the 90 d cadence: the next key is promoted and the old one retired.
-    await ensureSigningKey(keys.signingKeysFor, tenantId, at(91));
+    await quietKeys(keys).ensureSigningKey(tenantId, at(91));
     const promoted = generations.of(tenantId);
     expect(promoted).toBeGreaterThan(leading);
     // Nothing left to do: no write, no bump.
-    await ensureSigningKey(keys.signingKeysFor, tenantId, at(91));
+    await quietKeys(keys).ensureSigningKey(tenantId, at(91));
     expect(generations.of(tenantId)).toBe(promoted);
   });
 });

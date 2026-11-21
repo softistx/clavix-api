@@ -1,5 +1,43 @@
+import type { Jwks, SigningKeyStore } from "@softistx/janus-oauth";
 import type { Db } from "mongodb";
 import type { SecretResealCounts } from "@/modules/sign-in-methods";
+import type { KeyGenerations } from "./keys.generations";
+
+/** What `KeysService` is built over: the per-tenant key stores, the generation counter, the clock and the log. */
+export interface KeysServiceOptions {
+  /** `createTenantKeys`: a tenant's signing-key store and its public JWKS (hex tenant id). */
+  keys: {
+    signingKeysFor(tenantId: string): SigningKeyStore;
+    jwksFor(tenantId: string, at: Date): Promise<Jwks>;
+  };
+  generations: KeyGenerations;
+  now: () => Date;
+  log: (message: string) => void;
+}
+
+/** What one rotation pass did: tenants rotated and tenants that failed (the job retries when any failed). */
+export interface RotationPass {
+  rotated: number;
+  failed: number;
+}
+
+export interface RotateNowOptions {
+  /**
+   * Unpublish the retired key at once, for a leaked private key: tokens it
+   * signed stop verifying. Default: it stays published for the retirement
+   * window (`rotationPolicy.retireAfter`), so live tokens keep verifying.
+   */
+  dropOld?: boolean;
+}
+
+/** What an emergency rotation did for one tenant. */
+export interface EmergencyRotation {
+  tenantId: string;
+  /** The kid that signed until now; `null` when the tenant had no current key. */
+  retired: string | null;
+  /** The kid that signs from now on. */
+  current: string | null;
+}
 
 /** What one tenant's pass over the TOTP secrets did (janus's `secondFactor.reseal`, summed over its batches). */
 export interface SecondFactorResealCounts {
@@ -24,8 +62,8 @@ export interface ResealDeps {
   /** Every tenant partition (hex ids), the suspended and the trashed included. */
   tenantIds: () => Promise<string[]>;
   log: (message: string) => void;
-  /** Seals a partition's TOTP secrets again; janus's `secondFactor.reseal` under the keyring by default. */
-  resealSecondFactor?: ResealSecondFactor;
+  /** Seals a partition's TOTP secrets again (`resealSecondFactorOf(db, secondFactorKeysOf(masterKeys))`). */
+  resealSecondFactor: ResealSecondFactor;
   /**
    * The stores of Clavix's own sealed secrets, each sealing one tenant's
    * envelopes again under the same keyring. Required: a store left out would

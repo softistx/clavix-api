@@ -1,6 +1,5 @@
 import type { StepUpByEmail } from "@softistx/janus";
 import {
-  denial,
   passkeyResolvers,
   type SecondFactorResolvers,
   secondFactorResolvers,
@@ -11,6 +10,7 @@ import { recordingSignIn } from "@/modules/auth";
 import { revokeIfSso } from "@/modules/connections";
 import { asPasskeyInvalid, currentOf, responseOf } from "@/modules/passkeys";
 import { requireMethod } from "@/modules/sign-in-methods";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import { secondFactorDisabled } from "./mfa.errors";
 import { recordStepUp } from "./mfa.events";
@@ -60,14 +60,16 @@ export class MfaService {
 
   private async authOf(ctx: Context) {
     const auth = await this.ports.issuers.forRequest(ctx.request);
-    if (auth === null) throw denial("NOT_FOUND", "No such tenant");
+    if (auth === null)
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     return auth;
   }
 
   /** The tenant of the request's host, or NOT_FOUND. */
   private async tenantOf(ctx: Context) {
     const tenant = await ctx.tenant();
-    if (tenant === null) throw denial("NOT_FOUND", "No such tenant");
+    if (tenant === null)
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     return tenant;
   }
 
@@ -122,7 +124,9 @@ export class MfaService {
     await this.ports.usage.recordActive(tenant.tenantId, done.userId);
     const user = auth === null ? null : await auth.findUser(done.userId);
     if (user === null) {
-      throw denial("FORBIDDEN", "Sign-in could not be completed");
+      throw fail("FORBIDDEN", "Sign-in could not be completed", {
+        status: 403,
+      });
     }
     return {
       user: signedInUserOf(user),
@@ -252,7 +256,8 @@ export class MfaService {
     run: () => Promise<T>,
   ): Promise<T> {
     const user = await ctx.janus.user();
-    if (user === null) throw denial("UNAUTHENTICATED");
+    if (user === null)
+      throw fail("UNAUTHENTICATED", "Not signed in", { status: 401 });
     try {
       const done = await run();
       await recordStepUp(ctx, method, user.id);
@@ -289,7 +294,7 @@ export class MfaService {
     const tenant = await ctx.tenant();
     const auth = await this.ports.issuers.forRequest(ctx.request);
     if (auth === null || tenant === null) {
-      throw denial("NOT_FOUND", "No such tenant");
+      throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     }
     requireLive(tenant);
     const { user } = await currentOf(auth, ctx.request);
