@@ -1,5 +1,5 @@
 import { fail } from "@/shared/errors";
-import { isRecord, propertyOf } from "@/shared/values";
+import { isRecord } from "@/shared/values";
 import { localeOf } from "./consent.scope-labels";
 import type { ConsentCtx, ServerCtx } from "./consent.types";
 
@@ -60,14 +60,3 @@ export const requestOf = (ctx: unknown): Request => {
 /** The locale a context's request asks for (`accept-language`). */
 export const localeOfCtx = (ctx: ConsentCtx) =>
   localeOf(ctx.request?.headers.get("accept-language") ?? null);
-
-/** The answer of janus-oauth's `approveOAuthRequest`, which it types as `unknown`: the decision as it is (`grantId` stays), checked to say where the user goes next. A different shape is a mismatch with janus, never passed on. */
-export const decisionOf = (result: unknown): { redirectTo: string } => {
-  if (
-    typeof propertyOf(result, "redirectTo") !== "string" ||
-    !isRecord(result)
-  ) {
-    throw new Error("janus-oauth's approveOAuthRequest answered no redirectTo");
-  }
-  return { ...result, redirectTo: String(result["redirectTo"]) };
-};
