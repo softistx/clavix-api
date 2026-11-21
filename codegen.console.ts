@@ -29,7 +29,7 @@ const config: CodegenConfig = {
           TenantUser: "@/modules/users/users.types#TenantUserParent",
           // An endpoint with its tenant, which its `deliveries` read through.
           WebhookEndpoint:
-            "@/console/modules/webhooks/parent#WebhookEndpointParent",
+            "@/modules/webhooks/webhooks.console-parent#WebhookEndpointParent",
         },
       },
     },

@@ -1,5 +1,5 @@
 // The module's import surface. There is no resolver: the console module
-// (`src/console/modules/domains`) is the only caller that writes. The
+// (`domains.console-resolver.ts`) is the only caller that writes. The
 // recheck worker and queue are wired by file (`src/server.ts`,
 // `src/config/redis.ts`), so this barrel never loads Redis.
 

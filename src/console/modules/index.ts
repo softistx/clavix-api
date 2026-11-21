@@ -6,6 +6,16 @@ import {
   clientsGuards,
 } from "@/modules/clients/clients.console-resolver";
 import {
+  connections,
+  connectionsAudits,
+  connectionsGuards,
+} from "@/modules/connections/connections.console-resolver";
+import {
+  domains,
+  domainsAudits,
+  domainsGuards,
+} from "@/modules/domains/domains.console-resolver";
+import {
   resources,
   resourcesAudits,
   resourcesGuards,
@@ -16,34 +26,32 @@ import {
   rolesGuards,
 } from "@/modules/roles/roles.console-resolver";
 import {
+  signInMethods,
+  signInMethodsAudits,
+  signInMethodsGuards,
+} from "@/modules/sign-in-methods/sign-in-methods.console-resolver";
+import {
   users,
   usersAudits,
   usersGuards,
 } from "@/modules/users/users.console-resolver";
+import {
+  webhooks,
+  webhooksAudits,
+  webhooksGuards,
+} from "@/modules/webhooks/webhooks.console-resolver";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
 import { admins, adminsAudits, adminsGuards } from "./admins";
 import { audit, auditAudits, auditGuards } from "./audit";
 import { branding, brandingAudits, brandingGuards } from "./branding";
-import {
-  connections,
-  connectionsAudits,
-  connectionsGuards,
-} from "./connections";
-import { domains, domainsAudits, domainsGuards } from "./domains";
 import { me, meGuards } from "./me";
 import {
   oauthPolicy,
   oauthPolicyAudits,
   oauthPolicyGuards,
 } from "./oauth-policy";
-import {
-  signInMethods,
-  signInMethodsAudits,
-  signInMethodsGuards,
-} from "./sign-in-methods";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
-import { webhooks, webhooksAudits, webhooksGuards } from "./webhooks";
 
 // One entry per module: its resolvers, the guard of each root field it adds
 // and the audit action of each mutation it adds. A root field with no guard is

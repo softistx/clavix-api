@@ -18,7 +18,8 @@ import {
 import { janusIssuers } from "@/config/users";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
-import { CONSOLE_CLIENT_ID } from "@/console/identity";
+import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
+import { consoleSchema } from "@/console/schema";
 import {
   SignInPolicyService,
   secretContext,
@@ -26,8 +27,6 @@ import {
 } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { socialOf } from "@/modules/users/tenant-janus";
-import { CONSOLE_PATH } from "../../identity";
-import { consoleSchema } from "../../schema";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
