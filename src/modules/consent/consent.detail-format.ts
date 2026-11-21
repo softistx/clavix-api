@@ -15,9 +15,9 @@ export interface FormattedField {
  * words and formats numbers and booleans itself, from its own catalogue.
  */
 export type ConsentValue =
-  | { kind: "text"; text: string }
-  | { kind: "number"; number: number }
-  | { kind: "boolean"; boolean: boolean };
+  | { kind: "TEXT"; text: string }
+  | { kind: "NUMBER"; number: number }
+  | { kind: "BOOLEAN"; boolean: boolean };
 
 // The viewer's language (see `pickTranslation`), else `fallback`.
 export const pick = (
@@ -26,11 +26,11 @@ export const pick = (
   fallback = "",
 ) => pickTranslation(text ?? [], acceptLanguage) ?? fallback;
 
-const text = (value: string): ConsentValue => ({ kind: "text", text: value });
+const text = (value: string): ConsentValue => ({ kind: "TEXT", text: value });
 
 function scalar(value: unknown): ConsentValue[] {
-  if (typeof value === "boolean") return [{ kind: "boolean", boolean: value }];
-  if (typeof value === "number") return [{ kind: "number", number: value }];
+  if (typeof value === "boolean") return [{ kind: "BOOLEAN", boolean: value }];
+  if (typeof value === "number") return [{ kind: "NUMBER", number: value }];
   return typeof value === "string" && value !== "" ? [text(value)] : [];
 }
 

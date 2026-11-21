@@ -30,7 +30,7 @@ import {
 /**
  * The consent API of the hosted `/consent` page: the request host's OAuth
  * server, the approval hooks (the tenant's mode, the request's `acr_values`,
- * the details in words), the fields the page reads (labelled scopes, details,
+ * the typed detail rows), the fields the page reads (labelled scopes, details,
  * authentication, agent mark), the revocation of a replaced holder's grants and
  * its retry queue. Both the OAuth server and the signed-in user are the request
  * host's tenant's, so a request id or a session of another tenant is unknown.
@@ -152,7 +152,7 @@ export class ConsentService {
     }));
   }
 
-  /** The details of a request in words (D5), never the raw JSON. */
+  /** The details of a request as typed rows (D5), never the raw JSON. */
   async details(parent: Detailed, ctx: ConsentCtx) {
     return (await this.review(parent.authorizationDetails, ctx)).details;
   }
@@ -235,7 +235,7 @@ export class ConsentService {
       .on("error", (error) => this.log(`grants: ${String(error)}`));
   }
 
-  // The details of a pending request or device request, in words (D5), and
+  // The details of a pending request or device request, as typed rows (D5), and
   // whether every one is fully described.
   private async review(
     authorizationDetails: string | null | undefined,

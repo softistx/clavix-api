@@ -54,33 +54,33 @@ describe("detailsOf", () => {
         description: "Export your data",
         rows: [
           {
-            kind: "field",
+            kind: "FIELD",
             key: "format",
             label: "Format",
-            values: [{ kind: "text", text: "Tableur" }],
+            values: [{ kind: "TEXT", text: "Tableur" }],
           },
           {
-            kind: "field",
+            kind: "FIELD",
             key: "tags",
             label: "Tags",
             values: [
-              { kind: "text", text: "a" },
-              { kind: "text", text: "b" },
+              { kind: "TEXT", text: "a" },
+              { kind: "TEXT", text: "b" },
             ],
           },
           {
-            kind: "identifier",
+            kind: "IDENTIFIER",
             key: null,
             label: null,
-            values: [{ kind: "text", text: "acct-1" }],
+            values: [{ kind: "TEXT", text: "acct-1" }],
           },
           {
-            kind: "datatypes",
+            kind: "DATATYPES",
             key: null,
             label: null,
             values: [
-              { kind: "text", text: "x" },
-              { kind: "text", text: "y" },
+              { kind: "TEXT", text: "x" },
+              { kind: "TEXT", text: "y" },
             ],
           },
         ],
@@ -94,8 +94,8 @@ describe("detailsOf", () => {
     ]);
     const kinds = (language: string | null) =>
       detailsOf(json, texts, language)[0]?.rows.map((row) => row.kind);
-    expect(kinds("fr-CA")).toEqual(["identifier", "datatypes"]);
-    expect(kinds("de")).toEqual(["identifier", "datatypes"]);
+    expect(kinds("fr-CA")).toEqual(["IDENTIFIER", "DATATYPES"]);
+    expect(kinds("de")).toEqual(["IDENTIFIER", "DATATYPES"]);
     expect(detailsOf(json, texts, null)[0]?.title).toBe("Export");
     expect(detailsOf(json, texts, "fr")[0]?.rows[0]?.label).toBeNull();
   });
@@ -116,11 +116,47 @@ describe("detailsOf", () => {
     const values = (language: string) =>
       detailsOf(json, typed, language)[0]?.rows.map((row) => row.values);
     const raw: ConsentValue[][] = [
-      [{ kind: "boolean", boolean: true }],
-      [{ kind: "number", number: 1234.5 }],
+      [{ kind: "BOOLEAN", boolean: true }],
+      [{ kind: "NUMBER", number: 1234.5 }],
     ];
     expect(values("en")).toEqual(raw);
     expect(values("fr")).toEqual(raw);
+  });
+
+  test("locations are a row of their own, in order", () => {
+    const json = JSON.stringify([
+      { type: "export", locations: ["https://a.example", "https://b.example"] },
+    ]);
+    expect(detailsOf(json, texts, "en")[0]?.rows).toEqual([
+      {
+        kind: "LOCATIONS",
+        key: null,
+        label: null,
+        values: [
+          { kind: "TEXT", text: "https://a.example" },
+          { kind: "TEXT", text: "https://b.example" },
+        ],
+      },
+    ]);
+  });
+
+  test("an empty identifier, location or datatype is no value, and a row with none is dropped", () => {
+    const json = JSON.stringify([
+      {
+        type: "export",
+        identifier: "",
+        locations: [""],
+        datatypes: ["", "x"],
+      },
+    ]);
+    expect(detailsOf(json, texts, "en")[0]?.rows).toEqual([
+      {
+        kind: "DATATYPES",
+        key: null,
+        label: null,
+        values: [{ kind: "TEXT", text: "x" }],
+      },
+    ]);
   });
 
   test("a field with nothing to show has no row", () => {
@@ -137,10 +173,10 @@ describe("detailsOf", () => {
         description: "",
         rows: [
           {
-            kind: "actions",
+            kind: "ACTIONS",
             key: null,
             label: null,
-            values: [{ kind: "text", text: "go" }],
+            values: [{ kind: "TEXT", text: "go" }],
           },
         ],
       },

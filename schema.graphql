@@ -220,22 +220,22 @@ enum ConsentRowKind {
   """
   The actions the detail asks for; each value is the type's label for it.
   """
-  actions
+  ACTIONS
   """RFC 9396 `datatypes`."""
-  datatypes
+  DATATYPES
   """A field the tenant's type defines: `key` and `label` are its own."""
-  field
+  FIELD
   """RFC 9396 `identifier`."""
-  identifier
+  IDENTIFIER
   """The request's resource (RFC 9396 `locations`)."""
-  locations
+  LOCATIONS
 }
 
 """Which member of a `ConsentDetailValue` is set."""
 enum ConsentValueKind {
-  boolean
-  number
-  text
+  BOOLEAN
+  NUMBER
+  TEXT
 }
 
 """An ISO 3166-1 alpha-2 country code, such as FR."""

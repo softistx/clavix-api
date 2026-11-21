@@ -4,22 +4,22 @@ language of its own for them.
 """
 enum ConsentRowKind {
   "The request's resource (RFC 9396 `locations`)."
-  locations
+  LOCATIONS
   "The actions the detail asks for; each value is the type's label for it."
-  actions
+  ACTIONS
   "A field the tenant's type defines: `key` and `label` are its own."
-  field
+  FIELD
   "RFC 9396 `identifier`."
-  identifier
+  IDENTIFIER
   "RFC 9396 `datatypes`."
-  datatypes
+  DATATYPES
 }
 
 "Which member of a `ConsentDetailValue` is set."
 enum ConsentValueKind {
-  text
-  number
-  boolean
+  TEXT
+  NUMBER
+  BOOLEAN
 }
 
 """

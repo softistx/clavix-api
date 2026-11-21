@@ -30,20 +30,20 @@ describe("pick", () => {
 describe("valuesOf", () => {
   test("an enum value takes its label in the viewer's language", () => {
     expect(valuesOf("eur", field, "fr")).toEqual([
-      { kind: "text", text: "Euro (€)" },
+      { kind: "TEXT", text: "Euro (€)" },
     ]);
     expect(valuesOf(["eur", "usd"], field, "en")).toEqual([
-      { kind: "text", text: "Euro" },
-      { kind: "text", text: "usd" },
+      { kind: "TEXT", text: "Euro" },
+      { kind: "TEXT", text: "usd" },
     ]);
   });
 
   test("a boolean and a number stay raw, with no word and no format", () => {
     expect(valuesOf(false, { kind: "boolean" }, "fr")).toEqual([
-      { kind: "boolean", boolean: false },
+      { kind: "BOOLEAN", boolean: false },
     ]);
     expect(valuesOf(1500.5, { kind: "number" }, "fr")).toEqual([
-      { kind: "number", number: 1500.5 },
+      { kind: "NUMBER", number: 1500.5 },
     ]);
   });
 

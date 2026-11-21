@@ -1141,11 +1141,11 @@ query Consent($id: ID!) {
       title
       description
       rows {
-        kind # locations | actions | field | identifier | datatypes: word it from your own catalogue
-        key # the field's key, for kind "field"
-        label # the tenant's field label, for kind "field"
+        kind # LOCATIONS | ACTIONS | FIELD | IDENTIFIER | DATATYPES: word it from your own catalogue
+        key # the field's key, for kind FIELD
+        label # the tenant's field label, for kind FIELD
         values {
-          kind # text | number | boolean: exactly that member is set
+          kind # TEXT | NUMBER | BOOLEAN: exactly that member is set
           text
           number
           boolean

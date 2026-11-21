@@ -46,7 +46,7 @@ export interface ConsentDetail {
   rows: ConsentRow[];
 }
 
-/** The details of a request in words, and whether every one is fully described. */
+/** The details of a request as typed rows, and whether every one is fully described. */
 export interface ConsentDetails {
   details: ConsentDetail[];
   /**
@@ -104,20 +104,22 @@ function describe(
     key: string | null = null,
     label: string | null = null,
   ) => {
-    // An empty list, or a value of a shape the kind does not allow, has no row.
-    if (values.length > 0) rows.push({ kind, key, label, values });
+    // An empty text is no value; a row left with none, or a value of a shape
+    // the kind does not allow, has no row.
+    const shown = values.filter((v) => v.kind !== "TEXT" || v.text !== "");
+    if (shown.length > 0) rows.push({ kind, key, label, values: shown });
   };
   const strings = (items: unknown): ConsentValue[] =>
     Array.isArray(items)
-      ? items.map((item) => ({ kind: "text", text: String(item) }))
+      ? items.map((item) => ({ kind: "TEXT", text: String(item) }))
       : [];
-  row("locations", strings(detail["locations"]));
+  row("LOCATIONS", strings(detail["locations"]));
   const actions = detail["actions"];
   row(
-    "actions",
+    "ACTIONS",
     Array.isArray(actions)
       ? actions.map((action) => ({
-          kind: "text",
+          kind: "TEXT",
           text: pick(
             text?.actions?.find((a) => a.value === action)?.label,
             acceptLanguage,
@@ -130,7 +132,7 @@ function describe(
     const value = detail[field.key];
     if (value === undefined || value === null) continue;
     row(
-      "field",
+      "FIELD",
       valuesOf(value, field, acceptLanguage),
       field.key,
       pick(field.label, acceptLanguage, field.key),
@@ -138,9 +140,9 @@ function describe(
   }
   const identifier = detail["identifier"];
   if (typeof identifier === "string") {
-    row("identifier", [{ kind: "text", text: identifier }]);
+    row("IDENTIFIER", [{ kind: "TEXT", text: identifier }]);
   }
-  row("datatypes", strings(detail["datatypes"]));
+  row("DATATYPES", strings(detail["datatypes"]));
   return {
     type,
     title: pick(text?.name, acceptLanguage, type),
@@ -191,7 +193,7 @@ export function reviewDetails(
   };
 }
 
-/** The details of a pending request in words (see `reviewDetails`). */
+/** The details of a pending request as typed rows (see `reviewDetails`). */
 export const detailsOf = (
   authorizationDetails: string | null,
   texts: DetailTexts,
