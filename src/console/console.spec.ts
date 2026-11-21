@@ -13,7 +13,7 @@ import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
-import { noDetailTypes } from "@/config/no-ops";
+import { noDetailTypes, noUserLock } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -897,6 +897,7 @@ describe("operators:grant", () => {
   const invited: { email: string; role: string }[] = [];
   const deps = {
     access,
+    lock: noUserLock,
     findByEmail: async (email: string) =>
       email === "bob@console.test"
         ? { id: bob, email, active: true }
@@ -1038,6 +1039,7 @@ describe("operators:grant", () => {
     const wired = operatorGrantDeps({
       findByEmail: async () => null,
       access,
+      lock: noUserLock,
       invitations: {
         invite: async (input) => {
           invites.push(input);

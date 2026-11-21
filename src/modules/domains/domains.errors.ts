@@ -60,3 +60,8 @@ export const verifyCooldown = (retryAfter: number) =>
 
 export const badDomainInput = (message: string) =>
   new DomainError("BAD_USER_INPUT", message);
+
+/** A host the console refuses to claim, and why (the message is shown to the owner). */
+export class DomainHostError extends Error {
+  override name = "DomainHostError";
+}

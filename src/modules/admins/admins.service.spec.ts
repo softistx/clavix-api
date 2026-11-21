@@ -40,7 +40,7 @@ function fake(
   };
   const service = new AdminsService({
     access,
-    exclusive: createExclusive(),
+    exclusive: createExclusive(null),
     directory,
   });
   return { service, of };

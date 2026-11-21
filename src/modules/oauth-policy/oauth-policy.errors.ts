@@ -18,3 +18,8 @@ export const policyConflict = () =>
     "The OAuth policy was changed at the same time; read it and try again",
     409,
   );
+
+/** A value of the input that is wrong; the message says which. */
+export class AgentsInputError extends Error {
+  override name = "AgentsInputError";
+}

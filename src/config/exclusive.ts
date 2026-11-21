@@ -23,5 +23,5 @@ export const sharedLockOf = (app: {
 // One at a time per key, across the API's processes through the app's Redis
 // (required in production); without it, within this process.
 export const exclusive = createExclusive(
-  redis === undefined ? undefined : sharedLockOf(redis),
+  redis === undefined ? null : sharedLockOf(redis),
 );

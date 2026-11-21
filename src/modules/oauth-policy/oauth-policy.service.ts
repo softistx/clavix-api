@@ -1,15 +1,12 @@
 import { OptimisticLockError } from "@softistx/mongo";
 import type { Tenant, TenantsService } from "@/modules/tenants";
 import {
+  AgentsInputError,
   badAgentsInput,
   policyConflict,
   tenantNotFound,
 } from "./oauth-policy.errors";
-import {
-  AgentsInputError,
-  applyAgentsInput,
-  sameAgents,
-} from "./oauth-policy.rules";
+import { applyAgentsInput, sameAgents } from "./oauth-policy.rules";
 import type { AgentsPolicy, OAuthPolicy } from "./oauth-policy.schema";
 import type { OAuthPolicyInput } from "./oauth-policy.types";
 

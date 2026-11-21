@@ -1,13 +1,13 @@
 import type { brandingService } from "@/config/branding";
 import { tenantsService } from "@/config/tenancy";
 import { fail } from "@/shared/errors";
-import { BrandingConflictError } from "./branding.errors";
-import { logoUrl } from "./branding.logo-route";
 import {
+  BrandingConflictError,
   BrandingContrastError,
   BrandingInputError,
-  THEME_NAME,
-} from "./branding.theme";
+} from "./branding.errors";
+import { logoUrl } from "./branding.logo-route";
+import { THEME_NAME } from "./branding.theme";
 
 // The guard decided who may touch the tenant; this decides it exists (a
 // platform role is allowed on any id) and is not in the trash (a suspended

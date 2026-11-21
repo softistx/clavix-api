@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { DomainHostError } from "./domains.errors";
 import {
   cooldownSeconds,
-  DomainHostError,
   hostsToForget,
   normalizeDomainHost,
   RECHECK_GRACE_DAYS,

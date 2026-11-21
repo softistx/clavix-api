@@ -1,4 +1,5 @@
 import type { OAuthHandle } from "@/oauth/routes";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { AgentsFor } from "./consent.agent-marker";
 import type { RequestDemands } from "./consent.authentication";
 import type { DetailTextsFor } from "./consent.detail-labels";
@@ -21,6 +22,12 @@ export type WithServers = {
 
 /** A context as the consent fields read it: the readers and the request. */
 export type ConsentCtx = WithServers & { request?: Request };
+
+/** A context as `serverOf` reads it: the OAuth servers, the request and the tenant. */
+export type ServerCtx = Partial<Pick<WithServers, "oauthServers">> & {
+  request?: Request;
+  tenant: () => Promise<ResolvedTenant | null>;
+};
 
 /** What a queued revocation carries: ids only. */
 export interface RevokeJob {

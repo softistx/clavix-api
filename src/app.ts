@@ -44,6 +44,8 @@ export const CONSOLE_MAX_COST = 50_000;
 
 /** The ports `createApp` requires: bound in `src/config/app-ports.ts`. */
 export interface AppPorts extends ThrottleContext {
+  /** How many reverse proxies stand in front of the app (`CLAVIX_TRUSTED_PROXIES`). */
+  trustedProxies: number;
   /** Where the consent page reads the tenants' scope texts. */
   scopeTexts: ScopeTextsFor;
   /** The same for the tenants' detail type texts (the request's `details`). */
@@ -75,6 +77,7 @@ function baseOf(options: AppOptions) {
       tenantResolver,
       throttlesOf(options),
       options.telemetry ?? appTelemetry,
+      options.trustedProxies,
     )
       .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
       // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).

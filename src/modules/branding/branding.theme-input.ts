@@ -4,6 +4,7 @@ import {
   MOTIF_SHAPES_ALL,
   type MotifShape,
 } from "@softistx/material-core/backgrounds";
+import { BrandingInputError } from "./branding.errors";
 
 export interface ThemeInput {
   displayName: string;
@@ -22,16 +23,6 @@ export interface ValidThemeInput extends ThemeInput {
 }
 
 export const DEFAULT_RADIUS = "0.5rem";
-
-export class BrandingInputError extends Error {
-  readonly code = "BAD_USER_INPUT";
-  constructor(
-    readonly field: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 const RADIUS = /^(\d{1,2}(?:\.\d{1,3})?)(rem|px)$/;
 const PRESETS = new Set<string>(BACKGROUND_PRESETS.map((p) => p.id));

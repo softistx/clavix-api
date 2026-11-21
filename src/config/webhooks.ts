@@ -49,7 +49,7 @@ const queueLimits = webhookQueueLimits(
  */
 export const webhookDelivery = createWebhookDelivery({
   webhooks: webhooksService,
-  fetch: guardedFetch(urlPolicy),
+  fetch: guardedFetch(urlPolicy, fetch),
   log: warn,
   now: clock,
   queue:

@@ -44,6 +44,7 @@ const tenantOf = async (slug: string) => {
 };
 
 interface Answer {
+  // biome-ignore lint/suspicious/noExplicitAny: an untyped GraphQL response body, read by path in the specs
   data: Record<string, any> | null;
   errors?: { message: string; extensions?: Record<string, unknown> }[];
   cookies: string[];

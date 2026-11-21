@@ -7,7 +7,6 @@ import type { branding } from "./branding.model";
 import {
   buildTheme,
   type CompileTheme,
-  compileTheme,
   THEME_NAME,
   type ValidThemeInput,
 } from "./branding.theme";
@@ -33,7 +32,7 @@ export type {
 export class BrandingService {
   constructor(
     private readonly collection: TypedCollection<typeof branding>,
-    private readonly compile: CompileTheme = compileTheme,
+    private readonly compile: CompileTheme,
   ) {}
 
   private scoped(tenantId: string) {

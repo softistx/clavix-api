@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { isPublicAddress } from "@softistx/janus-oauth";
+import { WebhookUrlError } from "./webhooks.errors";
 
 /** Resolves a host name to its addresses (A and AAAA); injected so a spec can stand a DNS rebinding in. */
 export type Resolve = (host: string) => Promise<string[]>;
@@ -8,17 +9,6 @@ export interface UrlPolicy {
   resolve: Resolve;
   /** Private and loopback addresses allowed (`CLAVIX_WEBHOOKS_ALLOW_PRIVATE`, refused in production). */
   allowPrivate: boolean;
-}
-
-/** Why an endpoint URL is refused: a code for the console, a message for a person. */
-export class WebhookUrlError extends Error {
-  override name = "WebhookUrlError";
-  constructor(
-    readonly code: "invalid" | "notHttps" | "credentials" | "notPublic",
-    message: string,
-  ) {
-    super(message);
-  }
 }
 
 export const MAX_URL_LENGTH = 2000;
@@ -97,7 +87,7 @@ export async function checkWebhookUrl(
  */
 export function guardedFetch(
   policy: UrlPolicy,
-  send: typeof fetch = fetch,
+  send: typeof fetch,
 ): typeof fetch {
   const guarded = async (input: RequestInfo | URL, init?: RequestInit) => {
     const raw =

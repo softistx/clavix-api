@@ -32,7 +32,7 @@ test("tenant() resolves the request's host once, on first use", async () => {
     },
     invalidate: async () => {},
   };
-  const app = createBase(resolver, quietThrottles, appTelemetry).get(
+  const app = createBase(resolver, quietThrottles, appTelemetry, 0).get(
     "/who",
     async ({ reply, tenant }) => {
       const [a, b] = await Promise.all([tenant(), tenant()]);

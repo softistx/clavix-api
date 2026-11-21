@@ -3,7 +3,6 @@ import type { GraphQLContext } from "@softistx/alxia-graphql";
 import { telemetry as tracing } from "@softistx/alxia-telemetry";
 import type { JanusContext } from "@softistx/janus-graphql";
 import { type Telemetry, withAttributes } from "@softistx/telemetry";
-import { env } from "@/config/env";
 import type { ThrottleContext } from "@/http/throttle/context";
 import type { TenantJanus } from "@/modules/users/users.tenant-janus";
 import { isTenantless, tenantAttributes } from "@/telemetry/tenant";
@@ -20,14 +19,15 @@ export function createBase(
   resolver: TenantResolver,
   throttles: ThrottleContext,
   telemetry: Telemetry,
+  trustedProxies: number,
 ) {
-  // `ctx.ip`: the connection's address, or, behind CLAVIX_TRUSTED_PROXIES
+  // `ctx.ip`: the connection's address, or, behind `trustedProxies` (CLAVIX_TRUSTED_PROXIES, bound in `appPorts`)
   // proxies, the client X-Forwarded-For names (never believed beyond them).
   return (
     alxia(
-      env.CLAVIX_TRUSTED_PROXIES === 0
+      trustedProxies === 0
         ? {}
-        : { ip: forwardedIp({ trusted: env.CLAVIX_TRUSTED_PROXIES }) },
+        : { ip: forwardedIp({ trusted: trustedProxies }) },
     )
       // First, so the server span holds everything the request runs (D24).
       .use(
@@ -38,7 +38,6 @@ export function createBase(
           traced: (ctx) => !isTenantless(ctx.url.pathname),
         }),
       )
-      .decorate({ env })
       .decorate(throttles)
       .derive(({ request }) => {
         let tenant: Promise<ResolvedTenant | null> | undefined;

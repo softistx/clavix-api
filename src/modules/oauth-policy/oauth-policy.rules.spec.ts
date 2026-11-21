@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { AgentsInputError } from "./oauth-policy.errors";
 import {
-  AgentsInputError,
   agentsNeedPushOrProof,
   applyAgentsInput,
   MAX_AGENT_LIST,
