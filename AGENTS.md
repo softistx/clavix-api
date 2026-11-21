@@ -803,8 +803,8 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `budgets.testWebhook` (5/min per endpoint, then 20/min per tenant, `CLAVIX_WEBHOOK_TEST_*`) once the endpoint is found
   and enabled, before the address check and the queue. `inviteUser` / `inviteAdmin` spend `budgets.invitation` (200/h per
   tenant, both together, `CLAVIX_INVITE_TENANT_*`) just before the invitation is issued, and the per-caller budget
-  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@softistx/alxia-graphql`'s `fieldRateLimit` (`useInviteBudget`, first in the
-  console's plugins in `app.ts` after `useClientHeader`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
+  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@softistx/alxia-graphql`'s `fieldRateLimit` (`useInviteBudget`, right after `useClientHeader` in the
+  console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
   `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
   that sends a mail or queues outbound work gets its budget here, never a counter of its own.
 - The catalogue (D22, `webhooks.events.ts`) is janus's 16 user events (without `user.apiKeyCreated` / `user.apiKeyRevoked`, which never fire until API keys are adopted, and `user.passwordReset` / `user.passwordChanged`, which cannot fire while password sign-in is unavailable; #336) plus `session.signedIn`; `data` holds ids
