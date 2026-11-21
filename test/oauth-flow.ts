@@ -1,9 +1,7 @@
-import { expect } from "bun:test";
 import {
   createMemorySigningKeys,
   rotateSigningKeys,
   type SigningKeyStore,
-  s256Challenge,
 } from "@softistx/janus-oauth";
 import { withAgentRegistration } from "@/config/agents-registration";
 import { agentCheckFor, exchangeRulesFor } from "@/config/client-policies";
@@ -23,34 +21,43 @@ import type {
 } from "@/oauth/register-throttle";
 import type { MetadataTransport } from "@/oauth/registration";
 import { quietOAuth } from "~/ports";
+import {
+  basic,
+  type FlowClient,
+  requestsOf,
+  stepsOf,
+} from "./oauth-flow-steps";
 import { createTenantParOff } from "./tenant-par-off";
 
 export const DOMAIN = (await import("@/config/env")).env.CLAVIX_DOMAIN;
 export const REDIRECT = "https://app.example/callback";
-const VERIFIER = "v".repeat(64);
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
-/**
- * A real OAuth flow (authorize, approve, code exchange) against the tenants of
- * the test database, with a fake user pool: every user id is known, claims are
- * the user's e-mail. For the specs that read what a token carries or whether
- * it still works.
- */
-export function createFlow(
-  options: {
-    rolesFor?: RolesFor;
-    /** What the `/register` route throttles with (none by default). */
-    registerThrottle?: RegisterThrottle;
-    /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
-    metadataThrottle?: MetadataThrottle;
-    /** Fetches and resolves metadata documents (the specs' stand-in for the network). */
-    metadataTransport?: MetadataTransport;
-    /** The OAuth events listener of a tenant (none by default); the specs of the sign-in log pass the real one. */
-    eventsFor?: ClavixOAuthOptions["eventsFor"];
-  } = {},
-) {
+interface FlowOptions {
+  rolesFor?: RolesFor;
+  /** What the `/register` route throttles with (none by default). */
+  registerThrottle?: RegisterThrottle;
+  /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
+  metadataThrottle?: MetadataThrottle;
+  /** Fetches and resolves metadata documents (the specs' stand-in for the network). */
+  metadataTransport?: MetadataTransport;
+  /** The OAuth events listener of a tenant (none by default); the specs of the sign-in log pass the real one. */
+  eventsFor?: ClavixOAuthOptions["eventsFor"];
+}
+
+const authFor: AuthFor = () => ({
+  authenticate: async () => null,
+  findUser: async (id) => ({ id, active: true }),
+});
+const claimsFor: ClaimsFor = () => async (subject) => ({
+  email: `${subject.id}@end.test`,
+  email_verified: true,
+});
+
+/** One in-memory signing key store per tenant. */
+function signingKeysByTenant() {
   const keys = new Map<string, SigningKeyStore>();
-  const signingKeysFor = (tenantId: string) => {
+  return (tenantId: string) => {
     let store = keys.get(tenantId);
     if (store === undefined) {
       store = createMemorySigningKeys();
@@ -58,14 +65,13 @@ export function createFlow(
     }
     return store;
   };
-  const authFor: AuthFor = () => ({
-    authenticate: async () => null,
-    findUser: async (id) => ({ id, active: true }),
-  });
-  const claimsFor: ClaimsFor = () => async (subject) => ({
-    email: `${subject.id}@end.test`,
-    email_verified: true,
-  });
+}
+
+/** The issuers over the test database, with the fake user pool. */
+function issuersOf(
+  options: FlowOptions,
+  signingKeysFor: (tenantId: string) => SigningKeyStore,
+) {
   const base = createClavixOAuthIssuers({
     ...quietOAuth,
     clock: { now: () => new Date() },
@@ -86,47 +92,23 @@ export function createFlow(
       ? {}
       : { metadataTransport: options.metadataTransport }),
   });
-  const issuers = withAgentRegistration(
+  return withAgentRegistration(
     base,
     options.registerThrottle ?? undefined,
     options.metadataThrottle ?? undefined,
   );
-  const url = (slug: string, path: string) =>
-    `https://${slug}.${DOMAIN}${path}`;
-  const get = (slug: string, path: string, authorization?: string) =>
-    issuers.handle(
-      new Request(url(slug, path), {
-        headers: authorization === undefined ? {} : { authorization },
-      }),
-    );
-  const post = (
-    slug: string,
-    path: string,
-    body: Record<string, string>,
-    authorization?: string,
-    headers: Record<string, string> = {},
-  ) =>
-    issuers.handle(
-      new Request(url(slug, path), {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          ...(authorization === undefined ? {} : { authorization }),
-          ...headers,
-        },
-        body: new URLSearchParams(body),
-      }),
-    );
-  const basic = (id: string, secret: string) =>
-    `Basic ${btoa(`${id}:${secret}`)}`;
-  const clients: Record<string, { id: string; secret: string }> = {};
+}
 
-  /** A tenant with a signing key, a confidential client `backend` and these resources (each with a `read` scope). */
-  async function setUp(
+/** A tenant with a signing key, a confidential client `backend` and these resources (each with a `read` scope). */
+function setUpOf(
+  signingKeysFor: (tenantId: string) => SigningKeyStore,
+  clients: Record<string, FlowClient>,
+) {
+  return async (
     slug: string,
     resourceUris: readonly string[] = [],
     options: { par?: boolean } = {},
-  ) {
+  ) => {
     // A new tenant requires pushed authorization requests (M3): the specs that
     // authorize directly turn it off, the PAR specs keep it.
     const input = { slug, name: slug };
@@ -156,104 +138,25 @@ export function createFlow(
     );
     clients[slug] = { id: "backend", secret: registered.clientSecret ?? "" };
     return { tenantId: id };
-  }
-
-  /**
-   * authorize, then approve as `userId`: the code, not yet exchanged (a spec
-   * that drives the token request itself, DPoP proofs for instance).
-   */
-  async function authorizeCode(
-    slug: string,
-    scope: string,
-    options: {
-      resource?: string;
-      userId?: string;
-      client?: { id: string; secret: string };
-    } = {},
-  ) {
-    const client =
-      options.client ?? (clients[slug] as { id: string; secret: string });
-    const { resource, userId = `user-${slug}` } = options;
-    const authorize = await get(
-      slug,
-      `/authorize?${new URLSearchParams({
-        response_type: "code",
-        client_id: client.id,
-        redirect_uri: REDIRECT,
-        code_challenge: await s256Challenge(VERIFIER),
-        code_challenge_method: "S256",
-        scope,
-        nonce: "n-0S6_WzA2Mj",
-        ...(resource === undefined ? {} : { resource }),
-        state: "xyz",
-      })}`,
-    );
-    expect(authorize.status).toBe(302);
-    const consent = new URL(
-      authorize.headers.get("location") ?? "",
-      url(slug, "/"),
-    );
-    const server = await issuers.serverFor(new Request(url(slug, "/")));
-    if (server === null) throw new Error(`no server for ${slug}`);
-    const { redirectTo } = await server.approve(
-      { id: userId },
-      consent.searchParams.get("request_id") ?? "",
-      { scopes: scope.split(" "), authTime: new Date() },
-    );
-    return {
-      client,
-      /** The `/token` body of the code exchange. */
-      body: {
-        grant_type: "authorization_code",
-        code: new URL(redirectTo).searchParams.get("code") ?? "",
-        redirect_uri: REDIRECT,
-        code_verifier: VERIFIER,
-        ...(resource === undefined ? {} : { resource }),
-      },
-    };
-  }
-
-  /** authorize, approve as `userId`, code exchange. No `resource`: the issuer's userinfo. */
-  async function login(
-    slug: string,
-    scope: string,
-    options: {
-      resource?: string;
-      userId?: string;
-      client?: { id: string; secret: string };
-    } = {},
-  ) {
-    const { client, body } = await authorizeCode(slug, scope, options);
-    return post(slug, "/token", body, basic(client.id, client.secret));
-  }
-
-  const tokensOf = async (
-    slug: string,
-    scope: string,
-    options: {
-      resource?: string;
-      userId?: string;
-      client?: { id: string; secret: string };
-    } = {},
-  ) => {
-    const response = await login(slug, scope, options);
-    expect(response.status).toBe(200);
-    return (await response.json()) as {
-      access_token: string;
-      id_token?: string;
-      refresh_token?: string | null;
-    };
   };
+}
 
+/**
+ * A real OAuth flow (authorize, approve, code exchange) against the tenants of
+ * the test database, with a fake user pool: every user id is known, claims are
+ * the user's e-mail. For the specs that read what a token carries or whether
+ * it still works.
+ */
+export function createFlow(options: FlowOptions = {}) {
+  const signingKeysFor = signingKeysByTenant();
+  const issuers = issuersOf(options, signingKeysFor);
+  const requests = requestsOf(issuers, DOMAIN);
+  const clients: Record<string, FlowClient> = {};
   return {
     issuers,
-    setUp,
-    authorizeCode,
-    login,
-    tokensOf,
-    get,
-    post,
-    url,
+    setUp: setUpOf(signingKeysFor, clients),
+    ...stepsOf(issuers, requests, clients, REDIRECT),
+    ...requests,
     basic,
     clients,
   };
