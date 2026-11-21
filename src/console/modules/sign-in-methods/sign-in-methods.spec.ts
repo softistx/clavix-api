@@ -15,9 +15,11 @@ import { janusIssuers } from "@/config/users";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
-import { secretContext } from "@/modules/sign-in-methods/secrets";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
-import { socialProvidersOf } from "@/modules/sign-in-methods/social";
+import {
+  SignInPolicyService,
+  secretContext,
+  socialProvidersOf,
+} from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { socialOf } from "@/modules/users/tenant-janus";
 import { CONSOLE_PATH } from "../../identity";

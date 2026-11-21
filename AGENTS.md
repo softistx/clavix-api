@@ -141,10 +141,21 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 ## Users and sessions
 
 Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:
-- **One field, one schema**: `signIn: signInPolicySchema` (`sign-in.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (`mfa: { mode: passkeySufficient|required, totp }` goes beside it, with zod defaults so a cached tenant without it still parses: `totp` off, mode `passkeySufficient`) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
-- **Every write goes through `SignInPolicyService`** (`service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
-- **Gates**: `requireMethod(tenant, method)` (`gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked in the resolver before the throttle. Registering a passkey while signed in is not gated.
-- **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
+- Layout (A8): `sign-in-methods.resolver.ts` (+ `.resolver-support.ts`: the tenant's janus per request, the social
+  resolvers, the hosted page and the completed-flow answer), `.errors.ts` (the codes, `refusal`, `badInput`,
+  `methodDisabled`), `.rules.ts` (input checks, the method change, the first-party and usable rules, the reseal of
+  the entries), `.utils.ts`, `.types.ts`, `.schema.ts`, `.secrets.ts`, `.social.ts`, `.gate.ts`, `.sso-throttle.ts`,
+  and `sign-in-methods.service.ts`: one service per domain (owner, 2026-11-20), `SignInPolicyService`, holding
+  every business method of the domain (`get`, `updateMethods`, `updateMfa`, `setSocial`, `removeSocial`,
+  `resealSecrets`), its spec beside it. `index.ts` is the import surface (the schema first); `modules/index.ts` imports
+  `sign-in-methods.resolver.ts` by file (its support loads the config wiring). The service is built in
+  `src/config/sign-in-policy.ts` and registered as `services().signInPolicy`. Deep imports allowed: `sign-in-methods.schema.ts` by the tenants, webhooks and connections models and
+  `tenancy/resolved-tenant.ts` (the barrel would close an import cycle through the service), and `.errors.ts` into
+  `src/i18n/codes.ts`.
+- **One field, one schema**: `signIn: signInPolicySchema` (`sign-in-methods.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (`mfa: { mode: passkeySufficient|required, totp }` goes beside it, with zod defaults so a cached tenant without it still parses: `totp` off, mode `passkeySufficient`) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
+- **Every write goes through `SignInPolicyService`** (`sign-in-methods.service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
+- **Gates**: `requireMethod(tenant, method)` (`sign-in-methods.gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`src/modules/auth/magic-link.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked in the resolver before the throttle. Registering a passkey while signed in is not gated.
+- **Social secrets** are sealed by `secretBox` (`src/config/keys.ts`, `sign-in-methods.secrets.ts`): AES-256-GCM under an HKDF-SHA256 subkey of `CLAVIX_KEYS_MASTER_KEY` (info `social-secrets`), stored as `{ v: 1, kid, iv, ct }` with the tenant id and provider as associated data, so an envelope copied to another tenant or provider does not open. The master key itself is not exported. A secret is opened only in `socialProvidersOf` (`sign-in-methods.social.ts`), when a tenant's janus is built; it is in no GraphQL type (console or hosted), no log line and no error message (a provider that cannot be built is skipped with a warning naming the tenant, the provider and the error's name). The resolved tenant, cached in Redis, holds the envelope, never the secret.
 - **A social sign-in may replace an unverified holder (nxgt-janus #978)**. **Assumed, not answered**:
   `social.unverifiedHolder` (`unverifiedHolderOf`, `tenant-janus.ts`) answers `'replace'` for the tenant's built-in
   social apps (Google, GitHub, Microsoft: the static providers, which vouch for the addresses they hold) and
@@ -738,7 +749,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
   whenever the metadata advertises it). Each connection has its own redirect URI
   (`ssoCallbackUrlOf(issuer, id)`: janus-social's function form, nxgt-janus#975), and `socialResolvers`'s
-  `bindCallback` (janus-graphql 0.35, nxgt-janus#987; `sign-in-methods/index.ts`) binds the callback to the
+  `bindCallback` (janus-graphql 0.35, nxgt-janus#987; `sign-in-methods.resolver-support.ts`) binds the callback to the
   connection whose URL received it (`bindSsoCallback`), so an identity provider cannot pass a visitor's flow to another
   one even without `iss`. The id is the path of `callbackUrl` (`connectionIdOfCallbackUrl`) and must equal the
   `x-sso-connection` header the BFF sets from its own `:provider` route parameter (it forwards no browser header);
@@ -747,7 +758,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
 - **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
   enabled connection owning the address's verified domain (`ownerOf` in `connections.service.ts`: two claimants answer none), else null; it
-  spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods/sso-throttle.ts`,
+  spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods.sso-throttle.ts`,
   `CLAVIX_SSO_*`, refusal `MAIL_THROTTLED`), never the mail-sending `signInThrottle` (#328: a flood of lookups must not close
   a tenant's sign-in codes), and is `no-store`. The federated sign-in is janus's
   `socialSignInStart` / `socialSignInComplete` with the connection id as `provider` (an unknown or disabled one is

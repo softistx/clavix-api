@@ -4,7 +4,7 @@ import {
   hkdfSync,
   randomBytes,
 } from "node:crypto";
-import type { SealedSecret } from "./sign-in.schema";
+import type { SealedSecret } from "./sign-in-methods.schema";
 
 /** The purpose label of the subkey by default: the master key itself never encrypts a social secret. */
 const SOCIAL_LABEL = "social-secrets";

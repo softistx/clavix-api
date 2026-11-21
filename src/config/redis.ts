@@ -29,7 +29,7 @@ import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
-import { ssoLimits } from "@/modules/sign-in-methods/sso-throttle";
+import { ssoLimits } from "@/modules/sign-in-methods";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
 import { webhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-queue";

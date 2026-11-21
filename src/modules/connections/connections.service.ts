@@ -13,7 +13,7 @@ import {
   emptySecretResealCounts,
   type SecretBox,
   type SecretResealCounts,
-} from "@/modules/sign-in-methods/secrets";
+} from "@/modules/sign-in-methods";
 import { assertWithinQuota } from "@/modules/usage/quota";
 import { ConnectionError } from "./connections.errors";
 import type { ConnectionDoc, connections } from "./connections.model";

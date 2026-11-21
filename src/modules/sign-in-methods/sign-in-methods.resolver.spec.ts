@@ -30,7 +30,7 @@ import {
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import { SignInPolicyService } from "./service";
+import { SignInPolicyService } from "./sign-in-methods.service";
 
 // The OAuth issuers are mounted: the replacement revokes the former holder's grants through them.
 const flow = createFlow();

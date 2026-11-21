@@ -15,7 +15,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { registerClient } from "@/modules/clients/register-client";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
+import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";

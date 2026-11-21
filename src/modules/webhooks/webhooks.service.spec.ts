@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { createSecretBox } from "@/modules/sign-in-methods/secrets";
+import { createSecretBox } from "@/modules/sign-in-methods";
 import { QuotaExceededError } from "@/modules/usage/quota";
 import { WebhookError } from "./webhooks.errors";
 import { GIVE_UP_LIMIT, ROLL_OVERLAP_MS } from "./webhooks.rules";

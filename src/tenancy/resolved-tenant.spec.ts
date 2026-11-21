@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { resolvedTenant } from "./resolved-tenant";
 
 const entry = {

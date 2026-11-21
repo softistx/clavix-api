@@ -1,20 +1,20 @@
 import { env } from "@/config/env";
+import { signInPolicyService as service } from "@/config/sign-in-policy";
 import { tenantResolver } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
+  callbackUrlOf,
   isAvailable,
   type MethodType,
   type MfaMode,
   methodsOf,
   type SocialProviderId,
-} from "@/modules/sign-in-methods/sign-in.schema";
-import { callbackUrlOf } from "@/modules/sign-in-methods/social";
+} from "@/modules/sign-in-methods";
 import type { Tenant } from "@/modules/tenants";
 import { hostOf, issuerOf } from "@/modules/tenants";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { tenantArg } from "../ids";
-import { signInPolicyService as service } from "./wiring";
 
 export const signInMethodsGuards: Guards = {
   "Query.signInPolicy": onTenant("view", tenantArg),

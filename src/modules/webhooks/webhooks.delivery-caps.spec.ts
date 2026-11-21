@@ -6,7 +6,7 @@ import {
 } from "@softistx/janus-webhooks";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { createSecretBox } from "@/modules/sign-in-methods/secrets";
+import { createSecretBox } from "@/modules/sign-in-methods";
 import {
   createWebhookDelivery,
   endpointIdOf,

@@ -4,7 +4,7 @@ import {
   isEnabled,
   methodsOf,
   signInPolicySchema,
-} from "./sign-in.schema";
+} from "./sign-in-methods.schema";
 
 test("a tenant stored before the policy reads the defaults: passkey and e-mail code on, magic link and password off", () => {
   const policy = signInPolicySchema.parse(undefined);

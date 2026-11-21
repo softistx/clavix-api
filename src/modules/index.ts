@@ -7,7 +7,7 @@ import { health } from "./health";
 import { invitations } from "./invitations";
 import { mfa } from "./mfa";
 import { passkeys } from "./passkeys";
-import { signInMethods } from "./sign-in-methods";
+import { signInMethods } from "./sign-in-methods/sign-in-methods.resolver";
 
 // One entry per module; each module exports its `Resolvers`.
 export const resolvers: Resolvers = mergeResolvers([

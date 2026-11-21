@@ -5,7 +5,7 @@ import { createPasskeyThrottle } from "@/modules/passkeys/throttle";
 import {
   createHomeRealmThrottle,
   createSsoStartThrottle,
-} from "@/modules/sign-in-methods/sso-throttle";
+} from "@/modules/sign-in-methods";
 import {
   createMetadataThrottle,
   createRegisterThrottle,

@@ -10,7 +10,7 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { revokeIfSso } from "@/modules/connections";
-import { requireMethod } from "@/modules/sign-in-methods/gate";
+import { requireMethod } from "@/modules/sign-in-methods";
 import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import {

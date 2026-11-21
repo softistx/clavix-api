@@ -5,9 +5,9 @@ import { ConnectionsService } from "@/modules/connections";
 import {
   createSecretBox,
   emptySecretResealCounts,
+  SignInPolicyService,
   secretContext,
-} from "@/modules/sign-in-methods/secrets";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
+} from "@/modules/sign-in-methods";
 import { TenantsService } from "@/modules/tenants";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";

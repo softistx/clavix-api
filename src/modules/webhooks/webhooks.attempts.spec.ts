@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { createSecretBox } from "@/modules/sign-in-methods/secrets";
+import { createSecretBox } from "@/modules/sign-in-methods";
 import {
   DELIVERIES_PER_ENDPOINT,
   DELIVERY_RETENTION_SECONDS,

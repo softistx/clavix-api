@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { withTenantState } from "./tenant-state";
 

@@ -5,7 +5,7 @@ import {
   emptySecretResealCounts,
   type SecretBox,
   type SecretResealCounts,
-} from "@/modules/sign-in-methods/secrets";
+} from "@/modules/sign-in-methods";
 import { assertWithinQuota } from "@/modules/usage/quota";
 import { WebhookError } from "./webhooks.errors";
 import type { webhookDeliveries, webhookEndpoints } from "./webhooks.model";

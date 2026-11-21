@@ -11,8 +11,10 @@ import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { settled } from "@/modules/auth/outbox";
 import { resealAllTenants, resealExitCode } from "@/modules/keys/reseal";
-import { emptySecretResealCounts } from "@/modules/sign-in-methods/secrets";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
+import {
+  emptySecretResealCounts,
+  SignInPolicyService,
+} from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
