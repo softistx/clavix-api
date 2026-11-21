@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { ownedPurgers } from "@/config/purge";
 import { tenantsService } from "@/config/tenancy";
+import { defined } from "~/narrow";
 import {
   at,
   can,
@@ -80,7 +81,7 @@ describe("the tenant purge guards", () => {
     const a = await seed("alpha");
     await seed("bravo"); // not deleted
     const trashed = await tenantsService.trash(a._id.toHexString());
-    const due = purgeAtOf(trashed.deletedAt as Date);
+    const due = purgeAtOf(defined(trashed.deletedAt, "the deletion date"));
     expect(await run(at(due, -1))).toEqual({ purged: [], failed: [] });
     expect(await janusCount(a._id.toHexString())).toBeGreaterThanOrEqual(
       JANUS.length,
@@ -95,7 +96,9 @@ describe("the tenant purge guards", () => {
     const id = a._id.toHexString();
     const trashed = await tenantsService.trash(id);
     const before = await janusOf(id);
-    expect(await run(at(trashed.deletedAt as Date, 29))).toEqual({
+    expect(
+      await run(at(defined(trashed.deletedAt, "the deletion date"), 29)),
+    ).toEqual({
       purged: [],
       failed: [],
     });
@@ -110,7 +113,7 @@ describe("the tenant purge guards", () => {
     await tenantsService.suspend(paused._id.toHexString());
     const trashed = await tenantsService.trash(restored._id.toHexString());
     await tenantsService.restore(restored._id.toHexString());
-    const far = at(trashed.deletedAt as Date, 400);
+    const far = at(defined(trashed.deletedAt, "the deletion date"), 400);
     expect(await run(far)).toEqual({ purged: [], failed: [] });
     for (const tenant of [restored, live, paused]) {
       expect(await janusCount(tenant._id.toHexString())).toBeGreaterThanOrEqual(

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { JanusError } from "@softistx/janus";
+import { contextOf } from "~/spec-context";
 import { reasonOf, sourceOf } from "./auth.events";
 
 describe("reasonOf", () => {
@@ -17,8 +18,7 @@ describe("reasonOf", () => {
 });
 
 describe("sourceOf", () => {
-  const ctxOf = (request: Request) =>
-    ({ ip: "198.51.100.9", request }) as never;
+  const ctxOf = (request: Request) => contextOf({ request });
 
   test("names the client, its agent and one request id per request", () => {
     const request = new Request("https://acme.example/graphql", {

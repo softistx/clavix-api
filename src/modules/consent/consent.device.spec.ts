@@ -6,6 +6,7 @@ import {
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
+import { z } from "zod";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -19,7 +20,10 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
+import { jsonOf } from "~/json";
 import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { createDeviceThrottle } from "./consent.device-throttle";
@@ -62,8 +66,20 @@ const counting = (budget: number) => {
       const count = (used.get(key) ?? 0) + 1;
       used.set(key, count);
       return count <= budget
-        ? { allowed: true, retryAfter: 0 }
-        : { allowed: false, retryAfter: 42_000 };
+        ? {
+            allowed: true,
+            limit: budget,
+            remaining: budget - count,
+            resetAfter: 0,
+            retryAfter: 0,
+          }
+        : {
+            allowed: false,
+            limit: budget,
+            remaining: 0,
+            resetAfter: 42_000,
+            retryAfter: 42_000,
+          };
     },
   };
 };
@@ -77,9 +93,9 @@ const throttled = (budgets: { user: number; ip?: number; tenant?: number }) => {
     tenant,
     throttle: createDeviceThrottle(
       {
-        deviceUser: user as never,
-        deviceIp: ip as never,
-        deviceTenant: tenant as never,
+        deviceUser: user,
+        deviceIp: ip,
+        deviceTenant: tenant,
       },
       () => {},
     ),
@@ -89,10 +105,6 @@ const throttled = (budgets: { user: number; ip?: number; tenant?: number }) => {
 const app = createTestApp({ oauth: issuers });
 const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 const gql = async (
   slug: string,
   query: string,
@@ -116,12 +128,12 @@ const gql = async (
     body: JSON.stringify({ query, variables }),
   });
   return {
-    result: (await response.json()) as GqlResult,
+    result: await gqlOf(response),
     status: response.status,
     retryAfter: response.headers.get("retry-after"),
   };
 };
-const codeOf = (result: GqlResult) => result.errors?.[0]?.extensions?.code;
+const codeOf = (result: GqlResult) => result.errors?.[0]?.extensions?.["code"];
 
 const REQUEST = `query($code: String!) { oauthDeviceRequest(userCode: $code) { client { id name host } resource scopes { name label } expiresAt } }`;
 const APPROVE = `mutation($code: String!, $scopes: [String!]) { approveOAuthDeviceRequest(userCode: $code, scopes: $scopes) }`;
@@ -139,7 +151,10 @@ const deviceCodes = async (slug: string, scope = "openid email") => {
     }),
   );
   expect(response.status).toBe(200);
-  return (await response.json()) as { device_code: string; user_code: string };
+  return jsonOf(
+    response,
+    z.looseObject({ device_code: z.string(), user_code: z.string() }),
+  );
 };
 
 const poll = (slug: string, deviceCode: string) =>
@@ -220,10 +235,14 @@ describe("the device verification page's data", () => {
         language,
       );
       expect(result.errors).toBeUndefined();
-      return result.data?.["oauthDeviceRequest"] as {
-        client: { id: string; name: string };
-        scopes: { name: string; label: string }[];
-      };
+      return at(
+        result.data,
+        "oauthDeviceRequest",
+        z.looseObject({
+          client: z.looseObject({ id: z.string(), name: z.string() }),
+          scopes: z.array(z.object({ name: z.string(), label: z.string() })),
+        }),
+      );
     };
     const french = await read("fr-CA,en;q=0.8");
     expect(french.client).toMatchObject({ id: "tv", name: "Living room TV" });
@@ -250,10 +269,11 @@ describe("the device verification page's data", () => {
         cookieOf("dacme"),
       );
       expect(result.errors).toBeUndefined();
-      const request = result.data?.["oauthDeviceRequest"] as
-        | { client: unknown }
-        | undefined;
-      return request?.client;
+      return at(
+        result.data,
+        "oauthDeviceRequest",
+        z.looseObject({ client: z.unknown() }),
+      ).client;
     };
     expect(await markOf()).toEqual({
       id: "tv",
@@ -319,10 +339,10 @@ describe("approve and deny", () => {
     expect(approved.result.data?.["approveOAuthDeviceRequest"]).toBe(true);
     const response = await poll("dacme", device_code);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      id_token: string;
-      scope?: string;
-    };
+    const body = await jsonOf(
+      response,
+      z.looseObject({ id_token: z.string(), scope: z.string().optional() }),
+    );
     expect(decodeJwt(body.id_token)["sub"]).toBe(sessions["dacme"]?.userId);
     expect(body.scope).toBe("openid");
     // Decided: gone.
@@ -345,9 +365,9 @@ describe("approve and deny", () => {
     );
     expect(denied.result.errors).toBeUndefined();
     const response = await poll("dacme", device_code);
-    expect(((await response.json()) as { error: string }).error).toBe(
-      "access_denied",
-    );
+    expect(
+      (await jsonOf(response, z.looseObject({ error: z.string() }))).error,
+    ).toBe("access_denied");
   });
 
   test("a session older than five minutes is STEP_UP_REQUIRED and the request stays pending", async () => {

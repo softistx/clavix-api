@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
-import type { MemoryMailer } from "@softistx/mail";
 import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -24,8 +23,13 @@ import { SESSION_COOKIE, secondFactorKeysOf } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
+import { defined } from "~/narrow";
+import { testSecrets } from "~/ports";
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -34,10 +38,7 @@ const origin = {
 } as const;
 const policies = new SignInPolicyService(
   tenantsService,
-  {
-    seal: () => "",
-    open: () => "",
-  } as never,
+  testSecrets(),
   () => {},
 );
 
@@ -55,13 +56,6 @@ const tenantOf = async (slug: string) => {
   return tenant;
 };
 
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
-
 async function gql(
   slug: string,
   query: string,
@@ -78,13 +72,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
-  return {
-    status: response.status,
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const REQUEST = `mutation ($email: EmailAddress!) {
@@ -287,7 +275,7 @@ describe("enrol, activate, sign in with the challenge", () => {
       "verifySignInCode.challenge",
       z.string(),
     );
-    const code = on.recoveryCodes[0] as string;
+    const code = defined(on.recoveryCodes[0], "a recovery code");
     const recovered = await gql(SLUGS.a, RECOVER, {
       challenge,
       recoveryCode: code,
@@ -370,7 +358,7 @@ describe("a keyring rotation", () => {
 
     const tenant = await tenantOf(SLUGS.a);
     const newMaster = new Uint8Array(32).fill(9);
-    const ring = [newMaster, ...masterKeys] as [Uint8Array, ...Uint8Array[]];
+    const ring: [Uint8Array, ...Uint8Array[]] = [newMaster, ...masterKeys];
     // The tenant's own sealed stores are another spec's (src/modules/keys/keys.reseal.spec.ts).
     const none = async () => emptySecretResealCounts();
     const noStores = {
@@ -379,10 +367,10 @@ describe("a keyring rotation", () => {
       socialSecrets: none,
     };
     const report = await resealAllTenants({
-      db: mongo.db as never,
+      db: mongo.db,
       masterKeys: ring,
       resealSecondFactor: resealSecondFactorOf(
-        mongo.db as never,
+        mongo.db,
         secondFactorKeysOf(ring),
       ),
       tenantIds: async () => [tenant.partition],
@@ -399,10 +387,10 @@ describe("a keyring rotation", () => {
 
     // Idempotent: a second pass has nothing to seal again.
     const again = await resealAllTenants({
-      db: mongo.db as never,
+      db: mongo.db,
       masterKeys: ring,
       resealSecondFactor: resealSecondFactorOf(
-        mongo.db as never,
+        mongo.db,
         secondFactorKeysOf(ring),
       ),
       tenantIds: async () => [tenant.partition],
@@ -465,9 +453,7 @@ describe("an unknown host", () => {
       },
       body: JSON.stringify({ query: "{ secondFactor { enabled } }" }),
     });
-    const body = (await response.json()) as {
-      errors?: { extensions: Record<string, unknown> }[];
-    };
-    expect(body.errors?.[0]?.extensions["code"]).toBe("NOT_FOUND");
+    const body = await gqlOf(response);
+    expect(body.errors?.[0]?.extensions?.["code"]).toBe("NOT_FOUND");
   });
 });

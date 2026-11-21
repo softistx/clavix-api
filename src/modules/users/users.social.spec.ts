@@ -3,8 +3,12 @@ import type { SocialProfile } from "@softistx/janus";
 import { unverifiedHolderOf } from "./users.social";
 
 const holder = { id: "u1", type: "customer" } as const;
-const profile = (provider: string) =>
-  ({ provider, accountId: "a1", email: "ada@example.test" }) as SocialProfile;
+const profile = (provider: string): SocialProfile => ({
+  provider,
+  accountId: "a1",
+  email: "ada@example.test",
+  emailVerified: true,
+});
 
 describe("unverifiedHolderOf (nxgt-janus #978)", () => {
   const decide = unverifiedHolderOf((name) =>

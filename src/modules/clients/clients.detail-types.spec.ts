@@ -13,6 +13,7 @@ import { resourcesService } from "@/config/resources";
 import { consentReadyOf, mongoClientDetailTypes } from "@/modules/resources";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
+import { errorBody, jsonOf } from "~/json";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 import { parseClientArgs } from "./clients.cli";
 import { registerClient } from "./clients.register";
@@ -282,7 +283,7 @@ describe("a listed type end to end", () => {
     expect(ok.status).toBe(201);
     const refused = await par([{ type: "transfer", amount: 1 }]);
     expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: string }).error).toBe(
+    expect((await jsonOf(refused, errorBody)).error).toBe(
       "invalid_authorization_details",
     );
   });
@@ -292,7 +293,7 @@ describe("a listed type end to end", () => {
     await mongo.db.detailTypes.raw.deleteMany({ type: "payment" });
     const refused = await par([{ type: "payment", amount: 1 }]);
     expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: string }).error).toBe(
+    expect((await jsonOf(refused, errorBody)).error).toBe(
       "invalid_authorization_details",
     );
   });

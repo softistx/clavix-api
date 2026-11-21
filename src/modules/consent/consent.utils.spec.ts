@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ConsentCtx, WithServers } from "./consent.types";
 import {
   appCtxOf,
   consentCtxOf,
@@ -82,7 +83,14 @@ describe("requestOf", () => {
 
 describe("localeOfCtx", () => {
   test("reads accept-language and tolerates no request", () => {
-    const ctx = (request?: Request) => ({ request }) as never;
+    const base: WithServers = {
+      oauthServers: { serverFor: async () => null },
+      scopeTextsFor: async () => [],
+      detailTextsFor: async () => [],
+      agentsFor: async () => new Map(),
+    };
+    const ctx = (request?: Request): ConsentCtx =>
+      request === undefined ? base : { ...base, request };
     expect(localeOfCtx(ctx())).toBe(localeOfCtx(ctx(new Request("http://x"))));
     expect(
       localeOfCtx(

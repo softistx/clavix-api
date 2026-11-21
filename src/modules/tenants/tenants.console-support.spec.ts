@@ -5,6 +5,7 @@ import {
   planOrFail,
   quotasOut,
 } from "./tenants.console-support";
+import { effectiveQuotas } from "./tenants.plan";
 
 describe("tenants console support", () => {
   it("accepts a known plan and refuses another on `plan`", () => {
@@ -25,7 +26,10 @@ describe("tenants console support", () => {
   });
 
   it("copies the quotas and words a missing tenant", () => {
-    const quotas = { mau: 1 } as unknown as Parameters<typeof quotasOut>[0];
+    const quotas = effectiveQuotas({
+      plan: "free",
+      quotaOverrides: { mau: 1 },
+    });
     const out = quotasOut(quotas);
     expect(out).toEqual(quotas);
     expect(out).not.toBe(quotas);

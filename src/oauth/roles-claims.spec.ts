@@ -1,11 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesService } from "@/config/resources";
 import { rolesFor, rolesService } from "@/config/roles";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { jsonOf, tokenBody } from "~/json";
+import { defined, parsed } from "~/narrow";
+import { recordBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 
 const X = "https://x.roles.test/api";
@@ -16,7 +20,7 @@ let a = new ObjectId();
 let b = new ObjectId();
 
 const claimsOf = (token: string | undefined) =>
-  decodeJwt(token ?? "")["roles"] as string[] | undefined;
+  parsed(z.array(z.string()).optional(), decodeJwt(token ?? "")["roles"]);
 
 beforeAll(async () => {
   a = new ObjectId((await flow.setUp("roles-a", [X, Y])).tenantId);
@@ -68,7 +72,7 @@ describe("the roles claim", () => {
       `Bearer ${tokens.access_token}`,
     );
     expect(response.status).toBe(200);
-    const body = (await response.json()) as Record<string, unknown>;
+    const body = await jsonOf(response, recordBody);
     expect(body["roles"]).toEqual(["auditor", "member"]);
     expect(body["email"]).toBe("user-roles-a@end.test");
   });
@@ -114,7 +118,7 @@ describe("the roles claim", () => {
     });
     const role = await rolesService.create(a, { name: "late" });
     await rolesService.assign(a, role._id.toHexString(), "user-refresh");
-    const client = flow.clients["roles-a"] as { id: string; secret: string };
+    const client = defined(flow.clients["roles-a"], "the roles-a client");
     const refreshed = await flow.post(
       "roles-a",
       "/token",
@@ -126,7 +130,7 @@ describe("the roles claim", () => {
       flow.basic(client.id, client.secret),
     );
     expect(refreshed.status).toBe(200);
-    const body = (await refreshed.json()) as { access_token: string };
+    const body = await jsonOf(refreshed, tokenBody);
     expect(claimsOf(body.access_token)).toEqual(["late"]);
   });
 

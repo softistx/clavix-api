@@ -12,6 +12,13 @@ import { forTenant } from "@/config/users";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
+import { defined } from "~/narrow";
+
+const memberPage = z.looseObject({
+  items: z.array(z.looseObject({ user: z.looseObject({ id: z.string() }) })),
+  nextCursor: z.string().nullable(),
+  totalCount: z.number(),
+});
 
 const owner = consoleAs("rl-owner-a");
 const admin = consoleAs("rl-admin-a");
@@ -79,9 +86,10 @@ beforeAll(async () => {
     uri: "https://api.rl-a.example/v1",
     scopes: ["read"],
   });
-  resourceA = (
-    await mongo.db.resources.raw.findOne({ tenantId: new ObjectId(tenantA) })
-  )?._id.toHexString() as string;
+  resourceA = defined(
+    await mongo.db.resources.raw.findOne({ tenantId: new ObjectId(tenantA) }),
+    "the resource",
+  )._id.toHexString();
   expect(registered).toBeDefined();
 });
 
@@ -132,7 +140,11 @@ describe("CRUD", () => {
       t: tenantA,
       input: { name: "crud.role", description: "d" },
     });
-    const role = created.data?.["createRole"] as Record<string, unknown>;
+    const role = at(
+      created.data,
+      "createRole",
+      z.looseObject({ id: z.string() }),
+    );
     expect(role).toMatchObject({
       name: "crud.role",
       description: "d",
@@ -140,13 +152,15 @@ describe("CRUD", () => {
       managed: false,
       memberCount: 0,
     });
-    const id = role["id"] as string;
+    const id = role.id;
     expect((await viewer(GET, { t: tenantA, id })).data?.["role"]).toEqual(
       role,
     );
-    const listed = (await viewer(LIST, { t: tenantA })).data?.["roles"] as {
-      name: string;
-    }[];
+    const listed = at(
+      (await viewer(LIST, { t: tenantA })).data,
+      "roles",
+      z.array(z.looseObject({ name: z.string() })),
+    );
     expect(listed.map((r) => r.name)).toContain("crud.role");
     const updated = await admin(UPDATE, {
       t: tenantA,
@@ -257,9 +271,11 @@ describe("CRUD", () => {
       ),
     ).toBe("NOT_FOUND");
     await make(admin, tenantA, "on-res", { resourceId: resourceA });
-    const scoped = (await admin(LIST, { t: tenantA, res: resourceA })).data?.[
-      "roles"
-    ] as { resourceId: string }[];
+    const scoped = at(
+      (await admin(LIST, { t: tenantA, res: resourceA })).data,
+      "roles",
+      z.array(z.looseObject({ resourceId: z.string() })),
+    );
     expect(scoped.length).toBeGreaterThan(0);
     expect(scoped.every((r) => r.resourceId === resourceA)).toBe(true);
   });
@@ -357,21 +373,25 @@ describe("assignments", () => {
     const id = await make(admin, tenantA, "paged");
     await admin(ASSIGN, { t: tenantA, r: id, u: userA1 });
     await admin(ASSIGN, { t: tenantA, r: id, u: userA2 });
-    const first = (await viewer(MEMBERS, { t: tenantA, r: id, first: 1 }))
-      .data?.["roleMembers"] as {
-      items: { user: { id: string } }[];
-      nextCursor: string;
-    };
+    const first = at(
+      (await viewer(MEMBERS, { t: tenantA, r: id, first: 1 })).data,
+      "roleMembers",
+      memberPage,
+    );
     expect(first.items.map((m) => m.user.id)).toEqual([userA1]);
     expect(first.nextCursor).toBeString();
-    const second = (
-      await viewer(MEMBERS, {
-        t: tenantA,
-        r: id,
-        first: 1,
-        after: first.nextCursor,
-      })
-    ).data?.["roleMembers"] as { items: { user: { id: string } }[] };
+    const second = at(
+      (
+        await viewer(MEMBERS, {
+          t: tenantA,
+          r: id,
+          first: 1,
+          after: first.nextCursor,
+        })
+      ).data,
+      "roleMembers",
+      memberPage,
+    );
     expect(second.items.map((m) => m.user.id)).toEqual([userA2]);
     expect(
       codeOf(await viewer(MEMBERS, { t: tenantA, r: id, after: "garbage!" })),
@@ -385,13 +405,18 @@ describe("assignments", () => {
     const resolved = await tenantResolver.resolveHost(
       `rl-a.${env.CLAVIX_DOMAIN}`,
     );
-    const auth = await forTenant(resolved as NonNullable<typeof resolved>);
-    const many = spyOn(auth as NonNullable<typeof auth>, "findMany");
-    const one = spyOn(auth as NonNullable<typeof auth>, "findUser");
+    const auth = defined(
+      await forTenant(defined(resolved, "the tenant")),
+      "the tenant's janus",
+    );
+    const many = spyOn(auth, "findMany");
+    const one = spyOn(auth, "findUser");
     try {
-      const page = (await viewer(MEMBERS, { t: tenantA, r: id })).data?.[
-        "roleMembers"
-      ] as { items: { user: { id: string } }[] };
+      const page = at(
+        (await viewer(MEMBERS, { t: tenantA, r: id })).data,
+        "roleMembers",
+        memberPage,
+      );
       expect(page.items.map((m) => m.user.id)).toEqual([userA1, userA2]);
       expect(many).toHaveBeenCalledTimes(1);
       expect(one).not.toHaveBeenCalled();
@@ -406,11 +431,7 @@ describe("assignments", () => {
     await admin(ASSIGN, { t: tenantA, r: id, u: userA1 });
     await admin(ASSIGN, { t: tenantA, r: id, u: userA2 });
     const page = (result: Awaited<ReturnType<typeof viewer>>) =>
-      result.data?.["roleMembers"] as {
-        items: unknown[];
-        nextCursor: string | null;
-        totalCount: number;
-      };
+      at(result.data, "roleMembers", memberPage);
     expect(page(await viewer(MEMBERS, { t: tenantA, r: id })).totalCount).toBe(
       2,
     );
@@ -469,7 +490,7 @@ describe("assignments", () => {
       userId: userA1,
       createdAt: new Date(),
       updatedAt: new Date(),
-    } as never);
+    });
     expect((await admin(DELETE, { t: tenantA, id })).data?.["deleteRole"]).toBe(
       true,
     );
@@ -487,10 +508,11 @@ describe("assignments", () => {
     await admin(ASSIGN, { t: tenantA, r: one, u: userA1 });
     await admin(ASSIGN, { t: tenantA, r: one, u: userA2 });
     await adminB(ASSIGN, { t: tenantB, r: theirs, u: userB1 });
-    const list = (await admin(LIST, { t: tenantA })).data?.["roles"] as {
-      name: string;
-      memberCount: number;
-    }[];
+    const list = at(
+      (await admin(LIST, { t: tenantA })).data,
+      "roles",
+      z.array(z.looseObject({ name: z.string(), memberCount: z.number() })),
+    );
     const by = Object.fromEntries(list.map((r) => [r.name, r.memberCount]));
     expect(by["cnt-same"]).toBe(2);
     expect(by["cnt-empty"]).toBe(0);
@@ -504,7 +526,7 @@ describe("assignments", () => {
       tenantId: new ObjectId(tenantA),
       uri,
     });
-    const rid = found?._id.toHexString() as string;
+    const rid = defined(found, "the resource")._id.toHexString();
     const role = await rolesService.create(new ObjectId(tenantA), {
       name: "res-managed",
       resourceId: rid,
@@ -529,7 +551,7 @@ describe("assignments", () => {
       tenantId: new ObjectId(tenantA),
       uri,
     });
-    const rid = found?._id.toHexString() as string;
+    const rid = defined(found, "the resource")._id.toHexString();
     const role = await make(admin, tenantA, "res-bound", { resourceId: rid });
     await admin(ASSIGN, { t: tenantA, r: role, u: userA1 });
     await mongo.db.adminEvents.raw.deleteMany({});
@@ -598,9 +620,9 @@ describe("a repeat after a failed record", () => {
     await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
     const again = await admin(CREATE, { t: tenantA, input });
     expect(again.errors).toBeUndefined();
-    expect((again.data?.["createRole"] as { id: string } | undefined)?.id).toBe(
-      id,
-    );
+    expect(
+      at(again.data, "createRole", z.looseObject({ id: z.string() })).id,
+    ).toBe(id);
     expect((await events()).map((event) => event["action"])).toEqual([
       "role.create",
     ]);

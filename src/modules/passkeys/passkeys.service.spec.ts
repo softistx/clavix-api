@@ -1,31 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import type { GraphQLError } from "graphql";
+import { GraphQLError } from "graphql";
+import type { TenantJanus } from "@/modules/users";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { janusOver, signedAs } from "~/janus-double";
+import { instance } from "~/narrow";
+import { contextOf, tenantStandIn } from "~/spec-context";
 import { PasskeysService } from "./passkeys.service";
 
 // The service over stubbed ports: the refusals that come before janus is
 // asked. The sign-in and the management end to end are the HTTP specs beside.
-const serviceOver = (auth: object | null) =>
+const serviceOver = (auth: TenantJanus | null) =>
   new PasskeysService({
-    issuers: { forRequest: async () => auth as never },
+    issuers: { forRequest: async () => auth },
     usage: { recordActive: async () => {} },
   });
 
-const ctxOf = (
-  tenant: object | null = { tenantId: "t1", status: "active" },
-) => {
+const ctxOf = (tenant: ResolvedTenant | null = tenantStandIn()) => {
   const checks: unknown[] = [];
-  const ctx = {
-    request: new Request("https://acme.example/graphql"),
-    ip: "198.51.100.9",
-    tenant: async () => tenant,
-    set: { headers: new Headers() },
-    passkeyThrottle: { check: async (key: unknown) => void checks.push(key) },
-  };
-  return { ctx: ctx as never, checks };
+  const ctx = contextOf({
+    tenant,
+    throttles: {
+      passkeyThrottle: { check: async (key) => void checks.push(key) },
+    },
+  });
+  return { ctx, checks };
 };
 
 const codeOf = async (run: () => Promise<unknown>) =>
-  ((await run().catch((error: GraphQLError) => error)) as GraphQLError)
+  instance(await run().catch((error: unknown) => error), GraphQLError)
     .extensions["code"];
 
 describe("PasskeysService", () => {
@@ -41,18 +43,15 @@ describe("PasskeysService", () => {
   });
 
   test("a suspended tenant refuses the sign-in options before any budget is spent", async () => {
-    const { ctx, checks } = ctxOf({ tenantId: "t1", status: "suspended" });
-    expect(await codeOf(() => serviceOver({}).signInOptions(ctx))).toBe(
-      "TENANT_SUSPENDED",
-    );
+    const { ctx, checks } = ctxOf(tenantStandIn({ status: "suspended" }));
+    expect(
+      await codeOf(() => serviceOver(janusOver()).signInOptions(ctx)),
+    ).toBe("TENANT_SUSPENDED");
     expect(checks).toHaveLength(0);
   });
 
   test("the management needs a session", async () => {
-    const service = serviceOver({
-      authenticate: async () => null,
-      passkeys: {},
-    });
+    const service = serviceOver(janusOver({ authenticate: async () => null }));
     const { ctx } = ctxOf();
     expect(await codeOf(() => service.list(ctx))).toBe("UNAUTHENTICATED");
     expect(await codeOf(() => service.registrationOptions(ctx))).toBe(
@@ -64,10 +63,9 @@ describe("PasskeysService", () => {
   });
 
   test("a registration answer that is not JSON is BAD_USER_INPUT", async () => {
-    const service = serviceOver({
-      authenticate: async () => ({ user: { id: "u1" } }),
-      passkeys: {},
-    });
+    const service = serviceOver(
+      janusOver({ authenticate: async () => signedAs("u1") }),
+    );
     expect(
       await codeOf(() => service.register(ctxOf().ctx, "c", "{nope", "Key")),
     ).toBe("BAD_USER_INPUT");

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { domainsService, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
 
 const admin = consoleAs("dom-admin-a");
@@ -30,7 +32,9 @@ const LIST = `query($tenantId: ID!) { domains(tenantId: $tenantId) { ${FIELDS} }
 const GET = `query($tenantId: ID!, $id: ID!) { domain(tenantId: $tenantId, id: $id) { ${FIELDS} } }`;
 
 const idOf = (result: Awaited<ReturnType<typeof admin>>) =>
-  String((result.data?.["addDomain"] as { id: string } | undefined)?.id);
+  String(
+    at(result.data, "addDomain", z.object({ id: z.string() }).optional())?.id,
+  );
 
 beforeAll(async () => {
   tenantA = (await tenantsService.create({ slug: "dom-a", name: "A" })).id;
@@ -73,12 +77,16 @@ describe("addDomain", () => {
       host: "Auth.Acme.com.",
     });
     expect(result.errors).toBeUndefined();
-    const domain = result.data?.["addDomain"] as {
-      host: string;
-      status: string;
-      primary: boolean;
-      txtRecord: { name: string; value: string };
-    };
+    const domain = at(
+      result.data,
+      "addDomain",
+      z.object({
+        host: z.string(),
+        status: z.string(),
+        primary: z.boolean(),
+        txtRecord: z.object({ name: z.string(), value: z.string() }),
+      }),
+    );
     expect(domain).toMatchObject({
       host: "auth.acme.com",
       status: "PENDING",
@@ -100,8 +108,9 @@ describe("addDomain", () => {
       const result = await admin(ADD, { tenantId: tenantA, host });
       expect(codeOf(result)).toBe("BAD_USER_INPUT");
       expect(
-        (result.errors?.[0]?.extensions as { field?: string } | undefined)
-          ?.field,
+        z
+          .object({ field: z.string().optional() })
+          .parse(result.errors?.[0]?.extensions).field,
       ).toBe("host");
     },
   );
@@ -169,11 +178,11 @@ describe("verify cooldown", () => {
     ).toBeUndefined();
     const again = await admin(VERIFY, { tenantId: tenantA, id });
     expect(codeOf(again)).toBe("VERIFY_COOLDOWN");
-    const extensions = again.errors?.[0]?.extensions as
-      | { retryAfter?: number }
-      | undefined;
-    expect(extensions?.retryAfter).toBeGreaterThan(0);
-    expect(extensions?.retryAfter).toBeLessThanOrEqual(60);
+    const extensions = z
+      .object({ retryAfter: z.number().optional() })
+      .parse(again.errors?.[0]?.extensions);
+    expect(extensions.retryAfter).toBeGreaterThan(0);
+    expect(extensions.retryAfter).toBeLessThanOrEqual(60);
   });
 });
 
@@ -184,7 +193,7 @@ describe("reads, isolation, remove, primary", () => {
     const id = idOf(added);
     const list = await viewer(LIST, { tenantId: tenantA });
     expect(
-      ((list.data?.["domains"] as { host: string }[] | undefined) ?? []).map(
+      at(list.data, "domains", z.array(z.object({ host: z.string() }))).map(
         (d) => d.host,
       ),
     ).toEqual(["r.acme.com"]);
@@ -205,10 +214,14 @@ describe("reads, isolation, remove, primary", () => {
       tenantId: tenantA,
       id: idOf(added),
     });
-    const payload = result.data?.["verifyDomain"] as {
-      domain: { status: string };
-      failure: string;
-    };
+    const payload = at(
+      result.data,
+      "verifyDomain",
+      z.object({
+        domain: z.object({ status: z.string() }),
+        failure: z.string(),
+      }),
+    );
     expect(payload.domain.status).toBe("PENDING");
     expect(["NO_RECORD", "LOOKUP_FAILED"]).toContain(payload.failure);
     expect(
@@ -301,7 +314,11 @@ describe("setPrimaryDomain at the very same time", () => {
       ids.map((id) => admin(PRIMARY, { tenantId: tenantA, id })),
     );
     const listed = await admin(LIST, { tenantId: tenantA });
-    const rows = listed.data?.["domains"] as { primary: boolean }[];
+    const rows = at(
+      listed.data,
+      "domains",
+      z.array(z.object({ primary: z.boolean() })),
+    );
     expect(rows.filter((row) => row.primary)).toHaveLength(1);
   });
 });

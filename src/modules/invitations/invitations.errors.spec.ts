@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { JanusError } from "@softistx/janus";
+import { GraphQLError } from "graphql";
+import { instance } from "~/narrow";
 import {
   codes,
   goneCode,
@@ -39,9 +41,9 @@ describe("invitations errors", () => {
       const refused = await guarded(async () => {
         throw janusError(code);
       }).catch((e: unknown) => e);
-      expect(
-        (refused as { extensions: { code: string } }).extensions.code,
-      ).toBe("INVITATION_INVALID");
+      expect(instance(refused, GraphQLError).extensions["code"]).toBe(
+        "INVITATION_INVALID",
+      );
     }
     const store = janusError("STORE_FAILED");
     await expect(

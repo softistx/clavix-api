@@ -10,6 +10,8 @@ import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
 import { registerClient } from "@/modules/clients";
+import { jsonOf } from "~/json";
+import { answerBody, recordBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 
 const SOURCE = "https://source.tx.example/api";
@@ -18,16 +20,6 @@ const OTHER = "https://other.tx.example/api";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const SUBJECT = "user-subject";
-
-interface Answer {
-  access_token?: string;
-  refresh_token?: string | null;
-  issued_token_type?: string;
-  token_type?: string;
-  scope?: string;
-  expires_in?: number;
-  error?: string;
-}
 
 const ids: Record<string, string> = {};
 const secrets: Record<string, string> = {};
@@ -96,18 +88,18 @@ const exchange = (
     flow.basic(client.id, client.secret),
   );
 
-const answerOf = async (response: Response) =>
-  (await response.json()) as Answer;
+const answerOf = async (response: Response) => jsonOf(response, answerBody);
 
 const introspect = async (slug: string, token: string) =>
-  (await (
+  jsonOf(
     await flow.post(
       slug,
       "/introspect",
       { token },
       flow.basic("backend", flow.clients[slug]?.secret ?? ""),
-    )
-  ).json()) as Record<string, unknown>;
+    ),
+    recordBody,
+  );
 
 beforeAll(async () => {
   for (const slug of ["tx-a", "tx-b", "tx-norules"]) {

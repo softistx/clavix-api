@@ -1,11 +1,14 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
+import { errorBody, jsonOf, tokenBody } from "~/json";
+import { deviceCodesBody, recordBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 import { withTenantState } from "./tenant-state";
 
@@ -13,14 +16,12 @@ const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const DEVICES = "oauthPartitionedDeviceAuthorizations";
 
-interface Codes {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  verification_uri_complete: string;
-  expires_in: number;
-  interval: number;
-}
+const codesBody = deviceCodesBody.extend({
+  verification_uri: z.string(),
+  verification_uri_complete: z.string(),
+  expires_in: z.number(),
+  interval: z.number(),
+});
 
 const register = (
   slug: string,
@@ -57,7 +58,7 @@ const ask = (slug: string, clientId: string, scope = "openid email") =>
 const codesOf = async (slug: string, clientId = "tv", scope?: string) => {
   const response = await ask(slug, clientId, scope);
   expect(response.status).toBe(200);
-  return (await response.json()) as Codes;
+  return jsonOf(response, codesBody);
 };
 
 const poll = (slug: string, clientId: string, deviceCode: string) =>
@@ -68,7 +69,7 @@ const poll = (slug: string, clientId: string, deviceCode: string) =>
   });
 
 const errorOf = async (response: Response) =>
-  ((await response.json()) as { error: string }).error;
+  (await jsonOf(response, errorBody)).error;
 
 // A poll may not come before the interval: the specs that poll twice move the
 // last poll into the past instead of waiting.
@@ -105,11 +106,7 @@ describe("the device authorization grant", () => {
     await rewind();
     const tokens = await poll("dev-a", "tv", codes.device_code);
     expect(tokens.status).toBe(200);
-    const body = (await tokens.json()) as {
-      access_token: string;
-      id_token?: string;
-      refresh_token?: string;
-    };
+    const body = await jsonOf(tokens, tokenBody);
     expect(body.id_token).toBeDefined();
     expect(decodeJwt(body.id_token ?? "")["sub"]).toBe("user-1");
     expect(decodeJwt(body.access_token)["sub"]).toBe("user-1");
@@ -128,9 +125,7 @@ describe("the device authorization grant", () => {
     await approve("dev-a", codes.user_code);
     const tokens = await poll("dev-a", "tv-refresh", codes.device_code);
     expect(tokens.status).toBe(200);
-    expect(
-      ((await tokens.json()) as { refresh_token?: string }).refresh_token,
-    ).toBeTruthy();
+    expect((await jsonOf(tokens, tokenBody)).refresh_token).toBeTruthy();
   });
 
   test("polling before the interval is slow_down", async () => {
@@ -201,9 +196,10 @@ describe("the device authorization grant", () => {
   });
 
   test("the discovery document announces the endpoint and the grant", async () => {
-    const meta = (await (
-      await flow.get("dev-a", "/.well-known/oauth-authorization-server")
-    ).json()) as Record<string, unknown>;
+    const meta = await jsonOf(
+      await flow.get("dev-a", "/.well-known/oauth-authorization-server"),
+      recordBody,
+    );
     expect(meta["device_authorization_endpoint"]).toBe(
       flow.url("dev-a", "/device_authorization"),
     );

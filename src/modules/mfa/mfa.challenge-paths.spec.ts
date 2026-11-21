@@ -9,7 +9,6 @@ import {
   test,
 } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
-import type { MemoryMailer } from "@softistx/mail";
 import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -25,12 +24,15 @@ import { SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { fetchDouble } from "~/fetch-double";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
 
 // The second-factor challenge on the sign-in paths mfa.spec does not walk
 // (a magic link, a social provider), its freshness window, a suspended
 // tenant, and the usage it records (clavix-api#290).
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -48,13 +50,6 @@ const tenantOf = async (slug: string) => {
   return tenant;
 };
 
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
-
 async function gql(
   slug: string,
   query: string,
@@ -71,13 +66,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
-  return {
-    status: response.status,
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const CHALLENGE = "... on SecondFactorChallenge { challenge methods returnTo }";
@@ -181,8 +170,8 @@ function github(email: string) {
     new Response(JSON.stringify(value), {
       headers: { ...clientHeaders, "content-type": "application/json" },
     });
-  const fake = (async (input: unknown, init?: RequestInit) => {
-    const { url } = new Request(input as string, init);
+  const fake = fetchDouble(async (input, init) => {
+    const { url } = new Request(input, init);
     if (url === "https://github.com/login/oauth/access_token") {
       return json({ access_token: "gh-access", token_type: "bearer" });
     }
@@ -193,7 +182,7 @@ function github(email: string) {
       return json([{ email, primary: true, verified: true }]);
     }
     return new Response("unexpected", { status: 500 });
-  }) as typeof fetch;
+  });
   return async <T>(work: () => Promise<T>): Promise<T> => {
     const real = globalThis.fetch;
     globalThis.fetch = fake;

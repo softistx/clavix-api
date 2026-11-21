@@ -6,6 +6,7 @@ import { mongo } from "@/config/db";
 import { eventBus, eventFailures } from "@/config/events";
 import { tenantsService } from "@/config/tenancy";
 import { purgeAtOf } from "@/modules/tenants";
+import { defined } from "~/narrow";
 import { DAY, run, seed, useTenantPurgeHooks } from "~/tenant-purge";
 import { enforceRetention } from "./audit.retention";
 
@@ -39,7 +40,7 @@ const adminEvent = (tenantId: ObjectId | null, days: number) =>
     target: { type: "tenant", id: "x" },
     at: ago(days),
     requestId: "r",
-  } as never);
+  });
 const deps = () => ({
   targets: () => tenantsService.retentionTargets(),
   deleteAuthBefore: (id: string, before: Date) =>
@@ -268,7 +269,7 @@ describe("the retention", () => {
         ip: null,
         userAgent: null,
         requestId: "r",
-      })) as never[],
+      })),
     );
     const report = await enforceRetention(deps(), NOW);
     expect(report.removed).toBe(1_200);
@@ -284,7 +285,7 @@ describe("a tenant purge", () => {
     await record(idOf(b), 1);
     await adminEvent(a._id, 1);
     const trashed = await tenantsService.trash(idOf(a));
-    const due = purgeAtOf(trashed.deletedAt as Date);
+    const due = purgeAtOf(defined(trashed.deletedAt, "the trash date"));
     expect((await run(due)).purged).toContain(idOf(a));
     expect(await authCount(a)).toBe(0);
     expect(await authCount(b)).toBe(1);

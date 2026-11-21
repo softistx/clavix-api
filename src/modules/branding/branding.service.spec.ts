@@ -6,6 +6,7 @@ import {
   parse,
 } from "graphql";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
 import { brandingService } from "@/config/branding";
@@ -13,12 +14,14 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { noThrottle } from "@/config/no-ops";
 import { tenantsService } from "@/config/tenancy";
-import type { AuditAction, AuditTarget } from "@/console/audit";
 import type { ConsoleContext } from "@/console/context";
-import type { Permission } from "@/console/model";
+import { createExclusive } from "@/console/exclusive";
 import { consoleSchema } from "@/console/schema";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { jsonOf } from "~/json";
+import { withMembers } from "~/members";
 import {
   BrandingConflictError,
   BrandingContrastError,
@@ -70,28 +73,25 @@ const users = {
   adminB: "u-admin-b",
 };
 
-const ctxFor = (userId: string): ConsoleContext =>
-  ({
-    request: new Request("https://console.clavix.test/graphql"),
-    principal: { userId },
-    admins: {},
-    members: {},
-    users: {},
-    exclusive: async <T>(_key: string, work: () => Promise<T>) => work(),
-    budgets: {},
-    activity: {},
+const ctxFor = (userId: string): ConsoleContext => {
+  const context = withMembers({
+    exclusive: createExclusive(null),
     access,
     // Every id is an ordinary tenant (not `clavix`): the tenant-level guard decides.
     directory: {
       emailVerified: async () => true,
-      tenantsByIds: async (ids: readonly string[]) =>
-        ids.map((id) => ({ id, slug: `t-${id}`, name: id })),
+      tenantsByIds: async (ids) =>
+        ids.map((id) => ({
+          id,
+          slug: `t-${id}`,
+          name: id,
+          status: "active",
+          plan: "free",
+        })),
     },
-    can: (permission: Permission, tenantId: string) =>
-      access.can(userId, permission, tenantId),
-    canPlatform: (permission: Permission) =>
-      access.canPlatform(userId, permission),
-    audit: (action: AuditAction, target: AuditTarget) =>
+    can: (permission, tenantId) => access.can(userId, permission, tenantId),
+    canPlatform: (permission) => access.canPlatform(userId, permission),
+    audit: (action, target) =>
       adminEventRecorder.record({
         actor: userId,
         action,
@@ -99,7 +99,9 @@ const ctxFor = (userId: string): ConsoleContext =>
         target: { type: target.type, id: target.id },
         requestId: "branding-spec",
       }),
-  }) as unknown as ConsoleContext;
+  });
+  return { ...context, principal: { ...context.principal, userId } };
+};
 
 const eventsOf = (tenantId: string) =>
   mongo.db.adminEvents.raw
@@ -113,21 +115,28 @@ const run = async (
   source: string,
   userId: string,
   variableValues?: Record<string, unknown>,
-) =>
-  (await experimentalExecuteIncrementally({
+): Promise<ExecutionResult> => {
+  const result = await experimentalExecuteIncrementally({
     schema: consoleSchema,
     document: parse(source),
     contextValue: ctxFor(userId),
     ...(variableValues === undefined ? {} : { variableValues }),
-  })) as ExecutionResult;
+  });
+  if ("initialResult" in result) throw new Error("expected a single result");
+  return result;
+};
 
-interface Payload {
-  changed: boolean;
-  warnings: string[];
-  branding: { themeName: string; css: string; logoUrl: string | null };
-}
-const payloadOf = (result: { data?: unknown }) =>
-  (result.data as { updateBranding: Payload }).updateBranding;
+const payloadSchema = z.object({
+  changed: z.boolean(),
+  warnings: z.array(z.string()),
+  branding: z.object({
+    themeName: z.string(),
+    css: z.string(),
+    logoUrl: z.string().nullable(),
+  }),
+});
+const payloadOf = (result: ExecutionResult) =>
+  at(result.data, "updateBranding", payloadSchema);
 
 const UPDATE = `mutation ($t: ID!, $i: UpdateBrandingInput!) {
   updateBranding(tenantId: $t, input: $i) {
@@ -351,7 +360,7 @@ describe("updateBranding", () => {
     });
     expect(payloadOf(changed).changed).toBe(true);
     const read = await run(READ, users.viewerA, { t: tenantA });
-    expect((read.data as { branding: unknown }).branding).toMatchObject({
+    expect(at(read.data, "branding")).toMatchObject({
       displayName: "Acme 2",
       seed: "#7a3cff",
     });
@@ -560,8 +569,18 @@ describe("the public side", () => {
   });
 
   test("tenantBranding answers by host, anonymously, and is null elsewhere", async () => {
+    const answer = z.object({
+      data: z
+        .object({
+          tenantBranding: z
+            .looseObject({ logoUrl: z.string().nullable() })
+            .nullable(),
+        })
+        .optional(),
+      errors: z.unknown().optional(),
+    });
     const ask = async (h: string) =>
-      (await (
+      jsonOf(
         await app.request(`${h}/graphql`, {
           method: "POST",
           headers: {
@@ -573,11 +592,9 @@ describe("the public side", () => {
             query:
               "{ tenantBranding { displayName themeName css logoUrl backgroundPreset motif } }",
           }),
-        })
-      ).json()) as {
-        data?: { tenantBranding: { logoUrl: string } | null };
-        errors?: unknown;
-      };
+        }),
+        answer,
+      );
     const a = await ask(host(slugA));
     expect(a.data?.tenantBranding).toMatchObject({
       displayName: "Acme",

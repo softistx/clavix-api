@@ -21,6 +21,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
+import { gqlOf } from "~/gql";
 import { quietOAuth } from "~/ports";
 
 // A tenant-level role on the `clavix` tenant is not the platform's: every
@@ -85,7 +86,7 @@ const as =
       },
       body: JSON.stringify({ query }),
     });
-    return (await response.json()) as ConsoleResult;
+    return gqlOf(response);
   };
 const adminCaller = as(() => ADMIN);
 const tenantViewer = as(() => VIEWER);

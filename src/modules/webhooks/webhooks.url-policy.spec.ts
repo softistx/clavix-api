@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { fetchDouble } from "~/fetch-double";
 import { WebhookUrlError } from "./webhooks.errors";
 import {
   checkWebhookUrl,
@@ -75,10 +76,10 @@ describe("checkWebhookUrl", () => {
 describe("guardedFetch", () => {
   test("re-checks the address on every send (DNS rebinding)", async () => {
     const sent: RequestInit[] = [];
-    const send = (async (_url: unknown, init?: RequestInit) => {
+    const send = fetchDouble(async (_url, init) => {
       sent.push(init ?? {});
       return new Response("ok");
-    }) as unknown as typeof fetch;
+    });
     const guarded = guardedFetch(policy(), send);
     answers.set("flip.example.com", ["93.184.216.34"]);
     await guarded("https://flip.example.com/h", { method: "POST" });

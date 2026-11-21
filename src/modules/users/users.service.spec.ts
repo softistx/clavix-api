@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TenantInvitations } from "@/modules/invitations";
 import { TenantUnavailableError } from "@/modules/invitations";
+import { acmeJanus } from "~/acme-janus";
 import { UsersService } from "./users.service";
 import type { TenantJanus } from "./users.tenant-janus";
 
@@ -13,10 +14,13 @@ const away: TenantInvitations = {
   pending: async () => {
     throw new TenantUnavailableError();
   },
+  resend: async () => {
+    throw new TenantUnavailableError();
+  },
   revoke: async () => {
     throw new TenantUnavailableError();
   },
-} as unknown as TenantInvitations;
+};
 const users = new UsersService({
   janusOf: async () => null,
   grantsOf: async () => null,
@@ -49,10 +53,17 @@ describe("a tenant that went away mid-request", () => {
 
 const poolUser = (id: string, email: string, name: string) => ({
   id,
-  logins: { email },
+  type: "user" as const,
+  email,
   name,
+  emailVerified: true,
   active: true,
-  fields: { email, name },
+  hasPassword: false,
+  hasSecondFactor: false,
+  avatar: null,
+  version: 1,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
 });
 
 describe("lookup", () => {
@@ -61,13 +72,14 @@ describe("lookup", () => {
     const byMail = poolUser("1", "ada@x.test", "Other");
     const both = poolUser("2", "ada.b@x.test", "Ada B");
     const byName = poolUser("3", "zz@x.test", "Ada Lovelace");
-    const auth = {
+    const auth: TenantJanus = {
+      ...acmeJanus(),
       list: async (filter: Record<string, unknown>) => {
         calls.push(filter);
         const items = "emailPrefix" in filter ? [byMail, both] : [both, byName];
         return { items, nextCursor: null };
       },
-    } as unknown as TenantJanus;
+    };
     const users = new UsersService({
       janusOf: async () => auth,
       grantsOf: async () => null,

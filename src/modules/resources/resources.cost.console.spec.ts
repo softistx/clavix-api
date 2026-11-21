@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from "bun:test";
+import { z } from "zod";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { mongo } from "@/config/db";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { consoleRequestAs } from "~/console";
+import { jsonOf } from "~/json";
 
 // The console UI's Applications read (clavix-ui `app/api/resources.server.ts`): every resource with
 // its scopes and detail types, nested four lists deep. With graxia's default cost limit (5 000, ten
@@ -38,10 +40,18 @@ describe("console operation cost", () => {
     const response = await consoleRequestAs(OWNER)(APPLICATIONS, {
       tenantId: clavix,
     });
-    const body = (await response.json()) as {
-      data?: { resources: unknown[]; scopes: unknown[] } | null;
-      errors?: { extensions?: { code?: string } }[];
-    };
+    const body = await jsonOf(
+      response,
+      z.object({
+        data: z
+          .object({
+            resources: z.array(z.unknown()),
+            scopes: z.array(z.unknown()),
+          })
+          .nullish(),
+        errors: z.array(z.unknown()).optional(),
+      }),
+    );
     expect(body.errors).toBeUndefined();
     expect(Array.isArray(body.data?.resources)).toBe(true);
   });
@@ -55,10 +65,24 @@ describe("console operation cost", () => {
       `query($tenantId: ID!) { ${aliased} }`,
       { tenantId: clavix },
     );
-    const body = (await response.json()) as {
-      data?: unknown;
-      errors?: { extensions?: { code?: string; limit?: { name?: string } } }[];
-    };
+    const body = await jsonOf(
+      response,
+      z.object({
+        data: z.unknown().optional(),
+        errors: z
+          .array(
+            z.object({
+              extensions: z
+                .object({
+                  code: z.string().optional(),
+                  limit: z.object({ name: z.string().optional() }).optional(),
+                })
+                .optional(),
+            }),
+          )
+          .optional(),
+      }),
+    );
     expect(body.data).toBeUndefined();
     expect(body.errors?.[0]?.extensions?.limit?.name).toBe("cost");
   });

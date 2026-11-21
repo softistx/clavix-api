@@ -1,35 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import type { GraphQLError } from "graphql";
+import { GraphQLError } from "graphql";
+import { tenantMail } from "@/config/mail";
+import type { TenantJanus } from "@/modules/users";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { janusOver } from "~/janus-double";
+import { instance } from "~/narrow";
+import { contextOf, tenantStandIn } from "~/spec-context";
 import { MfaService } from "./mfa.service";
 
 // The service over stubbed ports: the refusals that come before janus is
 // asked. The sign-ins and the step-ups end to end are the HTTP specs beside.
-const serviceOver = (auth: object | null) =>
+const serviceOver = (auth: TenantJanus | null) =>
   new MfaService({
-    issuers: { forRequest: async () => auth as never },
+    issuers: { forRequest: async () => auth },
     now: () => new Date(),
-    mailOf: () => ({}) as never,
+    mailOf: tenantMail,
     usage: { recordActive: async () => {} },
   });
 
-const ctxOf = (
-  tenant: object | null = { tenantId: "t1", status: "active" },
-  user: object | null = null,
-) => {
+const ctxOf = (tenant: ResolvedTenant | null = tenantStandIn()) => {
   const checks: unknown[] = [];
-  const ctx = {
-    request: new Request("https://acme.example/graphql"),
-    ip: "198.51.100.9",
-    tenant: async () => tenant,
-    set: { headers: new Headers() },
-    passkeyThrottle: { check: async (key: unknown) => void checks.push(key) },
-    janus: { user: async () => user },
-  };
-  return { ctx: ctx as never, checks };
+  const ctx = contextOf({
+    tenant,
+    throttles: {
+      passkeyThrottle: { check: async (key) => void checks.push(key) },
+    },
+  });
+  return { ctx, checks };
 };
 
 const codeOf = async (run: () => Promise<unknown>) =>
-  ((await run().catch((error: GraphQLError) => error)) as GraphQLError)
+  instance(await run().catch((error: unknown) => error), GraphQLError)
     .extensions["code"];
 
 describe("MfaService", () => {
@@ -48,8 +49,8 @@ describe("MfaService", () => {
   });
 
   test("a suspended tenant refuses the passkey options before any budget is spent", async () => {
-    const service = serviceOver({});
-    const { ctx, checks } = ctxOf({ tenantId: "t1", status: "suspended" });
+    const service = serviceOver(janusOver());
+    const { ctx, checks } = ctxOf(tenantStandIn({ status: "suspended" }));
     expect(await codeOf(() => service.passkeyOptions(ctx, "c"))).toBe(
       "TENANT_SUSPENDED",
     );
@@ -57,7 +58,7 @@ describe("MfaService", () => {
   });
 
   test("a step-up confirmation needs a signed-in user", async () => {
-    const service = serviceOver({ authenticate: async () => null });
+    const service = serviceOver(janusOver({ authenticate: async () => null }));
     const { ctx } = ctxOf();
     expect(
       await codeOf(() => service.confirmPasskeyStepUp(ctx, "c", "{}")),

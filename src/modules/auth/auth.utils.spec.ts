@@ -7,7 +7,8 @@ const requestWith = (headers: Record<string, string>) =>
 describe("currentUserOf", () => {
   test("keeps the four public fields and nulls a missing name", () => {
     const user = { id: "u1", email: "a@x.test", emailVerified: true };
-    expect(currentUserOf({ ...user, secret: "no" } as typeof user)).toEqual({
+    const stored = { ...user, secret: "no" };
+    expect(currentUserOf(stored)).toEqual({
       ...user,
       name: null,
     });

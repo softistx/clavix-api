@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
-import type { Tenant, TenantsService } from "@/modules/tenants";
+import { GraphQLError } from "graphql";
+import { tenantsOver } from "~/oauth-tenants";
+import { tenantDoc } from "~/tenant-doc";
 import { agentsOff, type OAuthPolicy } from "./oauth-policy.schema";
 import { OAuthPolicyService } from "./oauth-policy.service";
 
@@ -12,21 +14,18 @@ const base = (): OAuthPolicy => ({
 
 // A tenants service of one tenant, holding its policy in memory.
 const fake = (oauth: OAuthPolicy, live = true) => {
-  const state = { tenant: { oauth } as unknown as Tenant, writes: 0 };
-  const tenants = {
+  const state = { tenant: tenantDoc({ oauth }), writes: 0 };
+  const tenants = tenantsOver({
     liveByIds: async () => (live ? [state.tenant] : []),
-    updateOAuth: async (
-      _id: unknown,
-      change: (tenant: Tenant) => OAuthPolicy | null,
-    ) => {
+    updateOAuth: async (_id, change) => {
       const next = change(state.tenant);
       if (next !== null) {
         state.writes++;
-        state.tenant = { ...state.tenant, oauth: next } as Tenant;
+        state.tenant = { ...state.tenant, oauth: next };
       }
       return state.tenant;
     },
-  } as unknown as TenantsService;
+  });
   return { state, service: new OAuthPolicyService(tenants) };
 };
 
@@ -34,7 +33,7 @@ const code = async (run: () => Promise<unknown>) => {
   try {
     await run();
   } catch (error) {
-    return (error as { extensions?: { code?: string } }).extensions?.code;
+    return error instanceof GraphQLError ? error.extensions["code"] : undefined;
   }
   return undefined;
 };
@@ -77,19 +76,23 @@ describe("OAuthPolicyService", () => {
   });
 
   test("a lost race is CONFLICT; any other failure passes through", async () => {
-    const lost = new OAuthPolicyService({
-      liveByIds: async () => [{ oauth: base() }],
-      updateOAuth: async () => {
-        throw new OptimisticLockError("lost");
-      },
-    } as unknown as TenantsService);
+    const lost = new OAuthPolicyService(
+      tenantsOver({
+        liveByIds: async () => [tenantDoc({ oauth: base() })],
+        updateOAuth: async () => {
+          throw new OptimisticLockError("lost");
+        },
+      }),
+    );
     expect(await code(() => lost.update("t", {}))).toBe("CONFLICT");
-    const broken = new OAuthPolicyService({
-      liveByIds: async () => [{ oauth: base() }],
-      updateOAuth: async () => {
-        throw new Error("boom");
-      },
-    } as unknown as TenantsService);
+    const broken = new OAuthPolicyService(
+      tenantsOver({
+        liveByIds: async () => [tenantDoc({ oauth: base() })],
+        updateOAuth: async () => {
+          throw new Error("boom");
+        },
+      }),
+    );
     expect(await code(() => broken.update("t", {}))).toBeUndefined();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { StoredDetailTypeDoc, StoredScopeDoc } from "./resources.types";
+import { detailTypeDoc, scopeDoc } from "~/resource-docs";
 import {
   detailTypeShape,
   fieldDraft,
@@ -83,27 +83,12 @@ describe("shapes", () => {
   });
 
   test("a scope without a resource shows a null resource id", () => {
-    const scope = {
-      _id: new ObjectId(),
-      name: "read",
-      description: { fr: "", en: "" },
-      resourceId: null,
-      claims: [],
-    } as unknown as StoredScopeDoc;
+    const scope = scopeDoc();
     expect(scopeShape(scope).resourceId).toBeNull();
   });
 
   test("a detail type shows its kinds in GraphQL names and no actions as []", () => {
-    const doc = {
-      _id: new ObjectId(),
-      resourceId: new ObjectId(),
-      type: "pay",
-      name: { fr: "", en: "" },
-      description: { fr: "", en: "" },
-      fields: [{ key: "n", kind: "integer", label: {}, required: true }],
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    } as unknown as StoredDetailTypeDoc;
+    const doc = detailTypeDoc();
     const shown = detailTypeShape(doc);
     expect(shown.fields[0]?.kind).toBe("INTEGER");
     expect(shown.fields[0]?.min).toBeNull();

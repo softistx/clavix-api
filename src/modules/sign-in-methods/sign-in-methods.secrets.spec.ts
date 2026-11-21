@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
+import { instance } from "~/narrow";
 import { sealedSecretSchema } from "./sign-in-methods.schema";
 import { createSecretBox, secretContext } from "./sign-in-methods.secrets";
 
@@ -57,7 +58,7 @@ test("another tenant, provider, key, version or a changed byte does not open", (
     () => box.open(sealed, secretContext("65f0000000000000000000bb", "google")),
     () => box.open(sealed, secretContext("65f0000000000000000000aa", "github")),
     () => createSecretBox(randomBytes(32)).open(sealed, context),
-    () => box.open({ ...sealed, v: 2 as 1 }, context),
+    () => box.open(Object.assign({ ...sealed }, { v: 2 }), context),
     () => box.open({ ...sealed, ct: `A${sealed.ct.slice(1)}x` }, context),
     () => box.open({ ...sealed, ct: "" }, context),
   ];
@@ -69,7 +70,9 @@ test("another tenant, provider, key, version or a changed byte does not open", (
       error = caught;
     }
     expect(error).toBeInstanceOf(Error);
-    expect(String((error as Error).message)).not.toContain("s3cret-value");
+    expect(String(instance(error, Error).message)).not.toContain(
+      "s3cret-value",
+    );
   }
 });
 
@@ -90,5 +93,8 @@ test("a keyring: the first key seals, every key opens, a stranger does not", () 
   expect(() => createSecretBox(next).open(sealedOld, context)).toThrow(
     "Sealed under another key",
   );
-  expect(() => createSecretBox([] as never)).toThrow(TypeError);
+  // An empty keyring is one the types forbid: it reaches the function untyped.
+  expect(() => Reflect.apply(createSecretBox, undefined, [[]])).toThrow(
+    TypeError,
+  );
 });

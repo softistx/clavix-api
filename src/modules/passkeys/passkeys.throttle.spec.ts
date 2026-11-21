@@ -19,6 +19,7 @@ import {
 } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
 import { quietTenants } from "~/ports";
 import {
   createPasskeyThrottle,
@@ -55,7 +56,7 @@ const OPTIONS = `mutation { passkeySignInOptions { challenge } }`;
 
 type Answer = {
   response: Response;
-  error: { extensions: Record<string, unknown> } | undefined;
+  error: NonNullable<GqlResult["errors"]>[number] | undefined;
 };
 
 async function post(
@@ -75,9 +76,7 @@ async function post(
     },
     body: JSON.stringify({ query }),
   });
-  const body = (await response.json()) as {
-    errors?: { extensions: Record<string, unknown> }[];
-  };
+  const body = await gqlOf(response);
   return { response, error: body.errors?.[0] };
 }
 
@@ -133,10 +132,8 @@ describe("unknown host", () => {
       },
       body: JSON.stringify({ query: OPTIONS }),
     });
-    const body = (await response.json()) as {
-      errors?: { extensions: Record<string, unknown> }[];
-    };
-    expect(body.errors?.[0]?.extensions["code"]).toBe("NOT_FOUND");
+    const body = await gqlOf(response);
+    expect(body.errors?.[0]?.extensions?.["code"]).toBe("NOT_FOUND");
     expect(checks).toBe(0);
   });
 });
@@ -149,7 +146,7 @@ describe("per client address", () => {
     }
     const { response, error } = await ask("lima", "203.0.113.1");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("PASSKEY_THROTTLED");
+    expect(error?.extensions?.["code"]).toBe("PASSKEY_THROTTLED");
     expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     await close();
   });
@@ -181,7 +178,7 @@ describe("per tenant", () => {
     }
     const { response, error } = await ask("lima", "198.51.100.99");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("PASSKEY_THROTTLED");
+    expect(error?.extensions?.["code"]).toBe("PASSKEY_THROTTLED");
     expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     await close();
   });

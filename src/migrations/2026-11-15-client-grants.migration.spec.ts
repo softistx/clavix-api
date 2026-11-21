@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { migrate } from "@softistx/mongo/migrations";
-import type { Db } from "mongodb";
+import type { Db, Document } from "mongodb";
 import { freshMigrationDb } from "~/migrations";
 import {
   clientGrantsMigration,
@@ -9,11 +9,12 @@ import {
 } from "./2026-11-15-client-grants.migration";
 
 const DEVICE = "urn:ietf:params:oauth:grant-type:device_code";
+type Keyed = Document & { _id: string };
 let db: Db;
 
 const put = (collection: string, name: string, grantTypes?: string[]) =>
-  db.collection(collection).insertOne({
-    _id: name as never,
+  db.collection<Keyed>(collection).insertOne({
+    _id: name,
     name,
     redirectUris: ["https://app.example/cb"],
     source: "registered",
@@ -23,7 +24,7 @@ const put = (collection: string, name: string, grantTypes?: string[]) =>
     ...(grantTypes === undefined ? {} : { grantTypes }),
   });
 const grantsOf = async (collection: string, name: string) =>
-  (await db.collection(collection).findOne({ _id: name as never }))?.[
+  (await db.collection<Keyed>(collection).findOne({ _id: name }))?.[
     "grantTypes"
   ];
 
@@ -69,15 +70,15 @@ describe(id, () => {
   });
 
   test("a stored null list is left alone", async () => {
-    await db.collection("oauthClients").insertOne({
-      _id: "nul" as never,
+    await db.collection<Keyed>("oauthClients").insertOne({
+      _id: "nul",
       name: "nul",
       redirectUris: [],
       source: "registered",
       createdAt: new Date(),
       expiresAt: null,
       grantTypes: null,
-    } as never);
+    });
     await migrate(db, [clientGrantsMigration]);
     expect(await grantsOf("oauthClients", "nul")).toBeNull();
   });

@@ -1,32 +1,28 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
-import type { GraphQLError } from "graphql";
+import { GraphQLError } from "graphql";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
 import { authEventsService } from "@/config/audit";
+import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { noBudgets, unthrottled } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlBody } from "~/gql";
+import { instance } from "~/narrow";
+import { tenantsOver } from "~/oauth-tenants";
 import { OAuthPolicyService } from "./oauth-policy.service";
 
-interface Policy {
-  tenantId: string;
-  par: { required: boolean };
-  dpop: { required: boolean };
-  version: number;
-}
-interface Result {
-  data?: Record<string, Policy> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-  text: string;
-}
+type Result = GqlResult & { text: string };
+const deps = createConsoleDeps({ serverFor: async () => null });
 
 const as = async (
   userId: string,
@@ -52,8 +48,8 @@ const as = async (
       access,
       adminEvents: adminEventRecorder,
       activity: { admin: adminEventReader, auth: authEventsService },
-      admins: {} as ConsoleAdmins,
-      users: {} as ConsoleUsers,
+      admins: deps.admins,
+      users: deps.users,
       exclusive: createExclusive(null),
       directory: {
         findUser: async () => null,
@@ -72,7 +68,7 @@ const as = async (
     body: JSON.stringify({ query, variables }),
   });
   const text = await response.text();
-  return { ...(JSON.parse(text) as Omit<Result, "text">), text };
+  return { ...gqlBody.parse(JSON.parse(text)), text };
 };
 const codeOf = (result: Result) => result.errors?.[0]?.extensions?.code;
 
@@ -121,7 +117,7 @@ afterAll(async () => {
 describe("guards", () => {
   test("a viewer reads the policy and cannot change it", async () => {
     const read = await as(VIEWER, POLICY, { t: a });
-    expect(read.data?.["oauthPolicy"]?.par.required).toBe(true);
+    expect(at(read.data, "oauthPolicy.par.required", z.boolean())).toBe(true);
     const before = (await stored(a)).version;
     const write = await as(VIEWER, UPDATE, {
       t: a,
@@ -148,7 +144,7 @@ describe("updateOAuthPolicy", () => {
       t: a,
       i: { par: { required: false } },
     });
-    expect(off.data?.["updateOAuthPolicy"]).toMatchObject({
+    expect(at(off.data, "updateOAuthPolicy")).toMatchObject({
       par: { required: false },
       dpop: { required: false },
       version: before.version + 1,
@@ -157,7 +153,9 @@ describe("updateOAuthPolicy", () => {
       t: a,
       i: { par: { required: true } },
     });
-    expect(on.data?.["updateOAuthPolicy"]?.par.required).toBe(true);
+    expect(at(on.data, "updateOAuthPolicy.par.required", z.boolean())).toBe(
+      true,
+    );
     expect((await stored(a)).oauth.par.required).toBe(true);
     expect((await eventsOf(a)).length).toBe(2);
   });
@@ -169,7 +167,9 @@ describe("updateOAuthPolicy", () => {
       t: a,
       i: { par: { required: true } },
     });
-    expect(same.data?.["updateOAuthPolicy"]?.version).toBe(before.version);
+    expect(at(same.data, "updateOAuthPolicy.version", z.number())).toBe(
+      before.version,
+    );
     expect((await stored(a)).version).toBe(before.version);
     expect((await eventsOf(a)).length).toBe(events + 1);
   });
@@ -179,7 +179,7 @@ describe("updateOAuthPolicy", () => {
       t: a,
       i: { dpop: { required: true } },
     });
-    expect(result.data?.["updateOAuthPolicy"]).toMatchObject({
+    expect(at(result.data, "updateOAuthPolicy")).toMatchObject({
       par: { required: true },
       dpop: { required: true },
     });
@@ -219,19 +219,21 @@ describe("updateOAuthPolicy", () => {
     const missing = await service
       .update("65f0000000000000000000aa", { par: { required: true } })
       .catch((error: unknown) => error);
-    expect((missing as GraphQLError).extensions).toMatchObject({
+    expect(instance(missing, GraphQLError).extensions).toMatchObject({
       code: "NOT_FOUND",
     });
-    const lost = new OAuthPolicyService({
-      liveByIds: tenantsService.liveByIds.bind(tenantsService),
-      updateOAuth: async () => {
-        throw Object.create(OptimisticLockError.prototype);
-      },
-    } as unknown as typeof tenantsService);
+    const lost = new OAuthPolicyService(
+      tenantsOver({
+        liveByIds: async (ids) => tenantsService.liveByIds(ids),
+        updateOAuth: async () => {
+          throw new OptimisticLockError("lost");
+        },
+      }),
+    );
     const refusal = await lost
       .update(b, { par: { required: false } })
       .catch((error: unknown) => error);
-    expect((refusal as GraphQLError).extensions).toMatchObject({
+    expect(instance(refusal, GraphQLError).extensions).toMatchObject({
       code: "CONFLICT",
       http: { status: 409 },
     });
@@ -244,27 +246,23 @@ const AGENTS_POLICY = `query ($t: ID!) { oauthPolicy(tenantId: $t) { ${AGENT_FIE
 const AGENTS_UPDATE = `mutation ($t: ID!, $i: OAuthPolicyInput!) {
   updateOAuthPolicy(tenantId: $t, input: $i) { ${AGENT_FIELDS} }
 }`;
-interface AgentPolicy {
-  version: number;
-  agents: {
-    dynamic: string;
-    redirectUris: string[];
-    metadataDocuments: boolean;
-    allowHosts: string[];
-  };
-  agentsNeedPushOrProof: boolean;
-}
+const agentPolicy = z.object({
+  version: z.number(),
+  agents: z.object({
+    dynamic: z.string(),
+    redirectUris: z.array(z.string()),
+    metadataDocuments: z.boolean(),
+    allowHosts: z.array(z.string()),
+  }),
+  agentsNeedPushOrProof: z.boolean(),
+});
 const agentsOf = (result: Result) =>
-  (result.data as unknown as Record<string, AgentPolicy>)[
-    "updateOAuthPolicy"
-  ] as AgentPolicy;
+  at(result.data, "updateOAuthPolicy", agentPolicy);
 
 describe("agents policy", () => {
   test("a tenant starts with agents off and no warning", async () => {
     const read = await as(VIEWER, AGENTS_POLICY, { t: a });
-    const policy = (read.data as unknown as Record<string, AgentPolicy>)[
-      "oauthPolicy"
-    ] as AgentPolicy;
+    const policy = at(read.data, "oauthPolicy", agentPolicy);
     expect(policy.agents).toEqual({
       dynamic: "OFF",
       redirectUris: [],

@@ -27,7 +27,7 @@ function setup(known: Record<string, boolean>) {
     tenantActive: async () => true,
     findUser: async (id: string) =>
       id in known ? { active: known[id] ?? false } : null,
-  } as never);
+  });
   return { hooks, granted, platform, exclusive };
 }
 
@@ -35,7 +35,7 @@ const invitation = (
   role: string,
   invitedBy: string | null,
   scope = adminScope(TENANT),
-) => ({ scope, role, invitedBy }) as { scope: string; role: string };
+) => ({ scope, role, invitedBy });
 
 describe("an owner invitation accepted after a deletion", () => {
   test("refused before anything is written when its inviter is gone", async () => {

@@ -1,12 +1,13 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createGrantsRevoke } from "@/config/grants-revoke";
-import type { Context } from "@/http/context";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { serverRevoking } from "~/oauth-server-double";
+import { contextOf } from "~/spec-context";
 import { grantsRevoke } from "./consent.queue";
 import { ConsentService } from "./consent.service";
 
-const ctx = {} as Context;
+const ctx = contextOf();
 const quiet = () => {};
 const down = async (): Promise<number> => {
   throw new Error("down");
@@ -107,16 +108,12 @@ describe("createGrantsRevoke", () => {
 
   test("revokes through the tenant's server", async () => {
     const seen: unknown[] = [];
-    const server = {
-      grants: {
-        revokeAll: async (who: unknown) => {
-          seen.push(who);
-          return 3;
-        },
-      },
-    };
+    const server = serverRevoking(async (who) => {
+      seen.push(who);
+      return 3;
+    });
     const run = createGrantsRevoke(
-      (async () => server) as never,
+      async () => server,
       async () => "acme",
     );
     expect(await run(job)).toBe(3);
@@ -191,7 +188,7 @@ describe("serverOf", () => {
       oauthServers: { serverFor: async () => server },
       tenant: async () => liveTenant,
     });
-    expect(found as unknown).toBe(server);
+    expect<unknown>(found).toBe(server);
   });
 
   test("refuses a null tenant behind a known server", async () => {

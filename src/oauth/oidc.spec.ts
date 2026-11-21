@@ -6,6 +6,7 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
@@ -13,6 +14,9 @@ import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
+import { recordBody } from "~/oauth-bodies";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { createClavixOAuthIssuers, userinfoOf } from "./issuers";
@@ -147,7 +151,7 @@ async function login(
   resource?: string,
   nonce = "n-0S6_WzA2Mj",
 ) {
-  const client = clients[slug] as { id: string; secret: string };
+  const client = defined(clients[slug], "the tenant client");
   const authorize = await get(
     slug,
     `/authorize?${new URLSearchParams({
@@ -188,20 +192,18 @@ async function login(
   );
 }
 
-interface Tokens {
-  access_token: string;
-  id_token: string;
-}
+const tokensBody = tokenBody.extend({ id_token: z.string() });
 const tokensOf = async (slug: string, scope: string) => {
   const response = await login(slug, scope);
   expect(response.status).toBe(200);
-  return (await response.json()) as Tokens;
+  return jsonOf(response, tokensBody);
 };
 const jwksOf = async (slug: string) =>
   createLocalJWKSet(
-    (await (await get(slug, "/jwks.json")).json()) as Parameters<
-      typeof createLocalJWKSet
-    >[0],
+    await jsonOf(
+      await get(slug, "/jwks.json"),
+      z.object({ keys: z.array(z.looseObject({})) }),
+    ),
   );
 
 beforeAll(async () => {
@@ -219,7 +221,7 @@ describe("discovery", () => {
   test("is the tenant's own, with its endpoints and its keys", async () => {
     const response = await get("acme", "/.well-known/openid-configuration");
     expect(response.status).toBe(200);
-    const document = (await response.json()) as Record<string, unknown>;
+    const document = await jsonOf(response, recordBody);
     expect(document).toMatchObject({
       issuer: issuerOf("acme"),
       authorization_endpoint: url("acme", "/authorize"),
@@ -345,8 +347,8 @@ describe("userinfo", () => {
 describe("introspection", () => {
   test("answers active for a token of the tenant's own resource", async () => {
     const response = await login("acme", "read", RESOURCE);
-    const { access_token } = (await response.json()) as Tokens;
-    const client = clients["acme"] as { id: string; secret: string };
+    const { access_token } = await jsonOf(response, tokenBody);
+    const client = defined(clients["acme"], "the acme client");
     const introspected = await post(
       "acme",
       "/introspect",
@@ -363,7 +365,7 @@ describe("introspection", () => {
 
   test("needs a confidential client of the tenant, and shows nothing of tokens for other resources", async () => {
     const tokens = await tokensOf("acme", "openid");
-    const client = clients["acme"] as { id: string; secret: string };
+    const client = defined(clients["acme"], "the acme client");
     const anonymous = await post("acme", "/introspect", {
       token: tokens.access_token,
     });
@@ -388,9 +390,10 @@ describe("tenant isolation", () => {
       jwtVerify(tokens.id_token, await jwksOf("globex")),
     ).rejects.toThrow();
     const kid = decodeProtectedHeader(tokens.id_token).kid;
-    const globex = (await (await get("globex", "/jwks.json")).json()) as {
-      keys: { kid: string }[];
-    };
+    const globex = await jsonOf(
+      await get("globex", "/jwks.json"),
+      z.object({ keys: z.array(z.object({ kid: z.string() })) }),
+    );
     expect(globex.keys.map((key) => key.kid)).not.toContain(kid);
   });
 
@@ -414,7 +417,7 @@ describe("tenant isolation", () => {
 
   test("A's client secret does not authenticate at B's introspection", async () => {
     const tokens = await tokensOf("acme", "openid");
-    const client = clients["acme"] as { id: string; secret: string };
+    const client = defined(clients["acme"], "the acme client");
     // Same client id on both tenants, but A's secret: B's partition refuses.
     const response = await post(
       "globex",

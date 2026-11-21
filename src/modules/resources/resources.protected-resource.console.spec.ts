@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { protectedResource } from "@softistx/janus-oauth";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { at } from "~/body";
 import { consoleAs } from "~/console";
 
 const admin = consoleAs("prm-admin");
@@ -46,10 +49,14 @@ const served = async (options: { scopes?: string[]; dpop?: boolean }) => {
 const read = async () => {
   const result = await admin(GET, { t: tenant, id: resourceId });
   expect(result.errors).toBeUndefined();
-  return result.data?.["resource"] as {
-    metadataUrl: string;
-    protectedResourceMetadata: string;
-  };
+  return at(
+    result.data,
+    "resource",
+    z.object({
+      metadataUrl: z.string(),
+      protectedResourceMetadata: z.string(),
+    }),
+  );
 };
 
 beforeAll(async () => {
@@ -58,8 +65,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await mongo.db.resources.raw.deleteMany({ tenantId: tenant as never });
-  await mongo.db.scopes.raw.deleteMany({ tenantId: tenant as never });
+  await mongo.db.resources.raw.deleteMany({ tenantId: new ObjectId(tenant) });
+  await mongo.db.scopes.raw.deleteMany({ tenantId: new ObjectId(tenant) });
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
@@ -70,11 +77,15 @@ describe("Resource.protectedResourceMetadata", () => {
   test("a new resource's document is janus's, at the RFC 9728 well-known path of its URI", async () => {
     const result = await admin(CREATE, { t: tenant, i: { uri: API } });
     expect(result.errors).toBeUndefined();
-    const created = result.data?.["createResource"] as {
-      id: string;
-      metadataUrl: string;
-      protectedResourceMetadata: string;
-    };
+    const created = at(
+      result.data,
+      "createResource",
+      z.object({
+        id: z.string(),
+        metadataUrl: z.string(),
+        protectedResourceMetadata: z.string(),
+      }),
+    );
     resourceId = created.id;
     const expected = await served({});
     expect(created.metadataUrl).toBe(
@@ -104,9 +115,11 @@ describe("Resource.protectedResourceMetadata", () => {
       JSON.parse(found.protectedResourceMetadata).scopes_supported.sort(),
     ).toEqual(["read", "write"]);
     const listed = await admin(LIST, { t: tenant });
-    const rows = (listed.data?.["resources"] ?? []) as {
-      protectedResourceMetadata: string;
-    }[];
+    const rows = at(
+      listed.data,
+      "resources",
+      z.array(z.object({ protectedResourceMetadata: z.string() })),
+    );
     expect(rows[0]?.protectedResourceMetadata).toBe(expected.body);
   });
 
@@ -144,11 +157,17 @@ describe("Resource.protectedResourceMetadata", () => {
       spy.mockResolvedValue(null);
       const listed = await admin(LIST, { t: tenant });
       expect(listed.errors).toBeUndefined();
-      const rows = listed.data?.["resources"] as {
-        id: string;
-        metadataUrl: string | null;
-        protectedResourceMetadata: string | null;
-      }[];
+      const rows = at(
+        listed.data,
+        "resources",
+        z.array(
+          z.object({
+            id: z.string(),
+            metadataUrl: z.string().nullable(),
+            protectedResourceMetadata: z.string().nullable(),
+          }),
+        ),
+      );
       expect(rows).toHaveLength(2);
       for (const row of rows) {
         expect(row.metadataUrl).toBeNull();

@@ -22,7 +22,7 @@ import type { DomainDirectory } from "@/tenancy/resolver";
 export const quietTenants = {
   domain: env.CLAVIX_DOMAIN,
   onHostsChanged: () => {},
-  hostsOf: () => [] as string[],
+  hostsOf: (): string[] => [],
   onCreated: () => {},
 };
 
@@ -46,7 +46,7 @@ export const noCustomDomains = {
 /** The OAuth issuers' ports of a tenant with no resource, no role, no exchange rule, no agent and no listener. */
 export const quietOAuth = {
   resourcesFor: () => ({}),
-  rolesFor: () => async () => [] as string[],
+  rolesFor: () => async (): Promise<string[]> => [],
   exchangeRulesFor: () => async () => null,
   agentCheckFor: () => async () => false,
   eventsFor: () => () => {},

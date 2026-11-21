@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { ObjectId } from "mongodb";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { clientPoliciesService } from "@/config/client-policies";
 import { consoleResource } from "@/config/console";
@@ -11,6 +12,7 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { userinfoOf } from "@/oauth/building";
 import { fingerprintOf } from "@/oauth/resolution";
 import { codeOf, consoleAs } from "~/console";
+import { manyRows as many, oneRow as one, rowsOf } from "~/rows";
 
 const API = "https://api.res-a.example/v1";
 const admin = consoleAs("res-admin-a");
@@ -40,15 +42,6 @@ const UPDATE_SCOPE = `mutation($tenantId: ID!, $id: ID!, $input: UpdateScopeInpu
 }`;
 const DELETE_SCOPE = `mutation($tenantId: ID!, $id: ID!) { deleteScope(tenantId: $tenantId, id: $id) }`;
 
-type Row = Record<string, unknown> & { id: string };
-const one = (result: Awaited<ReturnType<typeof admin>>, field: string) => {
-  expect(result.errors).toBeUndefined();
-  return result.data?.[field] as Row;
-};
-const many = (result: Awaited<ReturnType<typeof admin>>, field: string) => {
-  expect(result.errors).toBeUndefined();
-  return result.data?.[field] as Row[];
-};
 const served = async (slug: string) => {
   const tenant = await tenantResolver.resolveHost(
     `${slug}.${env.CLAVIX_DOMAIN}`,
@@ -70,8 +63,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const tenantId of [tenantA, tenantB]) {
-    await mongo.db.resources.raw.deleteMany({ tenantId: tenantId as never });
-    await mongo.db.scopes.raw.deleteMany({ tenantId: tenantId as never });
+    await mongo.db.resources.raw.deleteMany({
+      tenantId: new ObjectId(tenantId),
+    });
+    await mongo.db.scopes.raw.deleteMany({ tenantId: new ObjectId(tenantId) });
   }
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
@@ -714,7 +709,7 @@ describe("the console's own resource", () => {
       (resource) => resource["uri"] === consoleResource,
     );
     if (found === undefined) throw new Error("the console resource is seeded");
-    const [scope] = found["scopes"] as Row[];
+    const [scope] = rowsOf(found["scopes"]);
     expect(
       codeOf(await operator(DELETE_SCOPE, { tenantId, id: scope?.id ?? "" })),
     ).toBe("BAD_USER_INPUT");

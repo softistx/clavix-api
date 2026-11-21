@@ -4,6 +4,7 @@ import { version } from "@/modules/health";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { graphql } from "~/generated/graphql";
+import { gqlOf } from "~/gql";
 
 const app = createTestApp();
 
@@ -47,10 +48,7 @@ const introspect = async (target: ReturnType<typeof createTestApp>) => {
         '{ __schema { queryType { name } } __type(name: "Query") { name } }',
     }),
   });
-  return (await response.json()) as {
-    data?: unknown;
-    errors?: { message: string }[];
-  };
+  return await gqlOf(response);
 };
 
 test("GET /graphql from a browser is not an IDE page by default", async () => {

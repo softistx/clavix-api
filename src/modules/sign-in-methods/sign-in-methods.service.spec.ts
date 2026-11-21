@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import { OptimisticLockError } from "@softistx/mongo";
-import type { GraphQLError } from "graphql";
+import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
+import { mongo } from "@/config/db";
 import {
   PLATFORM_TENANT_SLUG,
   type Tenant,
-  type TenantsService,
+  TenantsService,
 } from "@/modules/tenants";
+import { defined, instance } from "~/narrow";
+import { quietTenants } from "~/ports";
+import { tenantDoc } from "~/tenant-doc";
 import {
   type SignInPolicy,
   signInPolicySchema,
@@ -20,23 +24,24 @@ const box = createSecretBox(randomBytes(32));
 /** The tenants service the policy needs, in memory: a change that answers `null` writes nothing. */
 function fakeTenants(slug = "acme") {
   const state = {
-    tenant: {
-      _id: new ObjectId(),
-      slug,
-      version: 1,
-      signIn: signInPolicySchema.parse(undefined),
-    } as unknown as Tenant,
+    tenant: tenantDoc({ slug, signIn: signInPolicySchema.parse(undefined) }),
     writes: 0,
     lose: false,
+    gone: false,
   };
-  const service = {
-    liveByIds: async (ids: readonly string[]) =>
-      ids.includes(state.tenant._id.toHexString()) ? [state.tenant] : [],
-    anyById: async () => state.tenant,
-    updateSignIn: async (
+  class MemoryTenants extends TenantsService {
+    override async liveByIds(ids: readonly string[]) {
+      return ids.includes(state.tenant._id.toHexString()) ? [state.tenant] : [];
+    }
+
+    override async anyById() {
+      return state.gone ? undefined : state.tenant;
+    }
+
+    override async updateSignIn(
       _id: string,
       change: (tenant: Tenant) => SignInPolicy | null,
-    ) => {
+    ) {
       if (state.lose) throw new OptimisticLockError("lost");
       const signIn = change(state.tenant);
       if (signIn === null) return state.tenant;
@@ -47,25 +52,34 @@ function fakeTenants(slug = "acme") {
         version: state.tenant.version + 1,
       };
       return state.tenant;
-    },
-    replaceSocial: async (_tenant: Tenant, social: SignInPolicy["social"]) => {
+    }
+
+    override async replaceSocial(
+      _tenant: Tenant,
+      social: SignInPolicy["social"],
+    ) {
       state.writes += 1;
       state.tenant = {
         ...state.tenant,
         signIn: { ...state.tenant.signIn, social },
       };
       return true;
-    },
-  };
+    }
+  }
+  const service = new MemoryTenants(mongo.db.tenants, {
+    ...quietTenants,
+    now: () => new Date(),
+    log: () => {},
+  });
   const id = () => state.tenant._id.toHexString();
-  return { state, id, service: service as unknown as TenantsService };
+  return { state, id, service };
 }
 
 const codeOf = async (run: () => Promise<unknown>) => {
   try {
     await run();
   } catch (error) {
-    return (error as GraphQLError).extensions["code"];
+    return instance(error, GraphQLError).extensions["code"];
   }
   return undefined;
 };
@@ -185,7 +199,10 @@ describe("setSocial", () => {
     expect(entry?.clientId).toBe("cid");
     expect(JSON.stringify(entry)).not.toContain("s3cret");
     expect(
-      box.open(entry?.secret as never, secretContext(id(), "google")),
+      box.open(
+        defined(entry?.secret, "the secret"),
+        secretContext(id(), "google"),
+      ),
     ).toBe("s3cret");
   });
 
@@ -202,7 +219,7 @@ describe("setSocial", () => {
     const before = state.tenant.signIn.social[0]?.secret;
     await policy.setSocial(id(), { provider: "github", enabled: false });
     expect(state.tenant.signIn.social[0]).toMatchObject({ enabled: false });
-    expect(state.tenant.signIn.social[0]?.secret).toEqual(before as never);
+    expect(state.tenant.signIn.social[0]?.secret).toEqual(before);
   });
 
   test("the entries stay ordered by provider", async () => {
@@ -276,8 +293,7 @@ describe("resealSecrets", () => {
 
   test("a tenant that is gone has nothing to seal", async () => {
     const t = fakeTenants();
-    (t.service as unknown as { anyById: () => Promise<undefined> }).anyById =
-      async () => undefined;
+    t.state.gone = true;
     const policy = new SignInPolicyService(t.service, box, () => {});
     expect(
       await policy.resealSecrets("65f0000000000000000000aa"),

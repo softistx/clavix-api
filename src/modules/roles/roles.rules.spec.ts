@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { RolesError } from "./roles.errors";
+import { instance } from "~/narrow";
+import { RolesError } from "./roles.errors";
 import {
   checkUserId,
   cleanDescription,
@@ -11,7 +12,7 @@ const refusal = (run: () => unknown) => {
   try {
     run();
   } catch (error) {
-    return error as RolesError;
+    return instance(error, RolesError);
   }
   return undefined;
 };

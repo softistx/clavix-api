@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import type { GraphQLError } from "graphql";
+import { GraphQLError } from "graphql";
+import { defined, instance } from "~/narrow";
 import {
   checkedSocial,
   checkedValue,
@@ -26,7 +27,7 @@ const code = (fn: () => unknown) => {
   try {
     fn();
   } catch (error) {
-    return (error as GraphQLError).extensions["code"];
+    return instance(error, GraphQLError).extensions["code"];
   }
   return undefined;
 };
@@ -178,7 +179,7 @@ describe("resealEntries", () => {
     const out = resealEntries(OWNER, social, box, (m) => logs.push(m), counts);
     expect(out.pending).toBe(1);
     expect(counts).toMatchObject({ scanned: 2, current: 1, unreadable: 0 });
-    expect(out.social[0]).toBe(social[0] as never);
+    expect(out.social[0]).toBe(defined(social[0], "the first entry"));
     expect(out.social[1]?.secret.kid).toBe(box.kid);
     expect(logs).toEqual([]);
   });
@@ -189,7 +190,7 @@ describe("resealEntries", () => {
     const logs: string[] = [];
     const out = resealEntries(OWNER, social, box, (m) => logs.push(m), counts);
     expect(out.pending).toBe(0);
-    expect(out.social[0]).toBe(social[0] as never);
+    expect(out.social[0]).toBe(defined(social[0], "the first entry"));
     expect(counts.unreadable).toBe(1);
     expect(logs).toEqual([
       `sign-in: the github secret of tenant ${OWNER} could not be sealed again`,

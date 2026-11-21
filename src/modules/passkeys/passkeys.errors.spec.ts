@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GraphQLError } from "graphql";
+import { instance } from "~/narrow";
 import {
   asPasskeyInvalid,
   codes,
@@ -32,8 +33,8 @@ describe("passkeys errors", () => {
     ]) {
       const error = await asPasskeyInvalid(() =>
         Promise.reject(refused(code)),
-      ).catch((caught: GraphQLError) => caught);
-      expect((error as GraphQLError).extensions["code"]).toBe(
+      ).catch((caught: unknown) => caught);
+      expect(instance(error, GraphQLError).extensions["code"]).toBe(
         "PASSKEY_INVALID",
       );
     }
