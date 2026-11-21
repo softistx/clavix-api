@@ -1,4 +1,4 @@
-import { ClientsService } from "@/modules/clients/clients.service";
+import { ClientsService } from "@/modules/clients";
 import { agentClientsService } from "./agent-clients";
 import { clientPoliciesService } from "./client-policies";
 import { oauthDb } from "./oauth-db";

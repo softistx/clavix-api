@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { agentClientsService } from "./agent-clients";
 import { createAgentsPrune } from "./agents-prune";

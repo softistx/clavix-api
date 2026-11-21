@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { parseTenantArgs } from "./tenants.cli";
 import { TenantInputError } from "./tenants.errors";
 import { PLATFORM_TENANT_SLUG, RESERVED_SLUGS } from "./tenants.rules";

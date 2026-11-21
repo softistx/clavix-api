@@ -20,7 +20,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { settled } from "@/modules/auth";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import {
   issuerOf,

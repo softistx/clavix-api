@@ -19,7 +19,7 @@ import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import type { AdminEventInput } from "@/console/admin-events/recorder";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import {
   detailTypes,
   mongoDetailTypeClients,

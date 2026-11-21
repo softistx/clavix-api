@@ -1,9 +1,21 @@
+import type { OAuthClientRecord } from "@softistx/janus-oauth";
 import {
   CLIENT_CREDENTIALS_GRANT,
   DEVICE_GRANT,
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
-import type { clientsService } from "@/config/clients";
+import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
+import type { CliTenant } from "@/shared/cli";
+import { DEFAULT_GRANTS } from "./clients.rules";
+import type {
+  AgentKinds,
+  AgentKindsOf,
+  AgentsReader,
+  ClientRegistration,
+  ClientSettingsInput,
+  ClientView,
+  SentSettings,
+} from "./clients.types";
 
 // What an admin event names: the client's id and its tenant, never its secret.
 export const target = (
@@ -51,7 +63,7 @@ const WIRE_GRANT = {
   CLIENT_CREDENTIALS: CLIENT_CREDENTIALS_GRANT,
 } as const;
 
-export type Rules = Awaited<ReturnType<typeof clientsService.tokenExchange>>;
+export type Rules = TokenExchangeRules | null;
 
 const exchangeShape = (rules: Rules | undefined) =>
   rules === null || rules === undefined
@@ -133,3 +145,67 @@ export const settingsOf = (input: ClientInput) => ({
   allowedScopes: input.allowedScopes ?? undefined,
   defaultScopes: input.defaultScopes ?? undefined,
 });
+
+/** A capability the janus port leaves optional; the Mongo store has them all. */
+export function capability<T>(method: T | undefined, name: string): T {
+  if (method === undefined) {
+    throw new Error(`the OAuth store has no ${name}()`);
+  }
+  return method;
+}
+
+/** How a janus record was registered: a metadata document is one, a registered client the agents store knows is dynamic. */
+export const registrationOf = (
+  record: OAuthClientRecord,
+  agents: AgentKinds = new Map(),
+): ClientRegistration =>
+  record.source === "metadata"
+    ? "metadata"
+    : (agents.get(record.id) ?? "console");
+
+/** A janus record as the console shows it, without its secret hash. */
+export const viewOf = (
+  record: OAuthClientRecord,
+  agents?: AgentKinds,
+): ClientView => ({
+  clientId: record.id,
+  name: record.name,
+  type: record.secretHash === undefined ? "public" : "confidential",
+  redirectUris: record.redirectUris,
+  grantTypes: record.grantTypes ?? DEFAULT_GRANTS,
+  createdAt: record.createdAt,
+  requirePushedAuthorizationRequests:
+    record.requirePushedAuthorizationRequests === true,
+  dpopBoundAccessTokens: record.dpopBoundAccessTokens === true,
+  registration: registrationOf(record, agents),
+  authorizationDetailsTypes: record.authorizationDetailsTypes ?? [],
+  allowedScopes: record.allowedScopes ?? [],
+  defaultScopes: record.defaultScopes ?? [],
+});
+
+/** Reads the tenant's agents among some client ids (bounded by them; none without the store). */
+export const agentKindsOf =
+  (agents: AgentsReader | undefined, tenant: CliTenant): AgentKindsOf =>
+  async (clientIds): Promise<AgentKinds> =>
+    (await agents?.kinds(tenant._id.toHexString(), clientIds)) ?? new Map();
+
+/**
+ * The settings a create or an update call sent, without the omitted ones:
+ * spread into a registration, so an omitted setting stays as recorded (or
+ * defaulted) and is never sent as `undefined`.
+ */
+export const sentSettings = (input: ClientSettingsInput): SentSettings => {
+  const { requirePar, dpopBound, grants, detailTypes } = input;
+  const { allowedScopes, defaultScopes } = input;
+  const sent = {
+    requirePar,
+    dpopBound,
+    grants,
+    detailTypes,
+    allowedScopes,
+    defaultScopes,
+  };
+  return Object.fromEntries(
+    Object.entries(sent).filter(([, value]) => value !== undefined),
+  ) as SentSettings;
+};

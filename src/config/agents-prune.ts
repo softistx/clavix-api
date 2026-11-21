@@ -2,7 +2,7 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { type PruneReport, pruneAgents } from "@/modules/agents/agents.prune";
 import { agentPruneEventInput } from "@/modules/agents/agents.prune-events";
-import { clientsKey } from "@/modules/clients/clients.utils";
+import { clientsKey } from "@/modules/clients";
 import { partitionOf } from "@/modules/tenants";
 import { adminEventRecorder } from "./admin-events";
 import { agentClientsService } from "./agent-clients";

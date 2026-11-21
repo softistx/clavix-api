@@ -23,7 +23,7 @@ import {
 } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { mongoClientDetailTypes } from "@/modules/resources";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";

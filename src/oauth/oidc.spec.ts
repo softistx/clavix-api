@@ -8,7 +8,7 @@ import {
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";

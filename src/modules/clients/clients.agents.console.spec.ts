@@ -8,7 +8,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 

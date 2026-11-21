@@ -5,7 +5,7 @@ import { mongo } from "@/config/db";
 import { eventBus } from "@/config/events";
 import { oauthDb } from "@/config/oauth-db";
 import { oauthListener } from "@/events/oauth-listener";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 
 // D14: the OAuth events of a tenant's issuer reach that tenant's sign-in log
