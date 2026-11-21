@@ -44,8 +44,7 @@ export function createTenantKeys({
         partition: tenantId,
       });
       assertSigningKeyStore(store, `signing keys of tenant ${tenantId}`);
-      if (generations !== undefined)
-        store = observed(store, tenantId, generations);
+      store = observed(store, tenantId, generations);
       stores.set(tenantId, store);
     }
     return store;

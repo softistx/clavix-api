@@ -41,7 +41,11 @@ describe("appCtxOf", () => {
   test("returns the app's context, refuses another as NOT_FOUND", () => {
     const ctx = { tenant: async () => null };
     expect(appCtxOf(ctx)).toBe(ctx);
-    expect(() => appCtxOf({})).toThrow();
+    expect(() => appCtxOf({})).toThrow(
+      expect.objectContaining({
+        extensions: { code: "NOT_FOUND", http: { status: 404 } },
+      }),
+    );
   });
 });
 
