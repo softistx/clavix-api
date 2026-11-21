@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { RolesService } from "@/modules/roles/roles.service";
+import { RolesService } from "@/modules/roles";
 import type { RolesFor } from "@/oauth/ports";
 import { mongo } from "./db";
 
