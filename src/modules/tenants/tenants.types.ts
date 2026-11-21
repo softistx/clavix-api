@@ -9,6 +9,8 @@ export interface PublicOrigin {
 }
 
 export interface TenantsServiceOptions {
+  /** The current time. */
+  now: () => Date;
   /** The apex tenants' hosts hang under. Default `CLAVIX_DOMAIN`. */
   domain?: string;
   /**

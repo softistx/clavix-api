@@ -35,6 +35,7 @@ const as = async (
   const response = await createApp({
     console: {
       now: () => new Date(),
+      reportError: () => {},
       authenticate: async () => ({
         userId,
         clientId: CONSOLE_CLIENT_ID,

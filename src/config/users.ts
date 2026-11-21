@@ -11,6 +11,7 @@ import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { masterKeys, secretBox } from "./keys";
 import { oauthDb } from "./oauth-db";
+import { warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 
 // What accepting an invitation does: on the `clavix` tenant (the console's
@@ -35,6 +36,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
   {
     resolver: tenantResolver,
     db: oauthDb,
+    log: warn,
     secondFactorKeys: secondFactorKeysOf(masterKeys),
     secrets: secretBox,
     connections: connectionsService,

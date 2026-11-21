@@ -47,6 +47,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -56,10 +57,14 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read"] } }),
 });
 const app = createApp({ oauth: issuers });
-const policies = new SignInPolicyService(tenantsService, {
-  seal: () => "",
-  open: () => "",
-} as never);
+const policies = new SignInPolicyService(
+  tenantsService,
+  {
+    seal: () => "",
+    open: () => "",
+  } as never,
+  () => {},
+);
 const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 
 interface GqlResult {

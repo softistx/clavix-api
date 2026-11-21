@@ -14,7 +14,7 @@ import { createDomainsService } from "./domains";
 import { env } from "./env";
 import { ensureSigningKeyOf } from "./keys";
 import { redis } from "./redis";
-import { warn } from "./runtime";
+import { clock, warn } from "./runtime";
 
 export interface TenancyOptions {
   tenants: TypedCollection<typeof tenants>;
@@ -59,6 +59,7 @@ export function createTenancy({
   const tenantsService = new TenantsService(tenants, {
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
     log,
+    now: clock,
     ...(hostsOf === undefined ? {} : { hostsOf }),
     ...(onCreated === undefined ? {} : { onCreated }),
   });

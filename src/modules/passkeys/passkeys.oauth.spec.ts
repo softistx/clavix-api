@@ -36,6 +36,7 @@ const origin = {
 } as const;
 const keys = createMemorySigningKeys();
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -47,6 +48,7 @@ const issuers = createClavixOAuthIssuers({
 const app = createApp({ oauth: issuers });
 const url = (path: string) => `${issuerOf("acme", origin)}${path}`;
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });

@@ -32,7 +32,10 @@ type Ring = [Uint8Array, ...Uint8Array[]];
 
 /** Clavix's own sealed stores as the server wires them, over one keyring. */
 const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
-  const tenants = new TenantsService(mongo.db.tenants, { log });
+  const tenants = new TenantsService(mongo.db.tenants, {
+    log,
+    now: () => new Date(),
+  });
   const boxes = {
     social: createSecretBox(ring),
     webhooks: createSecretBox(ring, "webhook-secrets"),

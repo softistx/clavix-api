@@ -373,6 +373,7 @@ describe("the OIDC email_verified claim follows the flag", () => {
   const VERIFIER = "v".repeat(64);
   const keys = createMemorySigningKeys();
   const issuers = createClavixOAuthIssuers({
+    clock: { now: () => new Date() },
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,
@@ -639,6 +640,8 @@ describe("with a stubbed janus", () => {
   const session = { user: { id: "u1", email: "a@b.c" } };
   const serviceOver = (verifyEmail: object, mail: object = {}) =>
     new AuthService({
+      log: () => {},
+      now: () => new Date(),
       issuers: {
         forRequest: async () =>
           ({ verifyEmail, authenticate: async () => session }) as never,

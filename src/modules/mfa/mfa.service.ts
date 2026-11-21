@@ -103,7 +103,7 @@ export class MfaService {
     const tenant = await this.tenantOf(ctx);
     requireLive(tenant);
     const auth = await this.ports.issuers.forRequest(ctx.request);
-    const since = new Date();
+    const since = this.ports.now();
     const done = await recordingSignIn(
       ctx,
       tenant.tenantId,

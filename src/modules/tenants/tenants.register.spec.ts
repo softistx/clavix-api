@@ -12,6 +12,7 @@ import { partitionOf } from "./tenants.utils";
 const collection = mongo.db.tenants;
 const created: string[] = [];
 const service = new TenantsService(collection, {
+  now: () => new Date(),
   log: () => {},
   domain: "clavix.test",
   onCreated: (id) => {

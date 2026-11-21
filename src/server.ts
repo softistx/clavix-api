@@ -91,7 +91,7 @@ const app = createApp({
 }).onStop(async () => {
   // A code mail still in flight is awaited (the requests have already finished), then lost if late.
   if ((await drain(MAIL_DRAIN_MS)) === "timeout")
-    console.warn("auth: sign-in code mail still in flight at stop, dropped");
+    warn("auth: sign-in code mail still in flight at stop, dropped");
   // The requests in flight finish; what waits for a retry stays in Redis for the next process.
   await webhookDelivery.close();
   // Last, so the final spans reach the collector: the backlog is shipped.

@@ -31,6 +31,7 @@ const resolver = createTenantResolver({
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
@@ -38,10 +39,12 @@ const tenants = new TenantsService(mongo.db.tenants, {
 const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth({
   resolver,
   db: oauthDb,
+  log: () => {},
 });
 
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
@@ -371,7 +374,11 @@ describe("magic link policy", () => {
         methods: [{ type: "magicLink" as const, enabled: true }],
       },
     };
-    expect(buildTenantJanus(oauthDb, chosen).magicLink.enabled).toBe(true);
-    expect(buildTenantJanus(oauthDb, tenant).magicLink.enabled).toBe(false);
+    expect(buildTenantJanus(oauthDb, chosen, () => {}).magicLink.enabled).toBe(
+      true,
+    );
+    expect(buildTenantJanus(oauthDb, tenant, () => {}).magicLink.enabled).toBe(
+      false,
+    );
   });
 });

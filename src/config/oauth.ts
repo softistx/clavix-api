@@ -21,7 +21,7 @@ import { dpopNonceSecret, keyGenerations, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
 import { rolesFor as storedRolesFor } from "./roles";
-import { clockMs } from "./runtime";
+import { clockMs, janusClock } from "./runtime";
 import { tenantResolver } from "./tenancy";
 import { usageService } from "./usage";
 
@@ -48,6 +48,7 @@ export const createIssuers = (
           signingKeysFor,
           dpopNonceSecret,
           authFor,
+          clock: janusClock,
           claimsFor,
           resourcesFor,
           rolesFor,

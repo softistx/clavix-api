@@ -47,8 +47,10 @@ export const tlsAskOver = (secret: string | undefined) =>
     limit:
       askLimits === undefined
         ? undefined
-        : tlsAskGate(() =>
-            askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),
+        : tlsAskGate(
+            () =>
+              askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),
+            warn,
           ),
   });
 

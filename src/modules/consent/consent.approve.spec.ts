@@ -34,6 +34,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
@@ -47,6 +48,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,

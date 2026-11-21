@@ -85,7 +85,7 @@ export async function unseedConsole(db: Db, origin: PublicOrigin) {
   const partition = partitionOf(tenant._id);
   // The console client has live sessions: its grants and tokens go with it.
   await deleteClient(createMongoOAuth(db, { partition }), CONSOLE_CLIENT_ID, {
-    now: new Date(),
+    now: clock(),
   });
   await db
     .collection("resources")

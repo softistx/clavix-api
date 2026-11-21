@@ -61,13 +61,18 @@ const IDP_ISSUER = `https://${IDP_HOST}`;
 const memory = mailer as MemoryMailer;
 
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policies = new SignInPolicyService(tenants, {
-  seal: () => "",
-  open: () => "",
-} as never);
+const policies = new SignInPolicyService(
+  tenants,
+  {
+    seal: () => "",
+    open: () => "",
+  } as never,
+  () => {},
+);
 // One recording throttle per budget: which one an operation spends is the point (G2-10).
 type Who = { tenantId: string; ip: string };
 const checks: Who[] = [];
@@ -114,6 +119,7 @@ const claimsFor: ClaimsFor = () => async (subject) => ({
   email_verified: true,
 });
 const idp = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: idpResolver,
   db: oauthDb,

@@ -278,7 +278,7 @@ describe("resealSecrets", () => {
     const t = fakeTenants();
     (t.service as unknown as { anyById: () => Promise<undefined> }).anyById =
       async () => undefined;
-    const policy = new SignInPolicyService(t.service, box);
+    const policy = new SignInPolicyService(t.service, box, () => {});
     expect(
       await policy.resealSecrets("65f0000000000000000000aa"),
     ).toMatchObject({

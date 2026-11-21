@@ -146,6 +146,7 @@ describe("hard quotas", () => {
 describe("the clients count over the real OAuth store", () => {
   test("counts a tenant's registered clients and no other tenant's", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      now: () => new Date(),
       log: () => {},
       domain: "clavix.test",
     });
@@ -181,6 +182,7 @@ describe("the clients count over the real OAuth store", () => {
   });
   test("agents are not clients: dynamic agents leave the clients count and fill the agents count", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      now: () => new Date(),
       log: () => {},
       domain: "clavix.test",
     });

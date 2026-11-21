@@ -58,17 +58,22 @@ describe("userWebhookEvent", () => {
 
 describe("signedInWebhookEvent", () => {
   test("a successful sign-in, without the address", () => {
-    const event = signedInWebhookEvent(signIn());
+    const event = signedInWebhookEvent(signIn(), () => new Date());
     expect(event?.type).toBe("session.signedIn");
     expect(event?.data).toEqual({ tenantId: TENANT, userId: "u1" });
   });
   test("failures, other types and unknown users are not delivered", () => {
     expect(
-      signedInWebhookEvent(signIn({ outcome: "failure" })),
+      signedInWebhookEvent(signIn({ outcome: "failure" }), () => new Date()),
     ).toBeUndefined();
-    expect(signedInWebhookEvent(signIn({ userId: undefined }))).toBeUndefined();
     expect(
-      signedInWebhookEvent(signIn({ type: "session.signOut" as never })),
+      signedInWebhookEvent(signIn({ userId: undefined }), () => new Date()),
+    ).toBeUndefined();
+    expect(
+      signedInWebhookEvent(
+        signIn({ type: "session.signOut" as never }),
+        () => new Date(),
+      ),
     ).toBeUndefined();
   });
 });

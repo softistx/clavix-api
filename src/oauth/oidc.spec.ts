@@ -30,6 +30,7 @@ const resolver = createTenantResolver({
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
@@ -65,6 +66,7 @@ const claimsFor: ClaimsFor = (tenant) => async (subject) => ({
 });
 
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,

@@ -93,7 +93,7 @@ export function createConsoleBudgets(
     inviteCaller: Bound<{ caller: string }>;
     inviteTenant: Bound<{ tenantId: string }>;
   },
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): ConsoleBudgets {
   const spend = async <P>(limit: Bound<P>, params: P, cost = 1) => {
     try {

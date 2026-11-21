@@ -59,10 +59,11 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policy = new SignInPolicyService(tenants, secretBox);
+const policy = new SignInPolicyService(tenants, secretBox, () => {});
 const SECRET = "gh-spec-secret-do-not-leak";
 
 interface Answer {

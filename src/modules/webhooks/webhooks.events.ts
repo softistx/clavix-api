@@ -80,6 +80,7 @@ export function userWebhookEvent(
 /** A successful sign-in of the sign-in log as `session.signedIn`; anything else is not delivered. */
 export function signedInWebhookEvent(
   event: AuthEvent,
+  now: () => Date,
 ): ClavixWebhookEvent | undefined {
   if (
     event.type !== "session.signIn" ||
@@ -91,7 +92,7 @@ export function signedInWebhookEvent(
   return {
     id: crypto.randomUUID(),
     type: "session.signedIn",
-    occurredAt: event.at ?? new Date(),
+    occurredAt: event.at ?? now(),
     data: { tenantId: event.tenantId, userId: event.userId },
   };
 }

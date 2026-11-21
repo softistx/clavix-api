@@ -5,7 +5,7 @@ const inFlight = new Set<Promise<void>>();
 
 export function afterAnswer(
   task: () => Promise<void>,
-  report: (message: string) => void = (message) => console.warn(message),
+  report: (message: string) => void,
 ): void {
   const run: Promise<void> = task()
     .catch((error: unknown) => {

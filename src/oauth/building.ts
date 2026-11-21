@@ -32,7 +32,7 @@ export interface BuildDeps {
   dpopNonceSecret: string;
   authFor: AuthFor;
   oidc: ReturnType<typeof createOidcProvider>;
-  clock?: Clock | undefined;
+  clock: Clock;
   rolesFor?: RolesFor | undefined;
   /** Absent: no client may exchange tokens. */
   exchangeRulesFor?: ExchangeRulesFor | undefined;
@@ -102,10 +102,7 @@ export const buildIssuer =
       dpop: {
         algorithms: DPOP_ALGORITHMS,
         required: tenant.oauth.dpop.required,
-        replay: createMongoDPoPReplayCache(
-          db,
-          clock === undefined ? {} : { clock },
-        ),
+        replay: createMongoDPoPReplayCache(db, { clock }),
         nonce: { secret: dpopNonceSecret },
       },
       // RFC 6749 section 4.4: served by a tenant with at least one resource
@@ -166,6 +163,6 @@ export const buildIssuer =
         }),
       },
       tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
-      ...(clock === undefined ? {} : { clock }),
+      clock,
     };
   };

@@ -11,22 +11,19 @@ export interface EventBus {
 export interface EventBusOptions {
   /**
    * Called when a subscriber throws: the event is lost for that subscriber and
-   * the others still get it. Default: a console line. Counted in telemetry
+   * the others still get it. Counted in telemetry
    * where a counter is wired.
    */
-  onFailure?: (error: unknown, event: ClavixEvent) => void;
+  onFailure: (error: unknown, event: ClavixEvent) => void;
 }
 
 /**
  * The Clavix event bus (D12, D13). A subscriber's failure is reported and
  * swallowed: an event never fails the sign-in that raised it.
  */
-export function createEventBus(options: EventBusOptions = {}): EventBus {
+export function createEventBus(options: EventBusOptions): EventBus {
   const subscribers = new Set<Subscriber>();
-  const onFailure =
-    options.onFailure ??
-    ((error, event) =>
-      console.error(`events: a subscriber failed on ${event.kind}`, error));
+  const { onFailure } = options;
   return {
     subscribe(subscriber) {
       subscribers.add(subscriber);

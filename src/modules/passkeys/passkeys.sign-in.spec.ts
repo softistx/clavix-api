@@ -25,6 +25,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
@@ -511,11 +512,15 @@ describe("development over http", () => {
   test("a tenant on an http .localhost origin builds a janus with its real rpId and origin, passkeys on", async () => {
     const tenant = await tenantOf("acme");
     const issuer = "http://acme.clavix.localhost:3000";
-    const janus = buildTenantJanus(oauthDb, {
-      ...tenant,
-      issuer,
-      slugIssuer: issuer,
-    });
+    const janus = buildTenantJanus(
+      oauthDb,
+      {
+        ...tenant,
+        issuer,
+        slugIssuer: issuer,
+      },
+      () => {},
+    );
     expect(janus.passkeys).toBeDefined();
     expect(rpIdOf({ slugIssuer: issuer })).toBe("acme.clavix.localhost");
     expect(originOf({ slugIssuer: issuer })).toBe(issuer);

@@ -151,10 +151,12 @@ export class AuthService {
       if (signUp) await this.createIfOpen(auth, email);
       const issued = await pending.send();
       if (issued !== null) await mail.signInCode(issued);
-    });
+    }, this.ports.log);
     return {
       challenge: pending.challenge,
-      expiresAt: new Date(Date.now() + SIGN_IN_CODE_LIFESPAN_MS),
+      expiresAt: new Date(
+        this.ports.now().getTime() + SIGN_IN_CODE_LIFESPAN_MS,
+      ),
     };
   }
 
@@ -216,8 +218,10 @@ export class AuthService {
       if (signUp) await this.createIfOpen(auth, email);
       const issued = await pending.send();
       if (issued !== null) await mail.magicLink(issued);
-    });
-    return { expiresAt: new Date(Date.now() + MAGIC_LINK_LIFESPAN_MS) };
+    }, this.ports.log);
+    return {
+      expiresAt: new Date(this.ports.now().getTime() + MAGIC_LINK_LIFESPAN_MS),
+    };
   }
 
   /** Confirms a magic link: a session, or the second-factor challenge of a user who holds a factor. */
@@ -283,7 +287,7 @@ export class AuthService {
             name: issued.user.name ?? issued.email,
           });
         }
-      });
+      }, this.ports.log);
     } catch (error) {
       if (error instanceof MailThrottledError) {
         throw emailVerificationThrottled(error.retryAfter ?? 600);

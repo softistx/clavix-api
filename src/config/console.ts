@@ -18,7 +18,7 @@ import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
 import { redis } from "./redis";
-import { clock } from "./runtime";
+import { clock, reportError, warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
@@ -64,6 +64,7 @@ export function createConsoleDeps(
     }),
     access,
     now: clock,
+    reportError,
     admins: createJanusAdmins(invitationsOf(clavixTenant)),
     users: new UsersService({
       janusOf: async (id) => {
@@ -82,11 +83,13 @@ export function createConsoleDeps(
     }),
     exclusive,
     budgets:
-      redis === undefined ? undefined : createConsoleBudgets(redis.limits),
+      redis === undefined
+        ? undefined
+        : createConsoleBudgets(redis.limits, warn),
     auditExport:
       redis === undefined
         ? {}
-        : { throttle: createExportThrottle(redis.limits.auditExport) },
+        : { throttle: createExportThrottle(redis.limits.auditExport, warn) },
     adminEvents: adminEventRecorder,
     activity: { admin: adminEventReader, auth: authEventsService },
     directory: {

@@ -16,7 +16,7 @@ import { env } from "./env";
 import { eventBus } from "./events";
 import { mailer } from "./mail";
 import { redis } from "./redis";
-import { warn } from "./runtime";
+import { clock, warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 import { urlPolicy, webhooksService } from "./webhooks-service";
@@ -51,6 +51,7 @@ export const webhookDelivery = createWebhookDelivery({
   webhooks: webhooksService,
   fetch: guardedFetch(urlPolicy),
   log: warn,
+  now: clock,
   queue:
     redis === undefined
       ? createMemoryWebhookQueue(queueLimits)

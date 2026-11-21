@@ -27,7 +27,7 @@ export function createSignInThrottle(
     signInIp: BoundLimits["ip"];
     signInTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): SignInThrottle {
   return createThrottle(
     { ip: limits.signInIp, tenant: limits.signInTenant },

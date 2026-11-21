@@ -66,6 +66,7 @@ export function createFlow(
     email_verified: true,
   });
   const base = createClavixOAuthIssuers({
+    clock: { now: () => new Date() },
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,

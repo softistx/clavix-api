@@ -44,7 +44,11 @@ const resolver = createTenantResolver({
   config,
   log: () => {},
 });
-const { janusIssuers } = createTenantAuth({ resolver, db: oauthDb });
+const { janusIssuers } = createTenantAuth({
+  resolver,
+  db: oauthDb,
+  log: () => {},
+});
 const instance = async () => {
   const auth = await janusIssuers.forRequest(
     new Request(`https://${SLUG_HOST}/`),
@@ -126,10 +130,14 @@ describe("passkeys on a custom domain (related origins)", () => {
     const tenant = await resolver.resolveHost(SLUG_HOST);
     if (tenant === null) throw new Error("no tenant");
     expect(() =>
-      buildTenantJanus(oauthDb, {
-        ...tenant,
-        relatedOrigins: relatedOriginsOf(["a.example"], config),
-      }),
+      buildTenantJanus(
+        oauthDb,
+        {
+          ...tenant,
+          relatedOrigins: relatedOriginsOf(["a.example"], config),
+        },
+        () => {},
+      ),
     ).not.toThrow();
   });
 });

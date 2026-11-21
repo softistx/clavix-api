@@ -54,6 +54,7 @@ export class TenantsService {
   ) => string[] | Promise<string[]>;
   private readonly onCreated: (tenantId: string) => void | Promise<void>;
   private readonly log: (message: string) => void;
+  private readonly now: () => Date;
 
   constructor(
     private readonly collection: TypedCollection<typeof tenants>,
@@ -64,6 +65,7 @@ export class TenantsService {
     this.hostsOf = options.hostsOf ?? (() => []);
     this.onCreated = options.onCreated ?? (() => {});
     this.log = options.log;
+    this.now = options.now;
   }
 
   async create(input: {
@@ -352,7 +354,7 @@ export class TenantsService {
         purgeStartedAt: { $exists: false },
       },
       {
-        $set: { deletedAt: null, updatedAt: new Date() },
+        $set: { deletedAt: null, updatedAt: this.now() },
         $inc: { version: 1 },
       },
     );
@@ -376,7 +378,7 @@ export class TenantsService {
     const result = await this.collection.raw.updateOne(
       { _id: tenant._id, version: tenant.version },
       {
-        $set: { "signIn.social": social, updatedAt: new Date() },
+        $set: { "signIn.social": social, updatedAt: this.now() },
         $inc: { version: 1 },
       },
     );

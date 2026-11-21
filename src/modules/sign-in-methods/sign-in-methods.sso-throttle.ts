@@ -41,7 +41,7 @@ export const createHomeRealmThrottle = (
     homeRealmIp: BoundLimits["ip"];
     homeRealmTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): SsoThrottle =>
   createThrottle(
     { ip: limits.homeRealmIp, tenant: limits.homeRealmTenant },
@@ -56,7 +56,7 @@ export const createSsoStartThrottle = (
     ssoStartIp: BoundLimits["ip"];
     ssoStartTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): SsoThrottle =>
   createThrottle(
     { ip: limits.ssoStartIp, tenant: limits.ssoStartTenant },

@@ -56,6 +56,7 @@ const open: ReturnType<typeof createWebhookDelivery>[] = [];
 const refused: string[] = [];
 const makeDelivery = (caps: { maxInFlight: number; maxPending: number }) => {
   const delivery = createWebhookDelivery({
+    now: () => new Date(),
     webhooks: endpoints,
     fetch: guardedFetch(policy, receiver),
     queue: createMemoryWebhookQueue(
