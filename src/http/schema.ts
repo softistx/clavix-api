@@ -1,9 +1,9 @@
 import { basename, join } from "node:path";
 import { loadFilesSync } from "@graphql-tools/load-files";
 import { mergeResolvers, mergeTypeDefs } from "@graphql-tools/merge";
-import { createSchema, type Resolvers } from "@graxia/core";
 import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
+import { createSchema, type Resolvers } from "@softistx/graxia";
 import { resolvers } from "../modules";
 import { guardedSchema } from "../modules/auth/plugin";
 import { consentResolvers, consentTypeDefs } from "../modules/consent";

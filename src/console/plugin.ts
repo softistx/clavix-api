@@ -1,4 +1,4 @@
-import { createStateKey, definePlugin } from "@graxia/core";
+import { createStateKey, definePlugin } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";

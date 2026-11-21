@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { graphqlClient } from "@alxia/graphql/testing";
+import { graphqlClient } from "@softistx/alxia-graphql/testing";
 import { graphql } from "~/generated/graphql";
 import { createApp } from "./app";
 import { version } from "./modules/health";

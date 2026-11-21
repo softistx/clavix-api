@@ -1,5 +1,5 @@
 import type { IResolvers } from "@graphql-tools/utils";
-import { definePlugin } from "@graxia/core";
+import { definePlugin } from "@softistx/graxia";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
 import { GraphQLError } from "graphql";

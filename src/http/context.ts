@@ -1,6 +1,6 @@
-import { alxia, forwardedIp } from "@alxia/core";
-import type { GraphQLContext } from "@alxia/graphql";
-import { telemetry as tracing } from "@alxia/telemetry";
+import { alxia, forwardedIp } from "@softistx/alxia";
+import type { GraphQLContext } from "@softistx/alxia-graphql";
+import { telemetry as tracing } from "@softistx/alxia-telemetry";
 import type { JanusContext } from "@softistx/janus-graphql";
 import { type Telemetry, withAttributes } from "@softistx/telemetry";
 import { env } from "@/config/env";

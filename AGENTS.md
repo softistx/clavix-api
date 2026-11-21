@@ -1,7 +1,7 @@
 # clavix-api: rules for agents and contributors
 
 The API of Clavix, a multi-tenant OAuth 2.1 / OpenID Connect identity provider (one
-issuer per tenant): Bun, alxia, graxia (`@alxia/graphql` on `@graxia/core`), `@softistx/mongo`, `@softistx/redis` and the
+issuer per tenant): Bun, alxia, graxia (`@softistx/alxia-graphql` on `@softistx/graxia`), `@softistx/mongo`, `@softistx/redis` and the
 `@softistx/janus*` packages. It serves the OAuth/OIDC endpoints and the GraphQL API of the hosted
 pages (e-mail code and passkey sign-in, consent), with the tenant, client, resource and signing-key
 services behind them; tenants, clients, resources and scopes are managed in the console API
@@ -49,12 +49,12 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 
 `buildTelemetry` makes the app's `@softistx/telemetry` (OTLP/HTTP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, no exporter
 otherwise; `ratioSampler(0.1)` in production), `config/telemetry.ts` installs it, and `createBase` (`http/context.ts`) gives
-`@alxia/telemetry` to `use` first, with `createApp({ telemetry })` to swap it in a spec. A second middleware resolves the tenant
+`@softistx/alxia-telemetry` to `use` first, with `createApp({ telemetry })` to swap it in a spec. A second middleware resolves the tenant
 (the memoised `ctx.tenant()`) and runs the rest under `withAttributes` of `clavix.tenant.id` and `clavix.tenant.plan` (`ResolvedTenant.plan`,
 `telemetry/tenant.ts`); `/healthz`, `/readyz` and `/internal/*` are neither traced nor resolved. `buildTenantJanus` returns
 `instrumentJanus(...)`; `createClavixOAuthIssuers` passes `instrument` (`instrumentOAuth`, tenant attributes via `tenantAttributes`; spec `src/oauth/telemetry.spec.ts`); the MongoDB command spans (`instrumentDatabase`, `server.ts`) need `monitorCommands`, set in `db.ts` only
 with an endpoint. **Never written:** tokens, codes, secrets, e-mails, logins, IPs: `createBase` passes `clientAddress: false`
-to `@alxia/telemetry` (>= 0.9.0), so the server span leaves `client.address` off. A new attribute is
+to `@softistx/alxia-telemetry` (>= 0.9.0), so the server span leaves `client.address` off. A new attribute is
 added to `tenantAttributes` or to the span that owns it, never from a request body. Spec: `telemetry/telemetry.spec.ts`.
 
 ## Console pages carry `totalCount: Int!`
@@ -278,7 +278,7 @@ resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are th
 
 ## Same-origin guard and shutdown
 
-`useSameOriginJson` (`src/http/same-origin.ts`, first graxia plugin of `createApp`, an `onRequest` of this API's own: `sameOrigin()` of `@alxia/graphql` is gone, and graxia's `csrf` option answers a fixed 403, so it is not used for this; graxia's CSRF header check stays on and runs before it, so a GET or a non-JSON POST carries `x-graphql-csrf: 1` to reach it) guards **every**
+`useSameOriginJson` (`src/http/same-origin.ts`, first graxia plugin of `createApp`, an `onRequest` of this API's own: `sameOrigin()` of `@softistx/alxia-graphql` is gone, and graxia's `csrf` option answers a fixed 403, so it is not used for this; graxia's CSRF header check stays on and runs before it, so a GET or a non-JSON POST carries `x-graphql-csrf: 1` to reach it) guards **every**
 `/graphql` operation once: a foreign `Origin`, `Origin: null` or a non-JSON POST is answered before
 parsing, with no CORS header: consent operations (`CONSENT_FIELDS`) get 404 `NOT_FOUND`, all others 403
 `FORBIDDEN`. Origin and request are compared by host (TLS-terminating proxy); no Origin passes (the cookie
@@ -655,7 +655,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `budgets.testWebhook` (5/min per endpoint, then 20/min per tenant, `CLAVIX_WEBHOOK_TEST_*`) once the endpoint is found
   and enabled, before the address check and the queue. `inviteUser` / `inviteAdmin` spend `budgets.invitation` (200/h per
   tenant, both together, `CLAVIX_INVITE_TENANT_*`) just before the invitation is issued, and the per-caller budget
-  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@alxia/graphql`'s `fieldRateLimit` (`useInviteBudget`, first in the
+  (60/h per mutation, `CLAVIX_INVITE_CALLER_*`) is `@softistx/alxia-graphql`'s `fieldRateLimit` (`useInviteBudget`, first in the
   console's plugins in `app.ts`), which counts every aliased selection before anything runs. Refusal: `RATE_LIMITED` 429,
   `extensions.retryAfter` and `Retry-After`. Redis down: allowed and logged, as the audit export. A new console mutation
   that sends a mail or queues outbound work gets its budget here, never a counter of its own.
