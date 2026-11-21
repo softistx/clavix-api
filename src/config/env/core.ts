@@ -8,7 +8,7 @@ import {
   optionalOutsideProduction,
   redisUrl,
   smtpUrl,
-  trustedProxiesRequired,
+  trustedProxies,
 } from "./shared";
 
 // The server, its stores, the issuers, the GraphQL IDE, telemetry and proxies.
@@ -85,11 +85,6 @@ export const coreEnv = () => {
     // right of X-Forwarded-For, which the proxies append to. Required in
     // production, where a wrong 0 behind a proxy rate-limits the proxy's address
     // for everyone (and a wrong N lets a client forge its own): say it, even if 0.
-    CLAVIX_TRUSTED_PROXIES: production
-      ? z
-          .string({ error: trustedProxiesRequired })
-          .regex(/^\d+$/, trustedProxiesRequired)
-          .transform(Number)
-      : z.coerce.number().int().min(0).default(0),
+    CLAVIX_TRUSTED_PROXIES: trustedProxies(production),
   };
 };

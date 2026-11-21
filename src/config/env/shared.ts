@@ -52,3 +52,12 @@ export const smtpUrl = z
 export const DEV_KEYS_MASTER_KEY = Buffer.from(
   "clavix-dev-only-keys-master-key!",
 ).toString("base64");
+
+// The number of reverse proxies in front of the app: required in production.
+export const trustedProxies = (production: boolean) =>
+  production
+    ? z
+        .string({ error: trustedProxiesRequired })
+        .regex(/^\d+$/, trustedProxiesRequired)
+        .transform(Number)
+    : z.coerce.number().int().min(0).default(0);
