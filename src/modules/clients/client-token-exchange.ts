@@ -1,6 +1,6 @@
 import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
+import { validateTokenExchange } from "@/modules/client-policies/client-policies.rules";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
-import { validateTokenExchange } from "@/modules/client-policies/validate";
 import { CatalogError } from "@/modules/resources";
 import type { CliTenant } from "@/shared/cli";
 import type { ClientView } from "./client-listing";

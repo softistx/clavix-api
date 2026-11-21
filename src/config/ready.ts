@@ -1,4 +1,4 @@
-import { readiness } from "@/modules/health/ready";
+import { readiness } from "@/modules/health";
 import { mongo } from "./db";
 import { redis } from "./redis";
 

@@ -3,7 +3,7 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import { auth } from "./auth/auth.resolver";
 import { branding } from "./branding/branding.resolver";
 import { connections } from "./connections/connections.resolver";
-import { health } from "./health";
+import { health } from "./health/health.resolver";
 import { invitations } from "./invitations/invitations.resolver";
 import { mfa } from "./mfa/mfa.resolver";
 import { passkeys } from "./passkeys/passkeys.resolver";

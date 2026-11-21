@@ -1,13 +1,6 @@
 import { redirectUriProblem } from "@softistx/janus-oauth";
-import type { AGENT_MODES, AgentsPolicy } from "./oauth-policy.schema";
-
-/** The change an admin makes to the agents policy: a field left out keeps its value. */
-export interface AgentsPolicyInput {
-  dynamic?: (typeof AGENT_MODES)[number] | undefined;
-  redirectUris?: readonly string[] | undefined;
-  metadataDocuments?: boolean | undefined;
-  allowHosts?: readonly string[] | undefined;
-}
+import type { AgentsPolicy } from "./oauth-policy.schema";
+import type { AgentsPolicyInput } from "./oauth-policy.types";
 
 /** What a list may hold, and a redirect URI's length. */
 export const MAX_AGENT_LIST = 50;

@@ -1,24 +1,17 @@
 import { OptimisticLockError } from "@softistx/mongo";
-import type { ErrorCode } from "@/i18n/codes";
 import type { Tenant, TenantsService } from "@/modules/tenants";
-import { fail } from "@/shared/errors";
+import {
+  badAgentsInput,
+  policyConflict,
+  tenantNotFound,
+} from "./oauth-policy.errors";
 import {
   AgentsInputError,
-  type AgentsPolicyInput,
   applyAgentsInput,
   sameAgents,
-} from "./agents-input";
-import type { OAuthPolicy } from "./oauth-policy.schema";
-
-const refusal = (code: ErrorCode, message: string, status: number) =>
-  fail(code, message, { status });
-
-/** The change an admin makes to the policy: a flag left out keeps its value. */
-export interface OAuthPolicyInput {
-  par?: { required?: boolean | undefined } | undefined;
-  dpop?: { required?: boolean | undefined } | undefined;
-  agents?: AgentsPolicyInput | null | undefined;
-}
+} from "./oauth-policy.rules";
+import type { AgentsPolicy, OAuthPolicy } from "./oauth-policy.schema";
+import type { OAuthPolicyInput } from "./oauth-policy.types";
 
 /**
  * The OAuth policy of a tenant (M3). Every change is one tenant write: it
@@ -32,23 +25,12 @@ export class OAuthPolicyService {
   /** The tenant (suspended included: its policy stays readable), or NOT_FOUND (404) for an unknown or trashed one. */
   async get(tenantId: string): Promise<Tenant> {
     const [tenant] = await this.tenants.liveByIds([tenantId]);
-    if (tenant === undefined) throw refusal("NOT_FOUND", "No such tenant", 404);
+    if (tenant === undefined) throw tenantNotFound();
     return tenant;
   }
 
   async update(tenantId: string, input: OAuthPolicyInput): Promise<Tenant> {
     await this.get(tenantId);
-    // Checked once, on the stored policy, before any write: a bad value stores nothing.
-    const checked = (tenant: Tenant) => {
-      try {
-        return applyAgentsInput(tenant.oauth.agents, input.agents);
-      } catch (error) {
-        if (error instanceof AgentsInputError) {
-          throw refusal("BAD_USER_INPUT", error.message, 400);
-        }
-        throw error;
-      }
-    };
     try {
       return await this.tenants.updateOAuth(tenantId, (tenant) => {
         const next: OAuthPolicy = {
@@ -56,7 +38,8 @@ export class OAuthPolicyService {
           dpop: {
             required: input.dpop?.required ?? tenant.oauth.dpop.required,
           },
-          agents: checked(tenant),
+          // Checked once, on the stored policy, before any write: a bad value stores nothing.
+          agents: this.checkedAgents(tenant.oauth.agents, input),
         };
         if (
           next.par.required === tenant.oauth.par.required &&
@@ -68,12 +51,20 @@ export class OAuthPolicyService {
         return next;
       });
     } catch (error) {
-      if (error instanceof OptimisticLockError) {
-        throw refusal(
-          "CONFLICT",
-          "The OAuth policy was changed at the same time; read it and try again",
-          409,
-        );
+      if (error instanceof OptimisticLockError) throw policyConflict();
+      throw error;
+    }
+  }
+
+  private checkedAgents(
+    current: AgentsPolicy,
+    input: OAuthPolicyInput,
+  ): AgentsPolicy {
+    try {
+      return applyAgentsInput(current, input.agents);
+    } catch (error) {
+      if (error instanceof AgentsInputError) {
+        throw badAgentsInput(error.message);
       }
       throw error;
     }
