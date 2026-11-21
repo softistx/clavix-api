@@ -20,6 +20,9 @@ export const common = defineCodes("common", [
   "CONFLICT",
   "RATE_LIMITED",
   "SERVICE_UNAVAILABLE",
+  "UNAUTHENTICATED",
+  "FORBIDDEN",
+  "METHOD_NOT_ALLOWED",
 ]);
 
 // Every module's declaration, in module order.

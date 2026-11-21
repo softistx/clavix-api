@@ -1,4 +1,5 @@
 import { defineCodes } from "@/i18n/define-codes";
+
 /** The slug is not a valid, unreserved DNS label. */
 export class InvalidSlugError extends Error {
   override name = "InvalidSlugError";

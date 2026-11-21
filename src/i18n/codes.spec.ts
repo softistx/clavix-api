@@ -23,6 +23,9 @@ test("the answers every module gives alike are declared in common", () => {
     "CONFLICT",
     "RATE_LIMITED",
     "SERVICE_UNAVAILABLE",
+    "UNAUTHENTICATED",
+    "FORBIDDEN",
+    "METHOD_NOT_ALLOWED",
   ]);
 });
 

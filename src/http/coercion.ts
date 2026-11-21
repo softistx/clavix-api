@@ -20,6 +20,8 @@ export function withoutQuotedValue(error: GraphQLError): GraphQLError {
   if (match === null) return error;
   const path = AT.exec(error.message)?.[1];
   const where = path === undefined ? "" : ` at "${path}"`;
+  // Not `fail()`: it keeps the failing `nodes` (positions) and sets no HTTP
+  // status, which graxia's `errorHttp` would turn into a response status.
   return new GraphQLError(
     `Variable "$${match[1]}" got an invalid value${where}`,
     { nodes: error.nodes ?? [], extensions: { code: "BAD_USER_INPUT" } },

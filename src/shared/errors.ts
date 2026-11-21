@@ -2,6 +2,14 @@ import type { ErrorHttp } from "@softistx/graxia";
 import { GraphQLError } from "graphql";
 import type { ErrorCode } from "@/i18n/codes";
 
+/**
+ * The JSON body of a refusal answered outside GraphQL (a route, a plugin's
+ * early answer): `{ errors: [{ message, extensions: { code } }] }`, the shape
+ * `fail()` gives a GraphQL error.
+ */
+export const errorBody = (code: ErrorCode, message: string): string =>
+  JSON.stringify({ errors: [{ message, extensions: { code } }] });
+
 export interface FailOptions {
   /** The HTTP status graxia answers a single operation with (`extensions.http.status`). */
   status?: number | undefined;
