@@ -28,6 +28,30 @@ export interface PublicDocumentsOptions {
   now: () => number;
 }
 
+/** A cacheable document request: a GET of one of the documents; its path and host slot. */
+const documentSlotOf = (request: Request): string | null => {
+  const { pathname, host } = new URL(request.url);
+  if (request.method !== "GET" || !DOCUMENTS.has(pathname)) return null;
+  return `${host.toLowerCase()}${pathname}`;
+};
+
+/** A 200 response's body as an entry, without the headers the entry sets itself. */
+const entryOf = (
+  response: Response,
+  body: string,
+  key: string,
+  expiresAt: number,
+): Entry => ({
+  key,
+  expiresAt,
+  body,
+  headers: [...response.headers].filter(
+    ([name]) => name !== "etag" && name !== "content-length",
+  ),
+  etag: `"${Bun.hash(body).toString(36)}"`,
+  status: 200,
+});
+
 const matches = (header: string, etag: string) =>
   header.trim() === "*" ||
   header
@@ -75,16 +99,7 @@ export function withPublicDocuments<
     const response = await oauth.handle(request, ip);
     if (response.status !== 200) return response;
     const body = await response.text();
-    const entry: Entry = {
-      key,
-      expiresAt: now() + ttl,
-      body,
-      headers: [...response.headers].filter(
-        ([name]) => name !== "etag" && name !== "content-length",
-      ),
-      etag: `"${Bun.hash(body).toString(36)}"`,
-      status: 200,
-    };
+    const entry = entryOf(response, body, key, now() + ttl);
     entries.delete(slot);
     entries.set(slot, entry);
     if (entries.size > max) {
@@ -97,13 +112,11 @@ export function withPublicDocuments<
   return {
     ...oauth,
     handle: async (request: Request, ip?: string | undefined) => {
-      const { pathname, host } = new URL(request.url);
-      if (request.method !== "GET" || !DOCUMENTS.has(pathname))
-        return oauth.handle(request, ip);
+      const slot = documentSlotOf(request);
+      if (slot === null) return oauth.handle(request, ip);
       const tenant = await resolver.resolveRequest(request);
       if (tenant === null) return oauth.handle(request, ip);
       const key = `${tenant.tenantId}.${tenant.version}.${generations.of(tenant.tenantId)}.${tenant.issuer}`;
-      const slot = `${host.toLowerCase()}${pathname}`;
       const hit = entries.get(slot);
       if (hit !== undefined && hit.key === key && hit.expiresAt > now())
         return answer(hit, request);

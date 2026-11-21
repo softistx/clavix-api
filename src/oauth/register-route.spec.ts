@@ -468,6 +468,7 @@ describe("agent records", () => {
         remove: async () => {},
       },
       agentQuotaOf: async () => null,
+      exclusive: (_key, work) => work(),
       log: () => {},
     });
     const before = await clients();
