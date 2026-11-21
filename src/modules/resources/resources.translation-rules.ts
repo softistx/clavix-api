@@ -21,7 +21,7 @@ function entriesOf(
   for (const item of input) {
     const locale = canonicalLocale(item.locale.trim());
     if (locale === undefined) {
-      return refuse("a locale is not a language tag (BCP 47)");
+      return refuse(`${what}: a locale is not a language tag (BCP 47)`);
     }
     if (entries.has(localeKey(locale))) {
       refuse(`${what} is given twice in ${locale}`);

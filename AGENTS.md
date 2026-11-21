@@ -324,8 +324,8 @@ is wrapped (`ConsentService.approveOrDenyUnmet`; `consent/consent.unmet.ts`) and
 A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176), not `otp`: janus stores it on the session itself (@softistx/janus 0.77), and `src/modules/mfa/mfa.second-factor.spec.ts` asserts it. A passkey step-up needs no
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language`, then its base language, then the first stored
-translation, then janus's label; `src/shared/translations.ts`: per asked language the exact locale, then its base language, then a sibling region (`fr` finds `fr-CA`)). No language is fixed for a tenant's texts; the one exception is the consent page's own row words (Actions, Location, Identifier, Data, Yes, No), kept in `en` and `fr` in `consent.detail-format.ts` (English first, the fallback) until clavix-ui words them from its catalogue, set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
-resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
+translation, then janus's label; `src/shared/translations.ts`: per asked language the exact locale, then its base language, then a sibling region (`fr` finds `fr-CA`))., set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+resolvers because janus-oauth's `scopeLabels` is one static map. No language is fixed for a tenant's texts; the one exception is the consent page's own row words (Actions, Location, Identifier, Data, Yes, No), kept in `en` and `fr` in `consent.detail-format.ts` (English first, the fallback) until clavix-ui words them from its catalogue. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 

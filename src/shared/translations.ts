@@ -51,7 +51,8 @@ export function acceptedLocales(header: string | null | undefined): string[] {
 /**
  * The text shown to a viewer: for each language the viewer asks, in order, the
  * translation in exactly that locale, then in its base language (`fr` for
- * `fr-CA`); else the first stored translation. `undefined` when there is none.
+ * `fr-CA`), then a sibling region (`fr-FR` for `fr-CA`); else the first stored
+ * translation. `undefined` when there is none.
  */
 export function pickTranslation(
   translations: readonly Translation[],
