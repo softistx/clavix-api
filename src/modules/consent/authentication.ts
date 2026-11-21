@@ -1,5 +1,4 @@
 import { denial } from "@softistx/janus-graphql";
-import { GraphQLError } from "graphql";
 import { janusIssuers } from "@/config/users";
 import type { Context } from "@/http/context";
 import {
@@ -9,6 +8,7 @@ import {
   assess,
   type Demands,
 } from "@/oauth/authentication-level";
+import { fail } from "@/shared/errors";
 
 /** What a pending request asks of the authentication: its `acr_values`, `max_age` and `prompt`. The device flow's request carries none. */
 export interface RequestDemands {
@@ -62,14 +62,17 @@ export async function assessment(
 
 /** D10: a request the session cannot meet is not approved; the answer carries what is missing so the page can lead the user to it. */
 export const unmetAuthentication = (missing: readonly string[]) =>
-  new GraphQLError("unmet_authentication_requirements", {
-    extensions: {
-      code: "UNMET_AUTHENTICATION_REQUIREMENTS",
-      oauthError: "unmet_authentication_requirements",
-      missing: [...missing],
-      http: { status: 403 },
+  fail(
+    "UNMET_AUTHENTICATION_REQUIREMENTS",
+    "unmet_authentication_requirements",
+    {
+      status: 403,
+      extra: {
+        oauthError: "unmet_authentication_requirements",
+        missing: [...missing],
+      },
     },
-  });
+  );
 
 /** The `authentication` field of a pending request. */
 export const authenticationOf = async (

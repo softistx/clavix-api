@@ -1,6 +1,6 @@
 import { JanusError } from "@softistx/janus";
 import type { JanusMail } from "@softistx/janus-mail";
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import type { TenantJanus } from "@/users/tenant-janus";
 import { afterAnswer } from "./outbox";
 
@@ -48,9 +48,7 @@ export async function requestSignInCode(
 
 /** Every refusal alike: a decoy challenge must not read differently from a real one. */
 export const codeInvalid = () =>
-  new GraphQLError("The code is wrong or has expired", {
-    extensions: { code: "CODE_INVALID", http: { status: 401 } },
-  });
+  fail("CODE_INVALID", "The code is wrong or has expired", { status: 401 });
 
 export async function verifySignInCode(
   auth: TenantJanus,

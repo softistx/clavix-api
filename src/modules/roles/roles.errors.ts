@@ -1,3 +1,4 @@
+import { defineCodes } from "@/i18n/define-codes";
 export type RolesErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
@@ -14,3 +15,6 @@ export class RolesError extends Error {
     this.name = "RolesError";
   }
 }
+
+// The codes this module raises (the inventory: src/i18n/codes.ts).
+export const codes = defineCodes("roles", ["ROLE_MANAGED"]);

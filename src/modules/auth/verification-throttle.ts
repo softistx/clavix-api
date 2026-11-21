@@ -1,4 +1,3 @@
-import { GraphQLError } from "graphql";
 import {
   type BoundLimits,
   createUserThrottle,
@@ -8,6 +7,7 @@ import {
   type UserThrottle,
   userAndTenantLimits,
 } from "@/http/throttle/core";
+import { fail } from "@/shared/errors";
 
 export type VerificationLimitConfig = UserLimitConfig;
 export type VerificationThrottle = UserThrottle;
@@ -22,13 +22,11 @@ export const verificationLimits = (config: VerificationLimitConfig) => {
 
 /** `EMAIL_VERIFICATION_THROTTLED`, 429, `retryAfter` in the error and `Retry-After` (seconds). */
 export const emailVerificationThrottled = (retryAfter: number) =>
-  new GraphQLError("Too many verification e-mails requested", {
-    extensions: {
-      code: "EMAIL_VERIFICATION_THROTTLED",
-      retryAfter,
-      http: { status: 429, headers: { "retry-after": String(retryAfter) } },
-    },
-  });
+  fail(
+    "EMAIL_VERIFICATION_THROTTLED",
+    "Too many verification e-mails requested",
+    { status: 429, retryAfter },
+  );
 
 /**
  * The user first, then the address and the tenant. Redis down or slow: the

@@ -763,6 +763,15 @@ A spec connects to no service the CI runner lacks. The skeleton has no store; th
 that adds MongoDB or Redis starts an in-memory one in `test/setup.ts` (as healthix-api's
 does) rather than reading `.env`. A slice runs the specs of the code it changed.
 
+## Errors
+
+Every refusal is `fail(code, message, { status, field, retryAfter, headers, extra })` (`src/shared/errors.ts`), never a
+hand-built `GraphQLError` (graxia plugins such as `src/http/coercion.ts` aside). `code` is an `ErrorCode`: each module
+declares its codes in its `<name>.errors.ts` (`export const codes = defineCodes("<name>", [...])`), the answers all modules
+share (`BAD_USER_INPUT`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `SERVICE_UNAVAILABLE`) are in `src/i18n/codes.ts`, which
+unions every group, and `src/i18n/codes.spec.ts` lists each code once. A new code goes in its module's file; tsc refuses an
+unknown one. Values stay UPPER_SNAKE (the contract with the UI and the SDK; renaming them is a later effort, D3).
+
 ## graxia plugins of this API
 
 An error's `extensions.http.status` and `headers` (a throttle's `Retry-After`) answer the JSON result through graxia

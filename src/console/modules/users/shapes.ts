@@ -1,4 +1,4 @@
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import type { TenantUserView, UserGrantView } from "../../context";
 
 /** A user as the console resolvers pass it on: its tenant too, for the fields read afterwards (`secondFactor`). */
@@ -31,9 +31,7 @@ export const grantShape = (grant: UserGrantView) => ({
 });
 
 export const badInput = (message: string) =>
-  new GraphQLError(message, {
-    extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
-  });
+  fail("BAD_USER_INPUT", message, { status: 400 });
 
 export const target = (type: string, id: string, tenantId: string) => ({
   type,

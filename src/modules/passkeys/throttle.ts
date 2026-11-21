@@ -1,4 +1,3 @@
-import { GraphQLError } from "graphql";
 import {
   type BoundLimits,
   createThrottle,
@@ -7,6 +6,7 @@ import {
   retryAfterSeconds,
   type Throttle,
 } from "@/http/throttle/core";
+import { fail } from "@/shared/errors";
 
 export type PasskeyLimitConfig = LimitConfig;
 export type PasskeyThrottle = Throttle;
@@ -21,11 +21,9 @@ export const passkeyLimits = (config: PasskeyLimitConfig) => {
 
 /** `PASSKEY_THROTTLED`, 429 with `Retry-After` (seconds). */
 export const passkeyThrottled = (retryAfter: number) =>
-  new GraphQLError("Too many passkey sign-ins requested", {
-    extensions: {
-      code: "PASSKEY_THROTTLED",
-      http: { status: 429, headers: { "retry-after": String(retryAfter) } },
-    },
+  fail("PASSKEY_THROTTLED", "Too many passkey sign-ins requested", {
+    status: 429,
+    headers: { "retry-after": String(retryAfter) },
   });
 
 /** Address first, then tenant; Redis down: the request goes through, logged. */

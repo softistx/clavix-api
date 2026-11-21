@@ -1,11 +1,11 @@
-import { GraphQLError } from "graphql";
 import { connectionsService } from "@/config/connections";
+import { fail } from "@/shared/errors";
 import type { TenantJanus } from "@/users/tenant-janus";
 
 /** The address signs in through its company's identity provider only (D3). */
 export const ssoRequired = () =>
-  new GraphQLError("This address signs in through single sign-on", {
-    extensions: { code: "SSO_REQUIRED", http: { status: 403 } },
+  fail("SSO_REQUIRED", "This address signs in through single sign-on", {
+    status: 403,
   });
 
 /** Before any code or link is sent: refuses an address whose domain requires single sign-on. */

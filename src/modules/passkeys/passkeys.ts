@@ -1,13 +1,12 @@
 import type { Passkey } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import type { TenantJanus } from "@/users/tenant-janus";
 
 /** Every refusal of a passkey sign-in alike: it must not tell whether the credential, the user or the tenant exists. */
 export const passkeyInvalid = () =>
-  new GraphQLError("The passkey was refused", {
-    extensions: { code: "PASSKEY_INVALID", http: { status: 401 } },
-  });
+  fail("PASSKEY_INVALID", "The passkey was refused", { status: 401 });
 
 /** What the browser answered, from the JSON text the page sent. */
 function parsed(text: string): unknown {
@@ -54,8 +53,8 @@ export async function currentOf(auth: TenantJanus, request: Request) {
 export function responseOf(text: string): unknown {
   const value = parsed(text);
   if (value === undefined) {
-    throw new GraphQLError("response must be a JSON string", {
-      extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+    throw fail("BAD_USER_INPUT", "response must be a JSON string", {
+      status: 400,
     });
   }
   return value;

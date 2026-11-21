@@ -2,9 +2,9 @@ import type { IResolvers } from "@graphql-tools/utils";
 import { definePlugin } from "@softistx/graxia";
 import { denial } from "@softistx/janus-graphql";
 import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
-import { GraphQLError } from "graphql";
 import type { Context } from "@/http/context";
 import type { OAuthHandle } from "@/oauth/routes";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { type AgentsFor, agentMarksReader, markOf } from "./agent-marker";
@@ -114,11 +114,8 @@ const detailsComplete = async (
 // type no longer defines) is refused before janus approves it, as an invalid
 // authorization details input; it stays pending and can be denied.
 const refuseIncomplete = () =>
-  new GraphQLError("invalid_authorization_details", {
-    extensions: {
-      code: "BAD_USER_INPUT",
-      oauthError: "invalid_authorization_details",
-    },
+  fail("BAD_USER_INPUT", "invalid_authorization_details", {
+    extra: { oauthError: "invalid_authorization_details" },
   });
 
 // One read of the client's agent mark per request, shared by its fields.

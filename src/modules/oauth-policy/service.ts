@@ -1,7 +1,8 @@
 import { OptimisticLockError } from "@softistx/mongo";
-import { GraphQLError } from "graphql";
+import type { ErrorCode } from "@/i18n/codes";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
+import { fail } from "@/shared/errors";
 import {
   AgentsInputError,
   type AgentsPolicyInput,
@@ -10,8 +11,8 @@ import {
 } from "./agents-input";
 import type { OAuthPolicy } from "./oauth-policy.schema";
 
-const refusal = (code: string, message: string, status: number) =>
-  new GraphQLError(message, { extensions: { code, http: { status } } });
+const refusal = (code: ErrorCode, message: string, status: number) =>
+  fail(code, message, { status });
 
 /** The change an admin makes to the policy: a flag left out keeps its value. */
 export interface OAuthPolicyInput {

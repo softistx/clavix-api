@@ -1,6 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
-import { GraphQLError } from "graphql";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../../context";
 import {
   lastOwnerError,
@@ -130,7 +130,7 @@ export async function keepOwners<T>(
       held = [...error.tenants];
     }
   }
-  throw new GraphQLError("The memberships keep changing, try again", {
-    extensions: { code: "CONFLICT", http: { status: 409 } },
+  throw fail("CONFLICT", "The memberships keep changing, try again", {
+    status: 409,
   });
 }

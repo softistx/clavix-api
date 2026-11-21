@@ -1,8 +1,9 @@
 import { OptimisticLockError } from "@softistx/mongo";
-import { GraphQLError } from "graphql";
+import type { ErrorCode } from "@/i18n/codes";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import type { Tenant } from "@/modules/tenants/tenants.model";
 import type { TenantsService } from "@/modules/tenants/tenants.service";
+import { fail } from "@/shared/errors";
 import {
   emptySecretResealCounts,
   type SecretBox,
@@ -21,8 +22,8 @@ import {
   type SocialProviderId,
 } from "./sign-in.schema";
 
-const refusal = (code: string, message: string, status: number) =>
-  new GraphQLError(message, { extensions: { code, http: { status } } });
+const refusal = (code: ErrorCode, message: string, status: number) =>
+  fail(code, message, { status });
 
 const badInput = (message: string) => refusal("BAD_USER_INPUT", message, 400);
 
