@@ -11,6 +11,7 @@
       "!!**/dist",
       "!!**/generated",
       "!!schema.graphql",
+      "!!console.schema.graphql",
       "!!docs/plans"
     ]
   },

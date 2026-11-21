@@ -10,6 +10,7 @@
     "start": "NODE_ENV=production bun dist/server.js",
     "test": "bun test --timeout=30000",
     "typecheck": "bun check",
+    "schema:print": "bun src/scripts/schema-print.ts",
     "db:sync": "bun src/scripts/db-sync.ts",
     "db:migrate": "bun src/scripts/db-migrate.ts",
     "tenants:create": "bun src/scripts/tenants-create.ts",
@@ -22,7 +23,7 @@
     "format": "biome format --write",
     "fix": "biome check --write",
     "check:ci": "biome ci",
-    "verify": "bun run generate && bun run check:ci && bun run typecheck && bun run test"
+    "verify": "bun run generate && bun run schema:print --check && bun run check:ci && bun run typecheck && bun run test"
   },
   "dependencies": {
     "@softistx/alxia": "^0.28.0",
