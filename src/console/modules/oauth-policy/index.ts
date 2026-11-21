@@ -1,10 +1,10 @@
+import { oauthPolicyService as service } from "@/config/oauth-policy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { agentsNeedPushOrProof } from "@/modules/oauth-policy/agents-input";
+import { agentsNeedPushOrProof } from "@/modules/oauth-policy/oauth-policy.rules";
 import type { Tenant } from "@/modules/tenants";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { tenantArg } from "../ids";
-import { oauthPolicyService as service } from "./wiring";
 
 export const oauthPolicyGuards: Guards = {
   "Query.oauthPolicy": onTenant("view", tenantArg),

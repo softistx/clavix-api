@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "@/app";
-import { readiness } from "./ready";
+import { readiness } from "./health.ready";
 
 const up = async () => true;
 const down = async () => {

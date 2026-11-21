@@ -675,6 +675,16 @@ comparison is `domains.check.ts`.
   does `usage.counter.ts`. Neither audit nor agents raises a coded error, so neither has an `.errors.ts`. Leaf deep
   imports: modules that check quotas import `usage.errors`, `usage.rules` and `usage.utils` directly, so they do not
   cycle through the usage barrel. No hosted resolver (console-only until A13/A14). Behaviour is unchanged.
+- Layout (A12, client-policies, oauth-policy, health): `client-policies` and `oauth-policy` are flat
+  `<name>.<role>.ts` modules with one service each (`ClientPoliciesService`, `OAuthPolicyService`), built in
+  `src/config/client-policies.ts` and `src/config/oauth-policy.ts` and registered in `services()` (`clientPolicies`,
+  `oauthPolicy`; the console's `wiring.ts` is gone). Rules: `client-policies.rules.ts` (`validateTokenExchange`),
+  `oauth-policy.rules.ts` (`applyAgentsInput`, `sameAgents`, `agentsNeedPushOrProof`). `oauth-policy` also has
+  `oauth-policy.types.ts` and `oauth-policy.errors.ts` (`tenantNotFound`, `badAgentsInput`, `policyConflict`: same codes
+  and messages as before). `oauth-policy.schema.ts`, the rules files and `health.resolver.ts` are imported by file, not
+  through the barrels (the tenants model, the OAuth ports and `config/telemetry` would close a cycle). `health` needs no
+  service: it is a probe (`health.ready.ts`), a version (`health.version.ts`) and a resolver (`health.resolver.ts`).
+  Behaviour is unchanged.
 - `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
   tenants (partial unique index on `{ host }` where `status: "verified"`), which the
   tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still

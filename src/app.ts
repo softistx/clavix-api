@@ -38,8 +38,8 @@ import type { DetailTextsFor } from "./modules/consent/consent.detail-labels";
 import type { DeviceThrottle } from "./modules/consent/consent.device-throttle";
 import { oauthContext } from "./modules/consent/consent.plugin";
 import type { ScopeTextsFor } from "./modules/consent/consent.scope-labels";
+import type { ReadyReport } from "./modules/health";
 import { version } from "./modules/health";
-import type { ReadyReport } from "./modules/health/ready";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
 // The largest body /graphql reads.

@@ -2,10 +2,12 @@ import { agentClientsService } from "@/config/agent-clients";
 import { authEventsService } from "@/config/audit";
 import { authService } from "@/config/auth";
 import { brandingService } from "@/config/branding";
+import { clientPoliciesService } from "@/config/client-policies";
 import { connectionsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { invitationsService } from "@/config/invitations";
 import { mfaService } from "@/config/mfa";
+import { oauthPolicyService } from "@/config/oauth-policy";
 import { passkeysService } from "@/config/passkeys";
 import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
@@ -26,11 +28,13 @@ export const services = () => ({
   audit: authEventsService,
   auth: authService,
   branding: brandingService,
+  clientPolicies: clientPoliciesService,
   connections: connectionsService,
   consent: consentService,
   domains: domainsService,
   invitations: invitationsService,
   mfa: mfaService,
+  oauthPolicy: oauthPolicyService,
   passkeys: passkeysService,
   resources: resourcesService,
   roles: rolesService,
