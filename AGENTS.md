@@ -572,8 +572,8 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
   clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
-- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
-  (`purge.ts`) claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
+- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `TenantsService.purge`
+  claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
   partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
   record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
   tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. The Redis MAU counters (hashed, no user ids) are not deleted: they expire on their own after 400 days.

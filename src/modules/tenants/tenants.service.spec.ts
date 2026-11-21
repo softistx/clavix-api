@@ -201,6 +201,32 @@ describe("TenantsService", () => {
     ).rejects.toThrow(OptimisticLockError);
   });
 
+  test("a policy change retries three times: two races win, a third reaches the caller", async () => {
+    const tenant = await service.create({ slug: "acme", name: "Acme" });
+    let reads = 0;
+    const racing = (limit: number) =>
+      ({
+        getById: async (id: never) => {
+          const found = await collection.getById(id);
+          if (reads++ < limit) {
+            await collection.update(found._id, { name: `N${reads}` });
+          }
+          return found;
+        },
+        update: collection.update.bind(collection),
+      }) as unknown as typeof collection;
+    const twice = new TenantsService(racing(2), { domain: "clavix.test" });
+    await twice.updateSignIn(tenant._id, (t) => t.signIn);
+    expect(reads).toBe(3);
+    reads = 0;
+    await expect(
+      new TenantsService(racing(3), { domain: "clavix.test" }).updateSignIn(
+        tenant._id,
+        (t) => t.signIn,
+      ),
+    ).rejects.toThrow(OptimisticLockError);
+  });
+
   test("the slug cannot change through update, updateMany or upsert", async () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     await expect(
