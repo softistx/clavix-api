@@ -13,6 +13,7 @@ import { CONSOLE_PATH } from "@/console/identity";
 import { adminScope } from "@/modules/invitations";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
@@ -50,8 +51,7 @@ const origin = {
 const hosted = `${issuerOf(PLATFORM_TENANT_SLUG, origin)}/graphql`;
 
 interface Answer {
-  // biome-ignore lint/suspicious/noExplicitAny: a spec reads the answer by path
-  data: Record<string, any> | null;
+  data: Record<string, unknown> | null;
   errors?: { message: string; extensions?: { code?: string } }[];
   cookies: string[];
 }
@@ -89,14 +89,15 @@ let tenantA = "";
 let tenantB = "";
 
 const roleIn = async (tenant: string, user: string) =>
-  (
-    await asConsole(
-      ownA,
-      `{ memberships(tenantId: "${tenant}") { user { id } role } }`,
-    )
-  ).data?.["memberships"]?.find(
-    (m: { user: { id: string } }) => m.user.id === user,
-  )?.role;
+  at<{ user: { id: string }; role: string }[]>(
+    (
+      await asConsole(
+        ownA,
+        `{ memberships(tenantId: "${tenant}") { user { id } role } }`,
+      )
+    ).data,
+    "memberships",
+  )?.find((m) => m.user.id === user)?.role;
 
 // The code of the invitation mailed to an address.
 const codeMailedTo = (email: string) => {
@@ -159,7 +160,7 @@ describe("permission per role", () => {
         `{ memberships(tenantId: "${tenantA}") { role } adminInvitations(tenantId: "${tenantA}") { id } }`,
       );
       expect(result.errors).toBeUndefined();
-      expect(result.data?.["memberships"]).toHaveLength(3);
+      expect(at(result.data, "memberships")).toHaveLength(3);
     }
   });
 
@@ -236,7 +237,7 @@ describe("tenant A / B isolation", () => {
 
   test("an invitation id of A does nothing on B, and B does not list A's", async () => {
     const issued = await invite(ownA, tenantA, "iso@adm.test", "VIEWER");
-    const id = issued.data?.["inviteAdmin"].id as string;
+    const id = at<string>(issued.data, "inviteAdmin.id");
     await asConsole(
       ownB,
       `mutation { revokeAdminInvitation(tenantId: "${tenantB}", invitationId: "${id}") }`,
@@ -245,13 +246,13 @@ describe("tenant A / B isolation", () => {
       ownB,
       `{ adminInvitations(tenantId: "${tenantB}") { id } }`,
     );
-    expect(listedB.data?.["adminInvitations"]).toEqual([]);
+    expect(at(listedB.data, "adminInvitations")).toEqual([]);
     const listedA = await asConsole(
       ownA,
       `{ adminInvitations(tenantId: "${tenantA}") { id email } }`,
     );
     expect(
-      listedA.data?.["adminInvitations"].map((i: { id: string }) => i.id),
+      at<{ id: string }[]>(listedA.data, "adminInvitations").map((i) => i.id),
     ).toContain(id);
   });
 
@@ -262,7 +263,7 @@ describe("tenant A / B isolation", () => {
       `{ memberships(tenantId: "${upper}") { role } adminInvitations(tenantId: "${upper}") { id } }`,
     );
     expect(result.errors).toBeUndefined();
-    expect(result.data?.["memberships"]).toHaveLength(3);
+    expect(at(result.data, "memberships")).toHaveLength(3);
   });
 
   test("removing a member of a tenant that does not exist is NOT_FOUND, like the other writes", async () => {
@@ -291,7 +292,7 @@ describe("inviting and accepting", () => {
     const email = "newadmin@adm.test";
     const issued = await invite(ownA, tenantA, email, "ADMIN");
     expect(issued.errors).toBeUndefined();
-    expect(issued.data?.["inviteAdmin"]).toMatchObject({
+    expect(at(issued.data, "inviteAdmin")).toMatchObject({
       email,
       role: "ADMIN",
     });
@@ -302,7 +303,7 @@ describe("inviting and accepting", () => {
       hosted,
       `{ invitationPreview(code: "${secret}") { email organization role } }`,
     );
-    expect(preview.data?.["invitationPreview"]).toEqual({
+    expect(at(preview.data, "invitationPreview")).toEqual({
       email,
       organization: "Alpha",
       role: "admin",
@@ -314,24 +315,25 @@ describe("inviting and accepting", () => {
     );
     expect(accepted.errors).toBeUndefined();
     // The code is the proof of the inbox: the new admin can use the console at once (ADR-0041).
-    expect(accepted.data?.["acceptInvitation"]).toMatchObject({
+    expect(at(accepted.data, "acceptInvitation")).toMatchObject({
       signedIn: true,
       organization: "Alpha",
       user: { email, emailVerified: true },
     });
     expect(accepted.cookies.join(";")).toContain("__Host-clavix-session=");
 
-    const members = (
-      await asConsole(
-        ownA,
-        `{ memberships(tenantId: "${tenantA}") { user { email } role } }`,
-      )
-    ).data?.["memberships"];
-    expect(
-      members.filter(
-        (m: { user: { email: string } }) => m.user.email === email,
-      ),
-    ).toEqual([{ user: { email }, role: "ADMIN" }]);
+    const members = at<{ user: { email: string }; role: string }[]>(
+      (
+        await asConsole(
+          ownA,
+          `{ memberships(tenantId: "${tenantA}") { user { email } role } }`,
+        )
+      ).data,
+      "memberships",
+    );
+    expect(members.filter((m) => m.user.email === email)).toEqual([
+      { user: { email }, role: "ADMIN" },
+    ]);
 
     // The code is spent: a second accept and a preview are refused, nothing changes.
     const again = await post(
@@ -353,9 +355,9 @@ describe("inviting and accepting", () => {
         `{ memberships(tenantId: "${tenantA}") { role } adminInvitations(tenantId: "${tenantA}") { email } }`,
       )
     ).data;
-    expect(after?.["memberships"]).toHaveLength(members.length);
+    expect(at<unknown[]>(after, "memberships")).toHaveLength(members.length);
     expect(
-      after?.["adminInvitations"].map((i: { email: string }) => i.email),
+      at<{ email: string }[]>(after, "adminInvitations").map((i) => i.email),
     ).not.toContain(email);
   });
 
@@ -399,9 +401,10 @@ describe("inviting and accepting", () => {
       `{ adminInvitations(tenantId: "${tenantA}") { email role } }`,
     );
     expect(
-      listed.data?.["adminInvitations"].filter(
-        (i: { email: string }) => i.email === email,
-      ),
+      at<{ email: string; role: string }[]>(
+        listed.data,
+        "adminInvitations",
+      ).filter((i) => i.email === email),
     ).toEqual([{ email, role: "ADMIN" }]);
     expect(
       code(
@@ -424,12 +427,14 @@ describe("inviting and accepting", () => {
       "ALREADY_MEMBER",
     );
     const email = "revoked@adm.test";
-    const id = (await invite(ownA, tenantA, email)).data?.["inviteAdmin"]
-      .id as string;
+    const id = at<string>(
+      (await invite(ownA, tenantA, email)).data,
+      "inviteAdmin.id",
+    );
     const secret = codeMailedTo(email);
     const revoke = `mutation { revokeAdminInvitation(tenantId: "${tenantA}", invitationId: "${id}") }`;
     expect(
-      (await asConsole(ownA, revoke)).data?.["revokeAdminInvitation"],
+      at((await asConsole(ownA, revoke)).data, "revokeAdminInvitation"),
     ).toBe(true);
     expect((await asConsole(ownA, revoke)).errors).toBeUndefined(); // idempotent
     expect(
@@ -477,7 +482,7 @@ describe("accepting, the edges", () => {
     ).toBeUndefined();
     const accepted = await accept(hosted, codeMailedTo(email));
     expect(accepted.errors).toBeUndefined();
-    expect(accepted.data?.["acceptInvitation"]).toEqual({
+    expect(at(accepted.data, "acceptInvitation")).toEqual({
       signedIn: false,
       organization: "Beta",
       user: null,
@@ -519,7 +524,7 @@ describe("accepting, the edges", () => {
       invitedBy: null,
     });
     const acceptedB = await accept(hostedB(), inB?.code);
-    expect(acceptedB.data?.["acceptInvitation"]).toMatchObject({
+    expect(at(acceptedB.data, "acceptInvitation")).toMatchObject({
       signedIn: true,
       organization: "Beta",
     });
@@ -572,7 +577,7 @@ describe("accepting, the edges", () => {
     expect(await idOf(email)).toBe("");
     await tenantsService.reactivate(tenantC);
     expect(
-      (await accept(hosted, secret)).data?.["acceptInvitation"],
+      at((await accept(hosted, secret)).data, "acceptInvitation"),
     ).toMatchObject({ signedIn: true, organization: "Gamma" });
     expect(await access.holders(tenantC, "admin")).toEqual([await idOf(email)]);
   });
@@ -581,10 +586,14 @@ describe("accepting, the edges", () => {
 describe("changing and removing, the last owner protected", () => {
   test("changeMembership is idempotent and refuses a non-member", async () => {
     const change = `mutation { changeMembership(tenantId: "${tenantA}", userId: "${vwA}", role: ADMIN) { role } }`;
-    expect((await asConsole(ownA, change)).data?.["changeMembership"]).toEqual({
+    expect(
+      at((await asConsole(ownA, change)).data, "changeMembership"),
+    ).toEqual({
       role: "ADMIN",
     });
-    expect((await asConsole(ownA, change)).data?.["changeMembership"]).toEqual({
+    expect(
+      at((await asConsole(ownA, change)).data, "changeMembership"),
+    ).toEqual({
       role: "ADMIN",
     });
     expect(await roleIn(tenantA, vwA)).toBe("ADMIN");
@@ -618,12 +627,15 @@ describe("changing and removing, the last owner protected", () => {
       `mutation { changeMembership(tenantId: "${tenantA}", userId: "${admA}", role: OWNER) { role } }`,
     );
     expect(
-      (
-        await asConsole(
-          admA,
-          `mutation { removeMembership(tenantId: "${tenantA}", userId: "${ownA}") }`,
-        )
-      ).data?.["removeMembership"],
+      at(
+        (
+          await asConsole(
+            admA,
+            `mutation { removeMembership(tenantId: "${tenantA}", userId: "${ownA}") }`,
+          )
+        ).data,
+        "removeMembership",
+      ),
     ).toBe(true);
     expect(await roleIn(tenantA, ownA)).toBeUndefined();
     // admA is the last owner now; ownA lost the right to ask.
@@ -647,12 +659,15 @@ describe("changing and removing, the last owner protected", () => {
 
   test("removing a non-member is true (idempotent)", async () => {
     expect(
-      (
-        await asConsole(
-          admA,
-          `mutation { removeMembership(tenantId: "${tenantA}", userId: "${ownA2}") }`,
-        )
-      ).data?.["removeMembership"],
+      at(
+        (
+          await asConsole(
+            admA,
+            `mutation { removeMembership(tenantId: "${tenantA}", userId: "${ownA2}") }`,
+          )
+        ).data,
+        "removeMembership",
+      ),
     ).toBe(true);
   });
 
@@ -694,7 +709,7 @@ describe("admin events", () => {
 
   test("each mutation stores its event: the actor, the action, the target by id", async () => {
     const invited = await invite(ownB, tenant, "ev@adm.test");
-    const invitationId = invited.data?.["inviteAdmin"]?.id as string;
+    const invitationId = at<string>(invited.data, "inviteAdmin.id");
     await asConsole(
       ownB,
       `mutation { revokeAdminInvitation(tenantId: "${tenant}", invitationId: "${invitationId}") }`,
@@ -764,12 +779,15 @@ describe("admin events", () => {
   test("the id in upper case is the same tenant, in one spelling in the trail; a malformed one stores nothing", async () => {
     const before = (await eventsOf()).length;
     expect(
-      (
-        await asConsole(
-          ownB,
-          `mutation { removeMembership(tenantId: "${tenant.toUpperCase()}", userId: "${ownA2}") }`,
-        )
-      ).data?.["removeMembership"],
+      at(
+        (
+          await asConsole(
+            ownB,
+            `mutation { removeMembership(tenantId: "${tenant.toUpperCase()}", userId: "${ownA2}") }`,
+          )
+        ).data,
+        "removeMembership",
+      ),
     ).toBe(true);
     expect((await eventsOf()).length).toBe(before + 1);
     const total = await mongo.db.adminEvents.raw.countDocuments({});
@@ -787,10 +805,10 @@ describe("admin events", () => {
   test("a repeat records again, so a retry never leaves a change with no event", async () => {
     const before = (await eventsOf()).length;
     const remove = `mutation { removeMembership(tenantId: "${tenant}", userId: "${ownA2}") }`;
-    expect((await asConsole(ownB, remove)).data?.["removeMembership"]).toBe(
+    expect(at((await asConsole(ownB, remove)).data, "removeMembership")).toBe(
       true,
     );
-    expect((await asConsole(ownB, remove)).data?.["removeMembership"]).toBe(
+    expect(at((await asConsole(ownB, remove)).data, "removeMembership")).toBe(
       true,
     );
     expect((await eventsOf()).length).toBe(before + 2);
@@ -836,7 +854,7 @@ describe("resending an invitation", () => {
       ownA,
       `mutation { inviteAdmin(tenantId: "${tenant}", email: "by@adm.test", role: VIEWER) { invitedBy { id name } } }`,
     );
-    expect(invited.data?.["inviteAdmin"].invitedBy).toEqual({
+    expect(at(invited.data, "inviteAdmin.invitedBy")).toEqual({
       id: ownA,
       name: "own-a@adm.test",
     });
@@ -845,26 +863,28 @@ describe("resending an invitation", () => {
       `{ adminInvitations(tenantId: "${tenant}") { email invitedBy { id name } } }`,
     );
     expect(
-      listed.data?.["adminInvitations"].find(
-        (i: { email: string }) => i.email === "by@adm.test",
-      ).invitedBy,
+      at<{ email: string; invitedBy: unknown }[]>(
+        listed.data,
+        "adminInvitations",
+      ).find((i) => i.email === "by@adm.test")?.invitedBy,
     ).toEqual({ id: ownA, name: "own-a@adm.test" });
   });
 
   test("a resend renews the invitation: new code and mail, the old code stops, invitedBy stays", async () => {
     const email = "renew@adm.test";
-    const id = (await invite(ownA, tenant, email, "VIEWER")).data?.[
-      "inviteAdmin"
-    ].id as string;
+    const id = at<string>(
+      (await invite(ownA, tenant, email, "VIEWER")).data,
+      "inviteAdmin.id",
+    );
     renewedId = id;
     const first = codeMailedTo(email);
     await age(email, { expiresAt: new Date(Date.now() + 1000) });
     const sent = await resend(ownA2, id);
     expect(sent.errors).toBeUndefined();
-    expect(sent.data?.["resendAdminInvitation"].id).toBe(id);
-    expect(sent.data?.["resendAdminInvitation"].invitedBy.id).toBe(ownA);
+    expect(at(sent.data, "resendAdminInvitation.id")).toBe(id);
+    expect(at(sent.data, "resendAdminInvitation.invitedBy.id")).toBe(ownA);
     expect(
-      new Date(sent.data?.["resendAdminInvitation"].expiresAt).getTime(),
+      new Date(at(sent.data, "resendAdminInvitation.expiresAt")).getTime(),
     ).toBeGreaterThan(Date.now() + 24 * 3_600_000);
     const second = codeMailedTo(email);
     expect(second).toBeDefined();
@@ -886,16 +906,20 @@ describe("resending an invitation", () => {
 
   test("a lapsed invitation can be sent again", async () => {
     const email = "lapsed@adm.test";
-    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
-      .id as string;
+    const id = at<string>(
+      (await invite(ownA, tenant, email)).data,
+      "inviteAdmin.id",
+    );
     await age(email, { expiresAt: new Date(Date.now() - 1000) });
     expect((await resend(ownA, id)).errors).toBeUndefined();
   });
 
   test("a second resend within a minute is RESEND_TOO_SOON (429): nothing sent, no event", async () => {
     const email = "soon@adm.test";
-    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
-      .id as string;
+    const id = at<string>(
+      (await invite(ownA, tenant, email)).data,
+      "inviteAdmin.id",
+    );
     // Just invited: the invitation's own send counts.
     const before = memory.sent.length;
     const early = await resend(ownA, id);
@@ -912,8 +936,10 @@ describe("resending an invitation", () => {
 
   test("two concurrent resends send one mail", async () => {
     const email = "race@adm.test";
-    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
-      .id as string;
+    const id = at<string>(
+      (await invite(ownA, tenant, email)).data,
+      "inviteAdmin.id",
+    );
     await age(email);
     const before = memory.sent.length;
     const answers = await Promise.all([resend(ownA, id), resend(ownA2, id)]);
@@ -924,8 +950,10 @@ describe("resending an invitation", () => {
 
   test("an accepted or revoked invitation is INVITATION_NOT_PENDING (409)", async () => {
     const email = "revoked@adm.test";
-    const id = (await invite(ownA, tenant, email)).data?.["inviteAdmin"]
-      .id as string;
+    const id = at<string>(
+      (await invite(ownA, tenant, email)).data,
+      "inviteAdmin.id",
+    );
     await asConsole(
       ownA,
       `mutation { revokeAdminInvitation(tenantId: "${tenant}", invitationId: "${id}") }`,
@@ -938,8 +966,10 @@ describe("resending an invitation", () => {
 
   test("an unknown invitation, another tenant's, a malformed id: NOT_FOUND / BAD_USER_INPUT", async () => {
     const email = "other@adm.test";
-    const id = (await invite(ownB, tenantB, email)).data?.["inviteAdmin"]
-      .id as string;
+    const id = at<string>(
+      (await invite(ownB, tenantB, email)).data,
+      "inviteAdmin.id",
+    );
     await age(email);
     expect(code(await resend(ownA, id))).toBe("NOT_FOUND");
     expect(code(await resend(ownA, "nope"))).toBe("NOT_FOUND");
@@ -949,9 +979,10 @@ describe("resending an invitation", () => {
   });
 
   test("only an owner of the tenant resends", async () => {
-    const id = (await invite(ownA, tenant, "perm@adm.test")).data?.[
-      "inviteAdmin"
-    ].id as string;
+    const id = at<string>(
+      (await invite(ownA, tenant, "perm@adm.test")).data,
+      "inviteAdmin.id",
+    );
     await age("perm@adm.test");
     expect(code(await resend(admA, id))).toBe("FORBIDDEN");
     expect(code(await resend(vwA, id))).toBe("FORBIDDEN");
@@ -993,7 +1024,7 @@ describe("platformOperators", () => {
     for (const who of [opViewer, opAdmin, opOwner]) {
       const result = await asConsole(who, query);
       expect(result.errors).toBeUndefined();
-      expect(result.data?.["platformOperators"]).toEqual([
+      expect(at(result.data, "platformOperators")).toEqual([
         { user: { id: opOwner }, role: "OWNER" },
         { user: { id: opAdmin }, role: "ADMIN" },
         { user: { id: opViewer }, role: "VIEWER" },

@@ -14,6 +14,7 @@ import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
@@ -26,8 +27,7 @@ const OUTSIDER = "switch-outsider";
 const HYBRID = "switch-hybrid";
 
 interface GqlResult {
-  // biome-ignore lint/suspicious/noExplicitAny: the spec reads untyped GraphQL JSON
-  data?: Record<string, any> | null;
+  data?: Record<string, unknown> | null;
   errors?: { message: string; extensions?: { code?: string } }[];
 }
 const request = (userId: string | null, query: string) =>
@@ -62,10 +62,16 @@ const as = async (userId: string, query: string) =>
 
 const LIST = (args = "") =>
   `{ me { switchableTenants${args} { items { role tenant { slug name status } } nextCursor totalCount } } }`;
-// biome-ignore lint/suspicious/noExplicitAny: untyped GraphQL JSON
-const pageOf = (r: GqlResult): any => r.data?.["me"]?.switchableTenants;
-const slugs = (r: GqlResult) =>
-  (pageOf(r).items as { tenant: { slug: string } }[]).map((i) => i.tenant.slug);
+interface Page {
+  items: {
+    role: string;
+    tenant: { slug: string; name: string; status: string };
+  }[];
+  nextCursor: string | null;
+  totalCount: number;
+}
+const pageOf = (r: GqlResult) => at<Page>(r.data, "me.switchableTenants");
+const slugs = (r: GqlResult) => pageOf(r).items.map((i) => i.tenant.slug);
 
 const ids: Record<string, string> = {};
 async function make(slug: string, name = `${slug} Inc`) {

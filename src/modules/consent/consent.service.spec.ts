@@ -1,6 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createGrantsRevoke } from "@/config/grants-revoke";
 import type { Context } from "@/http/context";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
+import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { grantsRevoke } from "./consent.queue";
 import { ConsentService } from "./consent.service";
 
@@ -126,6 +128,30 @@ describe("serverOf", () => {
   const service = new ConsentService({ log: quiet, now: () => new Date() });
   const request = new Request("https://acme.example.test/oauth/authorize");
   const server = { id: "srv" };
+  const liveTenant: ResolvedTenant = {
+    tenantId: "65f0000000000000000000aa",
+    slug: "acme",
+    name: "Acme",
+    signUp: false,
+    status: "active",
+    issuer: "https://acme.example.test",
+    slugIssuer: "https://acme.example.test",
+    relatedOrigins: [],
+    plan: "free",
+    partition: "65f0000000000000000000aa",
+    version: 1,
+    oauth: {
+      par: { required: false },
+      dpop: { required: false },
+      agents: {
+        dynamic: "off",
+        redirectUris: [],
+        metadataDocuments: false,
+        allowHosts: [],
+      },
+    },
+    signIn: signInPolicySchema.parse(undefined),
+  };
   // `fail` raises a GraphQLError: its code and HTTP status sit in `extensions`.
   const notFound = {
     extensions: { code: "NOT_FOUND", http: { status: 404 } },
@@ -143,6 +169,29 @@ describe("serverOf", () => {
       tenant: async () => null,
     });
     await expect(refusal).rejects.toMatchObject(notFound);
+  });
+
+  test.each(["suspended", "deleted"] as const)(
+    "refuses a %s tenant behind a known server with TENANT_SUSPENDED (403)",
+    async (status) => {
+      const refusal = service.serverOf({
+        request,
+        oauthServers: { serverFor: async () => server },
+        tenant: async () => ({ ...liveTenant, status }),
+      });
+      await expect(refusal).rejects.toMatchObject({
+        extensions: { code: "TENANT_SUSPENDED", http: { status: 403 } },
+      });
+    },
+  );
+
+  test("returns the server of a live tenant", async () => {
+    const found = await service.serverOf({
+      request,
+      oauthServers: { serverFor: async () => server },
+      tenant: async () => liveTenant,
+    });
+    expect(found as unknown).toBe(server);
   });
 
   test("refuses a null tenant behind a known server", async () => {
