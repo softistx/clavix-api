@@ -143,12 +143,12 @@ export function createApp(options: AppOptions = {}) {
             // values): ten items assumed per list put the UI's Applications read at 24 530, over
             // graxia's default 5 000, refused with HTTP 200 and no data. The caller is an
             // authenticated, verified admin, and the limit still refuses a read that multiplies
-            // those lists (aliases). Spec: `modules/resources/cost.spec.ts`.
+            // those lists (aliases). Spec: `modules/resources/resources.cost.console.spec.ts`.
             limits: { cost: { max: CONSOLE_MAX_COST } },
             onUnexpected: reportUnexpected,
             plugins: [
               useClientHeader(requireClient),
-              // First: aliased invitations are counted before anything runs.
+              // Second, after the client header: aliased invitations are counted before anything runs.
               ...(consoleOptions.budgets === undefined
                 ? []
                 : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
