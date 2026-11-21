@@ -11,6 +11,7 @@ import type {
   ApproveArgs,
   ConsentCtx,
   ConsentOptions,
+  Detailed,
   LabelledScope,
   RevokeEnqueuer,
   RevokeJob,
@@ -18,7 +19,14 @@ import type {
   ServerCtx,
 } from "./consent.types";
 import { denyUnreachable, isUnreachable } from "./consent.unmet";
-import { appCtxOf, localeOfCtx, perRequest, requestOf } from "./consent.utils";
+import {
+  appCtxOf,
+  consentCtxOf,
+  contextOf,
+  localeOfCtx,
+  perRequest,
+  requestOf,
+} from "./consent.utils";
 
 /**
  * The consent API of the hosted `/consent` page: the request host's OAuth
@@ -64,7 +72,7 @@ export class ConsentService {
    * and the tenant live, when it runs.
    */
   async countLookup(ctx: unknown): Promise<void> {
-    const { tenant, ip, deviceThrottle, janus } = ctx as Context;
+    const { tenant, ip, deviceThrottle, janus } = contextOf(ctx);
     const [current, resolved] = await Promise.all([janus.user(), tenant()]);
     if (current === null || resolved === null)
       throw fail("NOT_FOUND", "Not found", { status: 404 });
@@ -87,21 +95,21 @@ export class ConsentService {
   ): Promise<void> {
     if (selection !== undefined) throw refuseIncomplete();
     const authentication = await assessment(
-      ctx as Context,
+      contextOf(ctx),
       request,
       this.now(),
     );
     if (!authentication.met) throw unmetAuthentication(authentication.missing);
     if (request.authorizationDetails === undefined) return;
     const json = JSON.stringify(request.authorizationDetails);
-    const { complete } = await this.review(json, ctx as ConsentCtx);
+    const { complete } = await this.review(json, consentCtxOf(ctx));
     if (!complete) throw refuseIncomplete();
   }
 
   /** How the viewer authenticated (D9): the session's methods as `amr`, its level as `acr`, the time of its last proof as `auth_time`. */
   async approveOptions({ request }: ApproveArgs, ctx: unknown) {
     const { amr, acr, authTime } = await assessment(
-      ctx as Context,
+      contextOf(ctx),
       request,
       this.now(),
     );
@@ -146,18 +154,12 @@ export class ConsentService {
   }
 
   /** The details of a request in words (D5), never the raw JSON. */
-  async details(
-    parent: { authorizationDetails?: string | null },
-    ctx: ConsentCtx,
-  ) {
+  async details(parent: Detailed, ctx: ConsentCtx) {
     return (await this.review(parent.authorizationDetails, ctx)).details;
   }
 
   /** Whether every detail of a request is fully described; approval is refused otherwise. */
-  async detailsComplete(
-    parent: { authorizationDetails?: string | null },
-    ctx: ConsentCtx,
-  ) {
+  async detailsComplete(parent: Detailed, ctx: ConsentCtx) {
     return (await this.review(parent.authorizationDetails, ctx)).complete;
   }
 

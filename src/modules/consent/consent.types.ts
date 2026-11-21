@@ -29,6 +29,9 @@ export type ServerCtx = Partial<Pick<WithServers, "oauthServers">> & {
   tenant: () => Promise<ResolvedTenant | null>;
 };
 
+/** A request or a grant that may carry authorization details (the raw JSON). */
+export type Detailed = { authorizationDetails?: string | null };
+
 /** What a queued revocation carries: ids only. */
 export interface RevokeJob {
   tenantId: string;

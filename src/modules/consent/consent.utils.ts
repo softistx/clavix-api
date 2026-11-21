@@ -1,3 +1,4 @@
+import type { Context } from "@/http/context";
 import { fail } from "@/shared/errors";
 import { localeOf } from "./consent.scope-labels";
 import type { ConsentCtx, ServerCtx } from "./consent.types";
@@ -32,12 +33,39 @@ export const appCtxOf = (ctx: unknown): ServerCtx => {
   return ctx;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+/** Whether a context is the app's GraphQL context: the tenant reader, janus and the throttles. */
+export const isContext = (ctx: unknown): ctx is Context =>
+  isServerCtx(ctx) &&
+  isRecord(Reflect.get(ctx, "janus")) &&
+  isRecord(Reflect.get(ctx, "deviceThrottle"));
+
+/** Whether a context carries the consent readers `oauthContext` puts on it. */
+export const isConsentCtx = (ctx: unknown): ctx is ConsentCtx =>
+  isRecord(ctx) &&
+  isRecord(ctx["oauthServers"]) &&
+  typeof ctx["scopeTextsFor"] === "function" &&
+  typeof ctx["detailTextsFor"] === "function" &&
+  typeof ctx["agentsFor"] === "function";
+
+/** The app's GraphQL context, `NOT_FOUND` for any other. */
+export const contextOf = (ctx: unknown): Context => {
+  if (!isContext(ctx)) throw fail("NOT_FOUND", "Not found", { status: 404 });
+  return ctx;
+};
+
+/** The consent readers' context, `NOT_FOUND` for any other. */
+export const consentCtxOf = (ctx: unknown): ConsentCtx => {
+  if (!isConsentCtx(ctx)) throw fail("NOT_FOUND", "Not found", { status: 404 });
+  return ctx;
+};
+
 /** The request a context carries; `NOT_FOUND` when it carries none. */
 export const requestOf = (ctx: unknown): Request => {
-  const { request } = ctx as { request?: Request };
-  if (request === undefined)
-    throw fail("NOT_FOUND", "Not found", { status: 404 });
-  return request;
+  if (isRecord(ctx) && ctx["request"] instanceof Request) return ctx["request"];
+  throw fail("NOT_FOUND", "Not found", { status: 404 });
 };
 
 /** The locale a context's request asks for (`accept-language`). */

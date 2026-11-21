@@ -3,7 +3,7 @@ import { oauthResolvers, oauthTypeDefs } from "@softistx/janus-oauth/graphql";
 import type { Context } from "@/http/context";
 import { services } from "@/modules/services";
 import type { RequestDemands } from "./consent.authentication";
-import type { ConsentCtx, LabelledScope } from "./consent.types";
+import type { ConsentCtx, Detailed, LabelledScope } from "./consent.types";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -15,7 +15,6 @@ const janusResolvers = oauthResolvers({
   oauth: (ctx) => services().consent.serverOf(ctx),
 });
 
-type Detailed = { authorizationDetails?: string | null };
 type Scoped = { resource: string; scopes: LabelledScope[] };
 
 // The label of a scope is the tenant's description of it (console, `Scope`),

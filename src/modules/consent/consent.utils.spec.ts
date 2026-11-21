@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
   appCtxOf,
+  consentCtxOf,
+  contextOf,
+  isConsentCtx,
+  isContext,
   isServerCtx,
   localeOfCtx,
   perRequest,
   requestOf,
 } from "./consent.utils";
+
+const notFound = expect.objectContaining({
+  extensions: { code: "NOT_FOUND", http: { status: 404 } },
+});
 
 describe("perRequest", () => {
   test("reads once per request and keeps requests apart", async () => {
@@ -41,11 +49,38 @@ describe("appCtxOf", () => {
   test("returns the app's context, refuses another as NOT_FOUND", () => {
     const ctx = { tenant: async () => null };
     expect(appCtxOf(ctx)).toBe(ctx);
-    expect(() => appCtxOf({})).toThrow(
-      expect.objectContaining({
-        extensions: { code: "NOT_FOUND", http: { status: 404 } },
-      }),
-    );
+    expect(() => appCtxOf({})).toThrow(notFound);
+  });
+});
+
+describe("contextOf", () => {
+  const base = {
+    tenant: async () => null,
+    janus: { user: async () => null },
+    deviceThrottle: { check: async () => {} },
+  };
+  test("accepts the app's context, refuses another as NOT_FOUND", () => {
+    expect(isContext(base)).toBe(true);
+    expect(Object.is(contextOf(base), base)).toBe(true);
+    expect(isContext({ ...base, janus: undefined })).toBe(false);
+    expect(isContext({ ...base, deviceThrottle: null })).toBe(false);
+    expect(() => contextOf({ tenant: base.tenant })).toThrow(notFound);
+  });
+});
+
+describe("consentCtxOf", () => {
+  const readers = {
+    oauthServers: { serverFor: async () => null },
+    scopeTextsFor: async () => [],
+    detailTextsFor: async () => [],
+    agentsFor: async () => [],
+  };
+  test("accepts the consent readers' context, refuses another as NOT_FOUND", () => {
+    expect(isConsentCtx(readers)).toBe(true);
+    expect(Object.is(consentCtxOf(readers), readers)).toBe(true);
+    expect(isConsentCtx({ ...readers, agentsFor: undefined })).toBe(false);
+    expect(isConsentCtx(null)).toBe(false);
+    expect(() => consentCtxOf({})).toThrow(notFound);
   });
 });
 
@@ -53,7 +88,9 @@ describe("requestOf", () => {
   test("returns the context's request, or refuses as NOT_FOUND", () => {
     const request = new Request("https://a.test/");
     expect(requestOf({ request })).toBe(request);
-    expect(() => requestOf({})).toThrow();
+    expect(() => requestOf({})).toThrow(notFound);
+    expect(() => requestOf({ request: "https://a.test/" })).toThrow(notFound);
+    expect(() => requestOf(null)).toThrow(notFound);
   });
 });
 
