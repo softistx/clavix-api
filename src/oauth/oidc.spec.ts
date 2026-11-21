@@ -295,7 +295,7 @@ describe("userinfo", () => {
       `Bearer ${tokens.access_token}`,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ sub: "user-acme" });
+    expect(await response.json()).toEqual({ sub: "user-acme", roles: [] });
   });
 
   test("profile and email release their claims, read in the tenant's user pool", async () => {
@@ -308,6 +308,7 @@ describe("userinfo", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       sub: "user-acme",
+      roles: [],
       name: "Name of acme",
       family_name: "Doe",
       email: "user-acme@acme.test",
@@ -324,6 +325,7 @@ describe("userinfo", () => {
     );
     expect(await response.json()).toEqual({
       sub: "user-globex",
+      roles: [],
       email: "user-globex@globex.test",
       email_verified: true,
     });
