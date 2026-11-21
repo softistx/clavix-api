@@ -3,7 +3,7 @@ import { s256Challenge } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 
 const VERIFIER = "p".repeat(64);

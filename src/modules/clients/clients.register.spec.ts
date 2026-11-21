@@ -25,8 +25,9 @@ import {
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import { parseClientArgs } from "./cli";
-import { clientIdOf, registerClient } from "./register-client";
+import { parseClientArgs } from "./clients.cli";
+import { registerClient } from "./clients.register";
+import { clientIdOf } from "./clients.rules";
 
 const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";

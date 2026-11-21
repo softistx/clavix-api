@@ -12,7 +12,7 @@ import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,

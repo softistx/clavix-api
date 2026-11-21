@@ -5,8 +5,7 @@ import { redis } from "@/config/redis";
 import { clientDetailTypes } from "@/config/resources";
 import { clock } from "@/config/runtime";
 import { tenantBySlug } from "@/config/tenancy";
-import { parseClientArgs, USAGE } from "@/modules/clients/cli";
-import { registerClient } from "@/modules/clients/register-client";
+import { parseClientArgs, registerClient, USAGE } from "@/modules/clients";
 import { issuerOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 

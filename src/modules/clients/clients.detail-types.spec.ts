@@ -13,8 +13,8 @@ import { consentReadyOf, mongoClientDetailTypes } from "@/modules/resources";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 import { createFlow, REDIRECT } from "~/oauth-flow";
-import { parseClientArgs } from "./cli";
-import { registerClient } from "./register-client";
+import { parseClientArgs } from "./clients.cli";
+import { registerClient } from "./clients.register";
 
 const PAY = "https://pay.example/api";
 const flow = createFlow();
