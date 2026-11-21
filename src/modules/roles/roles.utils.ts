@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import { unique } from "@/shared/values";
 import type { RoleDoc } from "./roles.types";
 
 /** A copy of the roles sorted by name. */
@@ -29,7 +30,7 @@ export function claimNames(
         role.resourceId.toHexString() === resourceId,
     )
     .map((role) => role.name);
-  return [...new Set(names)].sort();
+  return unique(names).sort();
 }
 
 /** Each role's id (hex) at 0, then the grouped counts of the roles that have holders. */

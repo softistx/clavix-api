@@ -54,3 +54,7 @@ export function fail(
     },
   });
 }
+
+/** A malformed input: `BAD_USER_INPUT`, 400, with the field when the refusal is about one. */
+export const badInput = (message: string, field?: string) =>
+  fail("BAD_USER_INPUT", message, { status: 400, field });

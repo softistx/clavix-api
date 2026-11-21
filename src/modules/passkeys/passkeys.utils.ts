@@ -1,7 +1,7 @@
 import type { Passkey } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
 import type { TenantJanus } from "@/modules/users";
-import { fail } from "@/shared/errors";
+import { badInput } from "@/shared/errors";
 
 /** The session of the request, or UNAUTHENTICATED (401). */
 export async function currentOf(auth: TenantJanus, request: Request) {
@@ -19,9 +19,7 @@ export function responseOf(text: string): unknown {
     value = undefined;
   }
   if (value === undefined) {
-    throw fail("BAD_USER_INPUT", "response must be a JSON string", {
-      status: 400,
-    });
+    throw badInput("response must be a JSON string");
   }
   return value;
 }

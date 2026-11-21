@@ -65,7 +65,8 @@ const policy = (agents: Partial<AgentsPolicy>) => ({
 
 async function setAgents(slug: string, agents: Partial<AgentsPolicy>) {
   const found = await mongo.db.tenants.findFirst({ slug });
-  if (found == null) throw new Error(`no tenant ${slug}`);
+  if (found === null || found === undefined)
+    throw new Error(`no tenant ${slug}`);
   await tenantsService.updateOAuth(found._id, (tenant) => ({
     ...tenant.oauth,
     agents: policy(agents),
@@ -274,7 +275,7 @@ describe("throttle", () => {
 describe("agents quota", () => {
   test("403 access_denied once the tenant's quota is reached, other tenants unaffected", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-quota" });
-    if (found == null) throw new Error("no tenant");
+    if (found === null || found === undefined) throw new Error("no tenant");
     await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 2 },
@@ -295,7 +296,7 @@ describe("agents quota", () => {
 describe("agents quota under concurrency", () => {
   test("at most N of many simultaneous registrations pass a quota of N", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-race" });
-    if (found == null) throw new Error("no tenant");
+    if (found === null || found === undefined) throw new Error("no tenant");
     await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 3 },
@@ -314,7 +315,7 @@ describe("agents quota under concurrency", () => {
 describe("suspended tenant", () => {
   test("403 TENANT_SUSPENDED, and nothing stored", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-suspended" });
-    if (found == null) throw new Error("no tenant");
+    if (found === null || found === undefined) throw new Error("no tenant");
     await tenantsService.suspend(found._id);
     const response = await register("ag-suspended", {
       ...metadata,
@@ -440,7 +441,7 @@ describe("agent records", () => {
     expect(await agentClientsService.has(a.tenantId, client_id)).toBe(true);
     expect(await agentClientsService.has(b.tenantId, client_id)).toBe(false);
     const doc = await mongo.db.tenants.findFirst({ slug: "ag-open" });
-    if (doc == null) throw new Error("no tenant");
+    if (doc === null || doc === undefined) throw new Error("no tenant");
     const before = await agentClientsService.count(a.tenantId);
     await clientsService.delete(doc, client_id);
     expect(await agentClientsService.has(a.tenantId, client_id)).toBe(false);
@@ -604,7 +605,8 @@ describe("metadata documents: abuse limits", () => {
   test("past the agents quota a new metadata client is refused 403 before any fetch, a known one is not", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-quota" });
     const tenant = await tenantResolver.resolveHost(`ag-docs-quota.${DOMAIN}`);
-    if (found == null || tenant === null) throw new Error("no tenant");
+    if (found === null || found === undefined || tenant === null)
+      throw new Error("no tenant");
     await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 1 },
@@ -631,7 +633,7 @@ describe("metadata documents: abuse limits", () => {
 
   test("simultaneous first uses of one new client under a quota of 1 all pass and record it once", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-race" });
-    if (found == null) throw new Error("no tenant");
+    if (found === null || found === undefined) throw new Error("no tenant");
     await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 1 },

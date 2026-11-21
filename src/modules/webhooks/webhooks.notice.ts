@@ -1,7 +1,5 @@
 import type { MailMessage } from "@softistx/mail";
-
-const htmlEscape = (text: string) =>
-  text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+import { htmlEscape } from "@/shared/html";
 
 /**
  * The e-mail to a tenant's owners when an endpoint is switched off after 5

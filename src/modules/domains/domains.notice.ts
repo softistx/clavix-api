@@ -1,8 +1,6 @@
 import type { MailMessage } from "@softistx/mail";
+import { htmlEscape } from "@/shared/html";
 import { txtNameOf } from "./domains.rules";
-
-const htmlEscape = (text: string) =>
-  text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
  * The e-mail to a tenant's owners when a verified domain fails its TXT

@@ -1,9 +1,9 @@
+import { refusal } from "@/console/modules/refusal";
 import type {
   CheckConnectionInput,
   CreateConnectionInput,
   UpdateConnectionInput,
 } from "@/generated/console/resolvers";
-import { refusal } from "@/modules/tenants/tenants.console-errors";
 import { fail } from "@/shared/errors";
 import { ConnectionError } from "./connections.errors";
 import { AUTH_IN, TRUST_IN } from "./connections.utils";
@@ -61,7 +61,8 @@ export const checkOf = (input: CheckConnectionInput) => ({
   clientId: input.clientId,
   clientSecret: input.clientSecret,
   clientAuthentication:
-    input.clientAuthentication == null
+    input.clientAuthentication === null ||
+    input.clientAuthentication === undefined
       ? null
       : AUTH_IN[input.clientAuthentication],
   idTokenSignedResponseAlg: input.idTokenSignedResponseAlg ?? null,
@@ -77,10 +78,14 @@ export const createOf = (input: CreateConnectionInput) => ({
   ...input,
   id: input.id,
   clientAuthentication:
-    input.clientAuthentication == null
+    input.clientAuthentication === null ||
+    input.clientAuthentication === undefined
       ? null
       : AUTH_IN[input.clientAuthentication],
-  emailTrust: input.emailTrust == null ? undefined : TRUST_IN[input.emailTrust],
+  emailTrust:
+    input.emailTrust === null || input.emailTrust === undefined
+      ? undefined
+      : TRUST_IN[input.emailTrust],
   claims: claimsIn(input.claims),
   requireSso: input.requireSso ?? undefined,
   jit: input.jit ?? undefined,
@@ -90,9 +95,15 @@ export const createOf = (input: CreateConnectionInput) => ({
 
 /** What `updateConnection` hands the service: only the fields the caller sent (`null` clears an optional one). */
 export const patchOf = (input: UpdateConnectionInput) => ({
-  ...(input.name == null ? {} : { name: input.name }),
-  ...(input.issuer == null ? {} : { issuer: input.issuer }),
-  ...(input.clientId == null ? {} : { clientId: input.clientId }),
+  ...(input.name === null || input.name === undefined
+    ? {}
+    : { name: input.name }),
+  ...(input.issuer === null || input.issuer === undefined
+    ? {}
+    : { issuer: input.issuer }),
+  ...(input.clientId === null || input.clientId === undefined
+    ? {}
+    : { clientId: input.clientId }),
   ...(input.clientAuthentication === undefined
     ? {}
     : {
@@ -105,15 +116,21 @@ export const patchOf = (input: UpdateConnectionInput) => ({
     ? {}
     : { idTokenSignedResponseAlg: input.idTokenSignedResponseAlg }),
   ...(input.scopes === undefined ? {} : { scopes: input.scopes }),
-  ...(input.emailTrust == null
+  ...(input.emailTrust === null || input.emailTrust === undefined
     ? {}
     : { emailTrust: TRUST_IN[input.emailTrust] }),
   ...(input.claims === undefined ? {} : { claims: input.claims }),
-  ...(input.requireSso == null ? {} : { requireSso: input.requireSso }),
-  ...(input.jit == null ? {} : { jit: input.jit }),
-  ...(input.showButton == null ? {} : { showButton: input.showButton }),
+  ...(input.requireSso === null || input.requireSso === undefined
+    ? {}
+    : { requireSso: input.requireSso }),
+  ...(input.jit === null || input.jit === undefined ? {} : { jit: input.jit }),
+  ...(input.showButton === null || input.showButton === undefined
+    ? {}
+    : { showButton: input.showButton }),
   ...(input.upstreamMfa === undefined
     ? {}
     : { upstreamMfa: input.upstreamMfa }),
-  ...(input.enabled == null ? {} : { enabled: input.enabled }),
+  ...(input.enabled === null || input.enabled === undefined
+    ? {}
+    : { enabled: input.enabled }),
 });

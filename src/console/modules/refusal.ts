@@ -5,7 +5,7 @@ import {
   SlugTakenError,
 } from "@/modules/tenants";
 import { QuotaExceededError } from "@/modules/usage/usage.errors";
-import { fail } from "@/shared/errors";
+import { badInput, fail } from "@/shared/errors";
 
 const refuse = (
   message: string,
@@ -13,10 +13,6 @@ const refuse = (
   status: number,
   field?: string,
 ) => fail(code, message, { status, field });
-
-/** A malformed input: `BAD_USER_INPUT`, 400, with the field. */
-export const badInput = (message: string, field: string) =>
-  refuse(message, "BAD_USER_INPUT", 400, field);
 
 /** The service's refusals as the contract's GraphQL errors; anything else passes through. */
 export function refusal(error: unknown): unknown {
