@@ -1,7 +1,10 @@
 import { denial } from "@softistx/janus-graphql";
 import type { ConsoleContext } from "@/console/context";
-import { lastOwnerError } from "@/modules/admins/admins.errors";
-import { membersKey, PLATFORM_OWNERS_KEY } from "@/modules/admins/admins.utils";
+import {
+  lastOwnerError,
+  membersKey,
+  PLATFORM_OWNERS_KEY,
+} from "@/modules/admins";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 

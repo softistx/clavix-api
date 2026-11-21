@@ -1,10 +1,11 @@
 // The module's import surface (users: each tenant's janus instance over its
 // own partition of the user stores, the OAuth ports built on it, and the
-// console's users). Imported by file, each for a cycle the barrel would close:
-// `users.console-resolver` (`console/modules/index.ts`), `users.service`
-// (`config/console.ts`), `users.utils` (`roles.console-support.ts`) and
-// `users.console-mutations` (`lock-order.spec.ts`). `config/users.ts` builds
-// the process-wide instances.
+// console's users). Imported by file: `users.console-resolver`
+// (`console/modules/index.ts`), `users.console-mutations` (`lock-order.spec.ts`)
+// and the type `TenantJanus` of `users.tenant-janus` (`http/context.ts`,
+// `invitations.types.ts`, `invitations.service.ts`: the barrel would close a cycle
+// through `users.service` and the invitations). `config/users.ts` builds the
+// process-wide instances.
 
 export { userLoader } from "./users.data-loader";
 export { keepOwners } from "./users.owners";
@@ -14,6 +15,7 @@ export {
   ephemeralSecondFactorKeys,
   secondFactorKeysOf,
 } from "./users.second-factor-keys";
+export { UsersService } from "./users.service";
 export {
   MAGIC_LINK_LIFESPAN,
   SESSION,
@@ -33,4 +35,5 @@ export {
   socialOf,
   type TenantJanus,
 } from "./users.tenant-janus";
+export { shape } from "./users.utils";
 export { requireVerifiedEmail } from "./users.verified-email";
