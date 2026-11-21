@@ -1,4 +1,4 @@
-import { refusal } from "@/console/modules/tenants/errors";
+import { refusal } from "@/modules/tenants/tenants.console-errors";
 import { fail } from "@/shared/errors";
 import { DomainError } from "./domains.errors";
 

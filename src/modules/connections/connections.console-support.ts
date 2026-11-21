@@ -1,9 +1,9 @@
-import { refusal } from "@/console/modules/tenants/errors";
 import type {
   CheckConnectionInput,
   CreateConnectionInput,
   UpdateConnectionInput,
 } from "@/generated/console/resolvers";
+import { refusal } from "@/modules/tenants/tenants.console-errors";
 import { fail } from "@/shared/errors";
 import { ConnectionError } from "./connections.errors";
 import { AUTH_IN, TRUST_IN } from "./connections.utils";

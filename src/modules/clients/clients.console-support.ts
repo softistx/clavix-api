@@ -1,7 +1,7 @@
 import { denial } from "@softistx/janus-graphql";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
-import { refusal } from "@/console/modules/tenants/errors";
+import { refusal } from "@/modules/tenants/tenants.console-errors";
 import { QuotaExceededError } from "../usage/usage.errors";
 import { assertWithinQuota } from "../usage/usage.rules";
 

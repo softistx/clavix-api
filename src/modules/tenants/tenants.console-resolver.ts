@@ -5,20 +5,14 @@ import {
   planOf,
   purgeAtOf,
   stateOf,
-  type TenantState,
 } from "@/modules/tenants";
-import { docOf } from "./lookup";
-import { tenantMutations } from "./mutations";
-import { quotasOut, tenantQueries } from "./queries";
+import { tenantsAudits, tenantsGuards } from "./tenants.console-guards";
+import { tenantMutations } from "./tenants.console-mutations";
+import { tenantQueries } from "./tenants.console-queries";
+import { docOf, quotasOut, STATUS } from "./tenants.console-support";
 
-export { tenantsAudits, tenantsGuards } from "./guards";
-export type { TenantParent } from "./parent";
-
-const STATUS = {
-  active: "ACTIVE",
-  suspended: "SUSPENDED",
-  deleted: "DELETED",
-} as const satisfies Record<TenantState, string>;
+export type { TenantParent } from "./tenants.console-parent";
+export { tenantsAudits, tenantsGuards };
 
 export const tenants: Resolvers = {
   Tenant: {

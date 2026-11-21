@@ -346,7 +346,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
 - **A slice adds a module** under `src/modules/<name>/` (`<name>.console.graphqls`, `<name>.console-resolver.ts`,
   `<name>.console-guards.ts` with the guards and the audit action of each mutation: "Admin events" below) and lists it in
-  `src/console/modules/index.ts`. A16 folded the admins, audit, branding and oauth-policy modules the same way (admins: `admins.service.ts`, `.hooks`, `.janus`, `.utils`, `.errors`, with the console resolver split into `-queries`, `-mutations` and `-support`); `codegen.ts` leaves every `*.console.graphqls` out of the hosted types, as the hosted schema does.
+  `src/console/modules/index.ts`. A16 folded the admins, audit, branding, oauth-policy, me and tenants modules the same way, so `src/console/modules/` keeps only the registry (`index.ts`), the shared helpers (`ids.ts`, `user-key.ts`, `reserved.ts`, `catalog-support.ts`) and the cross-module specs (me: `me.console-resolver.ts`, `-support`, `-guards`, `me.utils.ts`, `me.types.ts`; admins: `admins.service.ts`, `.hooks`, `.janus`, `.utils`, `.errors`, with the console resolver split into `-queries`, `-mutations` and `-support`); `codegen.ts` leaves every `*.console.graphqls` out of the hosted types, as the hosted schema does.
 - **`clients` and `resources`** (issue #9) are thin: their console resolvers (A14: `<name>.console-resolver.ts`, with
   `-guards`, `-support`, and for resources `-queries` and `-mutations`; the SDL is `<name>.console.graphqls`, the shapes
   and the input mapping `<name>.utils.ts`) call `ClientsService`
@@ -556,7 +556,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   live in `src/modules/branding` (`branding.console-resolver.ts`, `-guards`, `-support`); the anonymous `tenantBranding` by host is in
   `src/modules/branding` and shows only what a hosted page draws (no seed, no tenant id).
 
-## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`, `src/console/modules/tenants`)
+## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`; its console files are `tenants.console-*`)
 
 - Layout (A5): `tenants.model.ts`, `.plan.ts`, `.trash.ts`, `.hooks.ts`, `.rules.ts` (slug rules), `.utils.ts`
   (hosts, issuers, partitions, list filters, `stateOf`), `.errors.ts`, `.types.ts`, `.cli.ts`, the purge queue and
@@ -601,7 +601,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   tenants deleted 30 days ago or more are touched. A new tenant-owned
   collection needs nothing here, but is a purge target: keep it behind `tenantOwned`.
 - **Console API**: `tenants`, `tenant`, `plans`, `usage` and the seven mutations are in
-  `src/console/modules/tenants`, with their audit actions (`tenant.create`, `.update`, `.setPlan`,
+  `src/modules/tenants` (`tenants.console-resolver.ts` with its `-queries`, `-mutations`, `-support`, `-errors`, `-parent` and `-guards`), with their audit actions (`tenant.create`, `.update`, `.setPlan`,
   `.suspend`, `.resume`, `.delete`, `.restore`). Only `updateTenant` is open to a tenant admin (refused with `TENANT_SUSPENDED` while the tenant is suspended); the rest
   is platform-only. The `Tenant` parent is `TenantParent` (codegen mapper), so `Me.memberships` keeps
   working with the extended type.
