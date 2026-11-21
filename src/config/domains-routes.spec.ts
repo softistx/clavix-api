@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { mintToken } from "@/modules/domains/domains.service";
+import { mintToken } from "@/modules/domains";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { mongo } from "./db";
 import { serveWebauthnOrigins, tlsAskOver } from "./domains-routes";

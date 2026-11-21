@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { domainStore, tenantsService } from "@/config/tenancy";
+import { domainsService, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
@@ -126,7 +126,7 @@ describe("addDomain", () => {
     ).toBeUndefined();
     const over = await admin(ADD, { tenantId: tenantA, host: "two.acme.com" });
     expect(codeOf(over)).toBe("QUOTA_EXCEEDED");
-    expect(await domainStore.count(new ObjectId(tenantA))).toBe(1);
+    expect(await domainsService.count(new ObjectId(tenantA))).toBe(1);
     expect(await usageService.count(tenantA, "domains")).toBe(1);
     await mongo.db.tenants.raw.updateOne(
       { _id: new ObjectId(tenantA) },
@@ -152,7 +152,7 @@ describe("quota under concurrency", () => {
     expect(results.filter((r) => codeOf(r) === "QUOTA_EXCEEDED")).toHaveLength(
       3,
     );
-    expect(await domainStore.count(new ObjectId(tenantA))).toBe(1);
+    expect(await domainsService.count(new ObjectId(tenantA))).toBe(1);
     await mongo.db.tenants.raw.updateOne(
       { _id: new ObjectId(tenantA) },
       { $set: { plan: "pro" } },

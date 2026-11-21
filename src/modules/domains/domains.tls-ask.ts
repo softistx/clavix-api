@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { normalizeHost, slugOfHost } from "@/tenancy/host";
-import { normalizeDomainHost } from "./domain-host";
+import { normalizeDomainHost } from "./domains.rules";
 
 /** The path Caddy's `on_demand_tls { ask }` calls. */
 export const TLS_ASK_PATH = "/internal/tls/ask";

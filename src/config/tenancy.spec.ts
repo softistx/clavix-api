@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createTenancy } from "@/config/tenancy";
-import type { TxtAnswer } from "@/modules/domains/dns";
-import { DomainStore } from "@/modules/domains/domains.service";
+import type { TxtAnswer } from "@/modules/domains";
+import { DomainsService } from "@/modules/domains";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 
@@ -52,7 +52,7 @@ describe("custom domains in the production wiring", () => {
   test("a verified custom domain reaches relatedOrigins through the domains object of config/tenancy.ts", async () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     const records = new Map<string, TxtAnswer>();
-    const store = new DomainStore(mongo.db.domains, {
+    const store = new DomainsService(mongo.db.domains, {
       dns: {
         resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
       },

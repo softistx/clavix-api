@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { platformHostPolicy, tlsAsk } from "./tls-ask";
-import { relatedOrigins } from "./well-known";
+import { platformHostPolicy, tlsAsk } from "./domains.tls-ask";
+import { relatedOrigins } from "./domains.well-known";
 
 const SECRET = "s".repeat(40);
 const ask = (

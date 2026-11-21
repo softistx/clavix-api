@@ -1,4 +1,15 @@
 import { domainToASCII } from "node:url";
+import type { DomainDoc } from "./domains.model";
+
+/** Why a claim did not verify: no record, another value, or DNS could not answer. */
+export type CheckFailure = "NO_RECORD" | "MISMATCH" | "LOOKUP_FAILED";
+
+/** Seconds a claim must wait between two checks of its DNS record (`verify`). */
+export const VERIFY_COOLDOWN_SECONDS = 60;
+
+/** Days a verified domain may fail its recheck before it becomes `unverified`. */
+export const RECHECK_GRACE_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 /** A host the console refuses to claim, and why (the message is shown to the owner). */
 export class DomainHostError extends Error {
@@ -66,3 +77,56 @@ export function normalizeDomainHost(
 
 /** The name of the TXT record that proves control of `host`. */
 export const txtNameOf = (host: string) => `_clavix.${host}`;
+
+/** Seconds until a claim checked at `checkedAt` may be checked again; `0` when it may be now. */
+export function cooldownSeconds(checkedAt: Date | null, now: Date): number {
+  if (checkedAt === null) return 0;
+  const waitMs =
+    VERIFY_COOLDOWN_SECONDS * 1_000 - (now.getTime() - checkedAt.getTime());
+  return waitMs <= 0 ? 0 : Math.ceil(waitMs / 1_000);
+}
+
+/** The hosts a tenant's write drops from the cache: the written ones and its slug host. */
+export function hostsToForget(
+  hosts: string[],
+  slugHost: string | undefined,
+): string[] {
+  return [...new Set([...hosts, ...(slugHost ? [slugHost] : [])])];
+}
+
+/** The hosts that resolve to a tenant: its verified ones and its primary, even lapsed. */
+export function resolvingHosts(
+  verified: string[],
+  primary: string | undefined,
+): string[] {
+  return primary === undefined || verified.includes(primary)
+    ? verified
+    : [...verified, primary];
+}
+
+/** What one recheck of a verified claim decides (`recheckOutcome`). */
+export type RecheckOutcome =
+  | { kind: "skip" }
+  | { kind: "fresh"; clearFailing: boolean }
+  | { kind: "failing"; since: Date }
+  | { kind: "lapse"; since: Date };
+
+/**
+ * A lookup that could not be answered changes nothing; a record that is there
+ * clears the failure streak; a failing one keeps its streak start and lapses
+ * once the streak reaches `RECHECK_GRACE_DAYS`.
+ */
+export function recheckOutcome(
+  failure: CheckFailure | null,
+  claim: Pick<DomainDoc, "failingSince">,
+  now: Date,
+): RecheckOutcome {
+  if (failure === "LOOKUP_FAILED") return { kind: "skip" };
+  if (failure === null) {
+    return { kind: "fresh", clearFailing: claim.failingSince !== null };
+  }
+  const since = claim.failingSince ?? now;
+  return now.getTime() - since.getTime() < RECHECK_GRACE_DAYS * DAY_MS
+    ? { kind: "failing", since }
+    : { kind: "lapse", since };
+}

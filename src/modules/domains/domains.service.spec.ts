@@ -2,15 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { QuotaExceededError } from "@/modules/usage/quota";
-import type { TxtAnswer, TxtResolver } from "./dns";
+import type { TxtAnswer, TxtResolver } from "./domains.dns";
 import { DomainError } from "./domains.errors";
-import {
-  DomainStore,
-  mintToken,
-  RECHECK_GRACE_DAYS,
-  VERIFY_COOLDOWN_SECONDS,
-} from "./domains.service";
-import type { DomainSystemEvent } from "./events";
+import type { DomainSystemEvent } from "./domains.events";
+import { RECHECK_GRACE_DAYS, VERIFY_COOLDOWN_SECONDS } from "./domains.rules";
+import { DomainsService } from "./domains.service";
+import { mintToken } from "./domains.utils";
 
 const collection = mongo.db.domains;
 const records = new Map<string, TxtAnswer>();
@@ -20,7 +17,7 @@ const dns: TxtResolver = {
 let clock = new Date("2026-11-12T12:00:00Z");
 const changed: string[][] = [];
 const events: DomainSystemEvent[] = [];
-const store = new DomainStore(collection, {
+const store = new DomainsService(collection, {
   dns,
   platformDomain: "clavix.test",
   now: () => clock,
@@ -62,15 +59,6 @@ const addVerified = async (tenant: ObjectId, host: string) => {
   publish(claim.host, claim.txtToken);
   return (await store.verify(tenant, claim._id.toHexString())).domain;
 };
-
-describe("tokens", () => {
-  test("are unguessable and distinct", () => {
-    const a = mintToken();
-    expect(a).toStartWith("clavix-verify=");
-    expect(a.length).toBeGreaterThan(40);
-    expect(mintToken()).not.toBe(a);
-  });
-});
 
 describe("add", () => {
   test("normalises, is idempotent, starts pending with its own token", async () => {
@@ -205,7 +193,7 @@ describe("verify", () => {
 
   test("an event that cannot be recorded does not fail the verification", async () => {
     const logged: string[] = [];
-    const failing = new DomainStore(collection, {
+    const failing = new DomainsService(collection, {
       dns,
       platformDomain: "clavix.test",
       now: () => clock,

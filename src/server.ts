@@ -21,7 +21,7 @@ import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { startAuditRetention } from "./modules/audit/retention-worker";
 import { drain } from "./modules/auth/outbox";
 import { startGrantsRevoke } from "./modules/consent/revoke-job";
-import { startDomainRecheck } from "./modules/domains/recheck-worker";
+import { startDomainRecheck } from "./modules/domains/domains.recheck-worker";
 import { startKeyRotation } from "./modules/keys";
 import { startTenantPurge } from "./modules/tenants/tenants.purge-worker";
 import { startWebhookSecretsPrune } from "./modules/webhooks/webhooks.secrets-prune-worker";

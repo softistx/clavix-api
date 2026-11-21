@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { AUDIT_ACTION } from "@/console/audit";
-import { domainEventInput } from "./events";
+import { domainEventInput } from "./domains.events";
 
 const tenantId = new ObjectId();
 const domainId = new ObjectId();

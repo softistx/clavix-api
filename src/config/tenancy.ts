@@ -10,7 +10,7 @@ import {
 } from "@/tenancy/tenant-cache";
 import { linkTenantToPlatform } from "./access";
 import { mongo } from "./db";
-import { createDomainStore } from "./domains";
+import { createDomainsService } from "./domains";
 import { env } from "./env";
 import { ensureSigningKeyOf } from "./keys";
 import { redis } from "./redis";
@@ -69,7 +69,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 
-export const domainStore = createDomainStore({
+export const domainsService = createDomainsService({
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
   slugHostOf: async (tenantId) => {
     const tenant = await tenantsService.find(tenantId);
@@ -92,11 +92,11 @@ export const { tenantResolver, tenantsService } = createTenancy({
       ? noTenantCache
       : redisTenantCache(redis.cache.tenantHost),
   domains: {
-    tenantOfHost: (host) => domainStore.tenantOfHost(host),
-    primaryHostOf: (tenantId) => domainStore.primaryHostOf(tenantId),
-    verifiedHostsOf: (tenantId) => domainStore.verifiedHostsOf(tenantId),
+    tenantOfHost: (host) => domainsService.tenantOfHost(host),
+    primaryHostOf: (tenantId) => domainsService.primaryHostOf(tenantId),
+    verifiedHostsOf: (tenantId) => domainsService.verifiedHostsOf(tenantId),
   },
-  hostsOf: (tenantId) => domainStore.resolvingHostsOf(tenantId),
+  hostsOf: (tenantId) => domainsService.resolvingHostsOf(tenantId),
   config: origin,
 });
 

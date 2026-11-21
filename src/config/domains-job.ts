@@ -1,10 +1,10 @@
 import { senderAddress } from "@/mail/mailer";
-import { lapsedDomainMail } from "@/modules/domains/notice";
-import type { RecheckDeps } from "@/modules/domains/recheck-worker";
+import { lapsedDomainMail } from "@/modules/domains";
+import type { RecheckDeps } from "@/modules/domains/domains.recheck-worker";
 import { access } from "./access";
 import { env } from "./env";
 import { mailer } from "./mail";
-import { domainStore, tenantsService } from "./tenancy";
+import { domainsService, tenantsService } from "./tenancy";
 
 /**
  * The recheck over the real stores. A domain that lapses mails the tenant's
@@ -13,7 +13,7 @@ import { domainStore, tenantsService } from "./tenancy";
 export const domainRecheckDeps = (
   findUser: (id: string) => Promise<{ email: string } | null>,
 ): RecheckDeps => ({
-  recheckAll: (onUnverified) => domainStore.recheckAll(onUnverified),
+  recheckAll: (onUnverified) => domainsService.recheckAll(onUnverified),
   notify: async (domain) => {
     const tenantId = domain.tenantId.toHexString();
     const tenant = await tenantsService.find(tenantId);

@@ -6,7 +6,7 @@ import { access } from "./access";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { createPartitionPurger } from "./partition-purger";
-import { domainStore, tenantsService } from "./tenancy";
+import { domainsService, tenantsService } from "./tenancy";
 
 /**
  * The tenant-owned collections of the app (`isOwned`: `adminEvents`, the
@@ -35,7 +35,7 @@ export const createTenantPurge =
         ...ownedPurgers(),
         {
           name: "domains",
-          deleteOwnedBy: (id) => domainStore.deleteOwnedBy(id),
+          deleteOwnedBy: (id) => domainsService.deleteOwnedBy(id),
         },
       ],
       memberships: access,

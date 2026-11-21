@@ -1,10 +1,8 @@
 import type { ObjectId } from "mongodb";
-import { domainStore, tenantsService } from "@/config/tenancy";
+import { domainsService, tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { txtNameOf } from "@/modules/domains/domain-host";
-import type { DomainError } from "@/modules/domains/domains.errors";
-import { DomainError as DomainErrorClass } from "@/modules/domains/domains.errors";
-import type { DomainDoc } from "@/modules/domains/domains.service";
+import type { DomainDoc, DomainError } from "@/modules/domains";
+import { DomainError as DomainErrorClass, txtNameOf } from "@/modules/domains";
 import { effectiveQuotas } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
@@ -84,11 +82,11 @@ export const domains: Resolvers = {
   Query: {
     domains: async (_, { tenantId }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      return (await domainStore.list(tenant._id)).map(shape);
+      return (await domainsService.list(tenant._id)).map(shape);
     },
     domain: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const found = await domainStore.find(tenant._id, id);
+      const found = await domainsService.find(tenant._id, id);
       return found === undefined ? null : shape(found);
     },
   },
@@ -100,7 +98,7 @@ export const domains: Resolvers = {
       // The quota count and the insert are not atomic: one claim at a time
       // per tenant, across processes when there is a shared lock.
       const created = await ctx.exclusive(domainsKey(tenant), () =>
-        refusing(() => domainStore.add(tenant._id, host, quota)),
+        refusing(() => domainsService.add(tenant._id, host, quota)),
       );
       await ctx.audit(
         "domain.add",
@@ -111,7 +109,7 @@ export const domains: Resolvers = {
     verifyDomain: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const { domain, failure } = await refusing(() =>
-        domainStore.verify(tenant._id, id),
+        domainsService.verify(tenant._id, id),
       );
       await ctx.audit("domain.verify", target(tenant._id, id));
       return { domain: shape(domain), failure };
@@ -119,7 +117,7 @@ export const domains: Resolvers = {
     removeDomain: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const removed = await ctx.exclusive(domainsKey(tenant), () =>
-        refusing(() => domainStore.remove(tenant._id, id)),
+        refusing(() => domainsService.remove(tenant._id, id)),
       );
       // Recorded on a repeat too (it may be the event the first run missed).
       // An id the trail cannot hold (empty, over 200) names no claim.
@@ -133,7 +131,7 @@ export const domains: Resolvers = {
       // Two calls at once would each flip a different claim to primary and
       // then clear the other: one at a time per tenant.
       const updated = await ctx.exclusive(domainsKey(tenant), () =>
-        refusing(() => domainStore.setPrimary(tenant._id, id)),
+        refusing(() => domainsService.setPrimary(tenant._id, id)),
       );
       await ctx.audit("domain.setPrimary", target(tenant._id, id));
       return shape(updated);

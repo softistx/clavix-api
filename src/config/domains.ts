@@ -1,6 +1,8 @@
-import { systemTxtResolver } from "@/modules/domains/dns";
-import { DomainStore } from "@/modules/domains/domains.service";
-import { domainEventInput } from "@/modules/domains/events";
+import {
+  DomainsService,
+  domainEventInput,
+  systemTxtResolver,
+} from "@/modules/domains";
 import { adminEventRecorder } from "./admin-events";
 import { mongo } from "./db";
 import { env } from "./env";
@@ -10,13 +12,13 @@ import { env } from "./env";
  * only this wiring and its module reach it). The resolver's cache is told
  * through `onHostsChanged`, which `config/tenancy.ts` supplies.
  */
-export const createDomainStore = (
+export const createDomainsService = (
   options: Pick<
-    ConstructorParameters<typeof DomainStore>[1],
+    ConstructorParameters<typeof DomainsService>[1],
     "onHostsChanged" | "slugHostOf"
   >,
 ) =>
-  new DomainStore(mongo.db.domains, {
+  new DomainsService(mongo.db.domains, {
     ...options,
     record: (event) => adminEventRecorder.record(domainEventInput(event)),
     dns: systemTxtResolver(),
