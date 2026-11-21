@@ -4,14 +4,14 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
+import { userinfoOf } from "@/oauth/building";
+import type { ResourcesFor } from "@/oauth/ports";
 import {
   CliInputError,
   type CliTenant,
   SuspendedTenantError,
   UnknownTenantError,
-} from "@/cli/errors";
-import { userinfoOf } from "@/oauth/building";
-import type { ResourcesFor } from "@/oauth/ports";
+} from "@/shared/cli";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { scopeNamesByResource } from "./catalog";
 import { replaceResourceScopes } from "./catalog/scopes";

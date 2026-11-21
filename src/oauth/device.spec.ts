@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { registerClient } from "@/modules/clients/register-client";
 import { createFlow } from "~/oauth-flow";
 import { withTenantState } from "./tenant-state";
 

@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { CliInputError } from "@/cli/errors";
+import { CliInputError } from "@/shared/cli";
 import type { RegisterResourceInput } from "./register-resource";
 
 export const USAGE = `Usage: bun run resources:create --tenant <slug> --uri <uri> --scope <scope> [options]

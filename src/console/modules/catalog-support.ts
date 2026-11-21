@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
-import type { CliTenant } from "@/cli/errors";
 import { CatalogError } from "@/modules/resources/catalog.errors";
 import { RolesError } from "@/modules/roles/roles.errors";
+import type { CliTenant } from "@/shared/cli";
 import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../context";
 import { liveTenant, tenantIdOf } from "./ids";

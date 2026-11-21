@@ -6,7 +6,7 @@ import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
-import { adminTenantOf } from "@/invitations/scope";
+import { adminTenantOf } from "@/modules/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";

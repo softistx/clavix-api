@@ -1,8 +1,8 @@
 import type { Passkey } from "@softistx/janus";
 import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { fail } from "@/shared/errors";
-import type { TenantJanus } from "@/users/tenant-janus";
 
 /** Every refusal of a passkey sign-in alike: it must not tell whether the credential, the user or the tenant exists. */
 export const passkeyInvalid = () =>

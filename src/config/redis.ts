@@ -10,7 +10,6 @@ import {
   exportLimits,
 } from "@/console/audit-export/throttle";
 import { consoleLimits } from "@/console/budgets";
-import { keyRotation } from "@/keys/queue";
 import { agentsPrune } from "@/modules/agents/prune.queue";
 import { auditRetention } from "@/modules/audit/retention.queue";
 import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
@@ -25,6 +24,7 @@ import {
 import { grantsRevoke } from "@/modules/consent/revoke.queue";
 import { domainRecheck } from "@/modules/domains/recheck.queue";
 import { tlsAskLimit } from "@/modules/domains/tls-limit";
+import { keyRotation } from "@/modules/keys/queue";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,

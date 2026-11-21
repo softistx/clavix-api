@@ -4,7 +4,7 @@ import {
   redirectUriProblem,
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
-import { CliInputError } from "@/cli/errors";
+import { CliInputError } from "@/shared/cli";
 import { OFFERED_GRANTS, type OfferedGrant } from "./grants";
 import type { RegisterClientInput } from "./register-client";
 

@@ -5,8 +5,8 @@ import { redis } from "@/config/redis";
 import { tenantsService } from "@/config/tenancy";
 import { webhookEndpoints } from "@/config/webhook-endpoints";
 import { signInPolicyService } from "@/console/modules/sign-in-methods/wiring";
-import { resealAllTenants, resealExitCode } from "@/keys";
-import { RESEAL_USAGE } from "@/keys/cli";
+import { resealAllTenants, resealExitCode } from "@/modules/keys";
+import { RESEAL_USAGE } from "@/modules/keys/cli";
 
 // Step 3 of a master-key rotation (docs/operations.md, "Rotating the master
 // key"): seals again, under the first key of CLAVIX_KEYS_MASTER_KEY (a

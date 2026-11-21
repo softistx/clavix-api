@@ -5,13 +5,13 @@ import {
   type SigningKeyStore,
   s256Challenge,
 } from "@softistx/janus-oauth";
-import { registerClient } from "@/clients/register-client";
 import { withAgentRegistration } from "@/config/agents-registration";
 import { agentCheckFor, exchangeRulesFor } from "@/config/client-policies";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { registerClient } from "@/modules/clients/register-client";
 import {
   type ClavixOAuthOptions,
   createClavixOAuthIssuers,

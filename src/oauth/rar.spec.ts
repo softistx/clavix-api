@@ -9,7 +9,6 @@ import {
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
 import {
   clientPoliciesService,
   exchangeRulesFor,
@@ -24,11 +23,12 @@ import {
 } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
+import { registerClient } from "@/modules/clients/register-client";
 import { mongoClientDetailTypes } from "@/modules/resources/detail-types";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
 import { createTenantParOff } from "../../test/tenant-par-off";
 
 // M3b R4, end to end: authorization details (RFC 9396) from PAR to the

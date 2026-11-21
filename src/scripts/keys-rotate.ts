@@ -1,11 +1,11 @@
-import { CliInputError, UnknownTenantError } from "@/cli/errors";
 import { mongo } from "@/config/db";
 import { signingKeysFor } from "@/config/keys";
 import { redis } from "@/config/redis";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
-import { rotateNow } from "@/keys";
-import { parseRotateArgs, ROTATE_USAGE } from "@/keys/cli";
+import { rotateNow } from "@/modules/keys";
+import { parseRotateArgs, ROTATE_USAGE } from "@/modules/keys/cli";
 import { partitionOf } from "@/modules/tenants/identity";
+import { CliInputError, UnknownTenantError } from "@/shared/cli";
 
 // Emergency rotation (a signing key leaked): retires the tenant's current key
 // now and makes a new one sign, through janus's own `retire` and rotation

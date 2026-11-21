@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { CliInputError } from "@/cli/errors";
+import { CliInputError } from "@/shared/cli";
 
 export const ROTATE_USAGE = `Usage: bun run keys:rotate <tenant-slug> [--drop-old]
        bun run keys:rotate --all [--drop-old]

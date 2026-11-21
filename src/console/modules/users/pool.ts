@@ -1,7 +1,7 @@
 import { denial } from "@softistx/janus-graphql";
 import type { OAuthGrants } from "@softistx/janus-oauth";
-import type { TenantInvitations } from "@/invitations/tenant-invitations";
-import type { TenantJanus } from "@/users/tenant-janus";
+import type { TenantInvitations } from "@/modules/invitations/tenant-invitations";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import type { TenantUserView } from "../../context";
 
 /** Where `ConsoleUsers` reaches a tenant's pool; `null` for a tenant that is gone or suspended. */

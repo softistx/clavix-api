@@ -1,6 +1,6 @@
-import { CliInputError } from "@/cli/errors";
-import { operatorScope } from "@/invitations/scope";
-import type { TenantInvitations } from "@/invitations/tenant-invitations";
+import { operatorScope } from "@/modules/invitations/scope";
+import type { TenantInvitations } from "@/modules/invitations/tenant-invitations";
+import { CliInputError } from "@/shared/cli";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
 import type { Role } from "./model";

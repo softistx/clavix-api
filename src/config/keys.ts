@@ -3,7 +3,7 @@ import {
   createKeyGenerations,
   createTenantKeys,
   ensureSigningKey,
-} from "@/keys";
+} from "@/modules/keys";
 import { createSecretBox } from "@/modules/sign-in-methods/secrets";
 import { mongo } from "./db";
 import { env } from "./env";

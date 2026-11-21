@@ -4,7 +4,7 @@ import {
   emptySecretResealCounts,
   type SecretResealCounts,
 } from "@/modules/sign-in-methods/secrets";
-import { secondFactorKeysOf } from "@/users/second-factor-keys";
+import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
 import {
   emptySecondFactorCounts,
   type ResealSecondFactor,

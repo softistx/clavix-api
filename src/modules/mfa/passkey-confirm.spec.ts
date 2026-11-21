@@ -13,8 +13,8 @@ import { settled } from "@/modules/auth/outbox";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { originOf, rpIdOf } from "@/users/rp";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { originOf, rpIdOf } from "@/modules/users/rp";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 // `confirmSecondFactorWithPasskey` (clavix-api#293): the hosted second-factor
 // page answers a `SecondFactorChallenge` with a passkey bound to it.

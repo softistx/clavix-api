@@ -2,12 +2,12 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { CLIENT_CREDENTIALS_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog, registerStoredResource } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createConsoleAuthenticator } from "@/console/auth";
+import { registerClient } from "@/modules/clients/register-client";
 import { createFlow } from "~/oauth-flow";
 import { withTenantState } from "./tenant-state";
 

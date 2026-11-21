@@ -1,5 +1,4 @@
 import { s256Challenge } from "@softistx/janus-oauth";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createIssuers } from "@/config/oauth";
@@ -13,6 +12,7 @@ import {
   tenantsService,
 } from "@/config/tenancy";
 import { authFor, claimsFor, forTenant } from "@/config/users";
+import { registerClient } from "@/modules/clients/register-client";
 import { registerTenant } from "@/modules/tenants/register-tenant";
 
 // Seeds the load test (docs/operations.md, "Load test"): TENANTS

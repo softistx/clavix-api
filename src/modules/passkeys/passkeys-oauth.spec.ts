@@ -7,18 +7,18 @@ import {
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
+import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
+import { originOf, rpIdOf } from "@/modules/users/rp";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { originOf, rpIdOf } from "@/users/rp";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // A passkey sign-in, then the OAuth flow of the same tenant: the id_token's

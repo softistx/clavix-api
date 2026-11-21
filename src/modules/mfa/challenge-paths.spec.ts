@@ -22,7 +22,7 @@ import { settled } from "@/modules/auth/outbox";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 // The second-factor challenge on the sign-in paths mfa.spec does not walk
 // (a magic link, a social provider), its freshness window, a suspended

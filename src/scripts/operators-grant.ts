@@ -1,4 +1,3 @@
-import { CliInputError } from "@/cli/errors";
 import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
 import { mongo } from "@/config/db";
@@ -16,6 +15,7 @@ import {
   parseOperatorArgs,
 } from "@/console/operators";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { CliInputError } from "@/shared/cli";
 
 // Grants a platform role (default owner) to a user of the clavix tenant, until
 // the console can. Idempotent. See `bun run operators:grant --help`.

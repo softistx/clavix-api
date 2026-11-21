@@ -9,20 +9,20 @@ import {
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import {
-  CliInputError,
-  SuspendedTenantError,
-  UnknownTenantError,
-} from "@/cli/errors";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import {
+  CliInputError,
+  SuspendedTenantError,
+  UnknownTenantError,
+} from "@/shared/cli";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 import { parseClientArgs } from "./cli";
 import { clientIdOf, registerClient } from "./register-client";
 

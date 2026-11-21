@@ -2,8 +2,8 @@ import { denial } from "@softistx/janus-graphql";
 import { connectionsService } from "@/config/connections";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
+import { homeRealmOf } from "@/modules/users/tenant-janus";
 import { requireLive } from "@/tenancy/live";
-import { homeRealmOf } from "@/users/tenant-janus";
 
 export const connections: Resolvers = {
   Query: {

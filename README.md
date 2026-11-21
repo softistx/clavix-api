@@ -167,7 +167,7 @@ Clavix adds no `jose`.
   default is public. A tenant with no key yet has an empty JWKS: the OAuth endpoints treat it as transient.
 - `CLAVIX_KEYS_MASTER_KEY` is generated with `openssl rand -base64 32`.
 - Rotation: ES256 keys sign for 90 days; the next key is published 48 h before it takes over and
-  a retired key stays published 24 h (`src/keys/policy.ts`). An hourly `key-rotation` job on
+  a retired key stays published 24 h (`src/modules/keys/policy.ts`). An hourly `key-rotation` job on
   `@softistx/redis` (cron `0 * * * *`) runs the step over every active tenant, and the server runs
   one pass at start, which also gives the seeded `clavix` tenant its key. Without `REDIS_URL`
   (development) only the pass at start runs.
@@ -1074,7 +1074,7 @@ tenant, not across tenants: the same person in two tenants is two users with two
 ## Users per tenant
 
 Each tenant has its own user pool (ADR-0008): one `@softistx/janus` instance per tenant
-(`createJanusIssuers`, `src/users`), built on its first request and rebuilt when the tenant's
+(`createJanusIssuers`, `src/modules/users`), built on its first request and rebuilt when the tenant's
 `version` moves, over its partition of the janus user stores (`partitioned*` collections,
 partition = the tenant's id in hex; `bun run db:sync` creates them). The same e-mail is two users in
 two tenants, and a user id, a session or a token of one tenant is unknown to another. An unknown
@@ -1084,7 +1084,7 @@ or suspended host has no instance.
 - **Lifetime**: 14 days, sliding (renewed once a day), and never more than 30 days after sign-in
   (`session.absolute`): past it the session is anonymous however recently it was used.
 - **Passkey relying party** (a default to confirm before the first production passkey, since a passkey is bound to its relying party for good): the tenant's own host. `rpIdOf(tenant)` is
-  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`); the verified custom domains are its related origins (`passkeys.relatedOrigins`, see Custom domains).
+  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/modules/users/rp.ts`); the verified custom domains are its related origins (`passkeys.relatedOrigins`, see Custom domains).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
   `src/server.ts`. Consent and passkeys are below, and a client's `/authorize` needs a resource: userinfo's, or one
   registered with `resources:create`. `__Host-` cookies need https (Chrome accepts `localhost`).

@@ -14,8 +14,8 @@ import { passkeyThrottled } from "@/modules/passkeys/throttle";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { originOf, rpIdOf } from "@/users/rp";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
+import { originOf, rpIdOf } from "@/modules/users/rp";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the
 // challenge reads the passkey options again, with no attempt counted.

@@ -1,11 +1,11 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
+import { registerClient } from "@/modules/clients/register-client";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { assertWithinQuota, QuotaExceededError } from "./quota";

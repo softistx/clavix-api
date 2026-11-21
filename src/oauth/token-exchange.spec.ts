@@ -2,13 +2,13 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
+import { registerClient } from "@/modules/clients/register-client";
 import { createFlow } from "~/oauth-flow";
 
 const SOURCE = "https://source.tx.example/api";

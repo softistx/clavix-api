@@ -12,7 +12,6 @@ import {
 } from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
 import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
 import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -21,15 +20,16 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { settled } from "@/modules/auth/outbox";
+import { registerClient } from "@/modules/clients/register-client";
 import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
+import { originOf, rpIdOf } from "@/modules/users/rp";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
-import { originOf, rpIdOf } from "@/users/rp";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of

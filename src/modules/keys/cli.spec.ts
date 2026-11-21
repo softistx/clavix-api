@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CliInputError } from "@/cli/errors";
+import { CliInputError } from "@/shared/cli";
 import { parseRotateArgs } from "./cli";
 
 test("keys:rotate takes a slug or --all, and --drop-old", () => {

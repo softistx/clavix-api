@@ -1,8 +1,8 @@
+import { INVITATION_PATH } from "@/mail/tenant-mail";
 import {
   createTenantInvitations,
   type TenantInvitations,
-} from "@/invitations/tenant-invitations";
-import { INVITATION_PATH } from "@/mail/tenant-mail";
+} from "@/modules/invitations/tenant-invitations";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
 import { tenantMail } from "./mail";

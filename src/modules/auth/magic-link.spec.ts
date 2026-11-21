@@ -12,7 +12,10 @@ import { SignInPolicyService } from "@/modules/sign-in-methods/service";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
-import { MAGIC_LINK_LIFESPAN, SESSION_COOKIE } from "@/users/tenant-janus";
+import {
+  MAGIC_LINK_LIFESPAN,
+  SESSION_COOKIE,
+} from "@/modules/users/tenant-janus";
 import { settled } from "./outbox";
 
 // Magic link is the tenant's choice, off until it turns it on (its sign-in

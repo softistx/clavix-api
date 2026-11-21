@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import { registerClient } from "@/clients/register-client";
 import { access } from "@/config/access";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
@@ -9,6 +8,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
+import { registerClient } from "@/modules/clients/register-client";
 import { partitionOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { codeOf, consoleAs } from "~/console";

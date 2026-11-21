@@ -11,8 +11,8 @@ import {
 } from "@/modules/connections/sso-gate";
 import { challengeOf } from "@/modules/mfa/challenge";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
+import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { requireLive } from "@/tenancy/live";
-import type { TenantJanus } from "@/users/tenant-janus";
 import { deviceOptions } from "./device";
 import {
   confirmEmailVerification,

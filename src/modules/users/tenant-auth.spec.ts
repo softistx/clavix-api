@@ -14,7 +14,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { createTenantParOff } from "../../../test/tenant-par-off";
 import { originOf, rpIdOf } from "./rp";
 import { createTenantAuth } from "./tenant-auth";
 import { buildTenantJanus, SESSION_COOKIE } from "./tenant-janus";

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
+import { registerClient } from "@/modules/clients/register-client";
 import { parseTenantArgs } from "./cli";
 import { partitionOf } from "./identity";
 import { registerTenant, TenantInputError } from "./register-tenant";

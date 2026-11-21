@@ -1,7 +1,7 @@
 import { deleteClient } from "@softistx/janus-oauth";
 import type { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import type { CliTenant } from "@/cli/errors";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
+import type { CliTenant } from "@/shared/cli";
 
 /**
  * Deletes the client. `unmanaged` is a record this service does not manage (not

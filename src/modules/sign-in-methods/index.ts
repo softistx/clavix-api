@@ -12,12 +12,12 @@ import {
 } from "@/modules/auth/sign-in-events";
 import { revokeOnReplace } from "@/modules/consent/revoke-job";
 import { challengeAnswer } from "@/modules/mfa/challenge";
-import { requireLive } from "@/tenancy/live";
 import {
   bindSsoCallback,
   connectionIdOfCallbackUrl,
   socialOf,
-} from "@/users/tenant-janus";
+} from "@/modules/users/tenant-janus";
+import { requireLive } from "@/tenancy/live";
 import { methodDisabled } from "./gate";
 import {
   type MethodType,

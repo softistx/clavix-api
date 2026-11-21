@@ -6,9 +6,9 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
+import { registerClient } from "@/modules/clients/register-client";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
 import { createTenantResolver } from "@/tenancy/resolver";

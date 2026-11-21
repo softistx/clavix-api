@@ -7,7 +7,6 @@ import {
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -15,11 +14,12 @@ import { oauthDb } from "@/config/oauth-db";
 import { catalog } from "@/config/resources";
 import { tenantAdmin, tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
+import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
+import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 const RESOURCE = "https://api.clavix.test/mcp";

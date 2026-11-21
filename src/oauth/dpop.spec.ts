@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { decodeJwt } from "jose";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { dpopNonceSecretOf } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
+import { registerClient } from "@/modules/clients/register-client";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 

@@ -5,9 +5,9 @@ import {
   type SigningKeyStore,
   s256Challenge,
 } from "@softistx/janus-oauth";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
+import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf } from "@/modules/tenants/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
 import { TenantsService } from "@/modules/tenants/tenants.service";
