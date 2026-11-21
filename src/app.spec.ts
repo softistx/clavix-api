@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { graphqlClient } from "@softistx/alxia-graphql/testing";
+import { version } from "@/modules/health";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { graphql } from "~/generated/graphql";
-import { version } from "./modules/health";
 
 const app = createTestApp();
 

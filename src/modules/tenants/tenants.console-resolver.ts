@@ -1,15 +1,11 @@
 import type { Resolvers } from "@/generated/console/resolvers";
-import {
-  effectiveQuotas,
-  overridesOf,
-  planOf,
-  purgeAtOf,
-  stateOf,
-} from "@/modules/tenants";
 import { tenantsAudits, tenantsGuards } from "./tenants.console-guards";
 import { tenantMutations } from "./tenants.console-mutations";
 import { tenantQueries } from "./tenants.console-queries";
 import { docOf, quotasOut, STATUS } from "./tenants.console-support";
+import { effectiveQuotas, overridesOf, planOf } from "./tenants.plan";
+import { purgeAtOf } from "./tenants.trash";
+import { stateOf } from "./tenants.utils";
 
 export type { TenantParent } from "./tenants.console-parent";
 export { tenantsAudits, tenantsGuards };

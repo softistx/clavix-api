@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MCP_CLIENT_REDIRECT_URIS } from "@softistx/janus-oauth";
-import { agentsOff } from "@/modules/oauth-policy/oauth-policy.schema";
+import { agentsOff } from "@/modules/oauth-policy";
 import { registrationOf } from "./registration";
 
 describe("registrationOf", () => {

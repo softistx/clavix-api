@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import type { TxtAnswer } from "@/modules/domains";
 import { createSecretBox } from "@/modules/sign-in-methods";
-import { QuotaExceededError } from "@/modules/usage/usage.errors";
+import { QuotaExceededError } from "@/modules/usage";
 import { ConnectionError } from "./connections.errors";
 import { ConnectionsService } from "./connections.service";
 import type { ConnectionInput } from "./connections.types";

@@ -34,7 +34,7 @@ import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of
 // tenant "fedacme" (its "Acme SSO"): the whole federated sign-in runs, the

@@ -1,5 +1,5 @@
-// The module's import surface. `client-policies.rules` (`validateTokenExchange`,
-// which reads the resources module) is imported by file by the clients module.
+// The module's import surface.
 
-export * from "./client-policies.model";
+export type { TokenExchangeRules } from "./client-policies.model";
+export { validateTokenExchange } from "./client-policies.rules";
 export * from "./client-policies.service";

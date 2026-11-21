@@ -25,7 +25,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 
 const RESOURCE = "https://api.clavix.test/mcp";
 const REDIRECT = "https://app.example/callback";

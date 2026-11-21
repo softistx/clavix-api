@@ -1,5 +1,5 @@
 import type { UserEvent, UserEventListener } from "@softistx/janus";
-import type { AuthEventType } from "@/modules/audit/audit.model";
+import type { AuthEventType } from "@/modules/audit";
 import { userWebhookEvent } from "@/modules/webhooks";
 import type { EventBus } from "./bus";
 

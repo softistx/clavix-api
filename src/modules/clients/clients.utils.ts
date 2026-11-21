@@ -4,7 +4,7 @@ import {
   DEVICE_GRANT,
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
-import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
+import type { TokenExchangeRules } from "@/modules/client-policies";
 import type { CliTenant } from "@/shared/cli";
 import { DEFAULT_GRANTS } from "./clients.rules";
 import type {

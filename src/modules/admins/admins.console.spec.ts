@@ -10,7 +10,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { CONSOLE_PATH } from "@/console/identity";
-import { adminScope } from "@/modules/invitations/invitations.rules";
+import { adminScope } from "@/modules/invitations";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";

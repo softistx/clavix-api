@@ -4,16 +4,15 @@ import { env } from "@/config/env";
 import { createIssuers } from "@/config/oauth";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
-import { catalog, registerStoredResource } from "@/config/resources";
 import {
-  tenantBySlug,
-  tenantResolver,
-  tenantsCollection,
-  tenantsService,
-} from "@/config/tenancy";
+  clientDetailTypes,
+  registerStoredResource,
+  resourcesService,
+} from "@/config/resources";
+import { clock } from "@/config/runtime";
+import { tenantBySlug, tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, forTenant } from "@/config/users";
-import { registerClient } from "@/modules/clients/register-client";
-import { registerTenant } from "@/modules/tenants/register-tenant";
+import { registerClient } from "@/modules/clients";
 
 // Seeds the load test (docs/operations.md, "Load test"): TENANTS
 // tenants, each with CHAINS public clients and one refresh-token chain per
@@ -128,10 +127,7 @@ const out: {
 try {
   for (let i = 0; i < TENANTS; i++) {
     const slug = `load${String(i).padStart(2, "0")}`;
-    await registerTenant(
-      { service: tenantsService, collection: tenantsCollection },
-      { slug, name: `Load ${i}` },
-    );
+    await tenantsService.register({ slug, name: `Load ${i}` });
     await registerStoredResource({
       tenant: slug,
       uri: RESOURCE,
@@ -139,15 +135,20 @@ try {
     });
     const owner = await tenantBySlug(slug);
     if (owner === undefined) throw new Error(`${slug}: tenant not found`);
-    const stored = (await catalog.listResources(owner._id)).find(
+    const stored = (await resourcesService.listResources(owner._id)).find(
       (resource) => resource.uri === RESOURCE,
     );
     if (stored === undefined) throw new Error(`${slug}: resource not stored`);
-    await catalog.updateResource(owner._id, stored._id.toHexString(), {
+    await resourcesService.updateResource(owner._id, stored._id.toHexString(), {
       allowClientCredentials: true,
     });
     const machine = await registerClient(
-      { db: oauthDb, findTenant: tenantBySlug },
+      {
+        db: oauthDb,
+        findTenant: tenantBySlug,
+        detailTypes: clientDetailTypes,
+        now: clock,
+      },
       {
         tenant: slug,
         name: "Load machine",
@@ -174,7 +175,12 @@ try {
     for (let j = 0; j < CHAINS; j++) {
       chain = j;
       await registerClient(
-        { db: oauthDb, findTenant: tenantBySlug },
+        {
+          db: oauthDb,
+          findTenant: tenantBySlug,
+          detailTypes: clientDetailTypes,
+          now: clock,
+        },
         {
           tenant: slug,
           name: `Load ${j}`,

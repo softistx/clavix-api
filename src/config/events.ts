@@ -1,5 +1,5 @@
 import { createEventBus } from "@/events/bus";
-import { authRecorder } from "@/modules/audit/audit.recorder";
+import { authRecorder } from "@/modules/audit";
 import { authEventsService } from "./audit";
 import { reportError } from "./runtime";
 

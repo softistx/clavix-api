@@ -21,7 +21,7 @@ import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth } from "~/ports";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { ACR } from "./authentication-level";
 import { createClavixOAuthIssuers } from "./issuers";
 

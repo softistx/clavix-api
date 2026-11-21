@@ -5,9 +5,8 @@ import type {
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import type { Db } from "mongodb";
-import type { AgentsService } from "@/modules/agents";
-import type { AgentKind } from "@/modules/agents/agents.model";
-import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
+import type { AgentKind, AgentsService } from "@/modules/agents";
+import type { ClientPoliciesService } from "@/modules/client-policies";
 import type { ClientDetailTypes } from "@/modules/resources";
 import type { CliTenant } from "@/shared/cli";
 

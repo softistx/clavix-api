@@ -26,7 +26,7 @@ import {
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { parseClientArgs } from "./clients.cli";
 import { registerClient } from "./clients.register";
 import { clientIdOf } from "./clients.rules";

@@ -20,7 +20,7 @@ import { CliInputError } from "@/shared/cli";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { parseResourceArgs } from "./resources.cli";
 import { mongoDetailTypeClients } from "./resources.client-lists";
 import { ResourcesService } from "./resources.service";

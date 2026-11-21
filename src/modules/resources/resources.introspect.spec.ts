@@ -18,7 +18,7 @@ import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { mongoDetailTypeClients } from "./resources.client-lists";
 import { ResourcesService } from "./resources.service";
 

@@ -1,4 +1,4 @@
-import { AuditService } from "@/modules/audit/audit.service";
+import { AuditService } from "@/modules/audit";
 import { mongo } from "./db";
 import { clock } from "./runtime";
 

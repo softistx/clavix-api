@@ -316,7 +316,7 @@ describe("reset by an admin", () => {
     const user = await auth.findUser(id);
     expect(user?.hasSecondFactor).toBe(true);
     // The console's port (`ConsoleUsers.resetSecondFactor`) is exercised through its pool.
-    const { UsersService } = await import("@/modules/users/users.service");
+    const { UsersService } = await import("@/modules/users");
     const users = new UsersService({
       janusOf: async () => auth,
       grantsOf: async () => {

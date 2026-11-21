@@ -1,5 +1,15 @@
 import { graphql } from "@softistx/alxia-graphql";
 import type { Telemetry } from "@softistx/telemetry";
+import { janusMasking, janusPlugin } from "@/modules/auth/auth.plugin";
+import { LOGO_PATH } from "@/modules/branding";
+import type {
+  AgentsFor,
+  DetailTextsFor,
+  ScopeTextsFor,
+} from "@/modules/consent";
+import { oauthContext } from "@/modules/consent/consent.plugin";
+import type { ReadyReport } from "@/modules/health";
+import { version } from "@/modules/health";
 import { serveLogo } from "./config/branding";
 import {
   serveTlsAsk,
@@ -24,14 +34,6 @@ import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import { type ThrottleContext, throttlesOf } from "./http/throttle/context";
 import { reportUnexpected } from "./http/unexpected";
-import { janusMasking, janusPlugin } from "./modules/auth/auth.plugin";
-import { LOGO_PATH } from "./modules/branding/branding.logo-route";
-import type { AgentsFor } from "./modules/consent/consent.agent-marker";
-import type { DetailTextsFor } from "./modules/consent/consent.detail-labels";
-import { oauthContext } from "./modules/consent/consent.plugin";
-import type { ScopeTextsFor } from "./modules/consent/consent.scope-labels";
-import type { ReadyReport } from "./modules/health";
-import { version } from "./modules/health";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
 // The largest body /graphql reads.

@@ -7,8 +7,8 @@ import {
   consoleOrigin,
 } from "@/console/identity";
 import type { ConsoleDeps } from "@/console/plugin";
-import { createJanusAdmins } from "@/modules/admins/admins.janus";
-import { UsersService } from "@/modules/users/users.service";
+import { createJanusAdmins } from "@/modules/admins";
+import { UsersService } from "@/modules/users";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
 import { adminEventReader, adminEventRecorder } from "./admin-events";

@@ -7,7 +7,7 @@ import { mongo } from "@/config/db";
 import { noThrottle } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
-import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
+import type { AgentsPolicy } from "@/modules/oauth-policy";
 import { partitionOf } from "@/modules/tenants";
 import { createFlow, DOMAIN } from "~/oauth-flow";
 import { createRegisterRoute } from "./register-route";

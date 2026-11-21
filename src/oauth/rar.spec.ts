@@ -30,7 +30,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth } from "~/ports";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 
 // M3b R4, end to end: authorization details (RFC 9396) from PAR to the
 // tokens, through the hosted consent API (`oauthRequest.details`).

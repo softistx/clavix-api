@@ -1,15 +1,15 @@
 import { codes as console } from "@/console/console.errors";
 import { codes as auth } from "@/modules/auth/auth.errors";
-import { codes as branding } from "@/modules/branding/branding.errors";
+import { codes as branding } from "@/modules/branding";
 import { codes as connections } from "@/modules/connections/connections.errors";
 import { codes as consent } from "@/modules/consent/consent.errors";
-import { codes as domains } from "@/modules/domains/domains.errors";
+import { codes as domains } from "@/modules/domains";
 import { codes as invitations } from "@/modules/invitations/invitations.errors";
 import { codes as mfa } from "@/modules/mfa/mfa.errors";
 import { codes as passkeys } from "@/modules/passkeys/passkeys.errors";
-import { codes as resources } from "@/modules/resources/resources.errors";
-import { codes as roles } from "@/modules/roles/roles.errors";
-import { codes as signInMethods } from "@/modules/sign-in-methods/sign-in-methods.errors";
+import { codes as resources } from "@/modules/resources";
+import { codes as roles } from "@/modules/roles";
+import { codes as signInMethods } from "@/modules/sign-in-methods";
 import { codes as tenants } from "@/modules/tenants";
 import { defineCodes } from "./define-codes";
 

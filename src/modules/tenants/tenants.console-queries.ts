@@ -2,11 +2,11 @@ import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { pageSize } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { PLANS } from "@/modules/tenants";
-import { isMonth } from "@/modules/usage/usage.utils";
+import { isMonth } from "@/modules/usage";
 import { badInput } from "@/shared/errors";
 import { parentOf } from "./tenants.console-parent";
 import { notFound, quotasOut, STATE } from "./tenants.console-support";
+import { PLANS } from "./tenants.plan";
 
 export const tenantQueries: NonNullable<Resolvers["Query"]> = {
   tenants: async (_, { q, status, after, first }) => {

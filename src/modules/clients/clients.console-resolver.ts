@@ -1,10 +1,12 @@
+import { denial } from "@softistx/janus-graphql";
 import { clientsService } from "@/config/clients";
+import { resourcesService } from "@/config/resources";
 import { catalogTenant, refusing } from "@/console/modules/catalog-support";
 import { pageSize } from "@/console/modules/ids";
 import { keepConsoleClient } from "@/console/modules/reserved";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { CatalogError } from "@/modules/resources";
 import { assertClientQuota } from "./clients.console-support";
-import { setClientTokenExchange } from "./clients.console-token-exchange";
 import {
   clientsKey,
   isClientId,
@@ -13,6 +15,50 @@ import {
   shape,
   target,
 } from "./clients.utils";
+
+/** Replaces a client's token exchange rules (RFC 8693), under the tenant's client lock. */
+const setClientTokenExchange: NonNullable<
+  NonNullable<Resolvers["Mutation"]>["setClientTokenExchange"]
+> = async (_, { tenantId, id, input }, ctx) => {
+  const tenant = await catalogTenant(ctx, tenantId);
+  const listed = input.subjectClients?.length ?? 0;
+  const agents = input.subjectAgents === true;
+  if (input.anySubjectClient === true ? listed > 0 : listed === 0 && !agents) {
+    await refusing(async () => {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        input.anySubjectClient === true
+          ? "Give subjectClients or anySubjectClient, not both"
+          : "Give the clients whose tokens may be exchanged, subjectAgents, or anySubjectClient",
+      );
+    });
+  }
+  // Under the tenant's client lock: a delete in between would leave rules
+  // of a client that is gone.
+  const rules = await ctx.exclusive(clientsKey(tenant), () =>
+    refusing(async () => {
+      keepConsoleClient(tenant, id);
+      const resources = await resourcesService.listResources(tenant._id);
+      return clientsService.setTokenExchange(
+        tenant,
+        id,
+        {
+          targetResources: input.targetResources,
+          subjectClients:
+            input.anySubjectClient === true
+              ? "any"
+              : (input.subjectClients ?? []),
+          subjectAgents: agents,
+        },
+        resources.map((resource) => resource.uri),
+      );
+    }),
+  );
+  await ctx.audit("client.tokenExchange.set", target(tenant, id));
+  const client = await clientsService.find(tenant, id);
+  if (client === null) throw denial("NOT_FOUND", "No such client");
+  return shape(client, rules);
+};
 
 export { clientsAudits, clientsGuards } from "./clients.console-guards";
 

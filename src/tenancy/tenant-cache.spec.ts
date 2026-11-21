@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { RedisClient } from "bun";
 import { openAppRedis } from "@/config/redis";
-import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
+import { oauthPolicySchema } from "@/modules/oauth-policy";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { redisTenantCache } from "./tenant-cache";
 

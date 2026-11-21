@@ -3,8 +3,8 @@ import { tenantsService } from "@/config/tenancy";
 import type { ConsoleContext } from "@/console/context";
 import type { Role } from "@/console/model";
 import { pageSize } from "@/console/modules/ids";
-import { GRAPHQL_ROLE } from "@/modules/admins/admins.utils";
-import { parentOf } from "@/modules/tenants/tenants.console-parent";
+import { GRAPHQL_ROLE } from "@/modules/admins";
+import { parentOf } from "@/modules/tenants";
 import { badInput } from "@/shared/errors";
 import { stronger } from "./me.utils";
 

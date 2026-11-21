@@ -1,4 +1,4 @@
-import type { Tenant } from "@/modules/tenants";
+import type { Tenant } from "./tenants.model";
 
 /**
  * What a `Tenant` resolver starts from: the console names a tenant by id, slug

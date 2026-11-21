@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { Tenant } from "@/modules/tenants";
 import { parentOf } from "./tenants.console-parent";
+import type { Tenant } from "./tenants.model";
 
 describe("tenants console parent", () => {
   it("carries the id, slug, name and the stored document", () => {

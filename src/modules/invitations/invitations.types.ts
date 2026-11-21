@@ -1,4 +1,4 @@
-import type { TenantJanus } from "@/modules/users";
+import type { TenantJanus } from "@/modules/users/users.tenant-janus";
 
 /** A pending invitation of a tenant's user pool, as a console lists it. */
 export interface PendingInvitation {

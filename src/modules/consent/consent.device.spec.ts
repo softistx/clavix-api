@@ -21,7 +21,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { createDeviceThrottle } from "./consent.device-throttle";
 
 const RESOURCE = "https://api.clavix.test/mcp";

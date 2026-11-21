@@ -1,6 +1,6 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import { AgentsService } from "@/modules/agents/agents.service";
-import type { AgentsFor } from "@/modules/consent/consent.agent-marker";
+import { AgentsService } from "@/modules/agents";
+import type { AgentsFor } from "@/modules/consent";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";

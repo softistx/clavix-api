@@ -1,7 +1,7 @@
 import { createStateKey, definePlugin } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { ErrorCode } from "@/i18n/codes";
-import { AdminsService } from "@/modules/admins/admins.service";
+import { AdminsService } from "@/modules/admins";
 import { errorBody } from "@/shared/errors";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";

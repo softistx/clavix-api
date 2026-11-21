@@ -1,13 +1,18 @@
-// The resources module's entry: other modules import from here, never from
-// its files.
+// The module's import surface. `resources.console-resolver` is loaded by file by
+// `console/modules/index.ts`.
+
 export * from "./resources.cli";
-export * from "./resources.client-lists";
+export { mongoDetailTypeClients } from "./resources.client-lists";
 export * from "./resources.client-opt-in";
-export * from "./resources.compile";
-export * from "./resources.compile-rules";
-export * from "./resources.errors";
-export * from "./resources.model";
-export * from "./resources.protected-document";
-export * from "./resources.rules";
+export { digestOf } from "./resources.compile";
+export { CatalogError, codes } from "./resources.errors";
+export {
+  detailTypes,
+  type FieldKind,
+  resources,
+  scopes,
+} from "./resources.model";
+export { DPOP_ALGORITHMS } from "./resources.protected-document";
+export { OIDC_SCOPES } from "./resources.rules";
 export * from "./resources.service";
-export * from "./resources.types";
+export type { Description, RegisterResourceInput } from "./resources.types";

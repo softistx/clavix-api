@@ -1,10 +1,13 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { rolesService } from "@/config/roles";
-import { membersKey, PLATFORM_OWNERS_KEY } from "@/modules/admins";
-import { adminInvitationHooks } from "@/modules/admins/admins.hooks";
-import { adminScope } from "@/modules/invitations/invitations.rules";
+import {
+  adminInvitationHooks,
+  membersKey,
+  PLATFORM_OWNERS_KEY,
+} from "@/modules/admins";
+import { adminScope } from "@/modules/invitations";
+import { keepOwners } from "@/modules/users";
 import { userMutations } from "@/modules/users/users.console-mutations";
-import { keepOwners } from "@/modules/users/users.owners";
 import { withMembers } from "~/members";
 import type { ConsoleContext } from "../context";
 import { createExclusive } from "../exclusive";

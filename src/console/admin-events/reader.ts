@@ -1,6 +1,6 @@
 import type { ReadDocumentOf, TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { drain } from "@/modules/audit/audit.utils";
+import { drain } from "@/modules/audit";
 import type { adminEvents } from "./admin-events.model";
 
 export type StoredAdminEvent = ReadDocumentOf<typeof adminEvents>;

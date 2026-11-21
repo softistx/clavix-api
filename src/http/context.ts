@@ -5,7 +5,7 @@ import type { JanusContext } from "@softistx/janus-graphql";
 import { type Telemetry, withAttributes } from "@softistx/telemetry";
 import { env } from "@/config/env";
 import type { ThrottleContext } from "@/http/throttle/context";
-import type { TenantJanus } from "@/modules/users";
+import type { TenantJanus } from "@/modules/users/users.tenant-janus";
 import { isTenantless, tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";

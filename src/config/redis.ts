@@ -25,16 +25,16 @@ import {
   deviceLimits,
 } from "@/modules/consent/consent.device-throttle";
 import { grantsRevoke } from "@/modules/consent/consent.queue";
+import { tlsAskLimit } from "@/modules/domains";
 import { domainRecheck } from "@/modules/domains/domains.recheck-queue";
-import { tlsAskLimit } from "@/modules/domains/domains.tls-limit";
-import { keyRotation } from "@/modules/keys";
+import { keyRotation } from "@/modules/keys/keys.queue";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/passkeys.throttle";
 import { ssoLimits } from "@/modules/sign-in-methods";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
-import { monthlyActiveUsers } from "@/modules/usage/usage.counter";
+import { monthlyActiveUsers } from "@/modules/usage";
 import { webhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-queue";
 import {
   type MetadataLimitConfig,

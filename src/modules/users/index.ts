@@ -1,22 +1,21 @@
 // The module's import surface (users: each tenant's janus instance over its
 // own partition of the user stores, the OAuth ports built on it, and the
-// console's users). Imported by file, never through here, to keep madge at 6:
-// the console resolvers (`console/modules/index.ts`, so this barrel never loads
-// the console back), `users.service.ts` and `users.types.ts` (both read the
-// invitations types, which import this barrel). `config/users.ts` builds the
+// console's users). Imported by file: `users.console-resolver`
+// (`console/modules/index.ts`), `users.console-mutations` (`lock-order.spec.ts`)
+// and the type `TenantJanus` of `users.tenant-janus` (`http/context.ts`,
+// `invitations.types.ts`, `invitations.service.ts`: the barrel would close a cycle
+// through `users.service` and the invitations). `config/users.ts` builds the
 // process-wide instances.
 
-export { gone } from "./users.errors";
-export {
-  createTenantJanusIssuers,
-  type TenantJanusOptions,
-} from "./users.issuers";
+export { userLoader } from "./users.data-loader";
+export { keepOwners } from "./users.owners";
 export { originOf, rpIdOf } from "./users.rp";
-export { type ClavixUser, userSchema } from "./users.schema";
+export { userSchema } from "./users.schema";
 export {
   ephemeralSecondFactorKeys,
   secondFactorKeysOf,
 } from "./users.second-factor-keys";
+export { UsersService } from "./users.service";
 export {
   MAGIC_LINK_LIFESPAN,
   SESSION,
@@ -33,9 +32,8 @@ export { createTenantAuth } from "./users.tenant-auth";
 export {
   buildTenantJanus,
   type InvitationHooks,
-  type InvitationHooksFor,
   socialOf,
   type TenantJanus,
-  type TenantSocialJanus,
 } from "./users.tenant-janus";
-export { emailUnverified, requireVerifiedEmail } from "./users.verified-email";
+export { shape } from "./users.utils";
+export { requireVerifiedEmail } from "./users.verified-email";

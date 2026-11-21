@@ -4,12 +4,12 @@ import { mergeResolvers, mergeTypeDefs } from "@graphql-tools/merge";
 import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
 import { createSchema, type Resolvers } from "@softistx/graxia";
-import { resolvers } from "../modules";
-import { guardedSchema } from "../modules/auth/auth.plugin";
+import { resolvers } from "@/modules";
+import { guardedSchema } from "@/modules/auth/auth.plugin";
 import {
   consentResolvers,
   consentTypeDefs,
-} from "../modules/consent/consent.resolver";
+} from "@/modules/consent/consent.resolver";
 import type { Context } from "./context";
 
 // Every src/**/*.graphqls, one per module, merged into one schema: each file

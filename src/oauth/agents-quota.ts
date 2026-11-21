@@ -1,6 +1,5 @@
 import type { Exclusive } from "@/console/exclusive";
-import { QuotaExceededError } from "@/modules/usage/usage.errors";
-import { assertWithinQuota } from "@/modules/usage/usage.rules";
+import { assertWithinQuota, QuotaExceededError } from "@/modules/usage";
 
 const NO_STORE = { "cache-control": "no-store" } as const;
 

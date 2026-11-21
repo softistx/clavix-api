@@ -1,6 +1,5 @@
 import { ObjectId } from "mongodb";
-import type { DetailTextsFor } from "@/modules/consent/consent.detail-labels";
-import type { ScopeTextsFor } from "@/modules/consent/consent.scope-labels";
+import type { DetailTextsFor, ScopeTextsFor } from "@/modules/consent";
 import {
   consentReadyOf,
   mongoClientDetailTypes,

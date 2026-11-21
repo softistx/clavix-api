@@ -12,10 +12,10 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 
 const deps = createConsoleDeps({ serverFor: async () => null });
 const OPERATOR = "tenants-operator";

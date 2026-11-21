@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { telemetry as appTelemetry } from "@/config/telemetry";
-import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
+import { oauthPolicySchema } from "@/modules/oauth-policy";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { quietThrottles } from "~/ports";
 import type { TenantResolver } from "../tenancy/resolver";

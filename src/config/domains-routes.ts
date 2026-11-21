@@ -4,9 +4,9 @@ import {
   relatedOrigins,
   TLS_ASK_PATH,
   tlsAsk,
+  tlsAskGate,
   WEBAUTHN_WELL_KNOWN,
 } from "@/modules/domains";
-import { tlsAskGate } from "@/modules/domains/domains.tls-limit";
 import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";

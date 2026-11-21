@@ -1,9 +1,6 @@
 import { env } from "@/config/env";
 import { noInvitationHooks, noThrottle, noUserThrottle } from "@/config/no-ops";
-import type {
-  AgentKindsOf,
-  AgentsReader,
-} from "@/modules/clients/clients.types";
+import type { AgentKindsOf, AgentsReader } from "@/modules/clients";
 import { createSecretBox } from "@/modules/sign-in-methods";
 import type { ConnectionsOf, InvitationHooks } from "@/modules/users";
 import { buildTenantJanus, ephemeralSecondFactorKeys } from "@/modules/users";
