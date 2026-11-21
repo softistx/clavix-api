@@ -183,11 +183,11 @@ export const viewOf = (
   defaultScopes: record.defaultScopes ?? [],
 });
 
-/** Reads the tenant's agents among some client ids (bounded by them; none without the store). */
+/** Reads the tenant's agents among some client ids (bounded by them). */
 export const agentKindsOf =
-  (agents: AgentsReader | undefined, tenant: CliTenant): AgentKindsOf =>
+  (agents: AgentsReader, tenant: CliTenant): AgentKindsOf =>
   async (clientIds): Promise<AgentKinds> =>
-    (await agents?.kinds(tenant._id.toHexString(), clientIds)) ?? new Map();
+    await agents.kinds(tenant._id.toHexString(), clientIds);
 
 /**
  * The settings a create or an update call sent, without the omitted ones:

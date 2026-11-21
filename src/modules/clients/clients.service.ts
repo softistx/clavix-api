@@ -52,14 +52,10 @@ export class ClientsService {
     input: Omit<RegisterClientInput, "tenant">,
   ) {
     const { db, now, detailTypes } = this.options;
-    return registerForTenant(
-      { db, now, ...(detailTypes === undefined ? {} : { detailTypes }) },
-      tenant,
-      input,
-    );
+    return registerForTenant({ db, now, detailTypes }, tenant, input);
   }
 
-  /** The tenant's agents among some client ids (none without the agents store). */
+  /** The tenant's agents among some client ids. */
   private agentsOf(tenant: CliTenant) {
     return agentKindsOf(this.options.agents, tenant);
   }
@@ -301,7 +297,7 @@ export class ClientsService {
     // that name it as a subject.
     await policies.deleteForClient(tenant._id, clientId);
     await policies.removeSubjectClient(tenant._id, clientId);
-    await agents?.remove(tenant._id.toHexString(), clientId);
+    await agents.remove(tenant._id.toHexString(), clientId);
     return { removed, unmanaged: false };
   }
 }

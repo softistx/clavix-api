@@ -1,6 +1,5 @@
 import { graphql } from "@softistx/alxia-graphql";
 import type { Telemetry } from "@softistx/telemetry";
-import { agentsFor } from "./config/agent-clients";
 import { serveLogo } from "./config/branding";
 import {
   serveTlsAsk,
@@ -10,7 +9,8 @@ import {
 } from "./config/domains-routes";
 import { env } from "./config/env";
 import { readyz } from "./config/ready";
-import { detailTextsFor, scopeTextsFor } from "./config/resources";
+import { telemetry as appTelemetry } from "./config/telemetry";
+import { tenantResolver } from "./config/tenancy";
 import { serveAuditExport } from "./console/audit-export/export";
 import { useInviteBudget } from "./console/budgets";
 import { CONSOLE_EXPORT_PATH, CONSOLE_PATH } from "./console/identity";
@@ -22,15 +22,12 @@ import { CLIENT_HEADER, useClientHeader } from "./http/csrf";
 import { serveReadyz } from "./http/readyz";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
-import type { Throttle } from "./http/throttle/core";
-import { throttlesFor } from "./http/throttles";
+import type { ThrottleContext } from "./http/throttle/context";
 import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/auth.plugin";
-import type { VerificationThrottle } from "./modules/auth/auth.verification-throttle";
 import { LOGO_PATH } from "./modules/branding/branding.logo-route";
 import type { AgentsFor } from "./modules/consent/consent.agent-marker";
 import type { DetailTextsFor } from "./modules/consent/consent.detail-labels";
-import type { DeviceThrottle } from "./modules/consent/consent.device-throttle";
 import { oauthContext } from "./modules/consent/consent.plugin";
 import type { ScopeTextsFor } from "./modules/consent/consent.scope-labels";
 import type { ReadyReport } from "./modules/health";
@@ -43,31 +40,22 @@ export const BODY_LIMIT = 100 * 1024;
 /** The highest cost of a console operation (graxia `limits.cost.max`; its default is 5 000). */
 export const CONSOLE_MAX_COST = 50_000;
 
-/** What `createApp` takes; every part has its default. */
-export interface AppOptions {
+/** The ports `createApp` requires: bound in `src/config/app-ports.ts`. */
+export interface AppPorts extends ThrottleContext {
+  /** Where the consent page reads the tenants' scope texts. */
+  scopeTexts: ScopeTextsFor;
+  /** The same for the tenants' detail type texts (the request's `details`). */
+  detailTexts: DetailTextsFor;
+  /** The tenants' agents, for `OAuthClient.agent` on the hosted pages. */
+  agents: AgentsFor;
+}
+
+/** What `createApp` takes: the ports, and the entry-point options (the last four default from env or the app's config). */
+export interface AppOptions extends AppPorts {
   oauth?: OAuthHandle;
-  // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
-  // default (none without REDIS_URL).
-  signInThrottle?: Throttle | undefined;
-  // The same for `passkeySignInOptions`.
-  passkeyThrottle?: Throttle | undefined;
-  // The same for `hostedHomeRealm`, apart from the sign-in code budget.
-  homeRealmThrottle?: Throttle | undefined;
-  // The same for `socialSignInStart` (social and enterprise).
-  ssoStartThrottle?: Throttle | undefined;
-  // The same for `requestEmailVerification` (per user too).
-  verifyThrottle?: VerificationThrottle | undefined;
-  // The same for the device verification page's code lookups.
-  deviceThrottle?: DeviceThrottle | undefined;
   // The console API (`/console/graphql`, src/console): bearer token, its own
   // schema. Off without it, the route does not exist.
   console?: ConsoleDeps & { schema?: typeof consoleSchema };
-  // Where the consent page reads the tenants' scope texts; the stored ones by default.
-  scopeTexts?: ScopeTextsFor;
-  // The same for the tenants' detail type texts (the request's `details`).
-  detailTexts?: DetailTextsFor;
-  // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
-  agents?: AgentsFor;
   // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
   telemetry?: Telemetry;
   // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
@@ -84,11 +72,22 @@ export interface AppOptions {
 // middlewares. The body limit is declared before the OAuth routes, since it
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.
-export function createApp(options: AppOptions = {}) {
+export function createApp(options: AppOptions) {
   const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
   const requireClient =
     options.requireClientHeader ?? env.CLAVIX_REQUIRE_CLIENT_HEADER;
-  const base = createBase(undefined, throttlesFor(options), options.telemetry)
+  const base = createBase(
+    tenantResolver,
+    {
+      signInThrottle: options.signInThrottle,
+      passkeyThrottle: options.passkeyThrottle,
+      homeRealmThrottle: options.homeRealmThrottle,
+      ssoStartThrottle: options.ssoStartThrottle,
+      verifyThrottle: options.verifyThrottle,
+      deviceThrottle: options.deviceThrottle,
+    },
+    options.telemetry ?? appTelemetry,
+  )
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
     .all("/readyz", ({ request }) =>
@@ -119,9 +118,9 @@ export function createApp(options: AppOptions = {}) {
           : [
               oauthContext(
                 { serverFor: options.oauth.serverFor },
-                options.scopeTexts ?? scopeTextsFor,
-                options.detailTexts ?? detailTextsFor,
-                options.agents ?? agentsFor,
+                options.scopeTexts,
+                options.detailTexts,
+                options.agents,
               ),
             ]),
       ],
@@ -149,9 +148,7 @@ export function createApp(options: AppOptions = {}) {
             plugins: [
               useClientHeader(requireClient),
               // Second, after the client header: aliased invitations are counted before anything runs.
-              ...(consoleOptions.budgets === undefined
-                ? []
-                : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
+              useInviteBudget(consoleOptions.budgets.inviteCaller),
               useWithoutQuotedValues(),
               useConsole(consoleOptions),
             ],
@@ -164,7 +161,4 @@ export function createApp(options: AppOptions = {}) {
         );
 }
 
-// The app the server runs.
-export const app = createApp();
-
-export type App = typeof app;
+export type App = ReturnType<typeof createApp>;

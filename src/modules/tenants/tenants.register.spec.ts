@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients";
 import { quietTenants } from "~/ports";
@@ -112,7 +113,12 @@ describe("isolation between tenants", () => {
 
     const findTenant = (slug: string) => collection.findFirst({ slug });
     await registerClient(
-      { now: () => new Date(), db: oauthDb, findTenant },
+      {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
+        db: oauthDb,
+        findTenant,
+      },
       { tenant: "isoa", name: "App", redirectUris: ["https://a.example/cb"] },
     );
     const storeOf = (tenantId: string) =>

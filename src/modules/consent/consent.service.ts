@@ -47,8 +47,8 @@ export class ConsentService {
   async serverOf(ctx: unknown) {
     // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
     const request = requestOf(ctx);
-    const server = await (ctx as WithServers).oauthServers?.serverFor(request);
-    if (server === null || server === undefined) throw denial("NOT_FOUND");
+    const server = await (ctx as WithServers).oauthServers.serverFor(request);
+    if (server === null) throw denial("NOT_FOUND");
     // A code is not minted for a suspended or deleted tenant.
     requireLive(
       await (
@@ -68,7 +68,7 @@ export class ConsentService {
     const { tenant, ip, deviceThrottle, janus } = ctx as Context;
     const [current, resolved] = await Promise.all([janus.user(), tenant()]);
     if (current === null || resolved === null) throw denial("NOT_FOUND");
-    await deviceThrottle?.check({
+    await deviceThrottle.check({
       tenantId: resolved.tenantId,
       userId: current.id,
       ip,
@@ -218,14 +218,14 @@ export class ConsentService {
 
   /**
    * Runs each queued revocation; a failure throws so the queue retries it with
-   * backoff. Without a queue (development, no Redis) nothing runs.
+   * backoff. The server starts it only with a queue (no Redis, no worker).
    */
   startRevokeWorker(
     run: (job: RevokeJob) => Promise<number>,
-    queue?: RevokeWorkerQueue,
+    queue: RevokeWorkerQueue,
   ): void {
     queue
-      ?.work(async ({ data }) => {
+      .work(async ({ data }) => {
         await run(data);
       })
       .on("error", (error) => this.log(`grants: ${String(error)}`));

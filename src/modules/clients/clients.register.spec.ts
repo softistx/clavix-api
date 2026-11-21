@@ -10,6 +10,7 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import {
   PLATFORM_TENANT_SLUG,
@@ -34,7 +35,12 @@ const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const options = { db: oauthDb, findTenant, now: () => new Date() };
+const options = {
+  db: oauthDb,
+  findTenant,
+  now: () => new Date(),
+  detailTypes: noDetailTypes,
+};
 
 const resolver = createTenantResolver({
   ...noCustomDomains,

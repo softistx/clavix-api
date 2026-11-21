@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { BODY_LIMIT, createApp } from "@/app";
+import { BODY_LIMIT } from "@/app";
+import { createTestApp } from "~/app";
 import { OAUTH_PATHS } from "./routes";
 
 // A stand-in for the issuers: answers what it was handed.
 const seen: Request[] = [];
-const app = createApp({
+const app = createTestApp({
   oauth: {
     handle: async (request) => {
       seen.push(request);
@@ -38,7 +39,7 @@ test("the other routes are untouched", async () => {
 });
 
 test("without issuers no OAuth path exists", async () => {
-  const bare = createApp();
+  const bare = createTestApp();
   expect((await bare.request("/token", { method: "POST" })).status).toBe(404);
 });
 

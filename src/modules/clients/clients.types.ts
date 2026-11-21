@@ -62,8 +62,8 @@ export interface ClientView {
 
 /** Which clients a listing keeps, beyond `q`. */
 export interface ClientFilter {
-  /** Reads the tenant's agents among a page's ids. Without it only the registered clients are listed, all `console`. */
-  agents?: AgentKindsOf | undefined;
+  /** Reads the tenant's agents among a page's ids. */
+  agents: AgentKindsOf;
   /** Only these registrations; none or an empty list: every one. */
   kinds?: readonly ClientRegistration[] | undefined;
 }
@@ -77,9 +77,9 @@ export interface ClientsServiceOptions {
    * The tenant's agents: they are told apart in the listing, and a deleted
    * client stops being one (it frees the `agents` quota).
    */
-  agents?: AgentsReader;
-  /** The tenants' detail types a client may list (R3); without it none can be listed. */
-  detailTypes?: ClientDetailTypes;
+  agents: AgentsReader;
+  /** The tenants' detail types a client may list (R3). */
+  detailTypes: ClientDetailTypes;
   now: () => Date;
 }
 
@@ -210,6 +210,6 @@ export interface RegisterClientOptions {
   db: Db;
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
   now: () => Date;
-  /** The tenant's detail types; without it a client cannot list any. */
-  detailTypes?: ClientDetailTypes;
+  /** The tenant's detail types. */
+  detailTypes: ClientDetailTypes;
 }

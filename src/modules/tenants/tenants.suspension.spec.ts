@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -9,6 +8,7 @@ import { settled } from "@/modules/auth";
 import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietDomains } from "~/ports";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
@@ -20,7 +20,7 @@ const origin = {
   domain: env.CLAVIX_DOMAIN,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
-const app = createApp();
+const app = createTestApp();
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 
 interface Answer {

@@ -145,7 +145,7 @@ export const webhooks: Resolvers = {
           );
         }
         // One test event of this endpoint and tenant (G2-02), before the address check and the queue.
-        await ctx.budgets?.testWebhook({ tenantId: hex, endpointId: id });
+        await ctx.budgets.testWebhook({ tenantId: hex, endpointId: id });
         // The address is checked again on send, by the delivery's fetch; the
         // console says so now rather than a silent give-up later.
         await webhooksService.checkAddress(found.url);

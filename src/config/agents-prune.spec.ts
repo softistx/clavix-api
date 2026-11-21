@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
+import { noDetailTypes } from "@/config/no-ops";
 import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { agentClientsService } from "./agent-clients";
@@ -16,6 +17,7 @@ const options = {
   db: oauthDb,
   findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
   now: () => NOW,
+  detailTypes: noDetailTypes,
 };
 let idA = "";
 let idB = "";

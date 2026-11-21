@@ -62,7 +62,7 @@ export const rateLimited = (retryAfter: number) =>
   fail("RATE_LIMITED", "Too many requests", { status: 429, retryAfter });
 
 /**
- * What the console's mutations spend (`ctx.budgets`; none without Redis).
+ * What the console's mutations spend (`ctx.budgets`; `noBudgets` without Redis).
  * Each call counts one and throws `rateLimited` past a limit.
  */
 export interface ConsoleBudgets {

@@ -73,7 +73,7 @@ export class PasskeysService {
    */
   async signInOptions(ctx: Context) {
     const tenant = await this.passkeyTenant(ctx);
-    await ctx.passkeyThrottle?.check({
+    await ctx.passkeyThrottle.check({
       tenantId: tenant.tenantId,
       ip: ctx.ip,
     });

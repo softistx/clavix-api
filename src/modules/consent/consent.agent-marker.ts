@@ -16,10 +16,10 @@ export function agentMarksReader() {
   const reads = new WeakMap<Request, Map<string, Promise<AgentMarks>>>();
   return (
     request: Request | undefined,
-    agents: AgentsFor | undefined,
+    agents: AgentsFor,
     clientId: string,
   ): Promise<AgentMarks> | undefined => {
-    if (request === undefined || agents === undefined) return undefined;
+    if (request === undefined) return undefined;
     let byClient = reads.get(request);
     if (byClient === undefined) {
       byClient = new Map();

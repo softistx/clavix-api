@@ -3,6 +3,7 @@ import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
 import { registerClient } from "@/modules/clients";
@@ -158,6 +159,7 @@ describe("the clients count over the real OAuth store", () => {
       db: oauthDb,
       findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
       now: () => new Date(),
+      detailTypes: noDetailTypes,
     };
     const redirect = "https://app.example/callback";
     await registerClient(options, {
@@ -195,6 +197,7 @@ describe("the clients count over the real OAuth store", () => {
       db: oauthDb,
       findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
       now: () => new Date(),
+      detailTypes: noDetailTypes,
     };
     const redirect = "https://app.example/callback";
     await registerClient(options, {

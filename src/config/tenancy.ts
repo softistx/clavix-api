@@ -67,9 +67,12 @@ export function createTenancy({
 // The domain store and the resolver refer to each other (a domain write drops
 // hosts from the cache; a custom host resolves through the store): the
 // closures below are called only after both exist.
+/** The tenants' parent domain, read once from the environment. */
+export const tenantDomain = env.CLAVIX_DOMAIN;
+
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
-  domain: env.CLAVIX_DOMAIN,
+  domain: tenantDomain,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 

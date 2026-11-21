@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { resourcesService } from "@/config/resources";
+import { tenantDomain } from "@/config/tenancy";
 import { catalogTenant, refusing } from "@/console/modules/catalog-support";
 import {
   keepConsoleResource,
@@ -39,7 +40,7 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
       created,
       [],
       [],
-      await documentsOf(tenant.slug)(created, []),
+      await documentsOf(tenant.slug, tenantDomain)(created, []),
     );
   },
   updateResource: async (_, { tenantId, id, input }, ctx) => {

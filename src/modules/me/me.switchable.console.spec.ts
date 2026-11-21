@@ -6,7 +6,6 @@ import {
   expect,
   test,
 } from "bun:test";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -14,6 +13,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
@@ -31,7 +31,7 @@ interface GqlResult {
   errors?: { message: string; extensions?: { code?: string } }[];
 }
 const request = (userId: string | null, query: string) =>
-  createApp({
+  createTestApp({
     console: {
       ...verifiedCallers(deps),
       authenticate: async () =>

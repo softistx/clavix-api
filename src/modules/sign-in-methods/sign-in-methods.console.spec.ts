@@ -2,14 +2,13 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import type { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
-import { unthrottled } from "@/config/no-ops";
+import { noBudgets, unthrottled } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import {
   domainsService,
@@ -28,6 +27,7 @@ import {
 } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { socialOf } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
 const origin = {
@@ -60,9 +60,10 @@ const as = async (
   query: string,
   variables: Record<string, unknown> = {},
 ): Promise<Result> => {
-  const response = await createApp({
+  const response = await createTestApp({
     console: {
       auditExport: { throttle: unthrottled },
+      budgets: noBudgets,
       now: () => new Date(),
       reportError: () => {},
       authenticate: async () => ({

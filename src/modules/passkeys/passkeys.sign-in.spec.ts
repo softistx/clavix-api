@@ -3,7 +3,6 @@ import {
   type Ceremony,
   softwareAuthenticator,
 } from "@softistx/janus-passkeys/testing";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -15,10 +14,11 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietJanus, quietTenants } from "~/ports";
 
-const app = createApp();
+const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

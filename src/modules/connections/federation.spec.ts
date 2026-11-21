@@ -11,11 +11,11 @@ import {
   softwareAuthenticator,
 } from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
@@ -31,6 +31,7 @@ import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
@@ -87,7 +88,7 @@ const recording = (into: Who[]) =>
       if (throttled) throw new Error("throttled");
     },
   }) as never;
-const app = createApp({
+const app = createTestApp({
   signInThrottle: recording(checks),
   homeRealmThrottle: recording(homeChecks),
   ssoStartThrottle: recording(startChecks),
@@ -309,6 +310,7 @@ beforeAll(async () => {
   });
   const registered = await registerClient(
     {
+      detailTypes: noDetailTypes,
       now: () => new Date(),
       db: oauthDb,
       findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),

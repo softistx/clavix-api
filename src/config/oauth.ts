@@ -13,6 +13,7 @@ import { resourcesFor } from "./resources";
 import { rolesFor } from "./roles";
 import { clockMs, janusClock } from "./runtime";
 import { tenantResolver } from "./tenancy";
+import { metadataThrottle, registerThrottle } from "./throttle";
 import { usageService } from "./usage";
 
 // The app's OAuth issuers with the real tenant resolver, database and signing
@@ -41,6 +42,8 @@ export const createIssuers = (authFor: AuthFor, claimsFor: ClaimsFor) =>
           eventsFor: (tenant) =>
             oauthListener(tenant.tenantId, tenant.issuer, eventBus),
         }),
+        registerThrottle,
+        metadataThrottle,
       ),
       { resolver: tenantResolver, generations: keyGenerations, now: clockMs },
     ),

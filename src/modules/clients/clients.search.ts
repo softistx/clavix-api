@@ -13,19 +13,16 @@ export const MAX_READS = 20;
 /**
  * What a listing keeps: a client matching `q` (part of its name or id, any
  * case) whose registration is wanted. A metadata-document client is listed
- * only when the agents are known (`filter.agents`).
+ * only when the agents are read (`filter.agents`).
  */
 const matcher = (
   q: string | undefined,
   filter: ClientFilter,
-  agents: AgentKinds | undefined,
+  agents: AgentKinds,
 ) => {
   const needle = q?.trim().toLowerCase() ?? "";
   const kinds = filter.kinds ?? [];
   return (record: OAuthClientRecord) => {
-    if (record.source !== "registered" && agents === undefined) {
-      return false;
-    }
     if (kinds.length > 0 && !kinds.includes(registrationOf(record, agents))) {
       return false;
     }
@@ -37,14 +34,11 @@ const matcher = (
   };
 };
 
-/** The agents among one page's records (bounded by the page); `undefined` without a reader. */
+/** The agents among one page's records (bounded by the page). */
 const agentsAmong = (
   filter: ClientFilter,
   page: OAuthPage<OAuthClientRecord>,
-): Promise<AgentKinds | undefined> =>
-  filter.agents === undefined
-    ? Promise.resolve(undefined)
-    : filter.agents(page.items.map((record) => record.id));
+): Promise<AgentKinds> => filter.agents(page.items.map((record) => record.id));
 
 // The page size a count reads the store with.
 const COUNT_READ = 100;
@@ -58,7 +52,7 @@ export async function countClientViews(
   listClients: (
     options?: OAuthPageOptions,
   ) => Promise<OAuthPage<OAuthClientRecord>>,
-  options: { q?: string | undefined } & ClientFilter = {},
+  options: { q?: string | undefined } & ClientFilter,
 ): Promise<number> {
   let total = 0;
   let cursor: string | undefined;

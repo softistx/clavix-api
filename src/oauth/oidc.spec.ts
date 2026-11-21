@@ -7,6 +7,7 @@ import {
 } from "@softistx/janus-oauth";
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
@@ -121,7 +122,12 @@ async function setUp(slug: string, withKey = true) {
     });
   }
   const registered = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: slug,
       name: "Back end",

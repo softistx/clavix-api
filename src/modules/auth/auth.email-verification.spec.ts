@@ -15,10 +15,10 @@ import {
 import type { MemoryMailer } from "@softistx/mail";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { createLocalJWKSet, jwtVerify } from "jose";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { openAppRedis } from "@/config/redis";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -28,6 +28,7 @@ import { registerClient } from "@/modules/clients";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
@@ -55,7 +56,7 @@ interface Answer {
 }
 
 async function gql(
-  app: ReturnType<typeof createApp>,
+  app: ReturnType<typeof createTestApp>,
   slug: string,
   query: string,
   variables: Record<string, unknown> = {},
@@ -124,7 +125,7 @@ function mailsTo(email: string, before: number) {
   return { mails, link, token: token ?? "" };
 }
 
-const app = createApp();
+const app = createTestApp();
 
 // Asks for the mail as `session` and returns it.
 async function ask(
@@ -451,6 +452,7 @@ describe("the OIDC email_verified claim follows the flag", () => {
     });
     const registered = await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
@@ -535,7 +537,7 @@ describe("limits over Redis", () => {
       if (ready) break;
       await Bun.sleep(20);
     }
-    const limited = createApp({
+    const limited = createTestApp({
       verifyThrottle: createVerificationThrottle(opened.limits, (message) => {
         throw new Error(message); // a spec never runs with Redis down
       }),
@@ -626,7 +628,7 @@ describe("limits over Redis", () => {
       logs.push(m),
     );
     await opened.close();
-    const down = createApp({ verifyThrottle: throttle });
+    const down = createTestApp({ verifyThrottle: throttle });
     const session = await signedIn("acme");
     const before = memory.sent.length;
     const answer = await gql(down, "acme", REQUEST, {}, session);

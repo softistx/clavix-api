@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { s256Challenge } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
@@ -39,7 +40,12 @@ beforeAll(async () => {
   await flow.setUp("par-off");
   await flow.setUp("par-client");
   const registered = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: "par-client",
       name: "Pushing",

@@ -20,6 +20,7 @@ function deps(over: Partial<PruneDeps> = {}) {
       return ["a", "b"];
     },
     hasStandingGrant: async () => false,
+    locked: async (_t, work) => work(),
     remove: async (t, c) => {
       state.removed.push(`${t}/${c}`);
       return true;
@@ -167,13 +168,12 @@ describe("startAgentsPrune", () => {
     };
   };
 
-  test("does nothing without a queue and runs nothing at start", () => {
+  test("runs nothing at start", () => {
     let runs = 0;
     const countRun = async () => {
       runs += 1;
       return { pruned: 0, failed: 0 };
     };
-    startAgentsPrune(countRun, undefined, () => {});
     const q = queueOf();
     startAgentsPrune(countRun, q.queue, () => {});
     expect(runs).toBe(0);

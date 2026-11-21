@@ -117,8 +117,8 @@ export interface ConsoleExtras {
   readonly users: ConsoleUsers;
   /** One at a time per key (a tenant's memberships). */
   readonly exclusive: Exclusive;
-  /** What the test webhooks and the invitations spend; `undefined`: no budget (no Redis). */
-  readonly budgets: ConsoleBudgets | undefined;
+  /** What the test webhooks and the invitations spend (`noBudgets` without Redis). */
+  readonly budgets: ConsoleBudgets;
   /** The readers of the two logs (D12): the console's activity and the tenants' sign-ins. */
   readonly activity: ConsoleActivity;
 }

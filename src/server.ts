@@ -4,6 +4,7 @@
 import "reflect-metadata";
 import { createApp } from "./app";
 import { createAgentsPrune } from "./config/agents-prune";
+import { appPorts } from "./config/app-ports";
 import { createAuditRetention } from "./config/audit-retention";
 import { createConsoleDeps } from "./config/console";
 import { domainRecheckDeps } from "./config/domains-job";
@@ -58,34 +59,38 @@ instrumentDatabase();
 // stored resources (`resources:create`) beside the built-in userinfo one.
 const oauth = createIssuers(authFor, claimsFor);
 const consoleDeps = createConsoleDeps(oauth);
-// Every 6 hours the verified domains' TXT records are read again (A4).
-startDomainRecheck(
-  domainRecheckDeps(consoleDeps.directory.findUser),
-  redis?.queues.domainRecheck,
-);
-// Daily, the agents that registered themselves and still have no grant after
-// 7 days are deleted (D10).
-startAgentsPrune(createAgentsPrune(clock), redis?.queues.agentsPrune, warn);
-// Daily, the sign-in log and the console activity are cut at each tenant's
-// plan retention, the platform's own events at 400 days (D16).
-startAuditRetention(
-  createAuditRetention(clock),
-  redis?.queues.auditRetention,
-  warn,
-);
-// Daily, the rolled webhook secrets past their 24 hours are dropped (D19).
-startWebhookSecretsPrune(
-  createWebhookSecretsPrune(clock),
-  redis?.queues.webhookSecretsPrune,
-  warn,
-);
-// A grant revocation that failed at a social replace is retried with backoff
-// (#353).
-services().consent.startRevokeWorker(
-  createGrantsRevoke(oauth.serverFor),
-  redis?.queues.grantsRevoke,
-);
+// Background workers need a queue: without Redis (development) none runs.
+if (redis !== undefined) {
+  // Every 6 hours the verified domains' TXT records are read again (A4).
+  startDomainRecheck(
+    domainRecheckDeps(consoleDeps.directory.findUser),
+    redis.queues.domainRecheck,
+  );
+  // Daily, the agents that registered themselves and still have no grant after
+  // 7 days are deleted (D10).
+  startAgentsPrune(createAgentsPrune(clock), redis.queues.agentsPrune, warn);
+  // Daily, the sign-in log and the console activity are cut at each tenant's
+  // plan retention, the platform's own events at 400 days (D16).
+  startAuditRetention(
+    createAuditRetention(clock),
+    redis.queues.auditRetention,
+    warn,
+  );
+  // Daily, the rolled webhook secrets past their 24 hours are dropped (D19).
+  startWebhookSecretsPrune(
+    createWebhookSecretsPrune(clock),
+    redis.queues.webhookSecretsPrune,
+    warn,
+  );
+  // A grant revocation that failed at a social replace is retried with backoff
+  // (#353).
+  services().consent.startRevokeWorker(
+    createGrantsRevoke(oauth.serverFor),
+    redis.queues.grantsRevoke,
+  );
+}
 const app = createApp({
+  ...appPorts,
   oauth,
   console: consoleDeps,
 }).onStop(async () => {

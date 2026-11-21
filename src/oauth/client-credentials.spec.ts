@@ -3,6 +3,7 @@ import { CLIENT_CREDENTIALS_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -41,7 +42,12 @@ async function machine(
   } = {},
 ) {
   const registered = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: options.slug ?? SLUG,
       name: clientId,
@@ -182,7 +188,12 @@ describe("the client credentials grant", () => {
   test("a client with the grant needs allowed scopes, and defaults within them", async () => {
     await expect(
       registerClient(
-        { now: () => new Date(), db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: SLUG,
           name: "none",
@@ -201,7 +212,12 @@ describe("the client credentials grant", () => {
   test("scopes belong to the grant: they go with it", async () => {
     await expect(
       registerClient(
-        { now: () => new Date(), db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: SLUG,
           name: "code",

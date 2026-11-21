@@ -4,16 +4,6 @@ import { telemetry as tracing } from "@softistx/alxia-telemetry";
 import type { JanusContext } from "@softistx/janus-graphql";
 import { type Telemetry, withAttributes } from "@softistx/telemetry";
 import { env } from "@/config/env";
-import { telemetry as appTelemetry } from "@/config/telemetry";
-import { tenantResolver } from "@/config/tenancy";
-import {
-  deviceThrottle,
-  homeRealmThrottle,
-  passkeyThrottle,
-  signInThrottle,
-  ssoStartThrottle,
-  verifyThrottle,
-} from "@/config/throttle";
 import type { ThrottleContext } from "@/http/throttle/context";
 import type { TenantJanus } from "@/modules/users";
 import { isTenantless, tenantAttributes } from "@/telemetry/tenant";
@@ -23,20 +13,13 @@ import type { TenantResolver } from "@/tenancy/resolver";
 // The base: what every resolver reads, decorated or derived here.
 // The throttles of the anonymous operations (`ctx.signInThrottle`,
 // `ctx.passkeyThrottle`, `ctx.homeRealmThrottle`, `ctx.ssoStartThrottle`, `ctx.verifyThrottle`,
-// `ctx.deviceThrottle`; none: no extra limit) ride on the context, typed.
+// `ctx.deviceThrottle`; the no-op where there is no Redis) ride on the context, typed.
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for
 // the OAuth endpoints), resolved once per request, on first use.
 export function createBase(
-  resolver: TenantResolver = tenantResolver,
-  throttles: ThrottleContext = {
-    signInThrottle,
-    passkeyThrottle,
-    homeRealmThrottle,
-    ssoStartThrottle,
-    verifyThrottle,
-    deviceThrottle,
-  },
-  telemetry: Telemetry = appTelemetry,
+  resolver: TenantResolver,
+  throttles: ThrottleContext,
+  telemetry: Telemetry,
 ) {
   // `ctx.ip`: the connection's address, or, behind CLAVIX_TRUSTED_PROXIES
   // proxies, the client X-Forwarded-For names (never believed beyond them).

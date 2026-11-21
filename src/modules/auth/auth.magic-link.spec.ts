@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -15,6 +14,7 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { MAGIC_LINK_LIFESPAN, SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietTenants } from "~/ports";
 import { settled } from "./auth.outbox";
@@ -22,7 +22,7 @@ import { settled } from "./auth.outbox";
 // Magic link is the tenant's choice, off until it turns it on (its sign-in
 // policy, slice A5): "plain" never did, "acme" and "vault" did.
 const memory = mailer as MemoryMailer;
-const app = createApp();
+const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

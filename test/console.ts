@@ -1,8 +1,9 @@
-import { createApp } from "@/app";
 import { createConsoleDeps } from "@/config/console";
+import { noBudgets } from "@/config/no-ops";
 import type { ConsoleBudgets } from "@/console/budgets";
 import type { ConsoleDirectory } from "@/console/context";
 import { CONSOLE_PATH } from "@/console/identity";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
 export interface ConsoleResult {
@@ -37,10 +38,10 @@ export function consoleRequestAs(
   userId: string,
   {
     verified = true,
-    budgets,
+    budgets = noBudgets,
   }: { verified?: boolean; budgets?: ConsoleBudgets } = {},
 ) {
-  const app = createApp({
+  const app = createTestApp({
     console: {
       ...deps,
       budgets,
@@ -103,7 +104,7 @@ export function exportAs(
     throttle?: (tenantId: string) => Promise<number | null>;
   },
 ) {
-  const app = createApp({
+  const app = createTestApp({
     console: {
       ...deps,
       directory: { ...deps.directory, emailVerified: async () => true },

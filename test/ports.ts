@@ -1,5 +1,9 @@
 import { env } from "@/config/env";
-import { noInvitationHooks } from "@/config/no-ops";
+import { noInvitationHooks, noThrottle, noUserThrottle } from "@/config/no-ops";
+import type {
+  AgentKindsOf,
+  AgentsReader,
+} from "@/modules/clients/clients.types";
 import { createSecretBox } from "@/modules/sign-in-methods";
 import type { ConnectionsOf, InvitationHooks } from "@/modules/users";
 import { buildTenantJanus, ephemeralSecondFactorKeys } from "@/modules/users";
@@ -86,3 +90,22 @@ export const quietJanus = (
     quietUsers.secondFactorKeys,
     noConnections,
   );
+
+/** The throttles of a base without Redis: no extra limit. */
+export const quietThrottles = {
+  signInThrottle: noThrottle,
+  passkeyThrottle: noThrottle,
+  homeRealmThrottle: noThrottle,
+  ssoStartThrottle: noThrottle,
+  verifyThrottle: noUserThrottle,
+  deviceThrottle: noUserThrottle,
+};
+
+/** A tenant with no agents: none told apart, nothing to remove. */
+export const noAgents: AgentsReader = {
+  kinds: async () => new Map(),
+  remove: async () => {},
+};
+
+/** Listing filter with no agents told apart. */
+export const noAgentKinds: AgentKindsOf = async () => new Map();

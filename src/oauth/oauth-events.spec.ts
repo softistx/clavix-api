@@ -3,6 +3,7 @@ import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { eventBus } from "@/config/events";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { oauthListener } from "@/events/oauth-listener";
 import { registerClient } from "@/modules/clients";
@@ -37,7 +38,12 @@ beforeAll(async () => {
     ids[slug] = (await flow.setUp(slug)).tenantId;
   }
   await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: "oev-a",
       name: "TV",

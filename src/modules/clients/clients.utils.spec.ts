@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { ObjectId } from "mongodb";
 import {
-  agentKindsOf,
   capability,
   clientsKey,
   grantsOf,
@@ -146,10 +145,5 @@ describe("clients utils: views and settings", () => {
     expect(sentSettings({ requirePar: false, grants: undefined })).toEqual({
       requirePar: false,
     });
-  });
-
-  test("agentKindsOf reads none without the store", async () => {
-    const tenant = { _id: { toHexString: () => "t" } } as never;
-    expect((await agentKindsOf(undefined, tenant)(["a"])).size).toBe(0);
   });
 });

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { telemetry as appTelemetry } from "@/config/telemetry";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
+import { quietThrottles } from "~/ports";
 import type { TenantResolver } from "../tenancy/resolver";
 import { createBase } from "./context";
 
@@ -30,10 +32,13 @@ test("tenant() resolves the request's host once, on first use", async () => {
     },
     invalidate: async () => {},
   };
-  const app = createBase(resolver).get("/who", async ({ reply, tenant }) => {
-    const [a, b] = await Promise.all([tenant(), tenant()]);
-    return reply(200, { slug: a?.slug, same: a === b });
-  });
+  const app = createBase(resolver, quietThrottles, appTelemetry).get(
+    "/who",
+    async ({ reply, tenant }) => {
+      const [a, b] = await Promise.all([tenant(), tenant()]);
+      return reply(200, { slug: a?.slug, same: a === b });
+    },
+  );
   const response = await app.request("http://acme.clavix.test/who");
   expect(await response.json()).toEqual({ slug: "acme", same: true });
   expect(seen).toEqual(["acme.clavix.test"]);

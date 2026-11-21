@@ -3,7 +3,6 @@ import {
   createMemorySigningKeys,
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
-import { createApp } from "@/app";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -19,6 +18,7 @@ import {
 } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
 import { quietOAuth } from "~/ports";
@@ -50,7 +50,7 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor,
 });
 // The bearer token is the user id: tokens are console.spec's business.
-const app = createApp({
+const app = createTestApp({
   oauth: issuers,
   console: {
     ...verifiedCallers(createConsoleDeps(issuers)),

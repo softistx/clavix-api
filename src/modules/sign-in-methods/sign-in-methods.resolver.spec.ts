@@ -8,7 +8,6 @@ import {
   spyOn,
   test,
 } from "bun:test";
-import { createApp } from "@/app";
 import { connectionsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
@@ -26,6 +25,7 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietTenants } from "~/ports";
 import { createFlow } from "../../../test/oauth-flow";
@@ -53,7 +53,7 @@ const issuers = {
     };
   },
 };
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

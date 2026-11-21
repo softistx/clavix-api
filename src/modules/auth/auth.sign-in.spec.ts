@@ -7,7 +7,6 @@ import {
   test,
 } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -20,12 +19,13 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { SESSION_COOKIE, SIGN_IN_CODE_LIFESPAN } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietTenants } from "~/ports";
 import { afterAnswer, settled } from "./auth.outbox";
 
 const memory = mailer as MemoryMailer;
-const app = createApp();
+const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

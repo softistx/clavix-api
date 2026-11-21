@@ -22,7 +22,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
         status: 409,
       });
     }
-    await ctx.budgets?.invitation({ tenantId });
+    await ctx.budgets.invitation({ tenantId });
     const inviter = await ctx.directory.findUser(ctx.principal.userId);
     const invitation = await refusing(() =>
       ctx.users.invite({

@@ -181,7 +181,7 @@ export class MfaService {
     const tenant = await this.tenantOf(ctx);
     requireLive(tenant);
     requireMethod(tenant, "passkey");
-    await ctx.passkeyThrottle?.check({ tenantId: tenant.tenantId, ip: ctx.ip });
+    await ctx.passkeyThrottle.check({ tenantId: tenant.tenantId, ip: ctx.ip });
     const auth = await this.authOf(ctx);
     const options = await auth.secondFactor.passkeyOptions(challenge);
     ctx.set.headers.set("cache-control", "no-store");

@@ -6,10 +6,10 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -22,6 +22,7 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
@@ -60,7 +61,7 @@ const issuers = createClavixOAuthIssuers({
   claimsFor,
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read"] } }),
 });
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 
 const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 const basic = (id: string, secret: string) =>
@@ -155,6 +156,7 @@ beforeAll(async () => {
     });
     const registered = await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),

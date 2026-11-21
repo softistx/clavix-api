@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createApp } from "@/app";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
-const app = createApp();
+const app = createTestApp();
 const LEAK = "987654321";
 
 interface Body {

@@ -4,6 +4,7 @@ import {
   hashOAuthSecret,
   type OAuthClientRecord,
 } from "@softistx/janus-oauth";
+import { noAgentKinds } from "~/ports";
 import { countClientViews, listClientViews, MAX_READS } from "./clients.search";
 import { capability } from "./clients.utils";
 
@@ -42,7 +43,11 @@ async function all(
   const pages: string[][] = [];
   let after: string | null = null;
   do {
-    const page = await listClientViews(listClients, { ...options, after });
+    const page = await listClientViews(listClients, {
+      ...options,
+      after,
+      agents: noAgentKinds,
+    });
     pages.push(page.items.map((item) => item.clientId));
     after = page.nextCursor;
   } while (after !== null);
@@ -70,7 +75,10 @@ describe("listClientViews", () => {
       }),
       record("code", { grantTypes: ["authorization_code"] }),
     ]);
-    const page = await listClientViews(store.listClients, { limit: 10 });
+    const page = await listClientViews(store.listClients, {
+      limit: 10,
+      agents: noAgentKinds,
+    });
     expect(JSON.stringify(page)).not.toContain(secretHash);
     expect(
       page.items.map((item) => [item.clientId, item.type, item.grantTypes]),
@@ -99,6 +107,7 @@ describe("listClientViews", () => {
     const first = await listClientViews(store.listClients, {
       limit: 1,
       q: "target",
+      agents: noAgentKinds,
     });
     expect(first.items).toEqual([]);
     expect(first.nextCursor).not.toBeNull();
@@ -106,6 +115,7 @@ describe("listClientViews", () => {
     const next = await listClientViews(store.listClients, {
       limit: 1,
       q: "target",
+      agents: noAgentKinds,
       after: first.nextCursor,
     });
     expect(next.items.map((item) => item.clientId)).toEqual(["target"]);
@@ -139,10 +149,20 @@ describe("countClientViews", () => {
       record("other", { name: "Zed" }),
       record("meta", { source: "metadata" }),
     ]);
-    expect(await countClientViews(store.listClients)).toBe(131);
-    expect(await countClientViews(store.listClients, { q: "  APP-12 " })).toBe(
-      11,
-    );
-    expect(await countClientViews(store.listClients, { q: "nothing" })).toBe(0);
+    expect(
+      await countClientViews(store.listClients, { agents: noAgentKinds }),
+    ).toBe(131);
+    expect(
+      await countClientViews(store.listClients, {
+        q: "  APP-12 ",
+        agents: noAgentKinds,
+      }),
+    ).toBe(11);
+    expect(
+      await countClientViews(store.listClients, {
+        q: "nothing",
+        agents: noAgentKinds,
+      }),
+    ).toBe(0);
   });
 });

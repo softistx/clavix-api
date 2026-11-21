@@ -63,8 +63,8 @@ export interface ConsoleDeps {
   admins: ConsoleAdmins;
   users: ConsoleUsers;
   exclusive: Exclusive;
-  /** The budgets of the test webhooks and the invitations (`budgets.ts`); none without Redis. */
-  budgets?: ConsoleBudgets | undefined;
+  /** The budgets of the test webhooks and the invitations (`budgets.ts`; `noBudgets` without Redis). */
+  budgets: ConsoleBudgets;
   /** Where `ctx.audit` appends its events. */
   adminEvents: AdminEventRecorder;
   /** The readers of the activity logs. */

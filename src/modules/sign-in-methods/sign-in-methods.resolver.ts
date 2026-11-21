@@ -22,7 +22,7 @@ export const signInMethods: Resolvers = {
       requireLive(tenant);
       await requireOfferedProvider(tenant, provider);
       const { resolvers } = await socialOfTenant(ctx);
-      await ctx.ssoStartThrottle?.check({
+      await ctx.ssoStartThrottle.check({
         tenantId: tenant.tenantId,
         ip: ctx.ip,
       });

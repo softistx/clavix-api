@@ -8,7 +8,6 @@ import {
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
 import {
   clientPoliciesService,
   exchangeRulesFor,
@@ -28,6 +27,7 @@ import { mongoClientDetailTypes } from "@/modules/resources";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "../../test/tenant-par-off";
@@ -65,7 +65,7 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor,
   exchangeRulesFor,
 });
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const ready = mongoClientDetailTypes(mongo.db.detailTypes, () => true);
 const text = (fr: string, en: string) => ({ fr, en });
