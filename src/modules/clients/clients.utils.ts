@@ -107,3 +107,29 @@ export const grantsOf = (
 /** The `Exclusive` key of a tenant's client writes (create, update, rotate, delete). */
 export const clientsKey = (tenant: { _id: { toHexString(): string } }) =>
   `console:clients:${tenant._id.toHexString()}`;
+
+const CLIENT_ID = /^[a-z0-9-]{1,64}$/;
+
+/** Whether an id could be a client's: anything else names nothing to record on the trail. */
+export const isClientId = (id: string) => CLIENT_ID.test(id);
+
+type ClientInput = {
+  name?: string | null;
+  redirectUris?: readonly string[] | null;
+  grantTypes?: readonly (keyof typeof WIRE_GRANT)[] | null;
+  requirePushedAuthorizationRequests?: boolean | null;
+  dpopBoundAccessTokens?: boolean | null;
+  authorizationDetailsTypes?: readonly string[] | null;
+  allowedScopes?: readonly string[] | null;
+  defaultScopes?: readonly string[] | null;
+};
+
+/** The settings a create or an update call sent, as the service names them; an omitted one stays `undefined` (keep or default). */
+export const settingsOf = (input: ClientInput) => ({
+  grants: grantsOf(input.grantTypes),
+  requirePar: input.requirePushedAuthorizationRequests ?? undefined,
+  dpopBound: input.dpopBoundAccessTokens ?? undefined,
+  detailTypes: input.authorizationDetailsTypes ?? undefined,
+  allowedScopes: input.allowedScopes ?? undefined,
+  defaultScopes: input.defaultScopes ?? undefined,
+});

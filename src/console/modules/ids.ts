@@ -32,3 +32,9 @@ export function idArg(given: string, name: string) {
   }
   return given;
 }
+
+const MAX_PAGE = 100;
+
+/** The page size a call asked for (25 by default), kept within 1 and 100. */
+export const pageSize = (first: number | null | undefined) =>
+  Math.min(Math.max(first ?? 25, 1), MAX_PAGE);

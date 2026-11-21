@@ -1,6 +1,21 @@
 import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
+  clients,
+  clientsAudits,
+  clientsGuards,
+} from "@/modules/clients/clients.console-resolver";
+import {
+  resources,
+  resourcesAudits,
+  resourcesGuards,
+} from "@/modules/resources/resources.console-resolver";
+import {
+  roles,
+  rolesAudits,
+  rolesGuards,
+} from "@/modules/roles/roles.console-resolver";
+import {
   users,
   usersAudits,
   usersGuards,
@@ -10,7 +25,6 @@ import type { Guards } from "../guard";
 import { admins, adminsAudits, adminsGuards } from "./admins";
 import { audit, auditAudits, auditGuards } from "./audit";
 import { branding, brandingAudits, brandingGuards } from "./branding";
-import { clients, clientsAudits, clientsGuards } from "./clients";
 import {
   connections,
   connectionsAudits,
@@ -23,8 +37,6 @@ import {
   oauthPolicyAudits,
   oauthPolicyGuards,
 } from "./oauth-policy";
-import { resources, resourcesAudits, resourcesGuards } from "./resources";
-import { roles, rolesAudits, rolesGuards } from "./roles";
 import {
   signInMethods,
   signInMethodsAudits,

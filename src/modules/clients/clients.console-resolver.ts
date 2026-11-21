@@ -1,59 +1,20 @@
-import { denial } from "@softistx/janus-graphql";
 import { clientsService } from "@/config/clients";
-import { tenantsService } from "@/config/tenancy";
-import { usageService } from "@/config/usage";
+import { catalogTenant, refusing } from "@/console/modules/catalog-support";
+import { pageSize } from "@/console/modules/ids";
+import { keepConsoleClient } from "@/console/modules/reserved";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { QuotaExceededError } from "@/modules/usage/usage.errors";
-import { assertWithinQuota } from "@/modules/usage/usage.rules";
-import type { Audits } from "../../audit";
-import { type Guards, onTenant } from "../../guard";
-import { catalogTenant, refusing } from "../catalog-support";
-import { tenantArg } from "../ids";
-import { keepConsoleClient } from "../reserved";
-import { refusal } from "../tenants/errors";
-import { clientsKey, grantsOf, kindsOf, shape, target } from "./shape";
-import { setClientTokenExchange } from "./token-exchange";
+import { assertClientQuota } from "./clients.console-support";
+import { setClientTokenExchange } from "./clients.console-token-exchange";
+import {
+  clientsKey,
+  isClientId,
+  kindsOf,
+  settingsOf,
+  shape,
+  target,
+} from "./clients.utils";
 
-const view = onTenant("view", tenantArg);
-const edit = onTenant("edit", tenantArg);
-
-export const clientsGuards: Guards = {
-  "Query.clients": view,
-  "Query.client": view,
-  "Mutation.createClient": edit,
-  "Mutation.updateClient": edit,
-  "Mutation.rotateClientSecret": edit,
-  "Mutation.setClientTokenExchange": edit,
-  "Mutation.deleteClient": edit,
-};
-
-export const clientsAudits: Audits = {
-  "Mutation.createClient": "client.create",
-  "Mutation.updateClient": "client.update",
-  "Mutation.rotateClientSecret": "client.rotateSecret",
-  "Mutation.setClientTokenExchange": "client.tokenExchange.set",
-  "Mutation.deleteClient": "client.delete",
-};
-
-const MAX_PAGE = 100;
-
-/** Clients are a hard quota: one more past the plan's is `QUOTA_EXCEEDED` (409). */
-async function assertClientQuota(tenant: { _id: { toHexString(): string } }) {
-  const id = tenant._id.toHexString();
-  const doc = await tenantsService.find(id);
-  if (doc === undefined) throw denial("NOT_FOUND", "No such tenant");
-  try {
-    assertWithinQuota(
-      "clients",
-      await usageService.count(id, "clients"),
-      usageService.quotasOf(doc).clients,
-    );
-  } catch (error) {
-    if (error instanceof QuotaExceededError) throw refusal(error);
-    throw error;
-  }
-}
-const CLIENT_ID = /^[a-z0-9-]{1,64}$/;
+export { clientsAudits, clientsGuards } from "./clients.console-guards";
 
 export const clients: Resolvers = {
   Query: {
@@ -63,7 +24,7 @@ export const clients: Resolvers = {
         Promise.all([
           clientsService.list(tenant, {
             after: after ?? null,
-            limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+            limit: pageSize(first),
             q: q ?? undefined,
             kinds: kindsOf(kind),
           }),
@@ -102,12 +63,7 @@ export const clients: Resolvers = {
         type: input.type === "CONFIDENTIAL" ? "confidential" : "public",
         redirectUris: input.redirectUris ?? [],
         clientId: input.clientId ?? undefined,
-        grants: grantsOf(input.grantTypes),
-        requirePar: input.requirePushedAuthorizationRequests ?? undefined,
-        dpopBound: input.dpopBoundAccessTokens ?? undefined,
-        detailTypes: input.authorizationDetailsTypes ?? undefined,
-        allowedScopes: input.allowedScopes ?? undefined,
-        defaultScopes: input.defaultScopes ?? undefined,
+        ...settingsOf(input),
       } as const;
       const created = await ctx.exclusive(clientsKey(tenant), () =>
         refusing(async () => {
@@ -137,12 +93,7 @@ export const clients: Resolvers = {
           return clientsService.update(tenant, id, {
             name: input.name ?? undefined,
             redirectUris: input.redirectUris ?? undefined,
-            grants: grantsOf(input.grantTypes),
-            requirePar: input.requirePushedAuthorizationRequests ?? undefined,
-            dpopBound: input.dpopBoundAccessTokens ?? undefined,
-            detailTypes: input.authorizationDetailsTypes ?? undefined,
-            allowedScopes: input.allowedScopes ?? undefined,
-            defaultScopes: input.defaultScopes ?? undefined,
+            ...settingsOf(input),
           });
         }),
       );
@@ -184,7 +135,7 @@ export const clients: Resolvers = {
       // an id no client can have names nothing to record, and neither does a
       // record that is not a registered client: it was left untouched, so
       // there is no change to put on the trail.
-      if (removed || (CLIENT_ID.test(id) && !unmanaged)) {
+      if (removed || (isClientId(id) && !unmanaged)) {
         await ctx.audit("client.delete", target(tenant, id));
       }
       return removed;
