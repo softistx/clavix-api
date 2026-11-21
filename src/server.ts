@@ -20,9 +20,9 @@ import { createWebhookSecretsPrune, webhookDelivery } from "./config/webhooks";
 import { startAgentsPrune } from "./modules/agents/prune-worker";
 import { startAuditRetention } from "./modules/audit/retention-worker";
 import { drain } from "./modules/auth";
-import { startGrantsRevoke } from "./modules/consent/revoke-job";
 import { startDomainRecheck } from "./modules/domains/domains.recheck-worker";
 import { startKeyRotation } from "./modules/keys";
+import { services } from "./modules/services";
 import { startTenantPurge } from "./modules/tenants/tenants.purge-worker";
 import { startWebhookSecretsPrune } from "./modules/webhooks/webhooks.secrets-prune-worker";
 
@@ -69,7 +69,7 @@ startWebhookSecretsPrune(
 );
 // A grant revocation that failed at a social replace is retried with backoff
 // (#353).
-startGrantsRevoke(
+services().consent.startRevokeWorker(
   createGrantsRevoke(oauth.serverFor),
   redis?.queues.grantsRevoke,
 );

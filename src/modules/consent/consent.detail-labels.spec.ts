@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type DetailTexts, detailsOf, reviewDetails } from "./detail-labels";
+import {
+  type DetailTexts,
+  detailsOf,
+  reviewDetails,
+} from "./consent.detail-labels";
 
 const texts: DetailTexts = [
   {

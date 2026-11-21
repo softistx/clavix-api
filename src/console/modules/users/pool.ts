@@ -1,6 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
 import type { OAuthGrants } from "@softistx/janus-oauth";
-import type { TenantInvitations } from "@/modules/invitations/tenant-invitations";
+import type { TenantInvitations } from "@/modules/invitations/invitations.types";
 import type { TenantJanus } from "@/modules/users/tenant-janus";
 import type { TenantUserView } from "../../context";
 

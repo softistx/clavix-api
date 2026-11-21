@@ -1,5 +1,5 @@
 import type { FieldKind } from "@/modules/resources";
-import type { ConsentLocale } from "./scope-labels";
+import type { ConsentLocale } from "./consent.scope-labels";
 
 type Text = { fr: string; en: string };
 

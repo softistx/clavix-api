@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { JanusError } from "@softistx/janus";
-import {
-  createTenantInvitations,
-  type InvitationSource,
-  ResendRefusedError,
-} from "./tenant-invitations";
+import { ResendRefusedError } from "./invitations.errors";
+import { InvitationsService } from "./invitations.service";
+import type {
+  InvitationSource,
+  InvitationsOptions,
+  TenantInvitations,
+} from "./invitations.types";
+
+// The hosted-page ports are not read by the per-tenant methods under test.
+const createTenantInvitations = (
+  source: () => Promise<InvitationSource | null>,
+  options: InvitationsOptions = {},
+): TenantInvitations =>
+  new InvitationsService({} as never, options).bind(source);
 
 const at = (day: number) => new Date(Date.UTC(2026, 0, day));
 const stored = (id: string, scope: string) => ({
@@ -89,7 +98,7 @@ function fakeSource(pageSize = 2) {
   };
 }
 
-describe("createTenantInvitations", () => {
+describe("InvitationsService per-tenant invitations", () => {
   test("invite issues under the scope and mails the link of the code", async () => {
     const { source, mails } = fakeSource();
     const invitations = createTenantInvitations(async () => source);

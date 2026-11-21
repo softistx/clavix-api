@@ -1,4 +1,4 @@
-import { BrandingInputError } from "./theme-input";
+import { BrandingInputError } from "./branding.theme-input";
 
 // `<` and a backslash are refused anywhere, comments included: the HTML parser
 // ends a `<style>` at `</style` inside a comment too. The other tokens are

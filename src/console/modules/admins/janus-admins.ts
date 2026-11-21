@@ -1,8 +1,8 @@
-import { adminScope } from "@/modules/invitations/scope";
+import { adminScope } from "@/modules/invitations/invitations.rules";
 import type {
   PendingInvitation,
   TenantInvitations,
-} from "@/modules/invitations/tenant-invitations";
+} from "@/modules/invitations/invitations.types";
 import type { AdminInvitation, ConsoleAdmins } from "../../context";
 import { isRole } from "../../model";
 

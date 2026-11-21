@@ -17,8 +17,9 @@ import type { AuditAction, AuditTarget } from "@/console/audit";
 import type { ConsoleContext } from "@/console/context";
 import type { Permission } from "@/console/model";
 import { consoleSchema } from "@/console/schema";
-import { BrandingConflictError, BrandingService } from "./branding.service";
-import { LOGO_MAX_BYTES } from "./logo";
+import { BrandingConflictError } from "./branding.errors";
+import { LOGO_MAX_BYTES } from "./branding.logo";
+import { BrandingService } from "./branding.service";
 import {
   assertSafeCss,
   BrandingContrastError,
@@ -29,7 +30,7 @@ import {
   measureTheme,
   THEME_NAME,
   validateThemeInput,
-} from "./theme";
+} from "./branding.theme";
 
 // 1x1 PNG.
 const PNG =

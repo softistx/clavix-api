@@ -10,6 +10,7 @@ import {
 } from "bun:test";
 import { createApp } from "@/app";
 import { connectionsService } from "@/config/connections";
+import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createGrantsRevoke, grantsRevokeQueue } from "@/config/grants-revoke";
@@ -18,10 +19,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
-import {
-  type RevokeJob,
-  startGrantsRevoke,
-} from "@/modules/consent/revoke-job";
+import type { RevokeJob } from "@/modules/consent/consent.types";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,
@@ -612,12 +610,15 @@ describe("social sign-in", () => {
         jobs.push(data);
       },
     };
-    startGrantsRevoke(createGrantsRevoke(flow.issuers.serverFor), {
-      work: (fn) => {
-        handler = fn;
-        return { on: () => {} };
+    consentService.startRevokeWorker(
+      createGrantsRevoke(flow.issuers.serverFor),
+      {
+        work: (fn) => {
+          handler = fn;
+          return { on: () => {} };
+        },
       },
-    });
+    );
     revokeDown.on = true;
     revokeDown.calls = 0;
     try {

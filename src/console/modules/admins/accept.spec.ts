@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { adminScope, operatorScope } from "@/modules/invitations/scope";
+import {
+  adminScope,
+  operatorScope,
+} from "@/modules/invitations/invitations.rules";
 import { createExclusive } from "../../exclusive";
 import { adminInvitationHooks } from "./accept";
 

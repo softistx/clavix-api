@@ -104,7 +104,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
   hashes the definitions (`digestOf`) so an edit rebuilds the issuer, and `withScopes` keeps a resource
   that has types and no scope. `saveDetailType` is the writer (`createDetailType` and `updateDetailType` call it). `createDetailType` repeated with the same values on the same resource returns the stored type (the console records its event again, as `createResource` and `createScope` do); other values or another resource stay `CONFLICT`.
 - **A client opts in** (R3): `registerClient` and `ClientsService` take `detailTypes` (`authorizationDetailsTypes` on the janus record; `src/modules/clients/detail-types.ts` judges it). Each name must be a stored type of the tenant (the `ClientDetailTypes` port, wired in `config/resources.ts`), the final client must require PAR (D3), and a client with `authorization_code` or the device grant (a consent page) needs the tenant in `CLAVIX_RAR_CONSENT_READY` (temporary `rarConsentReady`, removed with the consent page, V4). A kept type that is no longer stored stays on the record and is refused by the issuer.
-- **The consent API shows details in words** (R4, D4/D5): `OAuthRequest.details` and `OAuthDeviceRequest.details` (`consent/detail-labels.graphqls`) are built by the pure `detailsOf` (`consent/detail-labels.ts`) from janus's `authorizationDetails` string and the tenant's `detailTypes` texts (`detailTextsFor` in `config/resources.ts`, read once per request like the scope texts, put on the context by `oauthContext`). A detail that cannot be fully described (type deleted, a key, action or enum value the type no longer defines) makes `detailsComplete` false (`reviewDetails`), and janus-oauth's `beforeApprove` hook (`consent/index.ts`, once per approval in both flows) refuses it with `invalid_authorization_details`, the request staying pending. Approval stays all or nothing: `beforeApprove` refuses any `authorizationDetails` selection with `invalid_authorization_details`, in both flows. `src/oauth/rar.spec.ts` is the end-to-end spec.
+- **The consent API shows details in words** (R4, D4/D5): `OAuthRequest.details` and `OAuthDeviceRequest.details` (`consent/detail-labels.graphqls`) are built by the pure `detailsOf` (`consent/consent.detail-labels.ts`) from janus's `authorizationDetails` string and the tenant's `detailTypes` texts (`detailTextsFor` in `config/resources.ts`, read once per request like the scope texts, put on the context by `oauthContext`). A detail that cannot be fully described (type deleted, a key, action or enum value the type no longer defines) makes `detailsComplete` false (`reviewDetails`), and janus-oauth's `beforeApprove` hook (`ConsentService.beforeApprove`, `consent/consent.service.ts`, once per approval in both flows) refuses it with `invalid_authorization_details`, the request staying pending. Approval stays all or nothing: `beforeApprove` refuses any `authorizationDetails` selection with `invalid_authorization_details`, in both flows. `src/oauth/rar.spec.ts` is the end-to-end spec.
 - **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
   texts); `resources.scopes` stays optional in the model for its `down`.
 - **Migration `2026-11-16-name-keys`** backfills `nameKey` on the `partitionedUsers` written before janus 0.66 (janus-mongo "Backfilling name keys"), which `userLookup`'s `namePrefix` reads; run `db:sync` first.
@@ -128,7 +128,7 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 `tenant.oauth` (`oauthPolicySchema`: `{ par: { required }, dpop: { required } }`, every flag defaults to `false`) is on the tenant document and on `ResolvedTenant`, so an entry cached before the field parses off. `building.ts` passes `pushedAuthorizationRequests: { required: tenant.oauth.par.required }` (`/par` is always served, and is in `OAUTH_PATHS`, `REFUSED_PATHS` and the Caddyfile `@api` matcher).
 - **Every write goes through `OAuthPolicyService`** (over `TenantsService.updateOAuth`, optimistic lock, no write when nothing changes, `version` bump), modelled on `SignInPolicyService`. The `clavix` tenant accepts `par.required` / `dpop.required` like any tenant (the 409 guard is lifted, #233): migration `2026-11-17-console-par-dpop` sets both on the tenant and marks the `console` client `requirePar` + `dpopBound` (idempotent, version bumped only on a change; its `down` relaxes them). The console (clavix-ui#228) pushes (PAR) and proves (DPoP ES256), so **deploy clavix-ui first or together**: an older console is locked out once the migration has run. `test/setup.ts` relaxes the platform tenant after the migrations, so the specs keep minting plain tokens; `console.spec.ts` sets `dpop.required` itself and restores it.
 - `TenantsService.create` writes `par.required: true` for a new tenant (not the platform one); migration `2026-11-16-oauth-policy` writes an explicit `false` on the existing ones (`db:sync` first). Specs that authorize directly on a tenant made by `createFlow().setUp` get PAR turned off there (`{ par: true }` keeps it).
-- **Device grant** (`deviceAuthorization: { verificationUri: \`${issuer}/device\` }`in`building.ts`for every tenant;`/device_authorization`is in`OAUTH_PATHS`, `REFUSED_PATHS`and the Caddyfile`@api`matcher). It is never implied: a client lists`DEVICE_GRANT`in`grantTypes`. `registerClient`requires redirect URIs only when the grants include`authorization_code` (`usesRedirect`); default grants are `DEFAULT_GRANTS`, not `OFFERED_GRANTS`. The verification page's operations are janus's `oauthResolvers` (`modules/consent/index.ts`) with `beforeUserCodeLookup`=`deviceThrottle` (`modules/consent/device-throttle.ts`, `CLAVIX_DEVICE_*`, on the shared `createUserThrottle`of`http/throttle/core.ts`). The hook runs before the store is read, so it counts every lookup, not only misses. The device approve guard looks the code up first, so it runs the hook itself and marks the call (`counted`) so janus's hook does not count it twice. Specs that call `/authorize`on a new tenant use`createTenantParOff`.
+- **Device grant** (`deviceAuthorization: { verificationUri: \`${issuer}/device\` }`in`building.ts`for every tenant;`/device_authorization`is in`OAUTH_PATHS`, `REFUSED_PATHS`and the Caddyfile`@api`matcher). It is never implied: a client lists`DEVICE_GRANT`in`grantTypes`. `registerClient`requires redirect URIs only when the grants include`authorization_code` (`usesRedirect`); default grants are `DEFAULT_GRANTS`, not `OFFERED_GRANTS`. The verification page's operations are janus's `oauthResolvers` (`modules/consent/consent.resolver.ts`) with `beforeUserCodeLookup`=`deviceThrottle` (`modules/consent/consent.device-throttle.ts`, `CLAVIX_DEVICE_*`, on the shared `createUserThrottle`of`http/throttle/core.ts`). The hook runs before the store is read, so it counts every lookup, not only misses. The device approve guard looks the code up first, so it runs the hook itself and marks the call (`counted`) so janus's hook does not count it twice. Specs that call `/authorize`on a new tenant use`createTenantParOff`.
 - **Client credentials grant** (#362): opt-in at three levels. A resource sets `allowClientCredentials` (`Resource` model, `storedResourcesFor` gives janus `clientCredentials: true`, `updateResource` in the console, refused on the console's own resource by `refuseMachineConsole`); `building.ts` turns the server option on for a tenant only when one of its resources opted in (`fingerprintOf` adds `cc` so the cached issuer rebuilds); a client lists `CLIENT_CREDENTIALS_GRANT`, is confidential and has `allowedScopes` (the ceiling janus enforces; `defaultScopes` optional), judged by `registerClient`/`validate.ts`. The `accessTokens.claims` hook skips `roles` for `subjectType: "client"`. Only the token endpoint accepts a client token: the console's `authenticateRequest` never passes `clientCredentials`, userinfo answers 401, and no other endpoint reads a bearer principal. `OAuthPrincipal` is a union (`kind`/`subjectType`); the console uses `OAuthUserPrincipal`. Revoking does not cut a client off: delete it, drop the grant or rotate the secret. Spec: `src/oauth/client-credentials.spec.ts`; guide: `docs/guide/client-credentials.md`.
 - **Token exchange** (`tokenExchange: { policy: exchangePolicy(...) }` in `building.ts`, every tenant; `exchangePolicy` is in `src/oauth/token-exchange.ts`): the policy reads the client's rules through the `ExchangeRulesFor` port (`src/oauth/ports.ts`, stored by `src/config/client-policies.ts`, collection `clientPolicies`, tenant-owned) and answers `delegation` or `null` (`access_denied`); with no port, always `null`. Rules: `targetResources` and `subjectClients | "any"`. A client lists `TOKEN_EXCHANGE_GRANT` and is confidential (`registerClient`, `ClientsService.setTokenExchange`, which checks the input with `validateTokenExchange` in `src/modules/client-policies/validate.ts`); `ClientsService.delete` deletes its rules and removes the client from the other rules' `subjectClients` (`removeSubjectClient`); deleting a resource removes its URI from `targetResources` (`removeTarget`), both tenant-scoped.
 - **DPoP** (`dpop` in `building.ts`, every tenant): `algorithms ['ES256','EdDSA']`, `required: tenant.oauth.dpop.required`, `replay: createMongoDPoPReplayCache(oauthDb, { clock })` (Mongo, shared by instances, not Redis) and `nonce: { secret }`, the secret being `dpopNonceSecretOf(masterKeys)` (`src/config/keys.ts`: HKDF-SHA256 of the first master key, info `dpop-nonce`) passed to `createClavixOAuthIssuers({ dpopNonceSecret })` (required: specs pass a constant). The proof's `htu` is the issuer's public URL. New tenants start with `dpop.required: false` (`newTenantOAuthPolicy`). A client's `dpopBoundAccessTokens` goes through `registerClient` (`dpopBound`, CLI `--dpop-bound` / `--no-dpop-bound`, kept on a re-run) and `ClientsService`; `ClientView` carries it. The console (`src/console/auth.ts`) takes `Bearer` and `DPoP` through `server.authenticateRequest({ headers, method, url: publicUrl }, { resource })`, `publicUrl` being `https://console.<domain>/console/graphql` (`config/console.ts`); a refused DPoP request is a `ConsoleDPoPRefusal` that the plugin answers as `WWW-Authenticate: DPoP` plus `DPoP-Nonce`. Specs: `~/dpop` signs proofs (`createDpopKey`) and retries on `use_dpop_nonce` (`withNonce`). The console also refuses a delegated token (`principal.actor`, an RFC 8693 exchange) with a plain 401.
@@ -163,12 +163,12 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   not control). janus asks only once the provider reported the e-mail verified, and never replaces a verified
   user. A replaced user loses their credentials, links and sessions; `SocialSignedIn.replaced` says so, and the
   sign-in log's `session.signIn` carries `reason: "replaced"`. Clavix revokes the replaced user's OAuth grants
-  and refresh tokens itself: `socialSignInComplete` calls `revokeOAuthGrants` (`modules/consent/revoke.ts`, janus-oauth
+  and refresh tokens itself: `socialSignInComplete` calls `ConsentService.revokeGrants` (`modules/consent/consent.service.ts`, janus-oauth
   `grants.revokeAll`) when `replaced` is true, before anything else. janus does not repeat `replaced`, so a
-  failure must not be lost (clavix-api #353): `revokeOnReplace` (`modules/consent/revoke-job.ts`) puts a failed
-  revocation on the `grants-revoke` queue (`revoke.queue.ts`, `{ tenantId, userId }`, 8 attempts, backoff 1 min
+  failure must not be lost (clavix-api #353): `ConsentService.revokeOnReplace` puts a failed
+  revocation on the `grants-revoke` queue (`consent.queue.ts`, `{ tenantId, userId }`, 8 attempts, backoff 1 min
   doubling to 1 h, `grantsRevokeQueue` in `config/grants-revoke.ts`) and the sign-in succeeds once the job is
-  stored; the worker (`startGrantsRevoke`, started in `server.ts`, `createGrantsRevoke`) finds the tenant's
+  stored; the worker (`ConsentService.startRevokeWorker`, started in `server.ts`) finds the tenant's
   server by its issuer URL and repeats the idempotent `revokeAll`. With no Redis, or when the job cannot be
   added, the original error fails the sign-in as before.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
@@ -279,15 +279,15 @@ per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
 the resolver picks the request host's tenant's OAuth server; the session is that tenant's too.
 The same-origin guard is not in this module: it is the HTTP-layer plugin below, so a consent operation refused there still sees `NOT_FOUND`.
 `approveOAuthRequest` is fresh-only (5 min, `STEP_UP_REQUIRED`). Step-up (M2): `beforeApprove` runs
-`assessment` (`authentication.ts`, over the pure `src/oauth/authentication-level.ts`) for the code and device flows and
+`assessment` (`consent.authentication.ts`, over the pure `src/oauth/authentication-level.ts`) for the code and device flows and
 refuses with `UNMET_AUTHENTICATION_REQUIREMENTS` (403, extension `missing`); `approveOptions` passes `amr`, `acr` and
 `authTime`. A request nothing can meet (`missing` empty: an `acr` Clavix does not issue) is not left pending: `approveOAuthRequest`
-is wrapped (`approveOrDenyUnmet`, `consent/index.ts`; `consent/unmet.ts`) and denies it with `unmet_authentication_requirements`
+is wrapped (`ConsentService.approveOrDenyUnmet`; `consent/consent.unmet.ts`) and denies it with `unmet_authentication_requirements`
 (janus-oauth 0.24), answering `{ redirectTo }` with `error`, `state` and `iss`; a gap the user can close (`SECOND_FACTOR`,
 `FRESH_PROOF`, `ENROLMENT`) stays the 403 and the request stays pending for the step-up. The access-token `claims` hook
 (`oauth/building.ts`) puts the grant's `acr`, `amr` and `auth_time` in the JWT, the ID token's values (janus 0.76).
 A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176), not `otp`: janus stores it on the session itself (@softistx/janus 0.77), and `mfa.spec.ts` asserts it. A passkey step-up needs no
-authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`scope-labels.ts`: the
+authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language` French else English, then the other
 language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
 resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
@@ -387,11 +387,11 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   delete and un-verify of a `clavix` user (`OwnerChange`; `touch` checks the caller only, no count), tenant ownerships and the last live platform owner, under
   `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
   ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` or un-verify is never `LAST_OWNER`.
-  Invitations are **not** the console's own: `src/modules/invitations/tenant-invitations.ts`
-  (`createTenantInvitations`, wired per tenant by `invitationsOf` in `src/config/invitations.ts`) issues,
+  Invitations are **not** the console's own: `InvitationsService` (`src/modules/invitations/invitations.service.ts`;
+  `bind(source)` gives the per-tenant `TenantInvitations`, wired by `invitationsOf` in `src/config/invitations.ts`) issues,
   mails, lists and revokes the invitations of any tenant's user pool, and a users slice reuses it
   (never copy it). An admin invitation is one of the `clavix` tenant under the scope
-  `adminScope(tenantId)` (`src/modules/invitations/scope.ts`, `admin:<id>`); **only that scope grants a console
+  `adminScope(tenantId)` (`src/modules/invitations/invitations.rules.ts`, `admin:<id>`); **only that scope grants a console
   role**, so an invitation into a pool (the `clavix` pool included) uses any other scope. Accepting is
   the hosted `/graphql` (`src/modules/invitations`, `invitationPreview`, `acceptInvitation`, every
   refusal `INVITATION_INVALID`); what acceptance checks and grants are janus's `beforeAccept` /
@@ -403,7 +403,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   from janus's `updatedAt`, so it holds across processes with no Redis; the check and the write run under
   `ctx.exclusive` per invitation. Refusals are `ResendRefusedError` (`NOT_FOUND`, `INVITATION_NOT_PENDING`,
   `RESEND_TOO_SOON` with `retryAfter`). A users-pool invitation has no resend yet.
-  `invite` is guarded by `guardInvite` (`src/modules/invitations/invite-guards.ts`, from the stored pending list, so no Redis and
+  `invite` is guarded by `InvitationsService.guardInvite` (`src/modules/invitations/invitations.service.ts`, rules in `invitations.rules.ts`, from the stored pending list, so no Redis and
   it holds when Redis is down): re-inviting an address inside the cooldown is `INVITE_TOO_SOON` (`retryAfter`), a new
   address past `CLAVIX_INVITE_PENDING_LIMIT` (500 per scope) is `PENDING_INVITATIONS_LIMIT`; both are `ResendRefusedError`s
   that `refusing` maps (429 / 409). Not atomic. The Redis budgets (`CLAVIX_INVITE_*`) stay fail-open, as the audit export.
@@ -530,8 +530,8 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 ## Branding (`src/modules/branding`, `src/console/modules/branding`)
 
 A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`), reached only through
-`BrandingService` (`config/branding.ts`), which scopes every read and write with `scopeToTenant`.
-- **The theme is compiled on write, served as stored** (`theme.ts`): `validateThemeInput`, then
+`BrandingService` (`branding.service.ts`, built in `config/branding.ts`), which scopes every read and write with `scopeToTenant`.
+- **The theme is compiled on write, served as stored** (`branding.theme.ts`): `validateThemeInput`, then
   `defineTheme` and `themeToCss({ scope: "attribute" })` of `@softistx/material-core`, measured by
   `checkThemeContrast` in light and dark. A failing pair is `BRANDING_CONTRAST` and nothing is stored.
   Never write a stylesheet by hand, and never store CSS that did not pass `buildTheme`.
@@ -641,6 +641,18 @@ comparison is `domains.check.ts`.
   of the barrel), `auth.plugin` (`http/schema.ts`), the three `.errors` files (`i18n/codes.ts`), and
   `@/modules/mfa/mfa.challenge` from `auth.service.ts` (a leaf that avoids an auth to mfa runtime cycle) and `@/modules/auth/auth.events` from `mfa.events.ts` (`reasonOf`, `sourceOf`: a pure leaf, so mfa never loads the auth barrel). Behaviour,
   throttles, error codes, timing and cookies are unchanged.
+- Layout (A11): `consent`, `invitations` and `branding` are flat `<name>.<role>.ts` modules, one service per domain
+  (owner, 2026-11-20): `ConsentService` (the `/consent` and device hooks, the step-up refusal, the labels, the revocation
+  of replaced grants and its worker), `InvitationsService` (preview, accept, and `bind(source)` for a tenant's pool) and
+  `BrandingService` (read, `view`, `update`), each built in `src/config/<name>.ts`, registered in `services()` and called
+  by a thin `<name>.resolver.ts` (consent's builds janus-oauth's `oauthResolvers`). Each has `.errors.ts` (codes and
+  refusal builders), `.types.ts`, `.utils.ts` (invitations and consent), `.rules.ts` (invitations) and specs beside
+  every file that holds code. The barrels (`index.ts`) leave out the resolvers (`modules/index.ts` and `http/schema.ts`
+  import them by file). Deep imports, each for a leaf: `invitations.rules` and `invitations.types` (console modules),
+  `consent.device-throttle`, `consent.queue`, `consent.plugin` and the leaf readers `consent.agent-marker`,
+  `consent.detail-labels`, `consent.scope-labels` (`config/*.ts`, `app.ts`), `branding.logo-route` (`app.ts`, the
+  console: `logoUrl` and `LOGO_PATH` stay a leaf whose route takes a structural service), and each `.errors` file
+  (`i18n/codes.ts`). Behaviour, throttles, error codes and mail timing are unchanged.
 - `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
   tenants (partial unique index on `{ host }` where `status: "verified"`), which the
   tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still

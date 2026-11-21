@@ -6,7 +6,10 @@ import { env } from "@/config/env";
 import { sharedLockOf } from "@/config/exclusive";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
-import { adminScope, operatorScope } from "@/modules/invitations/scope";
+import {
+  adminScope,
+  operatorScope,
+} from "@/modules/invitations/invitations.rules";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { buildTenantJanus } from "@/modules/users/tenant-janus";
 import { createExclusive } from "../../exclusive";

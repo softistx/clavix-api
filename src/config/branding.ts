@@ -1,5 +1,5 @@
+import { logoRoute } from "@/modules/branding/branding.logo-route";
 import { BrandingService } from "@/modules/branding/branding.service";
-import { logoRoute } from "@/modules/branding/logo-route";
 import { mongo } from "./db";
 import { tenantResolver } from "./tenancy";
 

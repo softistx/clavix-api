@@ -7,22 +7,22 @@ import {
   type ThemeWarning,
   themeToCss,
 } from "@softistx/material-core/theme";
-import { assertSafeCss } from "./safe-css";
+import { assertSafeCss } from "./branding.safe-css";
 import {
   BrandingInputError,
   type ThemeInput,
   type ValidThemeInput,
   validateThemeInput,
-} from "./theme-input";
+} from "./branding.theme-input";
 
-export { assertSafeCss } from "./safe-css";
+export { assertSafeCss } from "./branding.safe-css";
 export {
   BrandingInputError,
   DEFAULT_RADIUS,
   type ThemeInput,
   type ValidThemeInput,
   validateThemeInput,
-} from "./theme-input";
+} from "./branding.theme-input";
 
 /** The theme's name: the value of `data-nxgt-theme` the hosted pages and the console preview set. */
 export const THEME_NAME = "tenant";

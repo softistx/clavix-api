@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { BrandingInputError } from "./theme";
+import { BrandingInputError } from "./branding.theme";
 
 /** The largest logo stored (bytes). */
 export const LOGO_MAX_BYTES = 256 * 1024;
