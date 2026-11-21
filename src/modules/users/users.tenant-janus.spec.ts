@@ -13,7 +13,10 @@ describe("buildTenantJanus", () => {
 
 describe("socialOf", () => {
   test("the instance when it has a social API, else null", () => {
-    const withSocial = { ...acmeJanus(), social: {} };
+    const withSocial = {
+      ...acmeJanus(),
+      social: { countLinks: async () => 0 },
+    };
     const without = { ...acmeJanus() };
     Reflect.deleteProperty(without, "social");
     expect(Object.is(socialOf(withSocial), withSocial)).toBe(true);
