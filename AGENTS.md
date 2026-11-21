@@ -639,7 +639,7 @@ comparison is `domains.check.ts`.
   each for a leaf: `auth.plugin`, `auth.verification-throttle` (`app.ts`), `auth.throttle`,
   `auth.verification-throttle` and `passkeys.throttle` (`config/redis.ts`, `config/throttle.ts`: Redis wiring kept out
   of the barrel), `auth.plugin` (`http/schema.ts`), the three `.errors` files (`i18n/codes.ts`), and
-  `@/modules/mfa/mfa.challenge` from `auth.service.ts` (a leaf that avoids an auth to mfa runtime cycle). Behaviour,
+  `@/modules/mfa/mfa.challenge` from `auth.service.ts` (a leaf that avoids an auth to mfa runtime cycle) and `@/modules/auth/auth.events` from `mfa.events.ts` (`reasonOf`, `sourceOf`: a pure leaf, so mfa never loads the auth barrel). Behaviour,
   throttles, error codes, timing and cookies are unchanged.
 - `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
   tenants (partial unique index on `{ host }` where `status: "verified"`), which the
