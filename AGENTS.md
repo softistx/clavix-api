@@ -27,6 +27,9 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 
 - The conventions are those of the `alxia-graphql-api` plugin (enabled in
   `.claude/settings.json`); healthix-api is the worked example this skeleton was cut from.
+  Known drift, being removed ([#401](https://github.com/softistx/clavix-api/issues/401)): no committed `schema.graphql`, modules not yet in
+  `<name>.<role>.ts` form, a parallel console tree, UPPER_SNAKE codes without `fail()`; the
+  worked example is schoolz-api.
 - Layout: `src/modules/<name>/` holds a module's `*.graphqls`, resolvers and services,
   merged by `src/modules/index.ts`; `src/http/` holds the context and the schema;
   `src/config/` reads the environment once (`defineEnv`); the hosted `/graphql` serves its IDE (Apollo Sandbox) and allows
