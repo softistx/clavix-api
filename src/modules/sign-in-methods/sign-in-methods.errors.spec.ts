@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphQLError } from "graphql";
-import {
-  badInput,
-  codes,
-  methodDisabled,
-  refusal,
-} from "./sign-in-methods.errors";
+import { codes, methodDisabled, refusal } from "./sign-in-methods.errors";
 
 const detail = (error: GraphQLError) => ({
   code: error.extensions["code"],
@@ -30,14 +25,6 @@ describe("sign-in-methods errors", () => {
       code: "CONFLICT",
       status: 409,
       message: "again",
-    });
-  });
-
-  test("bad input is BAD_USER_INPUT, 400", () => {
-    expect(detail(badInput("nope"))).toEqual({
-      code: "BAD_USER_INPUT",
-      status: 400,
-      message: "nope",
     });
   });
 

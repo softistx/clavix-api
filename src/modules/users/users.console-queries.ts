@@ -1,10 +1,9 @@
 import { JanusError } from "@softistx/janus";
-import { liveTenant, tenantIdOf } from "@/console/modules/ids";
+import { liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { badInput } from "./users.errors";
+import { badInput } from "@/shared/errors";
 import { grantShape, shape } from "./users.utils";
 
-const MAX_PAGE = 100;
 const MAX_PREFIX = 254;
 const MAX_LOOKUP = 20;
 
@@ -35,7 +34,7 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
     try {
       const page = await ctx.users.list(tenantId, {
         after: after ?? null,
-        limit: Math.min(Math.max(first ?? 25, 1), MAX_PAGE),
+        limit: pageSize(first),
         ...filter,
       });
       return {

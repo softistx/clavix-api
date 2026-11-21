@@ -1,3 +1,4 @@
+import { unique } from "@/shared/values";
 import { WebhookError } from "./webhooks.errors";
 import { isWebhookEventType } from "./webhooks.events";
 import type { EndpointSecret } from "./webhooks.model";
@@ -18,8 +19,8 @@ export const DESCRIPTION_MAX = 200;
 
 /** The event types, once each; an unknown one is `BAD_USER_INPUT` on `types`. */
 export function typesOf(types: readonly string[] | undefined): string[] {
-  const unique = [...new Set(types ?? [])];
-  const unknown = unique.find((type) => !isWebhookEventType(type));
+  const distinct = unique(types ?? []);
+  const unknown = distinct.find((type) => !isWebhookEventType(type));
   if (unknown !== undefined) {
     throw new WebhookError(
       "BAD_USER_INPUT",
@@ -27,7 +28,7 @@ export function typesOf(types: readonly string[] | undefined): string[] {
       "types",
     );
   }
-  return unique;
+  return distinct;
 }
 
 /** The description trimmed; `undefined` stays; too long is `BAD_USER_INPUT`. */

@@ -6,6 +6,7 @@ import {
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { CliInputError } from "@/shared/cli";
+import { unique } from "@/shared/values";
 import { clientIdOf, OFFERED_GRANTS, usesRedirect } from "./clients.rules";
 import type { OfferedGrant, RegisterClientInput } from "./clients.types";
 
@@ -17,7 +18,7 @@ function scopeList(
   scopes: readonly string[] | undefined,
 ): string[] | undefined {
   if (scopes === undefined) return undefined;
-  const clean = [...new Set(scopes.map((scope) => scope.trim()))];
+  const clean = unique(scopes.map((scope) => scope.trim()));
   for (const scope of clean) {
     if (scope === "" || /\s/.test(scope)) {
       throw new CliInputError(
@@ -68,7 +69,7 @@ export function validate(input: RegisterClientInput) {
       `client id "${clientId}" must be 1-64 characters of a-z, 0-9 and "-", not starting or ending with "-"`,
     );
   }
-  const redirectUris = [...new Set(input.redirectUris)];
+  const redirectUris = unique(input.redirectUris);
   for (const uri of redirectUris) {
     const problem = redirectUriProblem(uri);
     if (problem !== null) {

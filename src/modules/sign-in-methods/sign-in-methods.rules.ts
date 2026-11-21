@@ -1,4 +1,5 @@
-import { badInput, refusal } from "./sign-in-methods.errors";
+import { badInput } from "@/shared/errors";
+import { refusal } from "./sign-in-methods.errors";
 import {
   hasSignInMethod,
   isAvailable,

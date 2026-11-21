@@ -1,19 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { InvalidCursorError } from "@softistx/mongo";
-import {
-  actorOf,
-  guarded,
-  limitOf,
-  resolveEach,
-} from "./audit.console-support";
+import { actorOf, guarded, resolveEach } from "./audit.console-support";
 
 describe("audit console support", () => {
-  it("clamps the page size between 1 and 100, 25 by default", () => {
-    expect(limitOf(undefined)).toBe(25);
-    expect(limitOf(0)).toBe(1);
-    expect(limitOf(500)).toBe(100);
-  });
-
   it("looks each distinct id up once", async () => {
     const seen: string[] = [];
     const found = await resolveEach(["a", "b", "a"], async (id) => {

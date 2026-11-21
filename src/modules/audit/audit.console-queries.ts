@@ -1,12 +1,11 @@
-import { liveTenant, tenantIdOf } from "@/console/modules/ids";
+import { liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { badInput } from "@/modules/users";
+import { badInput } from "@/shared/errors";
 import {
   adminEventOf,
   adminPage,
   authEventOf,
   guarded,
-  limitOf,
   resolveEach,
 } from "./audit.console-support";
 import { isAuthEventType } from "./audit.model";
@@ -69,7 +68,7 @@ export const auditQueries: NonNullable<Resolvers["Query"]> = {
           clientId: filter?.clientId,
           outcome: filter?.outcome,
         },
-        { after: after ?? null, limit: limitOf(first) },
+        { after: after ?? null, limit: pageSize(first) },
       ),
     );
     const people = await resolveEach(

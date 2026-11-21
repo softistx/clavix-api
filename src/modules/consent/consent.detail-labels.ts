@@ -1,4 +1,5 @@
 import type { FieldKind } from "@/modules/resources";
+import { isRecord } from "@/shared/values";
 import type { ConsentLocale } from "./consent.scope-labels";
 
 type Text = { fr: string; en: string };
@@ -72,9 +73,6 @@ function pick(text: Text | undefined, locale: ConsentLocale, fallback = "") {
       ? text[other]
       : fallback;
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function scalar(value: unknown, locale: ConsentLocale): string {
   if (typeof value === "boolean") return YES_NO[locale][value ? 0 : 1];

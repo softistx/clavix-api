@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { ConsoleContext } from "@/console/context";
 import { liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
-import { fail } from "@/shared/errors";
+import { badInput } from "@/shared/errors";
 import { userLoader } from "../users/users.data-loader";
 import { shape as userShape } from "../users/users.utils";
 import type { RoleDoc } from "./roles.types";
@@ -45,7 +45,7 @@ export async function memberPage(
     });
   } catch (error) {
     if (error instanceof InvalidCursorError) {
-      throw fail("BAD_USER_INPUT", "The cursor is not valid", { status: 400 });
+      throw badInput("The cursor is not valid");
     }
     throw error;
   }

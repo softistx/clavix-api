@@ -6,7 +6,7 @@ import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { refusing } from "@/modules/admins/admins.errors";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { fail } from "@/shared/errors";
+import { badInput, fail } from "@/shared/errors";
 import { setActive } from "./users.console-support";
 import { keepOwners } from "./users.owners";
 import { shape, target } from "./users.utils";
@@ -57,9 +57,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     idArg(userId, "userId");
     const name = input.name.trim();
     if (name === "" || [...name].length > MAX_NAME) {
-      throw fail("BAD_USER_INPUT", "The name must be 1 to 200 characters", {
-        status: 400,
-      });
+      throw badInput("The name must be 1 to 200 characters");
     }
     await liveTenant(ctx.directory, tenantId);
     const user = await ctx.users.rename(tenantId, userId, name);

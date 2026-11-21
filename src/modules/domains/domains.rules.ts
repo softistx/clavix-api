@@ -1,4 +1,5 @@
 import { domainToASCII } from "node:url";
+import { unique } from "@/shared/values";
 import type { DomainDoc } from "./domains.model";
 
 /** Why a claim did not verify: no record, another value, or DNS could not answer. */
@@ -91,7 +92,7 @@ export function hostsToForget(
   hosts: string[],
   slugHost: string | undefined,
 ): string[] {
-  return [...new Set([...hosts, ...(slugHost ? [slugHost] : [])])];
+  return unique([...hosts, ...(slugHost ? [slugHost] : [])]);
 }
 
 /** The hosts that resolve to a tenant: its verified ones and its primary, even lapsed. */

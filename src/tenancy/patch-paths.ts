@@ -1,5 +1,5 @@
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+import { isRecord } from "@/shared/values";
+
 const head = (path: string) => path.split(".")[0];
 
 /**

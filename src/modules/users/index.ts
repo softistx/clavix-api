@@ -6,7 +6,7 @@
 // invitations types, which import this barrel). `config/users.ts` builds the
 // process-wide instances.
 
-export { badInput, gone } from "./users.errors";
+export { gone } from "./users.errors";
 export {
   createTenantJanusIssuers,
   type TenantJanusOptions,
