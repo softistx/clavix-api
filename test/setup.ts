@@ -3,7 +3,7 @@ import { MongoMemoryReplSet } from "mongodb-memory-server-core";
 
 // Preloaded by `bun test` (bunfig.toml), before any spec imports src/: one
 // in-memory MongoDB, a one-node replica set so that transactions work, for the
-// whole run. src/config/env.ts then reads its URI as MONGO_URI.
+// whole run. src/config/env/index.ts then reads its URI as MONGO_URI.
 const replSet = await MongoMemoryReplSet.create({
   replSet: { count: 1, storageEngine: "wiredTiger" },
   // mongod sizes its cache at half the RAM and, on a loaded laptop, can take

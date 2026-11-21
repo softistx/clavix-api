@@ -17,3 +17,14 @@ export class WebhookError extends Error {
     super(message);
   }
 }
+
+/** Why an endpoint URL is refused: a code for the console, a message for a person. */
+export class WebhookUrlError extends Error {
+  override name = "WebhookUrlError";
+  constructor(
+    readonly code: "invalid" | "notHttps" | "credentials" | "notPublic",
+    message: string,
+  ) {
+    super(message);
+  }
+}

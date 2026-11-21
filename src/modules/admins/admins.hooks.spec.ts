@@ -8,7 +8,7 @@ const TENANT = "6553f1c2a1b2c3d4e5f60718";
 const lockOf = (id: string) => `console:user:platform:${id}`;
 
 function setup(known: Record<string, boolean>) {
-  const exclusive = createExclusive();
+  const exclusive = createExclusive(null);
   const granted: [string, string, string][] = [];
   const platform: [string, string][] = [];
   const hooks = adminInvitationHooks({

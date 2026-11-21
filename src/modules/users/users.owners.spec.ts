@@ -28,7 +28,7 @@ function fake(setup: Setup = {}) {
   const platform = setup.platform ?? [];
   let reads = 0;
   const ctx = withMembers({
-    exclusive: createExclusive(),
+    exclusive: createExclusive(null),
     canPlatform: async () => setup.manage ?? true,
     directory: {
       emailVerified: async (id: string) =>

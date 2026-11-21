@@ -179,15 +179,17 @@ describe("update, secret, domains and delete", () => {
       domain: "Acme.TEST",
     });
     const domain = (
-      (added.data ?? {})["addConnectionDomain"] as unknown as {
-        domains: {
-          domain: string;
-          txtName: string;
-          txtToken: string;
-          verified: boolean;
-        }[];
-      }
-    ).domains[0];
+      added.data?.["addConnectionDomain"] as unknown as
+        | {
+            domains: {
+              domain: string;
+              txtName: string;
+              txtToken: string;
+              verified: boolean;
+            }[];
+          }
+        | undefined
+    )?.domains[0];
     expect(domain).toMatchObject({
       domain: "acme.test",
       txtName: "_clavix-sso.acme.test",
@@ -210,10 +212,12 @@ describe("update, secret, domains and delete", () => {
     });
     expect(
       (
-        (removed.data ?? {})["removeConnectionDomain"] as unknown as {
-          domains: unknown[];
-        }
-      ).domains,
+        removed.data?.["removeConnectionDomain"] as unknown as
+          | {
+              domains: unknown[];
+            }
+          | undefined
+      )?.domains,
     ).toEqual([]);
     expect(
       (await admin(DELETE, { tenantId: tenantA, id: "acme" })).data,

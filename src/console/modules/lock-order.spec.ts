@@ -26,7 +26,7 @@ const rank = (key: string) =>
 
 /** An `Exclusive` that records each key taken, with the keys already held. */
 function recording() {
-  const inner = createExclusive();
+  const inner = createExclusive(null);
   const held: string[] = [];
   const taken: { key: string; under: string[] }[] = [];
   const exclusive = <T>(key: string, work: () => Promise<T>) =>

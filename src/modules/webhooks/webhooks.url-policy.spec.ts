@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { WebhookUrlError } from "./webhooks.errors";
 import {
   checkWebhookUrl,
   guardedFetch,
   parseWebhookUrl,
   type UrlPolicy,
-  WebhookUrlError,
 } from "./webhooks.url-policy";
 
 const answers = new Map<string, string[]>();

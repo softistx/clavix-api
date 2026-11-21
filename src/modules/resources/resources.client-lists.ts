@@ -2,6 +2,7 @@ import type { Collection, Db, ObjectId } from "mongodb";
 
 // The part of a janus client record this port reads and writes.
 interface ClientLists {
+  _id: string;
   partition: string;
   authorizationDetailsTypes?: string[];
 }
@@ -37,9 +38,7 @@ export function mongoDetailTypeClients(db: Db): DetailTypeClients {
           { projection: { _id: 1 } },
         )
         .toArray();
-      return found.map((client) =>
-        String((client as unknown as { _id: string })._id),
-      );
+      return found.map((client) => client._id);
     },
     async drop(tenantId, types) {
       if (types.length === 0) return 0;

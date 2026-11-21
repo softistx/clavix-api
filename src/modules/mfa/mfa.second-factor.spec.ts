@@ -21,6 +21,7 @@ import {
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE, secondFactorKeysOf } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 
 const memory = mailer as MemoryMailer;
@@ -55,7 +56,7 @@ const tenantOf = async (slug: string) => {
 
 interface Answer {
   status: number;
-  data: Record<string, any> | null;
+  data: Record<string, unknown> | null;
   errors?: { message: string; extensions?: Record<string, unknown> }[];
   cookies: string[];
 }
@@ -123,7 +124,7 @@ async function signInByCode(slug: string, email: string) {
   const before = memory.sent.length;
   const asked = await gql(slug, REQUEST, { email });
   await settled();
-  const challenge = asked.data?.["requestSignInCode"].challenge as string;
+  const challenge = at<string>(asked.data, "requestSignInCode.challenge");
   const mail = memory.sent
     .slice(before)
     .filter((m) => JSON.stringify(m.to).includes(email))
@@ -143,10 +144,10 @@ async function amrOf(slug: string, cookie: string) {
 /** A signed-in user (session cookie) of the tenant. */
 async function sessionOf(slug: string, email: string) {
   const answer = await signInByCode(slug, email);
-  expect(answer.data?.["verifySignInCode"].__typename).toBe("SignedIn");
+  expect(at(answer.data, "verifySignInCode.__typename")).toBe("SignedIn");
   return {
     cookie: cookieOf(answer),
-    id: answer.data?.["verifySignInCode"].user.id as string,
+    id: at<string>(answer.data, "verifySignInCode.user.id"),
   };
 }
 
@@ -159,7 +160,7 @@ async function offerTotp(slug: string, totp = true) {
 /** Enrols and activates TOTP for a signed-in user; the secret and the recovery codes. */
 async function turnOn(slug: string, cookie: string) {
   const enrolled = await gql(slug, ENROLL, {}, cookie);
-  const secret = enrolled.data?.["enrollSecondFactor"].secret as string;
+  const secret = at<string>(enrolled.data, "enrollSecondFactor.secret");
   const activated = await gql(
     slug,
     ACTIVATE,
@@ -168,8 +169,10 @@ async function turnOn(slug: string, cookie: string) {
   );
   return {
     secret,
-    recoveryCodes: activated.data?.["activateSecondFactor"]
-      .recoveryCodes as string[],
+    recoveryCodes: at<string[]>(
+      activated.data,
+      "activateSecondFactor.recoveryCodes",
+    ),
     enrolled,
     activated,
   };
@@ -205,7 +208,7 @@ describe("the tenant's policy", () => {
     expect(codeOf(refused)).toBe("SECOND_FACTOR_DISABLED");
     expect(refused.status).toBe(403);
     expect(
-      (await gql(SLUGS.a, STATUS, {}, cookie)).data?.["secondFactor"],
+      at((await gql(SLUGS.a, STATUS, {}, cookie)).data, "secondFactor"),
     ).toEqual({ enabled: false, recoveryCodesLeft: null });
   });
 
@@ -227,17 +230,21 @@ describe("enrol, activate, sign in with the challenge", () => {
     await offerTotp(SLUGS.a);
     const { cookie } = await sessionOf(SLUGS.a, ADA);
     const on = await turnOn(SLUGS.a, cookie);
-    expect(on.enrolled.data?.["enrollSecondFactor"].uri).toStartWith(
+    expect(at(on.enrolled.data, "enrollSecondFactor.uri")).toStartWith(
       "otpauth://totp/",
     );
     expect(on.recoveryCodes).toHaveLength(10);
     expect(
-      (await gql(SLUGS.a, STATUS, {}, cookie)).data?.["secondFactor"],
+      at((await gql(SLUGS.a, STATUS, {}, cookie)).data, "secondFactor"),
     ).toEqual({ enabled: true, recoveryCodesLeft: 10 });
 
     // Next sign-in: a challenge, no session.
     const stopped = await signInByCode(SLUGS.a, ADA);
-    const challenge = stopped.data?.["verifySignInCode"];
+    const challenge = at<{
+      __typename: string;
+      methods: string[];
+      challenge: string;
+    }>(stopped.data, "verifySignInCode");
     expect(challenge.__typename).toBe("SecondFactorChallenge");
     expect(challenge.methods).toContain("totp");
     expect(cookieOf(stopped)).toBe("");
@@ -253,11 +260,11 @@ describe("enrol, activate, sign in with the challenge", () => {
       code: totpCode(on.secret, new Date(Date.now() + 30_000)),
     });
     expect(confirmed.errors).toBeUndefined();
-    expect(confirmed.data?.["confirmSecondFactor"].user.email).toBe(ADA);
+    expect(at(confirmed.data, "confirmSecondFactor.user.email")).toBe(ADA);
     const session = cookieOf(confirmed);
     expect(session).not.toBe("");
     expect(
-      (await gql(SLUGS.a, ME, {}, session)).data?.["currentUser"].email,
+      at((await gql(SLUGS.a, ME, {}, session)).data, "currentUser.email"),
     ).toBe(ADA);
     // RFC 8176: an authenticator code is `otp`, with `mfa` (nxgt-janus#950).
     const proved = await amrOf(SLUGS.a, session);
@@ -269,13 +276,13 @@ describe("enrol, activate, sign in with the challenge", () => {
     const { cookie } = await sessionOf(SLUGS.a, "rec@example.test");
     const on = await turnOn(SLUGS.a, cookie);
     const stopped = await signInByCode(SLUGS.a, "rec@example.test");
-    const challenge = stopped.data?.["verifySignInCode"].challenge as string;
+    const challenge = at<string>(stopped.data, "verifySignInCode.challenge");
     const code = on.recoveryCodes[0] as string;
     const recovered = await gql(SLUGS.a, RECOVER, {
       challenge,
       recoveryCode: code,
     });
-    expect(recovered.data?.["recoverSecondFactor"].recoveryCodesLeft).toBe(9);
+    expect(at(recovered.data, "recoverSecondFactor.recoveryCodesLeft")).toBe(9);
     expect(cookieOf(recovered)).not.toBe("");
     // RFC 8176: a recovery code is `rec` with `mfa` (janus 0.77): the session
     // says which second factor opened it. `otp` stays: it is the first factor
@@ -285,7 +292,7 @@ describe("enrol, activate, sign in with the challenge", () => {
     expect(proved).toContain("mfa");
 
     const again = await signInByCode(SLUGS.a, "rec@example.test");
-    const next = again.data?.["verifySignInCode"].challenge as string;
+    const next = at<string>(again.data, "verifySignInCode.challenge");
     expect(
       codeOf(
         await gql(SLUGS.a, RECOVER, { challenge: next, recoveryCode: code }),
@@ -299,7 +306,7 @@ describe("enrol, activate, sign in with the challenge", () => {
     await turnOn(SLUGS.a, cookie);
     await offerTotp(SLUGS.a, false);
     const stopped = await signInByCode(SLUGS.a, "keep@example.test");
-    expect(stopped.data?.["verifySignInCode"].__typename).toBe(
+    expect(at(stopped.data, "verifySignInCode.__typename")).toBe(
       "SecondFactorChallenge",
     );
     const { cookie: other } = await sessionOf(SLUGS.a, "late@example.test");
@@ -340,7 +347,7 @@ describe("reset by an admin", () => {
       recoveryCodesLeft: null,
     });
     const answer = await signInByCode(SLUGS.a, "lost@example.test");
-    expect(answer.data?.["verifySignInCode"].__typename).toBe("SignedIn");
+    expect(at(answer.data, "verifySignInCode.__typename")).toBe("SignedIn");
     expect(await users.resetSecondFactor(tenant.tenantId, "nobody")).toBeNull();
   });
 });
@@ -418,7 +425,7 @@ describe("tenants are isolated", () => {
 
     // The same address on B is another user, with no factor.
     const b = await signInByCode(SLUGS.b, BOB);
-    expect(b.data?.["verifySignInCode"].__typename).toBe("SignedIn");
+    expect(at(b.data, "verifySignInCode.__typename")).toBe("SignedIn");
     // A's cookie says nothing on B.
     expect(codeOf(await gql(SLUGS.b, STATUS, {}, a.cookie))).toBe(
       "UNAUTHENTICATED",
@@ -428,7 +435,10 @@ describe("tenants are isolated", () => {
     const enrolB = await gql(SLUGS.b, ENROLL, {}, bSession);
     expect(codeOf(enrolB)).toBe("SECOND_FACTOR_DISABLED");
     expect(
-      (await gql(SLUGS.a, STATUS, {}, a.cookie)).data?.["secondFactor"].enabled,
+      at(
+        (await gql(SLUGS.a, STATUS, {}, a.cookie)).data,
+        "secondFactor.enabled",
+      ),
     ).toBe(true);
   });
 });

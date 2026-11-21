@@ -1,5 +1,6 @@
 import { redirectUriProblem } from "@softistx/janus-oauth";
 import { unique } from "@/shared/values";
+import { AgentsInputError } from "./oauth-policy.errors";
 import type { AgentsPolicy } from "./oauth-policy.schema";
 import type { AgentsPolicyInput } from "./oauth-policy.types";
 
@@ -11,11 +12,6 @@ export const MAX_REDIRECT_URI = 2000;
 // document is served from), at most 253 characters. No scheme, port or path.
 const HOST =
   /^(?=.{1,253}$)(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-
-/** A value of the input that is wrong; the message says which. */
-export class AgentsInputError extends Error {
-  override name = "AgentsInputError";
-}
 
 /**
  * The agents policy after `input`: the lists are checked and cleaned (a

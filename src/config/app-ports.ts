@@ -1,4 +1,5 @@
 import { agentsFor } from "./agent-clients";
+import { env } from "./env";
 import { detailTextsFor, scopeTextsFor } from "./resources";
 import {
   deviceThrottle,
@@ -15,6 +16,7 @@ import {
  * scope texts, detail type texts and agents (the stored ones).
  */
 export const appPorts = {
+  trustedProxies: env.CLAVIX_TRUSTED_PROXIES,
   signInThrottle,
   passkeyThrottle,
   homeRealmThrottle,

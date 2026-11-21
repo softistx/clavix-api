@@ -22,6 +22,7 @@ import { CONSOLE_PATH } from "@/console/identity";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 import { quietOAuth } from "~/ports";
@@ -78,8 +79,7 @@ const app = createTestApp({
 const memory = mailer as MemoryMailer;
 
 interface Answer {
-  // biome-ignore lint/suspicious/noExplicitAny: a spec reads the answer by path
-  data: Record<string, any> | null;
+  data: Record<string, unknown> | null;
   errors?: { message: string; extensions?: { code?: string } }[];
 }
 async function post(url: string, query: string, bearer?: string) {
@@ -257,30 +257,30 @@ describe("listing", () => {
       ownA,
       `{ users(tenantId: "${tenantA}", first: 1) { items { id email name emailVerified active } nextCursor } }`,
     );
-    expect(first.data?.["users"].items).toHaveLength(1);
-    expect(first.data?.["users"].items[0]).toMatchObject({
+    expect(at(first.data, "users.items")).toHaveLength(1);
+    expect(at<unknown[]>(first.data, "users.items")[0]).toMatchObject({
       id: uA1,
       email: "one@end.test",
       name: "One",
       active: true,
     });
-    const cursor = first.data?.["users"].nextCursor as string;
+    const cursor = at<string>(first.data, "users.nextCursor");
     const second = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", first: 1, after: "${cursor}") { items { id } nextCursor } }`,
     );
-    expect(second.data?.["users"].items[0].id).toBe(uA2);
-    expect(second.data?.["users"].nextCursor).toBeNull();
+    expect(at<{ id: string }[]>(second.data, "users.items")[0]?.id).toBe(uA2);
+    expect(at(second.data, "users.nextCursor")).toBeNull();
     const byEmail = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", email: " TWO@end.test ") { items { id } } }`,
     );
-    expect(byEmail.data?.["users"].items).toEqual([{ id: uA2 }]);
+    expect(at(byEmail.data, "users.items")).toEqual([{ id: uA2 }]);
     const missing = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", email: "none@end.test") { items { id } } }`,
     );
-    expect(missing.data?.["users"].items).toEqual([]);
+    expect(at(missing.data, "users.items")).toEqual([]);
     expect(
       code(
         await asConsole(
@@ -303,56 +303,65 @@ describe("search by e-mail prefix", () => {
       `{ users(tenantId: "${tenantA}", emailPrefix: "PREFIX.") { items { id email } nextCursor totalCount } }`,
     );
     expect(all.errors).toBeUndefined();
-    expect(all.data?.["users"].totalCount).toBe(2);
-    expect(all.data?.["users"].items).toHaveLength(2);
-    expect(all.data?.["users"].items[0].id).toBe(pre);
+    expect(at(all.data, "users.totalCount")).toBe(2);
+    expect(at(all.data, "users.items")).toHaveLength(2);
+    expect(at<{ id: string }[]>(all.data, "users.items")[0]?.id).toBe(pre);
     const paged = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", emailPrefix: "prefix.", first: 1) { items { id } nextCursor totalCount } }`,
     );
-    expect(paged.data?.["users"].items).toHaveLength(1);
-    expect(paged.data?.["users"].totalCount).toBe(2);
-    expect(paged.data?.["users"].nextCursor).not.toBeNull();
+    expect(at(paged.data, "users.items")).toHaveLength(1);
+    expect(at(paged.data, "users.totalCount")).toBe(2);
+    expect(at(paged.data, "users.nextCursor")).not.toBeNull();
     // No prefix: every user of the tenant, and the total says so.
     const whole = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}") { items { id } totalCount } }`,
     );
-    expect(whole.data?.["users"].totalCount).toBeGreaterThanOrEqual(5);
+    expect(at(whole.data, "users.totalCount")).toBeGreaterThanOrEqual(5);
     // A blank prefix is no filter; none found is an empty page.
     expect(
-      (
-        await asConsole(
-          ownA,
-          `{ users(tenantId: "${tenantA}", emailPrefix: "  ") { totalCount } }`,
-        )
-      ).data?.["users"].totalCount,
-    ).toBe(whole.data?.["users"].totalCount);
+      at(
+        (
+          await asConsole(
+            ownA,
+            `{ users(tenantId: "${tenantA}", emailPrefix: "  ") { totalCount } }`,
+          )
+        ).data,
+        "users.totalCount",
+      ),
+    ).toBe(at(whole.data, "users.totalCount"));
     expect(
-      (
-        await asConsole(
-          ownA,
-          `{ users(tenantId: "${tenantA}", emailPrefix: "zzz") { items { id } totalCount } }`,
-        )
-      ).data?.["users"],
+      at(
+        (
+          await asConsole(
+            ownA,
+            `{ users(tenantId: "${tenantA}", emailPrefix: "zzz") { items { id } totalCount } }`,
+          )
+        ).data,
+        "users",
+      ),
     ).toEqual({ items: [], totalCount: 0 });
     // The exact match still answers, with its total.
     const exact = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", email: "prefix.two@find.test") { items { email } totalCount } }`,
     );
-    expect(exact.data?.["users"]).toEqual({
+    expect(at(exact.data, "users")).toEqual({
       items: [{ email: "prefix.two@find.test" }],
       totalCount: 1,
     });
     // The other tenant's pool is not searched.
     expect(
-      (
-        await asConsole(
-          ownB,
-          `{ users(tenantId: "${tenantB}", emailPrefix: "prefix.") { totalCount } }`,
-        )
-      ).data?.["users"].totalCount,
+      at(
+        (
+          await asConsole(
+            ownB,
+            `{ users(tenantId: "${tenantB}", emailPrefix: "prefix.") { totalCount } }`,
+          )
+        ).data,
+        "users.totalCount",
+      ),
     ).toBe(0);
     expect(
       code(
@@ -397,7 +406,7 @@ describe("user lookup for the role member picker", () => {
     );
     expect(code(wide)).toBe("GRAPHQL_VALIDATION_FAILED");
     const ok = await lookupOf(admA, tenantA, "one@");
-    expect(ok.data?.["userLookup"]).toEqual([
+    expect(at(ok.data, "userLookup")).toEqual([
       { id: uA1, email: "one@end.test", name: "One" },
     ]);
   });
@@ -415,20 +424,20 @@ describe("user lookup for the role member picker", () => {
     ).id;
     const found = await lookupOf(admA, tenantA, "MARTA");
     expect(found.errors).toBeUndefined();
-    const rows = (found.data?.["userLookup"] ?? []) as { id: string }[];
+    const rows = (at(found.data, "userLookup") ?? []) as { id: string }[];
     const ids = rows.map((u) => u.id);
     expect(ids).toEqual([byMail, both, byName]);
     expect(
-      (await lookupOf(admA, tenantA, "zzz-none")).data?.["userLookup"],
+      at((await lookupOf(admA, tenantA, "zzz-none")).data, "userLookup"),
     ).toEqual([]);
     // A blank query is an empty list, not the whole pool.
-    expect((await lookupOf(admA, tenantA, "  ")).data?.["userLookup"]).toEqual(
-      [],
-    );
+    expect(
+      at((await lookupOf(admA, tenantA, "  ")).data, "userLookup"),
+    ).toEqual([]);
     // Plain text, never a pattern.
-    expect((await lookupOf(admA, tenantA, ".*")).data?.["userLookup"]).toEqual(
-      [],
-    );
+    expect(
+      at((await lookupOf(admA, tenantA, ".*")).data, "userLookup"),
+    ).toEqual([]);
   });
 
   test("caps the answer: first defaults to 10, at most 20", async () => {
@@ -440,7 +449,7 @@ describe("user lookup for the role member picker", () => {
     }
     const count = async (first: string) => {
       const answer = await lookupOf(admA, tenantA, "cap", first);
-      return ((answer.data?.["userLookup"] ?? []) as unknown[]).length;
+      return ((at(answer.data, "userLookup") ?? []) as unknown[]).length;
     };
     expect(await count("")).toBe(10);
     expect(await count(", first: 3")).toBe(3);
@@ -452,18 +461,18 @@ describe("user lookup for the role member picker", () => {
     const b = await poolOf(SLUG.b);
     await b.auth.create({ email: "only-b@look.test", name: "Bertha Only" });
     expect(
-      (await lookupOf(admA, tenantA, "only-b")).data?.["userLookup"],
+      at((await lookupOf(admA, tenantA, "only-b")).data, "userLookup"),
     ).toEqual([]);
     expect(
-      (await lookupOf(admA, tenantA, "Bertha")).data?.["userLookup"],
+      at((await lookupOf(admA, tenantA, "Bertha")).data, "userLookup"),
     ).toEqual([]);
     expect(
-      (await lookupOf(ownB, tenantB, "Bertha")).data?.["userLookup"],
+      at((await lookupOf(ownB, tenantB, "Bertha")).data, "userLookup"),
     ).toHaveLength(1);
     // The owner of B has no say on A.
     expect(code(await lookupOf(ownB, tenantA, "one"))).toBe("FORBIDDEN");
     expect(
-      (await lookupOf(ownB, tenantB, "marta")).data?.["userLookup"],
+      at((await lookupOf(ownB, tenantB, "marta")).data, "userLookup"),
     ).toEqual([]);
   });
 
@@ -488,7 +497,7 @@ describe("user sessions", () => {
       `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { id device createdAt lastUsedAt expiresAt authenticatedAt } }`,
     );
     expect(listed.errors).toBeUndefined();
-    const rows = listed.data?.["userSessions"] as {
+    const rows = at(listed.data, "userSessions") as {
       id: string;
       device: string | null;
       createdAt: string;
@@ -505,12 +514,15 @@ describe("user sessions", () => {
     }
     const target = rows[1]?.id as string;
     // Another user's session id, named under this user, revokes nothing.
-    const foreignRows = (
-      await asConsole(
-        ownA,
-        `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { id } }`,
-      )
-    ).data?.["userSessions"] as { id: string }[];
+    const foreignRows = at(
+      (
+        await asConsole(
+          ownA,
+          `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { id } }`,
+        )
+      ).data,
+      "userSessions",
+    ) as { id: string }[];
     const foreign = foreignRows[0]?.id as string;
     expect(
       (
@@ -541,14 +553,17 @@ describe("user sessions", () => {
       ownA,
       `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
     );
-    expect(after.data?.["userSessions"]).toHaveLength(2);
+    expect(at(after.data, "userSessions")).toHaveLength(2);
     expect(
-      (
-        await asConsole(
-          ownA,
-          `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { device } }`,
-        )
-      ).data?.["userSessions"],
+      at(
+        (
+          await asConsole(
+            ownA,
+            `{ userSessions(tenantId: "${tenantA}", userId: "${other}") { device } }`,
+          )
+        ).data,
+        "userSessions",
+      ),
     ).toEqual([{ device: "Not yours" }]);
     // An unknown user has none.
     expect(
@@ -575,12 +590,15 @@ describe("user sessions", () => {
         )
       ).data,
     ).toEqual({ userSessions: [] });
-    const ownRows = (
-      await asConsole(
-        ownB,
-        `{ userSessions(tenantId: "${tenantB}", userId: "${uB2}") { id device } }`,
-      )
-    ).data?.["userSessions"] as { id: string; device: string }[];
+    const ownRows = at(
+      (
+        await asConsole(
+          ownB,
+          `{ userSessions(tenantId: "${tenantB}", userId: "${uB2}") { id device } }`,
+        )
+      ).data,
+      "userSessions",
+    ) as { id: string; device: string }[];
     const own = ownRows.find((s) => s.device === "B device");
     expect(own).toBeDefined();
     expect(
@@ -592,12 +610,15 @@ describe("user sessions", () => {
       ).data,
     ).toEqual({ revokeUserSession: false });
     expect(
-      (
-        await asConsole(
-          ownB,
-          `{ userSessions(tenantId: "${tenantB}", userId: "${uB2}") { id } }`,
-        )
-      ).data?.["userSessions"].length,
+      at(
+        (
+          await asConsole(
+            ownB,
+            `{ userSessions(tenantId: "${tenantB}", userId: "${uB2}") { id } }`,
+          )
+        ).data,
+        "userSessions.length",
+      ),
     ).toBeGreaterThan(0);
   });
 });
@@ -613,16 +634,16 @@ describe("e-mail verified flag", () => {
         ownA,
         `mutation { setUserEmailVerified(tenantId: "${tenantA}", userId: "${user}", verified: ${verified}) { id emailVerified name active } }`,
       );
-    expect((await set(true)).data?.["setUserEmailVerified"]).toEqual({
+    expect(at((await set(true)).data, "setUserEmailVerified")).toEqual({
       id,
       emailVerified: true,
       name: "V",
       active: true,
     });
-    expect((await set(true)).data?.["setUserEmailVerified"].emailVerified).toBe(
-      true,
-    );
-    expect((await set(false)).data?.["setUserEmailVerified"]).toMatchObject({
+    expect(
+      at((await set(true)).data, "setUserEmailVerified.emailVerified"),
+    ).toBe(true);
+    expect(at((await set(false)).data, "setUserEmailVerified")).toMatchObject({
       emailVerified: false,
       name: "V",
     });
@@ -630,12 +651,15 @@ describe("e-mail verified flag", () => {
     expect(code(await set(true, uB1))).toBe("NOT_FOUND");
     // No session was revoked by it.
     expect(
-      (
-        await asConsole(
-          ownA,
-          `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
-        )
-      ).data?.["userSessions"],
+      at(
+        (
+          await asConsole(
+            ownA,
+            `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { device } }`,
+          )
+        ).data,
+        "userSessions",
+      ),
     ).toEqual([{ device: "kept" }]);
   });
 });
@@ -653,11 +677,11 @@ describe("second factor", () => {
     );
 
   test("a user with no factor reads disabled; reset is idempotent; an unknown user is NOT_FOUND", async () => {
-    expect((await read(uA1)).data?.["user"]).toEqual({
+    expect(at((await read(uA1)).data, "user")).toEqual({
       secondFactor: { enabled: false, recoveryCodesLeft: null },
     });
     expect(
-      (await reset(admA, tenantA, uA1)).data?.["resetUserSecondFactor"],
+      at((await reset(admA, tenantA, uA1)).data, "resetUserSecondFactor"),
     ).toEqual({
       id: uA1,
       secondFactor: { enabled: false },
@@ -700,8 +724,10 @@ describe("second factor of a page of users", () => {
       );
       expect(page.errors).toBeUndefined();
       const factor = (id: string) =>
-        page.data?.["users"].items.find((row: { id: string }) => row.id === id)
-          ?.secondFactor;
+        at<{ id: string; secondFactor: unknown }[]>(
+          page.data,
+          "users.items",
+        ).find((row) => row.id === id)?.secondFactor;
       expect(factor(on)).toEqual({ enabled: true, recoveryCodesLeft: 10 });
       expect(factor(off)).toEqual({ enabled: false, recoveryCodesLeft: null });
       expect(factor(also)).toEqual({ enabled: true, recoveryCodesLeft: 10 });
@@ -713,7 +739,7 @@ describe("second factor of a page of users", () => {
         ownA,
         `mutation { resetUserSecondFactor(tenantId: "${tenant}", userId: "${on}") { secondFactor { enabled recoveryCodesLeft } } }`,
       );
-      expect(reset.data?.["resetUserSecondFactor"].secondFactor).toEqual({
+      expect(at(reset.data, "resetUserSecondFactor.secondFactor")).toEqual({
         enabled: false,
         recoveryCodesLeft: null,
       });
@@ -746,11 +772,11 @@ describe("resetting an operator's second factor (clavix-api#290)", () => {
     expect(code(await reset(platformAdmin, ownA))).toBe("FORBIDDEN");
     expect(code(await reset(platformAdmin, platformOwner))).toBe("FORBIDDEN");
     expect(
-      (await reset(platformOwner, ownA)).data?.["resetUserSecondFactor"],
+      at((await reset(platformOwner, ownA)).data, "resetUserSecondFactor"),
     ).toEqual({ id: ownA });
     // An operator with no role and no tenant stays an admin's to reset.
     expect(
-      (await reset(platformAdmin, nobody)).data?.["resetUserSecondFactor"],
+      at((await reset(platformAdmin, nobody)).data, "resetUserSecondFactor"),
     ).toEqual({ id: nobody });
   });
 });
@@ -802,7 +828,7 @@ describe("tenant A / B isolation", () => {
       `mutation { sessions: revokeUserSessions(tenantId: "${tenantA}", userId: "${uB1}") grant: revokeGrant(tenantId: "${tenantA}", userId: "${uB1}", grantId: "grant-b1") deleted: deleteUser(tenantId: "${tenantA}", userId: "${uB1}") }`,
     );
     expect(attempts.data).toEqual({ sessions: 0, grant: false, deleted: true });
-    expect((await grantsOf(ownA, tenantA, uB1)).data?.["userGrants"]).toEqual(
+    expect(at((await grantsOf(ownA, tenantA, uB1)).data, "userGrants")).toEqual(
       [],
     );
     const b = await poolOf(SLUG.b);
@@ -811,7 +837,7 @@ describe("tenant A / B isolation", () => {
       (await (await storeOf(SLUG.b)).findGrant("grant-b1"))?.revokedAt,
     ).toBeNull();
     expect(
-      (await grantsOf(ownB, tenantB, uB1)).data?.["userGrants"],
+      at((await grantsOf(ownB, tenantB, uB1)).data, "userGrants"),
     ).toHaveLength(1);
     expect(
       await asConsole(
@@ -828,7 +854,7 @@ describe("tenant A / B isolation", () => {
       ownA,
       `mutation { inviteUser(tenantId: "${tenantA}", email: "iso@end.test") { id } }`,
     );
-    const id = issued.data?.["inviteUser"].id as string;
+    const id = at<string>(issued.data, "inviteUser.id");
     await asConsole(
       ownB,
       `mutation { revokeInvitation(tenantId: "${tenantB}", invitationId: "${id}") }`,
@@ -846,7 +872,7 @@ describe("tenant A / B isolation", () => {
       `{ userInvitations(tenantId: "${tenantA}") { id email } }`,
     );
     expect(
-      listed.data?.["userInvitations"].map((i: { id: string }) => i.id),
+      at<{ id: string }[]>(listed.data, "userInvitations").map((i) => i.id),
     ).toContain(id);
   });
 });
@@ -876,7 +902,7 @@ describe("invitations", () => {
         `mutation { acceptInvitation(code: "${secret}") { signedIn user { id } } }`,
       );
       expect(accepted.errors).toBeUndefined();
-      const id = accepted.data?.["acceptInvitation"].user.id as string;
+      const id = at<string>(accepted.data, "acceptInvitation.user.id");
       expect(spy.mock.calls).toEqual([[tenantA, id]]);
     } finally {
       spy.mockRestore();
@@ -897,7 +923,7 @@ describe("invitations", () => {
       `mutation { acceptInvitation(code: "${secret}") { signedIn user { email } } }`,
     );
     expect(accepted.errors).toBeUndefined();
-    expect(accepted.data?.["acceptInvitation"]).toMatchObject({
+    expect(at(accepted.data, "acceptInvitation")).toMatchObject({
       signedIn: true,
       user: { email },
     });
@@ -926,7 +952,7 @@ describe("invitations", () => {
         ownA,
         `mutation { inviteUser(tenantId: "${tenantA}", email: "${email}") { id } }`,
       );
-    const first = (await invite()).data?.["inviteUser"].id as string;
+    const first = at<string>((await invite()).data, "inviteUser.id");
     const oldCode = codeMailedTo(email);
     // Inside the cooldown a second invite is refused and mails nothing.
     const early = await invite();
@@ -938,7 +964,7 @@ describe("invitations", () => {
         { email },
         { $set: { updatedAt: new Date(Date.now() - 120_000) } },
       );
-    const second = (await invite()).data?.["inviteUser"].id as string;
+    const second = at<string>((await invite()).data, "inviteUser.id");
     expect(second).not.toBe(first);
     const newCode = codeMailedTo(email);
     expect(newCode).not.toBe(oldCode);
@@ -947,8 +973,8 @@ describe("invitations", () => {
       `{ userInvitations(tenantId: "${tenantA}") { id email } }`,
     );
     expect(
-      listed.data?.["userInvitations"].filter(
-        (i: { email: string }) => i.email === email,
+      at<{ email: string }[]>(listed.data, "userInvitations").filter(
+        (i) => i.email === email,
       ),
     ).toHaveLength(1);
     for (let i = 0; i < 2; i++) {
@@ -1024,7 +1050,7 @@ describe("disabling, sessions, grants and deletion", () => {
       `mutation { updateUser(tenantId: "${tenantA}", userId: "${uA2}", input: { name: "  Renamed  " }) { id name email emailVerified active } }`,
     );
     expect(done.errors).toBeUndefined();
-    expect(done.data?.["updateUser"]).toEqual({
+    expect(at(done.data, "updateUser")).toEqual({
       id: uA2,
       name: "Renamed",
       email: before?.email,
@@ -1082,7 +1108,7 @@ describe("disabling, sessions, grants and deletion", () => {
   test("userGrants lists the standing grants; revokeGrant takes one back, twice alike", async () => {
     await seedGrant(slugA, uA2, "grant-a2");
     const listed = await grantsOf(ownA, tenantA, uA2);
-    expect(listed.data?.["userGrants"]).toEqual([
+    expect(at(listed.data, "userGrants")).toEqual([
       {
         id: "grant-a2",
         clientId: "some-app",
@@ -1102,7 +1128,7 @@ describe("disabling, sessions, grants and deletion", () => {
     expect((await revoke("grant-a2")).data).toEqual({ revokeGrant: true });
     expect((await revoke("grant-a2")).data).toEqual({ revokeGrant: true });
     expect((await revoke("nope")).data).toEqual({ revokeGrant: false });
-    expect((await grantsOf(ownA, tenantA, uA2)).data?.["userGrants"]).toEqual(
+    expect(at((await grantsOf(ownA, tenantA, uA2)).data, "userGrants")).toEqual(
       [],
     );
   });

@@ -19,12 +19,14 @@ import type { Permission } from "@/console/model";
 import { consoleSchema } from "@/console/schema";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
-import { BrandingConflictError } from "./branding.errors";
+import {
+  BrandingConflictError,
+  BrandingContrastError,
+} from "./branding.errors";
 import { LOGO_MAX_BYTES } from "./branding.logo";
 import { BrandingService } from "./branding.service";
 import {
   assertSafeCss,
-  BrandingContrastError,
   buildTheme,
   type CompileTheme,
   compileTheme,
@@ -173,7 +175,9 @@ describe("the unsafe-CSS guard", () => {
   });
 
   test("accepts the generated stylesheet and a comment that only holds the other tokens", () => {
-    expect(() => assertSafeCss(buildTheme(base).compiled.css)).not.toThrow();
+    expect(() =>
+      assertSafeCss(buildTheme(base, compileTheme).compiled.css),
+    ).not.toThrow();
     expect(() => assertSafeCss("a{b:c} /* url( @import */")).not.toThrow();
   });
 
@@ -190,7 +194,7 @@ describe("the unsafe-CSS guard", () => {
 
 describe("the theme", () => {
   test("a seed compiles to attribute-scoped css that passes AA in light and dark", () => {
-    const { compiled } = buildTheme(base);
+    const { compiled } = buildTheme(base, compileTheme);
     expect(compiled.css).toContain(`[data-nxgt-theme="${THEME_NAME}"]`);
     const modes = new Set(compiled.results.map((r) => r.mode));
     expect(modes).toEqual(new Set(["light", "dark"]));
@@ -198,7 +202,7 @@ describe("the theme", () => {
   });
 
   test("a hard seed (yellow) is moved to AA, with a warning, not refused", () => {
-    const { compiled } = buildTheme({ ...base, seed: "#ffff00" });
+    const { compiled } = buildTheme({ ...base, seed: "#ffff00" }, compileTheme);
     expect(compiled.warnings.length).toBeGreaterThan(0);
   });
 
@@ -252,14 +256,16 @@ describe("the theme", () => {
   });
 
   test("a display name or a seed that would break out of the stylesheet never reaches the css", () => {
-    const plain = buildTheme(base).compiled.css;
+    const plain = buildTheme(base, compileTheme).compiled.css;
     for (const displayName of [
       '"]}</style><script>alert(1)</script>{',
       "x */ } body{display:none} /*",
       "\\3c /style>",
     ]) {
       // The name is a label, not CSS: the stylesheet is the same without it.
-      expect(buildTheme({ ...base, displayName }).compiled.css).toBe(plain);
+      expect(
+        buildTheme({ ...base, displayName }, compileTheme).compiled.css,
+      ).toBe(plain);
     }
     expect(plain).not.toContain("<");
     for (const seed of [
@@ -271,7 +277,7 @@ describe("the theme", () => {
       "var(--x)",
       "rgb(1 2 3 / </style>)",
     ]) {
-      expect(() => buildTheme({ ...base, seed })).toThrow(
+      expect(() => buildTheme({ ...base, seed }, compileTheme)).toThrow(
         expect.objectContaining({ code: "BAD_USER_INPUT", field: "seed" }),
       );
     }
@@ -286,7 +292,7 @@ describe("the theme", () => {
       { motif: "nope" },
       { displayName: "  " },
     ]) {
-      expect(() => buildTheme({ ...base, ...bad })).toThrow();
+      expect(() => buildTheme({ ...base, ...bad }, compileTheme)).toThrow();
     }
   });
 });

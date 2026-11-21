@@ -6,3 +6,4 @@
 export { codes } from "./branding.errors";
 export { LOGO_PATH, logoRoute } from "./branding.logo-route";
 export { BrandingService } from "./branding.service";
+export { compileTheme } from "./branding.theme";

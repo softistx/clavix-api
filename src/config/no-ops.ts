@@ -45,3 +45,7 @@ export const noBudgets: ConsoleBudgets = {
 export const noQueue = {
   work: () => ({ on: () => {} }),
 };
+
+/** The per-user lock of a script or a spec that runs nothing beside it: the work runs at once. */
+export const noUserLock = <T>(_userId: string, work: () => Promise<T>) =>
+  work();

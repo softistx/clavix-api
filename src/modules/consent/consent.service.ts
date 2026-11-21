@@ -1,7 +1,6 @@
 import type { Context } from "@/http/context";
 import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
-import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { agentMarksReader, markOf } from "./consent.agent-marker";
 import { assessment, type RequestDemands } from "./consent.authentication";
 import { type DetailTexts, reviewDetails } from "./consent.detail-labels";
@@ -16,7 +15,7 @@ import type {
   RevokeEnqueuer,
   RevokeJob,
   RevokeWorkerQueue,
-  WithServers,
+  ServerCtx,
 } from "./consent.types";
 import { denyUnreachable, isUnreachable } from "./consent.unmet";
 import { localeOfCtx, perRequest, requestOf } from "./consent.utils";
@@ -44,17 +43,17 @@ export class ConsentService {
   }
 
   /** The OAuth server of the request's host, for a live tenant (`NOT_FOUND` otherwise). */
-  async serverOf(ctx: unknown) {
+  async serverOf(janusCtx: unknown) {
+    // janus types its context without the tenant; the app's base puts it there.
+    const ctx = janusCtx as ServerCtx;
     // The same-origin guard ran at the HTTP layer (`useSameOriginJson`, src/http/same-origin.ts).
     const request = requestOf(ctx);
-    const server = await (ctx as WithServers).oauthServers.serverFor(request);
+    const server = (await ctx.oauthServers?.serverFor(request)) ?? null;
     if (server === null) throw fail("NOT_FOUND", "Not found", { status: 404 });
     // A code is not minted for a suspended or deleted tenant.
-    requireLive(
-      await (
-        ctx as unknown as { tenant: () => Promise<ResolvedTenant> }
-      ).tenant(),
-    );
+    const tenant = await ctx.tenant();
+    if (tenant === null) throw fail("NOT_FOUND", "Not found", { status: 404 });
+    requireLive(tenant);
     return server;
   }
 
@@ -185,8 +184,11 @@ export class ConsentService {
    * with the access and refresh tokens they opened; answers how many grants it
    * revoked. Nothing to revoke where no OAuth server is mounted.
    */
-  async revokeGrants(ctx: Context, userId: string): Promise<number> {
-    if ((ctx as unknown as WithServers).oauthServers === undefined) return 0;
+  async revokeGrants(
+    ctx: Context & Partial<ServerCtx>,
+    userId: string,
+  ): Promise<number> {
+    if (ctx.oauthServers === undefined) return 0;
     return (await this.serverOf(ctx)).grants.revokeAll({ id: userId });
   }
 

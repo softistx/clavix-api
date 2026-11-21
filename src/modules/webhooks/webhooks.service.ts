@@ -6,7 +6,7 @@ import {
   type SecretResealCounts,
 } from "@/modules/sign-in-methods";
 import { assertWithinQuota } from "@/modules/usage";
-import { WebhookError } from "./webhooks.errors";
+import { WebhookError, WebhookUrlError } from "./webhooks.errors";
 import type { webhookDeliveries, webhookEndpoints } from "./webhooks.model";
 import { DELIVERIES_PER_ENDPOINT } from "./webhooks.model";
 import {
@@ -26,7 +26,7 @@ import type {
   WebhookEndpointDoc,
   WebhooksServiceOptions,
 } from "./webhooks.types";
-import { checkWebhookUrl, WebhookUrlError } from "./webhooks.url-policy";
+import { checkWebhookUrl } from "./webhooks.url-policy";
 import {
   attemptDoc,
   behindCount,

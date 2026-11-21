@@ -54,7 +54,7 @@ const as = async (
       activity: { admin: adminEventReader, auth: authEventsService },
       admins: {} as ConsoleAdmins,
       users: {} as ConsoleUsers,
-      exclusive: createExclusive(),
+      exclusive: createExclusive(null),
       directory: {
         findUser: async () => null,
         emailVerified: async () => true,

@@ -14,15 +14,15 @@ const LOCK = { ttl: 10_000, wait: 5_000 } as const;
 
 /**
  * `Exclusive` for this process (a queue per key), and across processes when a
- * shared lock is given. Without one (no Redis, outside production) a single
+ * shared lock is given. Without one (`null`: no Redis, outside production) a single
  * process is assumed. A shared lock that cannot be taken rejects: the work
  * does not run.
  */
-export function createExclusive(shared?: SharedLock): Exclusive {
+export function createExclusive(shared: SharedLock | null): Exclusive {
   const tails = new Map<string, Promise<unknown>>();
   return <T>(key: string, work: () => Promise<T>): Promise<T> => {
     const run = () =>
-      shared === undefined ? work() : shared(`exclusive:${key}`, work, LOCK);
+      shared === null ? work() : shared(`exclusive:${key}`, work, LOCK);
     const previous = tails.get(key) ?? Promise.resolve();
     const mine = previous.then(run, run);
     const tail = mine.catch(() => {});

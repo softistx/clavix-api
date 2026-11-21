@@ -13,9 +13,17 @@ const record = {
 
 describe("view", () => {
   test("keeps the fields the console shows", () => {
-    const user = { ...record, logins: { email: "ada@x.test" }, extra: 1 };
-    // biome-ignore lint/suspicious/noExplicitAny: a pool user is wider than its view
-    expect(view(user as any)).toEqual({ ...record });
+    const user = {
+      ...record,
+      type: "user" as const,
+      logins: { email: "ada@x.test" },
+      hasPassword: false,
+      hasSecondFactor: false,
+      avatar: null,
+      version: 1,
+      updatedAt: createdAt,
+    };
+    expect(view(user)).toEqual({ ...record });
   });
 });
 
@@ -32,8 +40,15 @@ describe("shape", () => {
 describe("grantShape", () => {
   test("copies the scopes", () => {
     const scopes = ["openid"];
-    // biome-ignore lint/suspicious/noExplicitAny: only the scopes matter here
-    const shaped = grantShape({ id: "g", scopes } as any);
+    const shaped = grantShape({
+      id: "g",
+      clientId: "c",
+      clientName: null,
+      resource: "https://api.example.test",
+      scopes,
+      createdAt,
+      updatedAt: createdAt,
+    });
     expect(shaped.scopes).toEqual(scopes);
     expect(shaped.scopes).not.toBe(scopes);
   });

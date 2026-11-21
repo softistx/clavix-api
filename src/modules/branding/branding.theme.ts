@@ -7,9 +7,13 @@ import {
   type ThemeWarning,
   themeToCss,
 } from "@softistx/material-core/theme";
+import {
+  BrandingContrastError,
+  BrandingInputError,
+  type ContrastFailure,
+} from "./branding.errors";
 import { assertSafeCss } from "./branding.safe-css";
 import {
-  BrandingInputError,
   type ThemeInput,
   type ValidThemeInput,
   validateThemeInput,
@@ -17,7 +21,6 @@ import {
 
 export { assertSafeCss } from "./branding.safe-css";
 export {
-  BrandingInputError,
   DEFAULT_RADIUS,
   type ThemeInput,
   type ValidThemeInput,
@@ -26,28 +29,6 @@ export {
 
 /** The theme's name: the value of `data-nxgt-theme` the hosted pages and the console preview set. */
 export const THEME_NAME = "tenant";
-
-/** A pair that fails its minimum ratio in one mode. */
-export interface ContrastFailure {
-  foreground: string;
-  background: string;
-  mode: string;
-  ratio: number;
-  minimum: number;
-}
-
-/** The brand's colours do not meet WCAG AA (`BRANDING_CONTRAST`). */
-export class BrandingContrastError extends Error {
-  readonly code = "BRANDING_CONTRAST";
-  constructor(readonly failures: readonly ContrastFailure[]) {
-    super(
-      `The theme fails WCAG AA on ${failures.length} pair(s): ${failures
-        .slice(0, 3)
-        .map((f) => `${f.foreground} on ${f.background} (${f.mode}) ${f.ratio}`)
-        .join(", ")}`,
-    );
-  }
-}
 
 export interface CompiledTheme {
   css: string;
@@ -164,7 +145,7 @@ export function failuresOf(compiled: CompiledTheme): ContrastFailure[] {
 /** Validates, compiles and checks AA in light and dark; throws `BrandingContrastError` when a pair fails. */
 export function buildTheme(
   input: ThemeInput,
-  compile: CompileTheme = compileTheme,
+  compile: CompileTheme,
 ): { input: ValidThemeInput; compiled: CompiledTheme } {
   const valid = validateThemeInput(input);
   const compiled = compile(valid);

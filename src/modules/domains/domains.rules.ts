@@ -1,5 +1,6 @@
 import { domainToASCII } from "node:url";
 import { unique } from "@/shared/values";
+import { DomainHostError } from "./domains.errors";
 import type { DomainDoc } from "./domains.model";
 
 /** Why a claim did not verify: no record, another value, or DNS could not answer. */
@@ -11,11 +12,6 @@ export const VERIFY_COOLDOWN_SECONDS = 60;
 /** Days a verified domain may fail its recheck before it becomes `unverified`. */
 export const RECHECK_GRACE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1_000;
-
-/** A host the console refuses to claim, and why (the message is shown to the owner). */
-export class DomainHostError extends Error {
-  override name = "DomainHostError";
-}
 
 const LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const NUMERIC = /^\d+$/;

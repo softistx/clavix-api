@@ -13,6 +13,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
@@ -24,8 +25,7 @@ const ADMIN = "tenants-admin-acme";
 const OUTSIDER = "tenants-outsider";
 
 interface GqlResult {
-  // biome-ignore lint/suspicious/noExplicitAny: the spec reads untyped GraphQL JSON
-  data?: Record<string, any> | null;
+  data?: Record<string, unknown> | null;
   errors?: {
     message: string;
     extensions?: { code?: string; field?: string };
@@ -90,7 +90,7 @@ async function create(slug = "acme") {
     `mutation { createTenant(input: { slug: "${slug}", name: "${slug} Inc" }) { ${FIELDS} } }`,
   );
   expect(r.errors).toBeUndefined();
-  return r.data?.["createTenant"] as { id: string };
+  return at(r.data, "createTenant") as { id: string };
 }
 
 describe("createTenant", () => {
@@ -162,7 +162,7 @@ describe("plan and quotas", () => {
         `mutation { setTenantPlan(id: "${id}", input: { plan: "pro", quotaOverrides: { clients: 50 } }) { ${FIELDS} } }`,
       );
     const first = await run();
-    expect(first.data?.["setTenantPlan"]).toMatchObject({
+    expect(at(first.data, "setTenantPlan")).toMatchObject({
       plan: { id: "pro" },
       quotaOverrides: { mau: null, clients: 50, domains: null },
       quotas: { mau: 10000, clients: 50, domains: 5 },
@@ -173,7 +173,7 @@ describe("plan and quotas", () => {
       OPERATOR,
       `mutation { setTenantPlan(id: "${id}", input: { plan: "free" }) { quotaOverrides { clients } quotas { clients } } }`,
     );
-    expect(reset.data?.["setTenantPlan"]).toEqual({
+    expect(at(reset.data, "setTenantPlan")).toEqual({
       quotaOverrides: { clients: null },
       quotas: { clients: 3 },
     });
@@ -187,7 +187,7 @@ describe("plan and quotas", () => {
     );
     expect(code(bad)).toBe("BAD_USER_INPUT");
     const plans = await as(OUTSIDER, "{ plans { id } }");
-    expect(plans.data?.["plans"]).toEqual([
+    expect(at(plans.data, "plans")).toEqual([
       { id: "free" },
       { id: "pro" },
       { id: "enterprise" },
@@ -203,13 +203,13 @@ describe("suspend, resume, delete, restore", () => {
         OPERATOR,
         `mutation { suspendTenant(id: "${id}") { status } }`,
       );
-      expect(r.data?.["suspendTenant"]).toEqual({ status: "SUSPENDED" });
+      expect(at(r.data, "suspendTenant")).toEqual({ status: "SUSPENDED" });
     }
     const resumed = await as(
       OPERATOR,
       `mutation { resumeTenant(id: "${id}") { status } }`,
     );
-    expect(resumed.data?.["resumeTenant"]).toEqual({ status: "ACTIVE" });
+    expect(at(resumed.data, "resumeTenant")).toEqual({ status: "ACTIVE" });
     expect((await events()).filter((e) => e === "tenant.suspend")).toHaveLength(
       2,
     );
@@ -247,7 +247,10 @@ describe("suspend, resume, delete, restore", () => {
       OPERATOR,
       `mutation { deleteTenant(id: "${id}") { status deletedAt purgeAt } }`,
     );
-    const d = first.data?.["deleteTenant"];
+    const d = at<{ status: string; purgeAt: string; deletedAt: string }>(
+      first.data,
+      "deleteTenant",
+    );
     expect(d.status).toBe("DELETED");
     expect(
       new Date(d.purgeAt).getTime() - new Date(d.deletedAt).getTime(),
@@ -256,7 +259,7 @@ describe("suspend, resume, delete, restore", () => {
       OPERATOR,
       `mutation { deleteTenant(id: "${id}") { deletedAt } }`,
     );
-    expect(again.data?.["deleteTenant"].deletedAt).toBe(d.deletedAt);
+    expect(at(again.data, "deleteTenant.deletedAt")).toBe(d.deletedAt);
     // The trash is resumed by restore, not resume.
     const resume = await as(
       OPERATOR,
@@ -267,7 +270,7 @@ describe("suspend, resume, delete, restore", () => {
       OPERATOR,
       `mutation { restoreTenant(id: "${id}") { status deletedAt purgeAt } }`,
     );
-    expect(restored.data?.["restoreTenant"]).toEqual({
+    expect(at(restored.data, "restoreTenant")).toEqual({
       status: "SUSPENDED",
       deletedAt: null,
       purgeAt: null,
@@ -300,18 +303,19 @@ describe("queries", () => {
       OPERATOR,
       "{ tenants(first: 2) { items { slug status } nextCursor totalCount } }",
     );
-    const page = all.data?.["tenants"];
-    expect(page.items.map((t: { slug: string }) => t.slug)).toEqual([
-      "alpha",
-      "bravo",
-    ]);
-    expect(page.items[0].status).toBe("DELETED");
+    const page = at<{
+      items: { slug: string; status: string }[];
+      nextCursor: string;
+      totalCount: number;
+    }>(all.data, "tenants");
+    expect(page.items.map((t) => t.slug)).toEqual(["alpha", "bravo"]);
+    expect(page.items[0]?.status).toBe("DELETED");
     const next = await as(
       OPERATOR,
       `{ tenants(first: 2, after: "${page.nextCursor}") { items { slug } nextCursor } }`,
     );
     expect(
-      next.data?.["tenants"].items.map((t: { slug: string }) => t.slug),
+      at<{ slug: string }[]>(next.data, "tenants.items").map((t) => t.slug),
     ).toEqual(["charlie", PLATFORM_TENANT_SLUG].sort());
     // totalCount ignores the page and the cursor, and follows q and status.
     expect(page.totalCount).toBe(4);
@@ -319,7 +323,7 @@ describe("queries", () => {
       OPERATOR,
       `{ tenants(first: 2, after: "${page.nextCursor}") { totalCount } }`,
     );
-    expect(second.data?.["tenants"].totalCount).toBe(4);
+    expect(at(second.data, "tenants.totalCount")).toBe(4);
     const counted = await as(
       OPERATOR,
       '{ a: tenants(q: "BRA") { totalCount } b: tenants(status: DELETED) { totalCount } c: tenants(q: "zzz") { totalCount } }',
@@ -330,12 +334,12 @@ describe("queries", () => {
       c: { totalCount: 0 },
     });
     const q = await as(OPERATOR, '{ tenants(q: "BRA") { items { slug } } }');
-    expect(q.data?.["tenants"].items).toEqual([{ slug: "bravo" }]);
+    expect(at(q.data, "tenants.items")).toEqual([{ slug: "bravo" }]);
     const deleted = await as(
       OPERATOR,
       "{ tenants(status: DELETED) { items { slug } } }",
     );
-    expect(deleted.data?.["tenants"].items).toEqual([{ slug: "alpha" }]);
+    expect(at(deleted.data, "tenants.items")).toEqual([{ slug: "alpha" }]);
   });
 
   test("tenants needs view on the platform; a tenant admin sees only its tenant, not the trash", async () => {
@@ -348,12 +352,12 @@ describe("queries", () => {
       code(await as(VIEWER, "{ tenants { items { id } } }")),
     ).toBeUndefined();
     const one = await as(ADMIN, `{ tenant(id: "${id}") { slug } }`);
-    expect(one.data?.["tenant"]).toEqual({ slug: "acme" });
+    expect(at(one.data, "tenant")).toEqual({ slug: "acme" });
     await as(OPERATOR, `mutation { deleteTenant(id: "${id}") { id } }`);
     const hidden = await as(ADMIN, `{ tenant(id: "${id}") { slug } }`);
-    expect(hidden.data?.["tenant"]).toBeNull();
+    expect(at(hidden.data, "tenant")).toBeNull();
     const seen = await as(OPERATOR, `{ tenant(id: "${id}") { status } }`);
-    expect(seen.data?.["tenant"]).toEqual({ status: "DELETED" });
+    expect(at(seen.data, "tenant")).toEqual({ status: "DELETED" });
   });
 
   test("a tenant admin's update is refused while suspended; an operator's goes through", async () => {
@@ -363,7 +367,7 @@ describe("queries", () => {
       ADMIN,
       `mutation { updateTenant(id: "${id}", input: { name: "Renamed", signUp: true }) { name signUp } }`,
     );
-    expect(ok.data?.["updateTenant"]).toEqual({
+    expect(at(ok.data, "updateTenant")).toEqual({
       name: "Renamed",
       signUp: true,
     });
@@ -377,7 +381,7 @@ describe("queries", () => {
       OPERATOR,
       `mutation { updateTenant(id: "${id}", input: { name: "Again" }) { name } }`,
     );
-    expect(op.data?.["updateTenant"]).toEqual({ name: "Again" });
+    expect(at(op.data, "updateTenant")).toEqual({ name: "Again" });
   });
 
   test("usage reports the meters against the quotas; a bad month is BAD_USER_INPUT", async () => {
@@ -387,7 +391,7 @@ describe("queries", () => {
       ADMIN,
       `{ usage(tenantId: "${id}", month: "2026-10") { tenantId month mau { used quota exceeded } clients { used quota } domains { used quota } } }`,
     );
-    expect(r.data?.["usage"]).toEqual({
+    expect(at(r.data, "usage")).toEqual({
       tenantId: id,
       month: "2026-10",
       mau: { used: 0, quota: 1000, exceeded: false },
@@ -400,7 +404,7 @@ describe("queries", () => {
       `{ usage(tenantId: "${id.toUpperCase()}", month: "2026-10") { month } }`,
     );
     expect(upper.errors).toBeUndefined();
-    expect(upper.data?.["usage"]).toEqual({ month: "2026-10" });
+    expect(at(upper.data, "usage")).toEqual({ month: "2026-10" });
     const bad = await as(
       ADMIN,
       `{ usage(tenantId: "${id}", month: "2026-13") { month } }`,

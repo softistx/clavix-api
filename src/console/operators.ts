@@ -68,9 +68,10 @@ export async function grantOperator(
     access: Pick<Access, "grantPlatform">;
     /**
      * Runs the check and the grant alone per user (the accept hooks' lock),
-     * so a `deleteUser` or a disable cannot slip between them. Default: none.
+     * so a `deleteUser` or a disable cannot slip between them. Bound in the
+     * wiring (`noUserLock` when nothing else runs beside it).
      */
-    lock?: <T>(userId: string, work: () => Promise<T>) => Promise<T>;
+    lock: <T>(userId: string, work: () => Promise<T>) => Promise<T>;
     /** Issues and mails the operator invitation; the id of the invitation. */
     invite(email: string, role: Role): Promise<{ id: string }>;
     record(target: { type: string; id: string }): Promise<void>;
@@ -93,8 +94,7 @@ export async function grantOperator(
       invited: true,
     };
   }
-  const lock = deps.lock ?? ((_id, work) => work());
-  const granted = await lock(user.id, async () => {
+  const granted = await deps.lock(user.id, async () => {
     // Read again under the lock: the account may have changed since.
     const current = await deps.findByEmail(input.email);
     if (current === null || current.id !== user.id) {
@@ -124,14 +124,14 @@ type GrantDeps = Parameters<typeof grantOperator>[0];
 export function operatorGrantDeps(parts: {
   findByEmail: GrantDeps["findByEmail"];
   access: GrantDeps["access"];
-  lock?: GrantDeps["lock"];
+  lock: GrantDeps["lock"];
   invitations: Pick<TenantInvitations, "invite">;
   recorder: Pick<AdminEventRecorder, "record">;
 }): GrantDeps {
   return {
     findByEmail: parts.findByEmail,
     access: parts.access,
-    ...(parts.lock === undefined ? {} : { lock: parts.lock }),
+    lock: parts.lock,
     invite: (email, role) =>
       parts.invitations.invite({
         scope: operatorScope(),

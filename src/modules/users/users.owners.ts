@@ -6,6 +6,7 @@ import {
 } from "@/modules/admins";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
+import { OwnershipMoved } from "./users.errors";
 
 /**
  * The tenants where the user holds any role, sorted: a fixed lock order, so
@@ -14,13 +15,6 @@ import { fail } from "@/shared/errors";
  */
 const memberTenants = async (ctx: ConsoleContext, userId: string) =>
   (await ctx.access.memberships(userId)).map(({ tenantId }) => tenantId).sort();
-
-/** Ownership granted between the read of the tenants and their locks. */
-class OwnershipMoved extends Error {
-  constructor(readonly tenants: readonly string[]) {
-    super("ownership moved");
-  }
-}
 
 /**
  * What a write does to its target, for the owner rule: `disable`, `delete`
