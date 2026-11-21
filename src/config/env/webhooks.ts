@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isProduction } from "./shared";
 
-// Webhook endpoints, the durable delivery queue and the consent-ready tenants.
+// Webhook endpoints, the durable delivery queue.
 export const webhooksEnv = () => {
   const production = isProduction();
   return {

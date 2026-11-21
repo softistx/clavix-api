@@ -898,7 +898,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 
 ## OAuth clients
 
-`src/modules/clients/` registers a client on a tenant (`registerClient` in `clients.register.ts`, split into steps under 80 lines; `clients.rules.ts` holds the offered grants, the size limits and `clientIdOf`, `clients.validate.ts` the input checks, `clients.types.ts` the types, `clients.utils.ts` the views, the agent reader and the optional-settings spread, `clients.search.ts` the listing and the count, `clients.cli.ts` the flags; `clients/index.ts` is the entry other modules import; the script `clients:create`
+`src/modules/clients/` registers a client on a tenant (`registerClient` in `clients.register.ts`, split into steps under 80 lines; `clients.rules.ts` holds the offered grants, the size limits, `clientIdOf` and `checkTokenExchangeShape` (the token-exchange rule-set shape), `clients.validate.ts` the input checks, `clients.types.ts` the types, `clients.utils.ts` the views, the agent reader and the optional-settings spread, `clients.search.ts` the listing and the count, `clients.cli.ts` the flags; `clients/index.ts` is the entry other modules import; the script `clients:create`
 in `src/scripts/clients-create.ts`, README "OAuth clients"). It writes through the janus store of
 the tenant's partition (`createMongoOAuth(oauthDb, { partition })`), with its own client id as
 the idempotency key (janus has no lookup by name); a secret is minted with janus's

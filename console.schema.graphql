@@ -639,9 +639,8 @@ input CreateClientInput {
   allowedScopes: [String!]
   """
   The detail types the client may ask for: the names of the tenant's types.
-  BAD_USER_INPUT for an unknown type, without `requirePushedAuthorizationRequests`
-  (details in a URL are not protected), or on a client that uses `/authorize` or the device grant
-  of a tenant whose consent pages do not show details yet. Default: none.
+  BAD_USER_INPUT for an unknown type, or without `requirePushedAuthorizationRequests`
+  (details in a URL are not protected). Default: none.
   """
   authorizationDetailsTypes: [String!]
   """
