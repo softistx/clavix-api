@@ -1,4 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
+import { localeOf } from "./consent.scope-labels";
+import type { ConsentCtx } from "./consent.types";
 
 /** One read per request, shared by the fields of a page (the texts of a tenant, say). */
 export function perRequest<T>() {
@@ -23,3 +25,7 @@ export const requestOf = (ctx: unknown): Request => {
   if (request === undefined) throw denial("NOT_FOUND");
   return request;
 };
+
+/** The locale a context's request asks for (`accept-language`). */
+export const localeOfCtx = (ctx: ConsentCtx) =>
+  localeOf(ctx.request?.headers.get("accept-language") ?? null);

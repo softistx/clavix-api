@@ -6,8 +6,10 @@ import { agentMarksReader, markOf } from "./consent.agent-marker";
 import { assessment, type RequestDemands } from "./consent.authentication";
 import { type DetailTexts, reviewDetails } from "./consent.detail-labels";
 import { refuseIncomplete, unmetAuthentication } from "./consent.errors";
-import { localeOf, type ScopeTexts, textOf } from "./consent.scope-labels";
+import type { ScopeTexts } from "./consent.scope-labels";
+import { textOf } from "./consent.scope-labels";
 import type {
+  ApproveArgs,
   ConsentCtx,
   ConsentOptions,
   LabelledScope,
@@ -17,16 +19,7 @@ import type {
   WithServers,
 } from "./consent.types";
 import { denyUnreachable, isUnreachable } from "./consent.unmet";
-import { perRequest, requestOf } from "./consent.utils";
-
-/** What janus-oauth hands the approval hooks: the pending request and a selection of details, if any. */
-interface ApproveArgs {
-  request: RequestDemands & { authorizationDetails?: unknown };
-  authorizationDetails?: unknown;
-}
-
-const localeOfCtx = (ctx: ConsentCtx) =>
-  localeOf(ctx.request?.headers.get("accept-language") ?? null);
+import { localeOfCtx, perRequest, requestOf } from "./consent.utils";
 
 /**
  * The consent API of the hosted `/consent` page: the request host's OAuth

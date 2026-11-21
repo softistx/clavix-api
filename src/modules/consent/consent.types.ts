@@ -1,5 +1,6 @@
 import type { OAuthHandle } from "@/oauth/routes";
 import type { AgentsFor } from "./consent.agent-marker";
+import type { RequestDemands } from "./consent.authentication";
 import type { DetailTextsFor } from "./consent.detail-labels";
 import type { ScopeTextsFor } from "./consent.scope-labels";
 
@@ -49,4 +50,10 @@ export interface LabelledScope {
 export interface ConsentOptions {
   /** Where a queued or failed revocation is logged (a warning by default). */
   log?: (message: string) => void;
+}
+
+/** What janus-oauth hands the approval hooks: the pending request and a selection of details, if any. */
+export interface ApproveArgs {
+  request: RequestDemands & { authorizationDetails?: unknown };
+  authorizationDetails?: unknown;
 }

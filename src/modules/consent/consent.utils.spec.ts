@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { perRequest, requestOf } from "./consent.utils";
+import { localeOfCtx, perRequest, requestOf } from "./consent.utils";
 
 describe("perRequest", () => {
   test("reads once per request and keeps requests apart", async () => {
@@ -25,5 +25,17 @@ describe("requestOf", () => {
     const request = new Request("https://a.test/");
     expect(requestOf({ request })).toBe(request);
     expect(() => requestOf({})).toThrow();
+  });
+});
+
+describe("localeOfCtx", () => {
+  test("reads accept-language and tolerates no request", () => {
+    const ctx = (request?: Request) => ({ request }) as never;
+    expect(localeOfCtx(ctx())).toBe(localeOfCtx(ctx(new Request("http://x"))));
+    expect(
+      localeOfCtx(
+        ctx(new Request("http://x", { headers: { "accept-language": "fr" } })),
+      ),
+    ).toBe("fr");
   });
 });
