@@ -10,7 +10,7 @@ import {
   ConnectionError,
   txtNameOf,
 } from "@/modules/connections";
-import { callbackUrlOf } from "@/modules/sign-in-methods/social";
+import { callbackUrlOf } from "@/modules/sign-in-methods";
 import { effectiveQuotas } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";

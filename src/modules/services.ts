@@ -1,5 +1,6 @@
 import { connectionsService } from "@/config/connections";
 import { resourcesService } from "@/config/resources";
+import { signInPolicyService } from "@/config/sign-in-policy";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
 
@@ -13,6 +14,7 @@ import { webhooksService } from "@/config/webhooks-service";
 export const services = () => ({
   connections: connectionsService,
   resources: resourcesService,
+  signInPolicy: signInPolicyService,
   tenants: tenantsService,
   webhooks: webhooksService,
 });

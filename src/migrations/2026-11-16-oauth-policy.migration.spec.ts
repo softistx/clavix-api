@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { migrate } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { freshMigrationDb } from "~/migrations";
 import {
   id,

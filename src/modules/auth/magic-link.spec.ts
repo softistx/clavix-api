@@ -8,7 +8,7 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
+import { SignInPolicyService } from "@/modules/sign-in-methods";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,

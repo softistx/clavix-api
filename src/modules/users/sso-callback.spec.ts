@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { callbackUrlOf } from "@/modules/sign-in-methods/social";
+import { callbackUrlOf } from "@/modules/sign-in-methods";
 import { connectionIdOfCallbackUrl } from "./tenant-janus";
 
 describe("the callback URL of a connection (nxgt-janus#975)", () => {

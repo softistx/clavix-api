@@ -1,7 +1,7 @@
 import { defineCollection, id, type ReadDocumentOf } from "@softistx/mongo";
 import { z } from "zod";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in-methods.schema";
 import { planFields } from "./tenants.plan";
 import { trashFields } from "./tenants.trash";
 
@@ -22,7 +22,7 @@ export const tenants = defineCollection({
     // Closed by default (and for a tenant stored before the flag existed): the
     // users come in by invitation. The `clavix` tenant stays closed.
     signUp: z.boolean().default(false),
-    signIn: signInPolicySchema, // slice A5: methods and social apps (sign-in.schema.ts)
+    signIn: signInPolicySchema, // slice A5: methods and social apps (sign-in-methods.schema.ts)
     oauth: oauthPolicySchema, // M3: PAR and DPoP requirements (oauth-policy.schema.ts)
     ...planFields,
     ...trashFields,

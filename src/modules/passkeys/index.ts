@@ -5,7 +5,7 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { requireNoSsoForUser } from "@/modules/connections";
-import { requireMethod } from "@/modules/sign-in-methods/gate";
+import { requireMethod } from "@/modules/sign-in-methods";
 import { requireLive } from "@/tenancy/live";
 import {
   asPasskeyInvalid,

@@ -1,8 +1,8 @@
 import type { SocialProvider } from "@softistx/janus";
 import { github, google, microsoft } from "@softistx/janus-social";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import { type SecretBox, secretContext } from "./secrets";
-import { enabledSocial, type SocialProviderId } from "./sign-in.schema";
+import { enabledSocial, type SocialProviderId } from "./sign-in-methods.schema";
+import { type SecretBox, secretContext } from "./sign-in-methods.secrets";
 
 /**
  * Where a provider sends the visitor back: the hosted page of the tenant's

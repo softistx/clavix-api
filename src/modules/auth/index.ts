@@ -10,7 +10,7 @@ import {
   revokeIfSso,
 } from "@/modules/connections";
 import { challengeOf } from "@/modules/mfa/challenge";
-import { requireMethod } from "@/modules/sign-in-methods/gate";
+import { requireMethod } from "@/modules/sign-in-methods";
 import type { TenantJanus } from "@/modules/users/tenant-janus";
 import { requireLive } from "@/tenancy/live";
 import { deviceOptions } from "./device";

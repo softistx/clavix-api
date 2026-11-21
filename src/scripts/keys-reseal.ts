@@ -2,9 +2,9 @@ import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { masterKeys } from "@/config/keys";
 import { redis } from "@/config/redis";
+import { signInPolicyService } from "@/config/sign-in-policy";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
-import { signInPolicyService } from "@/console/modules/sign-in-methods/wiring";
 import { resealAllTenants, resealExitCode } from "@/modules/keys";
 import { RESEAL_USAGE } from "@/modules/keys/cli";
 

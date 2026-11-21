@@ -21,7 +21,7 @@ import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { settled } from "@/modules/auth/outbox";
 import { registerClient } from "@/modules/clients/register-client";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
+import { SignInPolicyService } from "@/modules/sign-in-methods";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,

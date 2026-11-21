@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in-methods.schema";
 import { PLAN_IDS } from "@/modules/tenants";
 
 /**

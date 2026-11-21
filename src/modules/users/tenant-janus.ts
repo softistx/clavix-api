@@ -25,12 +25,12 @@ import {
 } from "@softistx/janus-social";
 import { instrumentJanus } from "@softistx/janus-telemetry";
 import type { Db } from "mongodb";
-import type { SecretBox } from "@/modules/sign-in-methods/secrets";
-import { isEnabled } from "@/modules/sign-in-methods/sign-in.schema";
+import type { SecretBox } from "@/modules/sign-in-methods";
 import {
   callbackUrlOf,
+  isEnabled,
   socialProvidersOf,
-} from "@/modules/sign-in-methods/social";
+} from "@/modules/sign-in-methods";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { originOf, rpIdOf } from "./rp";

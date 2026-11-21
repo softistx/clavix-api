@@ -3,7 +3,7 @@ import type { Db } from "mongodb";
 import {
   emptySecretResealCounts,
   type SecretResealCounts,
-} from "@/modules/sign-in-methods/secrets";
+} from "@/modules/sign-in-methods";
 import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
 import {
   emptySecondFactorCounts,

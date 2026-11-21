@@ -25,7 +25,7 @@ import {
   createSsoStartThrottle,
   type SsoLimitConfig,
   ssoLimits,
-} from "./sso-throttle";
+} from "./sign-in-methods.sso-throttle";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,

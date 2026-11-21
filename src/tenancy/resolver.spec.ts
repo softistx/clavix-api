@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
 import { memoryTenantCache, type TenantCache } from "./tenant-cache";

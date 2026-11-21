@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { oauthDb } from "@/config/oauth-db";
 import { relatedOriginsOf } from "@/modules/domains/well-known";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { createTenantResolver, type TenantRecord } from "@/tenancy/resolver";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 import { createTenantAuth } from "./tenant-auth";

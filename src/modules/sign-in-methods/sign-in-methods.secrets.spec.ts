@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { createSecretBox, secretContext } from "./secrets";
-import { sealedSecretSchema } from "./sign-in.schema";
+import { sealedSecretSchema } from "./sign-in-methods.schema";
+import { createSecretBox, secretContext } from "./sign-in-methods.secrets";
 
 const master = randomBytes(32);
 const box = createSecretBox(master);

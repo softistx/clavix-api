@@ -19,7 +19,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { settled } from "@/modules/auth/outbox";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
+import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 

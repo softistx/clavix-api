@@ -4,7 +4,7 @@ import {
   createTenantKeys,
   ensureSigningKey,
 } from "@/modules/keys";
-import { createSecretBox } from "@/modules/sign-in-methods/secrets";
+import { createSecretBox } from "@/modules/sign-in-methods";
 import { mongo } from "./db";
 import { env } from "./env";
 import { parseMasterKeys } from "./master-keys";
