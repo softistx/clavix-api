@@ -7,6 +7,12 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Translations as a list of locales** — scope descriptions and detail type texts are lists of
+  `{ locale, text }` (any BCP 47 language, no fixed French and English), a write sets or replaces
+  the locales it names, and the consent screen picks the viewer's `Accept-Language`, then its base
+  language, then the first stored translation. Breaking for the console UI
+  ([#484](https://github.com/softistx/clavix-api/issues/484)).
+
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
   the `<name>.<role>.ts` shape with the console's resolvers inside their owning module; errors go

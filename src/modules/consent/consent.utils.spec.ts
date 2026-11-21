@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ConsentCtx, WithServers } from "./consent.types";
 import {
+  acceptLanguageOf,
   appCtxOf,
   consentCtxOf,
   isConsentCtx,
   isServerCtx,
-  localeOfCtx,
   perRequest,
   requestOf,
 } from "./consent.utils";
@@ -80,7 +80,7 @@ describe("requestOf", () => {
   });
 });
 
-describe("localeOfCtx", () => {
+describe("acceptLanguageOf", () => {
   test("reads accept-language and tolerates no request", () => {
     const base: WithServers = {
       oauthServers: { serverFor: async () => null },
@@ -90,11 +90,16 @@ describe("localeOfCtx", () => {
     };
     const ctx = (request?: Request): ConsentCtx =>
       request === undefined ? base : { ...base, request };
-    expect(localeOfCtx(ctx())).toBe(localeOfCtx(ctx(new Request("http://x"))));
+    expect(acceptLanguageOf(ctx())).toBeNull();
+    expect(acceptLanguageOf(ctx(new Request("http://x")))).toBeNull();
     expect(
-      localeOfCtx(
-        ctx(new Request("http://x", { headers: { "accept-language": "fr" } })),
+      acceptLanguageOf(
+        ctx(
+          new Request("http://x", {
+            headers: { "accept-language": "fr-CA,en;q=0.8" },
+          }),
+        ),
       ),
-    ).toBe("fr");
+    ).toBe("fr-CA,en;q=0.8");
   });
 });

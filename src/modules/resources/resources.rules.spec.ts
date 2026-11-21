@@ -9,9 +9,7 @@ import {
   checkScopeName,
   cleanClaims,
   cleanName,
-  cleanText,
   isOidcScope,
-  MAX_DESCRIPTION,
   MAX_NAME,
   OIDC_SCOPES,
   resourceUriProblem,
@@ -64,14 +62,6 @@ describe("scope and resource names", () => {
     expect(() => cleanName("x".repeat(MAX_NAME + 1))).toThrow(/at most/);
   });
 
-  test("cleanText trims and bounds a description", () => {
-    expect(cleanText(" hi ")).toBe("hi");
-    expect(cleanText(undefined)).toBeUndefined();
-    expect(() => cleanText("x".repeat(MAX_DESCRIPTION + 1))).toThrow(
-      CatalogError,
-    );
-  });
-
   test("cleanClaims deduplicates and bounds the claims", () => {
     expect(cleanClaims([" a ", "a", "b"])).toEqual(["a", "b"]);
     expect(cleanClaims(undefined)).toEqual([]);
@@ -90,18 +80,21 @@ describe("scope and resource names", () => {
 
   test("sameScopeDefinition compares texts and claims, not their order", () => {
     const stored = scopeDoc({
-      description: { fr: "f", en: "e" },
+      description: [
+        { locale: "fr", text: "f" },
+        { locale: "en", text: "e" },
+      ],
       claims: ["a", "b"],
     });
-    expect(sameScopeDefinition(stored, { fr: "f", en: "e" }, ["b", "a"])).toBe(
-      true,
-    );
-    expect(sameScopeDefinition(stored, { fr: "f", en: "x" }, ["a", "b"])).toBe(
-      false,
-    );
-    expect(sameScopeDefinition(stored, { fr: "f", en: "e" }, ["a"])).toBe(
-      false,
-    );
+    const same = [
+      { locale: "en", text: "e" },
+      { locale: "fr", text: "f" },
+    ];
+    expect(sameScopeDefinition(stored, same, ["b", "a"])).toBe(true);
+    expect(
+      sameScopeDefinition(stored, [{ locale: "fr", text: "f" }], ["a", "b"]),
+    ).toBe(false);
+    expect(sameScopeDefinition(stored, same, ["a"])).toBe(false);
   });
 });
 

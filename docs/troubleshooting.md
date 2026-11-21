@@ -183,10 +183,10 @@ query {
 `description`, or no row for a field the client sent.
 
 **Why:** the blocks are built from the tenant's detail type texts. A type deleted after the request (or never written in
-the viewer's language) falls back to its name and the other language, and a field the type does not define is never shown, since
-no raw JSON reaches the page. A viewer that sends no `Accept-Language` gets English.
+the viewer's language) falls back to its name and the first stored translation, and a field the type does not define is never shown, since
+no raw JSON reaches the page. A viewer that sends no `Accept-Language` gets the first stored translation.
 
-**Fix:** write the type's `name`, `description` and field `label`s in French and English (`updateDetailType`), and keep a type that
+**Fix:** write the type's `name`, `description` and field `label`s in every language you serve (`updateDetailType`; a list of `{ locale, text }`, the locales you send are set and the others kept), and keep a type that
 a pending request uses. The page must render every block: approval allows all of them or none, and is refused while
 `detailsComplete` is false (see below).
 

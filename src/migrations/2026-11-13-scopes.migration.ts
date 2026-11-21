@@ -24,7 +24,7 @@ export async function moveScopesToDocuments(db: Db): Promise<number> {
       if (await owned.exists({ name, resourceId: resource._id })) continue;
       await owned.create({
         name,
-        description: { fr: "", en: "" },
+        description: [],
         resourceId: resource._id,
         claims: [],
       });

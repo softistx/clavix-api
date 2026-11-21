@@ -15,8 +15,6 @@ import {
 import {
   detailTypeShape,
   fieldDraft,
-  localised,
-  localisedOrKeep,
   resourceShape,
   scopeShape,
   target,
@@ -69,7 +67,7 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
     const created = await refusing(() =>
       resourcesService.createScope(_id, {
         name: input.name,
-        description: localised(input.description ?? {}),
+        description: input.description ?? undefined,
         resourceId: input.resourceId ?? null,
         claims: input.claims ?? undefined,
       }),
@@ -81,7 +79,7 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
     const { _id } = await catalogTenant(ctx, tenantId);
     const updated = await refusing(() =>
       resourcesService.updateScope(_id, id, {
-        description: localisedOrKeep(input.description),
+        description: input.description ?? undefined,
         claims: input.claims ?? undefined,
       }),
     );
@@ -116,8 +114,8 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
     const created = await refusing(() =>
       resourcesService.createDetailType(_id, input.resourceId, {
         type: input.type,
-        name: localised(input.name),
-        description: localised(input.description ?? {}),
+        name: input.name,
+        description: input.description ?? undefined,
         fields: input.fields.map(fieldDraft),
         actions: input.actions?.map(valueDraft),
       }),
@@ -132,8 +130,8 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
     const { _id } = await catalogTenant(ctx, tenantId);
     const updated = await refusing(() =>
       resourcesService.updateDetailType(_id, id, {
-        name: localisedOrKeep(input.name),
-        description: localisedOrKeep(input.description),
+        name: input.name ?? undefined,
+        description: input.description ?? undefined,
         fields: input.fields?.map(fieldDraft),
         actions: input.actions?.map(valueDraft),
       }),

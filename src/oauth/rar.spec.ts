@@ -73,7 +73,10 @@ const issuers = createClavixOAuthIssuers({
 const app = createTestApp({ oauth: issuers });
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const ready = mongoClientDetailTypes(mongo.db.detailTypes);
-const text = (fr: string, en: string) => ({ fr, en });
+const text = (fr: string, en: string) => [
+  { locale: "fr", text: fr },
+  { locale: "en", text: en },
+];
 
 const url = (path = "/") => `${issuerOf(SLUG, origin)}${path}`;
 const basic = (id: string, secret: string) =>
@@ -343,7 +346,10 @@ describe("authorization details through consent", () => {
         description: "Initier des virements",
         rows: [
           { label: "Actions", value: "Initier" },
-          { label: "Montant", value: "1 500,5" },
+          {
+            label: "Montant",
+            value: new Intl.NumberFormat("fr-CA").format(1500.5),
+          },
           { label: "Devise", value: "Euro" },
           { label: "Urgent", value: "Oui" },
           { label: "Motif", value: "Rent" },

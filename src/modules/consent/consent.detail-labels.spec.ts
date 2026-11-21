@@ -5,19 +5,25 @@ import {
   reviewDetails,
 } from "./consent.detail-labels";
 
+// A text in French and English; a blank language is not written.
+const t = (fr: string, en: string) => [
+  ...(fr === "" ? [] : [{ locale: "fr", text: fr }]),
+  ...(en === "" ? [] : [{ locale: "en", text: en }]),
+];
+
 const texts: DetailTexts = [
   {
     type: "export",
-    name: { fr: "Export", en: "Export" },
-    description: { fr: "", en: "Export your data" },
+    name: t("Export", "Export"),
+    description: t("", "Export your data"),
     fields: [
       {
         key: "format",
         kind: "enum",
-        label: { fr: "Format", en: "Format" },
-        values: [{ value: "csv", label: { fr: "Tableur", en: "" } }],
+        label: t("Format", "Format"),
+        values: [{ value: "csv", label: t("Tableur", "") }],
       },
-      { key: "tags", kind: "string[]", label: { fr: "", en: "Tags" } },
+      { key: "tags", kind: "string[]", label: t("", "Tags") },
     ],
   },
 ];
@@ -57,6 +63,36 @@ describe("detailsOf", () => {
       label: "Données",
       value: "x, y",
     });
+  });
+
+  test("a viewer's other languages: the base language, a language none covers", () => {
+    const json = JSON.stringify([
+      { type: "export", identifier: "a", datatypes: ["x"] },
+    ]);
+    const labels = (language: string) =>
+      detailsOf(json, texts, language)[0]?.rows.map((row) => row.label);
+    expect(labels("fr-CA")).toEqual(["Identifiant", "Données"]);
+    expect(labels("de")).toEqual(["Identifier", "Data"]);
+    expect(detailsOf(json, texts, null)[0]?.title).toBe("Export");
+  });
+
+  test("booleans read yes or no, numbers use the viewer's format", () => {
+    const typed: DetailTexts = [
+      {
+        type: "pay",
+        name: t("Paiement", "Payment"),
+        description: [],
+        fields: [
+          { key: "ok", kind: "boolean", label: t("", "Ok") },
+          { key: "sum", kind: "number", label: t("", "Sum") },
+        ],
+      },
+    ];
+    const json = JSON.stringify([{ type: "pay", ok: true, sum: 1234.5 }]);
+    const values = (language: string) =>
+      detailsOf(json, typed, language)[0]?.rows.map((row) => row.value);
+    expect(values("en")).toEqual(["Yes", "1,234.5"]);
+    expect(values("fr")).toEqual(["Oui", expect.stringMatching(/^1.234,5$/)]);
   });
 
   test("a field with nothing to show has no row", () => {

@@ -20,9 +20,9 @@ import type {
 } from "./consent.types";
 import { denyUnreachable, isUnreachable } from "./consent.unmet";
 import {
+  acceptLanguageOf,
   appCtxOf,
   consentCtxOf,
-  localeOfCtx,
   perRequest,
   requestOf,
 } from "./consent.utils";
@@ -140,14 +140,14 @@ export class ConsentService {
   ): Promise<LabelledScope[]> {
     const texts = await this.readTexts(ctx.request, ctx.scopeTextsFor);
     if (texts === undefined) return parent.scopes;
-    const locale = localeOfCtx(ctx);
+    const acceptLanguage = acceptLanguageOf(ctx);
     return parent.scopes.map((scope) => ({
       name: scope.name,
       label:
         textOf(
           texts,
           { name: scope.name, resource: parent.resource },
-          locale,
+          acceptLanguage,
         ) ?? scope.label,
     }));
   }
@@ -243,6 +243,10 @@ export class ConsentService {
   ) {
     const texts =
       (await this.readDetailTexts(ctx.request, ctx.detailTextsFor)) ?? [];
-    return reviewDetails(authorizationDetails ?? null, texts, localeOfCtx(ctx));
+    return reviewDetails(
+      authorizationDetails ?? null,
+      texts,
+      acceptLanguageOf(ctx),
+    );
   }
 }

@@ -117,7 +117,7 @@ in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
 URL cannot be registered: it is built in, with the OpenID Connect scopes.
-- **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description { fr, en }`,
+- **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description` (a list of translations, `[{ locale, text }]`),
   `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
   have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
   or `email` (`resources.rules.ts`); it exists once a tenant describes it. `claims` is stored only.
@@ -323,8 +323,8 @@ is wrapped (`ConsentService.approveOrDenyUnmet`; `consent/consent.unmet.ts`) and
 (`oauth/building.ts`) puts the grant's `acr`, `amr` and `auth_time` in the JWT, the ID token's values (janus 0.76).
 A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176), not `otp`: janus stores it on the session itself (@softistx/janus 0.77), and `src/modules/mfa/mfa.second-factor.spec.ts` asserts it. A passkey step-up needs no
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
-resource's scope, else the standard one; `Accept-Language` French else English, then the other
-language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+resource's scope, else the standard one; `Accept-Language`, then its base language, then the first stored
+translation, then janus's label; no language is fixed in `src/`, `src/shared/translations.ts`), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
 resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
@@ -935,7 +935,7 @@ An error's `extensions.http.status` and `headers` (a throttle's `Retry-After`) a
 itself (`errorHttp`, on by default since 0.10: highest status wins, `http` is stripped from the body, `spec: true` ignores
 the status under `application/json`); no plugin of this API carries it. `useWithoutQuotedValues`
 (`src/http/coercion.ts`) scrubs the coercion errors in `onResultChunk` (streams) and `onResponse` (plain JSON). The console is
-`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 50 000 in `app.ts`: the UI's nested reads of stored lists cost more than graxia's default 5 000, and a refused document is a 200 with no `data`; `src/modules/resources/resources.cost.console.spec.ts`); `useInviteBudget` is
+`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 200 000 in `app.ts`: the UI's nested reads of stored lists (translation lists included) cost more than graxia's default 5 000, and a refused document is a 200 with no `data`; `src/modules/resources/resources.cost.console.spec.ts`); `useInviteBudget` is
 `fieldRateLimit`, whose 429 and `Retry-After` are graxia's. A client that sends a GET or a non-JSON POST sends
 `x-graphql-csrf: 1`. The JSON plugins match `application/json` and `application/graphql-response+json` (parameters
 ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. Unexpected resolver errors and janus 5xx errors go to the app's telemetry

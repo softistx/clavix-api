@@ -1,24 +1,32 @@
-"A text in the languages the consent page speaks."
-type LocalizedText {
-  fr: String!
-  en: String!
+"""
+A text in one language. A list of translations holds at most one text per
+locale; no language is built in.
+"""
+type Translation {
+  locale: Locale!
+  text: String!
 }
 
-input LocalizedTextInput {
-  fr: String
-  en: String
+"""
+A text to set in one language (a BCP 47 tag, `fr`, `en-CA`...). In a list, a
+write sets or replaces the locales it names and keeps the others; a blank
+`text` removes that locale.
+"""
+input TranslationInput {
+  locale: Locale!
+  text: String!
 }
 
 """
 A scope of a tenant: what a client may ask for. The consent page shows its
-description in the viewer's language (French when empty in English, and the
-other way round; the name when both are empty).
+description in the viewer's language (`Accept-Language`, then its base
+language, then the first translation; the name when there is none).
 """
 type Scope {
   id: ID!
   "The OAuth scope token. Unique in its resource (or among the standard scopes); never changes."
   name: String!
-  description: LocalizedText!
+  description: [Translation!]!
   "The resource it belongs to; `null` for a standard OpenID Connect scope."
   resourceId: ID
   "The claims it opens."
@@ -74,14 +82,14 @@ enum DetailFieldKind {
 "A value of an `enum` field or an action, with the words the consent page shows."
 type DetailValue {
   value: String!
-  label: LocalizedText!
+  label: [Translation!]!
 }
 
 "One field of a detail type."
 type DetailField {
   key: String!
   kind: DetailFieldKind!
-  label: LocalizedText!
+  label: [Translation!]!
   required: Boolean!
   "Numbers: the lowest value."
   min: Float
@@ -102,8 +110,8 @@ type DetailType {
   id: ID!
   resourceId: ID!
   type: String!
-  name: LocalizedText!
-  description: LocalizedText!
+  name: [Translation!]!
+  description: [Translation!]!
   fields: [DetailField!]!
   "The RFC 9396 `actions` the type allows; empty when it takes none."
   actions: [DetailValue!]!
@@ -113,14 +121,14 @@ type DetailType {
 
 input DetailValueInput {
   value: String!
-  label: LocalizedTextInput
+  label: [TranslationInput!]
 }
 
 input DetailFieldInput {
   "A letter, then letters, digits or `_` (64 characters at most); not an RFC 9396 field name."
   key: String!
   kind: DetailFieldKind!
-  label: LocalizedTextInput
+  label: [TranslationInput!]
   required: Boolean
   min: Float
   max: Float
@@ -133,19 +141,20 @@ input CreateDetailTypeInput {
   resourceId: ID!
   "1 to 64 letters, digits, `_ . : -`, starting with a letter; unique in the tenant, never changes."
   type: String!
-  name: LocalizedTextInput!
-  description: LocalizedTextInput
+  name: [TranslationInput!]!
+  description: [TranslationInput!]
   fields: [DetailFieldInput!]!
   actions: [DetailValueInput!]
 }
 
 """
-Fields left out stay as they are; `fields` and `actions` replace the whole
-list (`actions: []` clears it). The type name and the resource never change.
+Fields left out stay as they are; `name` and `description` set or replace the
+locales they list and keep the others (a blank text removes a locale);
+`fields` and `actions` replace the whole list (`actions: []` clears it). The type name and the resource never change.
 """
 input UpdateDetailTypeInput {
-  name: LocalizedTextInput
-  description: LocalizedTextInput
+  name: [TranslationInput!]
+  description: [TranslationInput!]
   fields: [DetailFieldInput!]
   actions: [DetailValueInput!]
 }
@@ -159,7 +168,7 @@ input CreateResourceInput {
 
 input CreateScopeInput {
   name: String!
-  description: LocalizedTextInput
+  description: [TranslationInput!]
   "Leave out for a standard OpenID Connect scope."
   resourceId: ID
   claims: [String!]
@@ -172,9 +181,13 @@ input UpdateResourceInput {
   allowClientCredentials: Boolean
 }
 
-"Fields left out stay as they are. The name and the resource never change."
+"""
+Fields left out stay as they are; `description` sets or replaces the locales it
+lists and keeps the others (a blank text removes a locale). The name and the
+resource never change.
+"""
 input UpdateScopeInput {
-  description: LocalizedTextInput
+  description: [TranslationInput!]
   claims: [String!]
 }
 

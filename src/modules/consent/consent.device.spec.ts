@@ -221,7 +221,10 @@ describe("the device verification page's data", () => {
     if (acme === undefined) throw new Error("no tenant");
     await resourcesService.createScope(acme._id, {
       name: "email",
-      description: { fr: "Votre adresse e-mail", en: "Your email address" },
+      description: [
+        { locale: "fr", text: "Votre adresse e-mail" },
+        { locale: "en", text: "Your email address" },
+      ],
       resourceId: null,
       claims: [],
     });

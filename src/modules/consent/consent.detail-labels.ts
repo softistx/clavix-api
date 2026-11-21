@@ -1,8 +1,12 @@
 import type { FieldKind } from "@/modules/resources";
+import {
+  acceptedLocales,
+  pickTranslation,
+  type Translation,
+} from "@/shared/translations";
 import { isRecord } from "@/shared/values";
-import type { ConsentLocale } from "./consent.scope-labels";
 
-type Text = { fr: string; en: string };
+type Text = readonly Translation[];
 
 /** The words of one detail type of a tenant (D5): what the consent page shows of it. */
 export interface DetailText {
@@ -49,55 +53,78 @@ export interface ConsentDetails {
   complete: boolean;
 }
 
+// The page's own words, with the first language the fallback of a viewer
+// whose languages none of them covers.
 const COMMON: Record<
-  "actions" | "identifier" | "datatypes" | "locations",
+  "actions" | "identifier" | "datatypes" | "locations" | "yes" | "no",
   Text
 > = {
-  actions: { fr: "Actions", en: "Actions" },
-  locations: { fr: "Emplacement", en: "Location" },
-  identifier: { fr: "Identifiant", en: "Identifier" },
-  datatypes: { fr: "Données", en: "Data" },
-};
-const YES_NO: Record<ConsentLocale, [string, string]> = {
-  fr: ["Oui", "Non"],
-  en: ["Yes", "No"],
+  actions: [
+    { locale: "en", text: "Actions" },
+    { locale: "fr", text: "Actions" },
+  ],
+  locations: [
+    { locale: "en", text: "Location" },
+    { locale: "fr", text: "Emplacement" },
+  ],
+  identifier: [
+    { locale: "en", text: "Identifier" },
+    { locale: "fr", text: "Identifiant" },
+  ],
+  datatypes: [
+    { locale: "en", text: "Data" },
+    { locale: "fr", text: "Données" },
+  ],
+  yes: [
+    { locale: "en", text: "Yes" },
+    { locale: "fr", text: "Oui" },
+  ],
+  no: [
+    { locale: "en", text: "No" },
+    { locale: "fr", text: "Non" },
+  ],
 };
 
-// The viewer's language, else the other one, else `fallback`.
-function pick(text: Text | undefined, locale: ConsentLocale, fallback = "") {
-  if (text === undefined) return fallback;
-  const other = locale === "fr" ? "en" : "fr";
-  return text[locale] !== ""
-    ? text[locale]
-    : text[other] !== ""
-      ? text[other]
-      : fallback;
-}
+// The viewer's language (see `pickTranslation`), else `fallback`.
+const pick = (
+  text: Text | undefined,
+  acceptLanguage: string | null,
+  fallback = "",
+) => pickTranslation(text ?? [], acceptLanguage) ?? fallback;
 
-function scalar(value: unknown, locale: ConsentLocale): string {
-  if (typeof value === "boolean") return YES_NO[locale][value ? 0 : 1];
-  if (typeof value === "number")
-    return new Intl.NumberFormat(locale).format(value);
+function scalar(value: unknown, acceptLanguage: string | null): string {
+  if (typeof value === "boolean") {
+    return pick(value ? COMMON.yes : COMMON.no, acceptLanguage);
+  }
+  if (typeof value === "number") {
+    return new Intl.NumberFormat(acceptedLocales(acceptLanguage)).format(value);
+  }
   return typeof value === "string" ? value : "";
 }
 
 function formatted(
   value: unknown,
   field: DetailText["fields"][number],
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): string {
   const labelOf = (raw: string) =>
-    pick(field.values?.find((v) => v.value === raw)?.label, locale, raw);
+    pick(
+      field.values?.find((v) => v.value === raw)?.label,
+      acceptLanguage,
+      raw,
+    );
   if (Array.isArray(value)) {
     return value
       .map((item) =>
-        field.kind === "enum" ? labelOf(String(item)) : scalar(item, locale),
+        field.kind === "enum"
+          ? labelOf(String(item))
+          : scalar(item, acceptLanguage),
       )
       .join(", ");
   }
   return field.kind === "enum" && typeof value === "string"
     ? labelOf(value)
-    : scalar(value, locale);
+    : scalar(value, acceptLanguage);
 }
 
 // RFC 9396 members the rows always show, whatever the type.
@@ -137,26 +164,26 @@ function isComplete(
 function describe(
   detail: Record<string, unknown>,
   text: DetailText | undefined,
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): ConsentDetail {
   const type = String(detail["type"]);
   const rows: ConsentRow[] = [];
   const locations = detail["locations"];
   if (Array.isArray(locations) && locations.length > 0) {
     rows.push({
-      label: pick(COMMON.locations, locale),
+      label: pick(COMMON.locations, acceptLanguage),
       value: locations.map(String).join(", "),
     });
   }
   const actions = detail["actions"];
   if (Array.isArray(actions) && actions.length > 0) {
     rows.push({
-      label: pick(COMMON.actions, locale),
+      label: pick(COMMON.actions, acceptLanguage),
       value: actions
         .map((action) =>
           pick(
             text?.actions?.find((a) => a.value === action)?.label,
-            locale,
+            acceptLanguage,
             String(action),
           ),
         )
@@ -166,26 +193,32 @@ function describe(
   for (const field of text?.fields ?? []) {
     const value = detail[field.key];
     if (value === undefined || value === null) continue;
-    const shown = formatted(value, field, locale);
+    const shown = formatted(value, field, acceptLanguage);
     // An empty list, or a value of a shape the kind does not allow, has no row.
     if (shown === "") continue;
-    rows.push({ label: pick(field.label, locale, field.key), value: shown });
+    rows.push({
+      label: pick(field.label, acceptLanguage, field.key),
+      value: shown,
+    });
   }
   const identifier = detail["identifier"];
   if (typeof identifier === "string") {
-    rows.push({ label: pick(COMMON.identifier, locale), value: identifier });
+    rows.push({
+      label: pick(COMMON.identifier, acceptLanguage),
+      value: identifier,
+    });
   }
   const datatypes = detail["datatypes"];
   if (Array.isArray(datatypes) && datatypes.length > 0) {
     rows.push({
-      label: pick(COMMON.datatypes, locale),
+      label: pick(COMMON.datatypes, acceptLanguage),
       value: datatypes.map(String).join(", "),
     });
   }
   return {
     type,
-    title: pick(text?.name, locale, type),
-    description: pick(text?.description, locale),
+    title: pick(text?.name, acceptLanguage, type),
+    description: pick(text?.description, acceptLanguage),
     rows,
   };
 }
@@ -204,7 +237,7 @@ function describe(
 export function reviewDetails(
   authorizationDetails: string | null,
   texts: DetailTexts,
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): ConsentDetails {
   if (authorizationDetails === null) return { details: [], complete: true };
   let parsed: unknown;
@@ -222,7 +255,9 @@ export function reviewDetails(
     text: texts.find((text) => text.type === detail["type"]),
   }));
   return {
-    details: matches.map(({ detail, text }) => describe(detail, text, locale)),
+    details: matches.map(({ detail, text }) =>
+      describe(detail, text, acceptLanguage),
+    ),
     complete:
       typed.length === parsed.length &&
       matches.every(({ detail, text }) => isComplete(detail, text)),
@@ -233,6 +268,6 @@ export function reviewDetails(
 export const detailsOf = (
   authorizationDetails: string | null,
   texts: DetailTexts,
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): ConsentDetail[] =>
-  reviewDetails(authorizationDetails, texts, locale).details;
+  reviewDetails(authorizationDetails, texts, acceptLanguage).details;

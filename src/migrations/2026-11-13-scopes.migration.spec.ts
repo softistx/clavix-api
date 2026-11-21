@@ -70,7 +70,7 @@ describe(id, () => {
     );
     for (const scope of await scopeDocs()) {
       expect(scope).toMatchObject({
-        description: { fr: "", en: "" },
+        description: [],
         claims: [],
       });
     }
@@ -90,11 +90,14 @@ describe(id, () => {
     await migrate(db, [clavixTenant, scopesMigration]);
     await db
       .collection("scopes")
-      .updateOne({ name: "read" }, { $set: { "description.en": "Read" } });
+      .updateOne(
+        { name: "read" },
+        { $set: { description: [{ locale: "en", text: "Read" }] } },
+      );
     await again();
     const found = await scopeDocs();
     expect(found).toHaveLength(1);
-    expect(found[0]?.["description"]).toEqual({ fr: "", en: "Read" });
+    expect(found[0]?.["description"]).toEqual([{ locale: "en", text: "Read" }]);
   });
 
   test("down puts the strings back and empties the scopes", async () => {

@@ -1,6 +1,7 @@
 import type { ReadDocumentOf, TypedCollection } from "@softistx/mongo";
 import type { z } from "zod";
 import type { CliTenant } from "@/shared/cli";
+import type { Translation } from "@/shared/translations";
 import type { DetailTypeClients } from "./resources.client-lists";
 import type {
   detailTypes,
@@ -13,40 +14,26 @@ export type StoredResourceDoc = ReadDocumentOf<typeof resources>;
 export type StoredScopeDoc = ReadDocumentOf<typeof scopes>;
 export type StoredDetailTypeDoc = ReadDocumentOf<typeof detailTypes>;
 
-export interface Description {
-  fr: string;
-  en: string;
-}
-
-/** A text to set; a language left out (or `undefined`) is not touched. */
-export interface DescriptionInput {
-  fr?: string | undefined;
-  en?: string | undefined;
-}
+/** A text as a caller sends it: the locales it sets (see `mergeTranslations`). */
+export type Texts = readonly Translation[];
 
 export interface ScopeInput {
   name: string;
-  description?: DescriptionInput | undefined;
+  description?: Texts | undefined;
   /** The resource it belongs to; `null` for a standard OpenID Connect scope. */
   resourceId?: string | null | undefined;
   claims?: readonly string[] | undefined;
 }
 
-/** A label or a description in the draft: a language left out is empty. */
-export interface TextDraft {
-  fr?: string | undefined;
-  en?: string | undefined;
-}
-
 export interface ValueDraft {
   value: string;
-  label?: TextDraft | undefined;
+  label?: Texts | undefined;
 }
 
 export interface FieldDraft {
   key: string;
   kind: FieldKind;
-  label?: TextDraft | undefined;
+  label?: Texts | undefined;
   required?: boolean | undefined;
   min?: number | undefined;
   max?: number | undefined;
@@ -57,16 +44,16 @@ export interface FieldDraft {
 /** What the console sends to create a detail type. */
 export interface DetailTypeDraft {
   type: string;
-  name: TextDraft;
-  description?: TextDraft | undefined;
+  name: Texts;
+  description?: Texts | undefined;
   fields: readonly FieldDraft[];
   actions?: readonly ValueDraft[] | undefined;
 }
 
 /** What it sends to change one: the type name never changes; a part left out stays. */
 export interface DetailTypePatch {
-  name?: DescriptionInput | undefined;
-  description?: DescriptionInput | undefined;
+  name?: Texts | undefined;
+  description?: Texts | undefined;
   fields?: readonly FieldDraft[] | undefined;
   actions?: readonly ValueDraft[] | undefined;
 }
