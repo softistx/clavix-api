@@ -45,7 +45,7 @@
     "@softistx/janus-oauth-mongo": "^0.20.2",
     "@softistx/janus-oidc": "^0.4.15",
     "@softistx/janus-passkeys": "^0.3.28",
-    "@softistx/janus-social": "^0.10.2",
+    "@softistx/janus-social": "^0.10.3",
     "@softistx/janus-telemetry": "^0.20.1",
     "@softistx/janus-webhooks": "^0.16.0",
     "@softistx/janus-webhooks-redis": "^0.13.2",

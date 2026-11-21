@@ -24,7 +24,7 @@
         "@softistx/janus-oauth-mongo": "^0.20.2",
         "@softistx/janus-oidc": "^0.4.15",
         "@softistx/janus-passkeys": "^0.3.28",
-        "@softistx/janus-social": "^0.10.2",
+        "@softistx/janus-social": "^0.10.3",
         "@softistx/janus-telemetry": "^0.20.1",
         "@softistx/janus-webhooks": "^0.16.0",
         "@softistx/janus-webhooks-redis": "^0.13.2",
@@ -339,7 +339,7 @@
 
     "@softistx/janus-passkeys": ["@softistx/janus-passkeys@0.3.28", "", { "dependencies": { "@simplewebauthn/server": "^14.0.3" }, "peerDependencies": { "@softistx/janus": "^0.80.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-2cI2T6xDONWUVtajfybxWj8XGFRsI2Y6KDrsL+ZKamHAX0uFeMlVJCVKumfsy101cwdbqrWN6Q/wI7J698/KSw=="],
 
-    "@softistx/janus-social": ["@softistx/janus-social@0.10.2", "", { "dependencies": { "oauth4webapi": "^3.8.8" }, "peerDependencies": { "@softistx/janus": "^0.80.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-U2TvOECsnnENBymFU8Hj1cunaMzGAnejWbVIAP9qONxNfXzXcS9QrPkFfRXCKXxz4J1VoflKjH4HW/2E+kuGrA=="],
+    "@softistx/janus-social": ["@softistx/janus-social@0.10.3", "", { "dependencies": { "oauth4webapi": "^3.8.9" }, "peerDependencies": { "@softistx/janus": "^0.80.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-relt1WpFb1kMptlWuToUIaVKiU1nj1/JJ2FdI9/dpbLcKLnja4oMLXOH7bhy/L7c8DQ6JXwTGW5Rm9fO/d3DPg=="],
 
     "@softistx/janus-telemetry": ["@softistx/janus-telemetry@0.20.1", "", { "peerDependencies": { "@softistx/janus": "^0.80.0", "@softistx/telemetry": ">=0.3.0 <1", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-l5doC09ChTxX2Qx358/osb0XhZKidaktPq37asGEusOtH+OZWULOSdzCYlCIfgpxPZ5zdxknitW/Y5hfS1jPaw=="],
 
@@ -701,7 +701,7 @@
 
     "normalize-path": ["normalize-path@2.1.1", "", { "dependencies": { "remove-trailing-separator": "^1.0.1" } }, "sha512-3pKJwH184Xo/lnH6oyP1q2pMd7HcypqqmRs91/6/i2CGtWwIKGCkOOMTm/zXbgTEWHw1uNpNi/igc3ePOYHb6w=="],
 
-    "oauth4webapi": ["oauth4webapi@3.8.8", "", {}, "sha512-8N28E+a/oxfXWBgOMt+ZP/JUf/XR+IFbvkAEPP3gznXOMv9BpAAwiIj0TFNz3tGTPc0ZQ8zmWBNgN1nAys0gng=="],
+    "oauth4webapi": ["oauth4webapi@3.8.9", "", {}, "sha512-gyn4jpaxyYFm1epl3mwqc1sFShLjT9eq/63JW+Nvk286Lz6FC72pVv/SyhJHxo+sQiHEcjIHs4TtFKX/+Md07A=="],
 
     "onetime": ["onetime@7.0.0", "", { "dependencies": { "mimic-function": "^5.0.0" } }, "sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ=="],
 
