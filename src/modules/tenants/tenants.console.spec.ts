@@ -14,6 +14,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
 const deps = createConsoleDeps({ serverFor: async () => null });
@@ -49,6 +50,7 @@ const as = (userId: string, query: string) =>
     .request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer x",
       },

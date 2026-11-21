@@ -13,6 +13,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 import { buildTelemetry } from "./build";
 import { parseOtlpHeaders } from "./otlp-headers";
 
@@ -65,6 +66,7 @@ test("a sign-in request is traced with its tenant and no e-mail or address", asy
   const response = await app.request(`${issuerOf("tele", origin)}/graphql`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       "x-forwarded-for": "203.0.113.9",
     },
@@ -116,7 +118,7 @@ test("with no endpoint set there is no exporter, and requests still answer", asy
   const app = createApp({ telemetry });
   const response = await app.request(`${issuerOf("tele", origin)}/graphql`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ query: "{ health { status } }" }),
   });
   expect(response.status).toBe(200);

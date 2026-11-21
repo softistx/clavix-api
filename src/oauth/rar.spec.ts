@@ -28,6 +28,7 @@ import { mongoClientDetailTypes } from "@/modules/resources";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../test/tenant-par-off";
 
 // M3b R4, end to end: authorization details (RFC 9396) from PAR to the
@@ -84,6 +85,7 @@ const gql = async (
   const response = await app.request(url("/graphql"), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       cookie,
       ...(language === undefined ? {} : { "accept-language": language }),

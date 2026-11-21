@@ -7,6 +7,7 @@ import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
+import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 import { adminEvents } from "./admin-events/admin-events.model";
 import {
@@ -116,6 +117,7 @@ const as = (
     .request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer x",
         ...options.headers,

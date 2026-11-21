@@ -19,6 +19,7 @@ import {
 } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
 
 // A tenant-level role on the `clavix` tenant is not the platform's: every
@@ -75,6 +76,7 @@ const as =
     const response = await app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: `Bearer ${who()}`,
       },

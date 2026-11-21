@@ -16,6 +16,7 @@ import {
 } from "@/modules/tenants";
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { buildTenantJanus, SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 const app = createApp();
 const origin = {
@@ -57,6 +58,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       origin: (await tenantOf(slug)).issuer.replace(/\/$/, ""),
       ...(cookie === undefined ? {} : { cookie }),

@@ -27,6 +27,7 @@ import {
 } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { socialOf } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -86,6 +87,7 @@ const as = async (
   }).request(`http://localhost${CONSOLE_PATH}`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       authorization: "Bearer x",
     },

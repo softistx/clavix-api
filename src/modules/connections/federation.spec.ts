@@ -32,6 +32,7 @@ import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of
@@ -146,6 +147,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       "x-forwarded-for": "198.51.100.77",
       ...headers,

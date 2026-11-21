@@ -26,6 +26,7 @@ import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
+import { CLIENT_HEADER, useClientHeader } from "./http/csrf";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
@@ -85,9 +86,13 @@ export function createApp(
     ready?: () => Promise<ReadyReport>;
     // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
     ide?: boolean;
+    // Refuse a GraphQL request without `x-clavix-client`; `CLAVIX_REQUIRE_CLIENT_HEADER` by default.
+    requireClientHeader?: boolean;
   } = {},
 ) {
   const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
+  const requireClient =
+    options.requireClientHeader ?? env.CLAVIX_REQUIRE_CLIENT_HEADER;
   const base = createBase(
     undefined,
     {
@@ -133,10 +138,12 @@ export function createApp(
     graphql(app, {
       schema,
       ide: ide ? "apollo-sandbox" : false,
+      sandbox: { initialHeaders: { [CLIENT_HEADER]: "apollo-sandbox" } },
       // Introspection follows the IDE: off wherever the IDE is.
       introspection: ide,
       onUnexpected: reportUnexpected,
       plugins: [
+        useClientHeader(requireClient),
         useSameOriginJson(),
         useWithoutQuotedValues(),
         janusPlugin(),
@@ -173,6 +180,7 @@ export function createApp(
             limits: { cost: { max: CONSOLE_MAX_COST } },
             onUnexpected: reportUnexpected,
             plugins: [
+              useClientHeader(requireClient),
               // First: aliased invitations are counted before anything runs.
               ...(consoleOptions.budgets === undefined
                 ? []

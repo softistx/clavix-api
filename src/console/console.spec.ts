@@ -35,6 +35,7 @@ import {
 } from "@/modules/tenants";
 import { userinfoOf } from "@/oauth/building";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
@@ -107,6 +108,7 @@ const call = (query: string, token?: string) =>
   app.request(`http://localhost${CONSOLE_PATH}`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
     },
@@ -298,6 +300,7 @@ describe("the clavix tenant requires DPoP", () => {
     app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: `${scheme} ${token}`,
         ...(proof === undefined ? {} : { dpop: proof }),
@@ -345,6 +348,7 @@ describe("the console's DPoP token", () => {
     app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: `${scheme} ${token}`,
         ...(proof === undefined ? {} : { dpop: proof }),
@@ -633,7 +637,11 @@ describe("the console's bearer token", () => {
   test("a cookie alone authenticates nothing", async () => {
     const response = await app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: "sid=abc" },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        cookie: "sid=abc",
+      },
       body: JSON.stringify({ query: ME }),
     });
     expect(response.status).toBe(401);
@@ -684,6 +692,7 @@ describe("the guard", () => {
     const response = await guarded.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer x",
       },
@@ -1094,6 +1103,7 @@ describe("the guards over HTTP", () => {
       .request(`http://localhost${CONSOLE_PATH}`, {
         method: "POST",
         headers: {
+          ...clientHeaders,
           "content-type": "application/json",
           authorization: "Bearer x",
         },
@@ -1152,6 +1162,7 @@ describe("authentication failures", () => {
       {
         method: "POST",
         headers: {
+          ...clientHeaders,
           "content-type": "application/json",
           authorization: "Bearer x",
         },

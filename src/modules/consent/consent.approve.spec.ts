@@ -22,6 +22,7 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 const RESOURCE = "https://api.clavix.test/mcp";
@@ -73,6 +74,7 @@ const gql = async (
   const response = await app.request(url(slug, "/graphql"), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(cookie === undefined ? {} : { cookie }),
       ...(language === undefined ? {} : { "accept-language": language }),
@@ -380,6 +382,7 @@ describe("a foreign page cannot decide", () => {
     const id = await authorize("acme");
     const response = await post(
       {
+        ...clientHeaders,
         "content-type": "application/json",
         origin: "https://evil.clavix.test",
       },
@@ -418,6 +421,7 @@ describe("a foreign page cannot decide", () => {
   test("a foreign Origin or a form post cannot list or revoke connected apps", async () => {
     const foreign = await post(
       {
+        ...clientHeaders,
         "content-type": "application/json",
         origin: "https://evil.clavix.test",
       },

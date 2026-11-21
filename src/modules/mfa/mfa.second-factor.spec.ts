@@ -18,6 +18,7 @@ import {
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { secondFactorKeysOf } from "@/modules/users/second-factor-keys";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 const memory = mailer as MemoryMailer;
 const app = createApp();
@@ -61,6 +62,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       origin: (await tenantOf(slug)).issuer.replace(/\/$/, ""),
       ...(cookie === undefined ? {} : { cookie }),
@@ -421,7 +423,11 @@ describe("an unknown host", () => {
     const host = `http://nobody-here.${env.CLAVIX_DOMAIN}`;
     const response = await app.request(`${host}/graphql`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: host },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        origin: host,
+      },
       body: JSON.stringify({ query: "{ secondFactor { enabled } }" }),
     });
     const body = (await response.json()) as {

@@ -17,6 +17,7 @@ import type { AuditAction, AuditTarget } from "@/console/audit";
 import type { ConsoleContext } from "@/console/context";
 import type { Permission } from "@/console/model";
 import { consoleSchema } from "@/console/schema";
+import { clientHeaders } from "~/client-header";
 import { BrandingConflictError } from "./branding.errors";
 import { LOGO_MAX_BYTES } from "./branding.logo";
 import { BrandingService } from "./branding.service";
@@ -549,7 +550,11 @@ describe("the public side", () => {
       (await (
         await app.request(`${h}/graphql`, {
           method: "POST",
-          headers: { "content-type": "application/json", origin: h },
+          headers: {
+            ...clientHeaders,
+            "content-type": "application/json",
+            origin: h,
+          },
           body: JSON.stringify({
             query:
               "{ tenantBranding { displayName themeName css logoUrl backgroundPreset motif } }",

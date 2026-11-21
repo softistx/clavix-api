@@ -18,6 +18,7 @@ import {
   MAGIC_LINK_LIFESPAN,
   SESSION_COOKIE,
 } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 import { settled } from "./auth.outbox";
 
 // Magic link is the tenant's choice, off until it turns it on (its sign-in
@@ -52,6 +53,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       "x-forwarded-for": ip,
       ...extra,
@@ -186,6 +188,7 @@ describe("magic link turned on by the tenant", () => {
     const me = await app.request(url("acme"), {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         cookie: (cookie ?? "").split(";")[0] ?? "",
       },
@@ -287,7 +290,7 @@ describe("magic link turned on by the tenant", () => {
       `https://nobody.${env.CLAVIX_DOMAIN}/graphql`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { ...clientHeaders, "content-type": "application/json" },
         body: JSON.stringify({
           query: REQUEST,
           variables: { email: "a@example.test" },

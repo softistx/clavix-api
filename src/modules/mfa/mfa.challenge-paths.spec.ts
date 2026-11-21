@@ -22,6 +22,7 @@ import { settled } from "@/modules/auth";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 // The second-factor challenge on the sign-in paths mfa.spec does not walk
 // (a magic link, a social provider), its freshness window, a suspended
@@ -62,6 +63,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       origin: (await tenantOf(slug)).issuer.replace(/\/$/, ""),
       ...(cookie === undefined ? {} : { cookie }),
@@ -176,7 +178,7 @@ async function holder(slug: string, email: string) {
 function github(email: string) {
   const json = (value: unknown) =>
     new Response(JSON.stringify(value), {
-      headers: { "content-type": "application/json" },
+      headers: { ...clientHeaders, "content-type": "application/json" },
     });
   const fake = (async (input: unknown, init?: RequestInit) => {
     const { url } = new Request(input as string, init);

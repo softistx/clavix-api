@@ -1051,3 +1051,11 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** Bun's bundler emits the ESM inits of `@simplewebauthn/server` before its CommonJS require of `reflect-metadata`, so `@peculiar/x509` loads `tsyringe` first.
 
 **Fix:** keep `import "reflect-metadata"` first in `src/server.ts`.
+
+## 403 `CLIENT_HEADER_REQUIRED` on `/graphql` or `/console/graphql`
+
+**When:** `CLAVIX_REQUIRE_CLIENT_HEADER=true` and the request carries no `x-clavix-client` header (or a blank one).
+
+**Why:** the API refuses it before parsing, so no resolver runs. Every first-party caller sends the header (clavix-ui sends `clavix-ui`).
+
+**Fix:** add `x-clavix-client: <your client name>` (any non-empty value) to the request, or leave the flag `false` until the caller is updated.

@@ -15,6 +15,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the
 // challenge reads the passkey options again, with no attempt counted.
@@ -55,6 +56,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       origin: (await tenantOf(slug)).issuer.replace(/\/$/, ""),
       ...(cookie === undefined ? {} : { cookie }),
@@ -365,6 +367,7 @@ describe("requestSecondFactorPasskeyOptions", () => {
       const response = await limited.request(url(A), {
         method: "POST",
         headers: {
+          ...clientHeaders,
           "content-type": "application/json",
           origin: (await tenantOf(A)).issuer.replace(/\/$/, ""),
         },
@@ -396,7 +399,11 @@ describe("requestSecondFactorPasskeyOptions", () => {
     const host = `http://nobody-here.${env.CLAVIX_DOMAIN}`;
     const response = await limited.request(`${host}/graphql`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: host },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        origin: host,
+      },
       body: JSON.stringify({ query: OPTIONS, variables: { challenge: "x" } }),
     });
     const body = (await response.json()) as {

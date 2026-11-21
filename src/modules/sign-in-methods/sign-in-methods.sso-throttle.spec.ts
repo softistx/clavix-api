@@ -19,6 +19,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 import {
   createHomeRealmThrottle,
   createSsoStartThrottle,
@@ -92,7 +93,11 @@ async function setup(code: SsoLimitConfig, sso: SsoLimitConfig) {
   ) => {
     const response = await app.request(`${issuerOf(slug, origin)}/graphql`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        "x-forwarded-for": ip,
+      },
       body: JSON.stringify({ query, variables }),
     });
     const body = (await response.json()) as {

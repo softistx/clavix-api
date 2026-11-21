@@ -9,6 +9,7 @@ import { settled } from "@/modules/auth";
 import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
+import { clientHeaders } from "~/client-header";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { issuerOf } from "./tenants.utils";
 
@@ -29,7 +30,7 @@ interface Answer {
 async function gql(slug: string, query: string): Promise<Answer> {
   const response = await app.request(url(slug), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ query }),
   });
   const body = (await response.json()) as Omit<Answer, "status">;

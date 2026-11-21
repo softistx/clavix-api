@@ -18,6 +18,7 @@ import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { createDeviceThrottle } from "./consent.device-throttle";
 
@@ -103,6 +104,7 @@ const gql = async (
   const response = await on.request(url(slug, "/graphql"), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(cookie === undefined ? {} : { cookie }),
       ...(language === undefined ? {} : { "accept-language": language }),

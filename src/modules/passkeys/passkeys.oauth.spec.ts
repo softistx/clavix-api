@@ -21,6 +21,7 @@ import {
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // A passkey sign-in, then the OAuth flow of the same tenant: the id_token's
@@ -53,6 +54,7 @@ const gql = async (query: string, variables = {}, cookie = "") => {
   const response = await app.request(url("/graphql"), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(cookie === "" ? {} : { cookie }),
     },

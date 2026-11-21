@@ -13,6 +13,7 @@ import { createExclusive } from "@/console/exclusive";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { OAuthPolicyService } from "@/modules/oauth-policy/oauth-policy.service";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 
 interface Policy {
   tenantId: string;
@@ -59,6 +60,7 @@ const as = async (
   }).request(`http://localhost${CONSOLE_PATH}`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       authorization: "Bearer x",
     },
