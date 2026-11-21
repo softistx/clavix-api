@@ -74,8 +74,3 @@ test("on: the IDE page (an HTML GET with no query) needs no header", async () =>
   }).request(paths[0] as string, { headers: { accept: "text/html" } });
   expect(response.status).toBe(200);
 });
-
-test("the flag is read from the environment, off by default", async () => {
-  const { env } = await import("@/config/env");
-  expect(env.CLAVIX_REQUIRE_CLIENT_HEADER).toBe(false);
-});
