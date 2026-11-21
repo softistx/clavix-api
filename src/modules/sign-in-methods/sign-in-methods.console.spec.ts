@@ -1,14 +1,12 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
-import type { GraphQLError } from "graphql";
+import { GraphQLError, GraphQLObjectType } from "graphql";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
-import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
-import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
-import { noBudgets, unthrottled } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import {
   domainsService,
@@ -16,14 +14,18 @@ import {
   tenantsService,
 } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
-import { createExclusive } from "@/console/exclusive";
-import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { consoleSchema } from "@/console/schema";
-import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { socialOf } from "@/modules/users";
-import { createTestApp } from "~/app";
-import { clientHeaders } from "~/client-header";
+import { at } from "~/body";
+import { consoleRequestAs } from "~/console";
+import { type GqlResult, gqlBody } from "~/gql";
+import { defined, instance } from "~/narrow";
+import { quietTenants } from "~/ports";
 import { secretContext } from "./sign-in-methods.secrets";
 import { SignInPolicyService } from "./sign-in-methods.service";
 import { socialProvidersOf } from "./sign-in-methods.social";
@@ -35,71 +37,41 @@ const origin = {
 } as const;
 const SECRET = "GOCSPX-spec-secret-do-not-leak";
 
-interface Policy {
-  tenantId: string;
-  methods: { type: string; enabled: boolean; available: boolean }[];
-  social: {
-    provider: string;
-    clientId: string;
-    hasSecret: boolean;
-    enabled: boolean;
-    callbackUrl: string;
-  }[];
-  version: number;
-}
-interface Result {
-  data?: Record<string, Policy> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-  text: string;
-}
+const policySchema = z.looseObject({
+  tenantId: z.string(),
+  methods: z.array(
+    z.object({
+      type: z.string(),
+      enabled: z.boolean(),
+      available: z.boolean(),
+    }),
+  ),
+  social: z.array(
+    z.looseObject({
+      provider: z.string(),
+      clientId: z.string(),
+      hasSecret: z.boolean(),
+      enabled: z.boolean(),
+      callbackUrl: z.string(),
+    }),
+  ),
+  version: z.number(),
+});
+type Policy = z.output<typeof policySchema>;
+type Result = GqlResult & { text: string };
 
 const as = async (
   userId: string,
   query: string,
   variables: Record<string, unknown> = {},
 ): Promise<Result> => {
-  const response = await createTestApp({
-    console: {
-      auditExport: { throttle: unthrottled },
-      budgets: noBudgets,
-      now: () => new Date(),
-      reportError: () => {},
-      authenticate: async () => ({
-        userId,
-        clientId: CONSOLE_CLIENT_ID,
-        grantId: "g",
-        scopes: ["console"],
-        clientName: null,
-        bound: null,
-        jkt: null,
-        authorizationDetails: [],
-      }),
-      access,
-      adminEvents: adminEventRecorder,
-      activity: { admin: adminEventReader, auth: authEventsService },
-      admins: {} as ConsoleAdmins,
-      users: {} as ConsoleUsers,
-      exclusive: createExclusive(null),
-      directory: {
-        findUser: async () => null,
-        emailVerified: async () => true,
-        findUserByEmail: async () => null,
-        tenantsByIds: async () => [],
-      },
-    },
-  }).request(`http://localhost${CONSOLE_PATH}`, {
-    method: "POST",
-    headers: {
-      ...clientHeaders,
-      "content-type": "application/json",
-      authorization: "Bearer x",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  const text = await response.text();
-  return { ...(JSON.parse(text) as Omit<Result, "text">), text };
+  const text = await (await consoleRequestAs(userId)(query, variables)).text();
+  return { ...gqlBody.parse(JSON.parse(text)), text };
 };
-const codeOf = (result: Result) => result.errors?.[0]?.extensions?.code;
+const codeOf = (result: Result) => result.errors?.[0]?.extensions?.["code"];
+/** The policy a mutation or the query answered under `field`, `undefined` when it answered none. */
+const policyIn = (result: Result, field: string): Policy | undefined =>
+  at(result.data, field, policySchema.optional());
 
 const FIELDS =
   "tenantId version methods { type enabled available } social { provider clientId hasSecret enabled callbackUrl }";
@@ -138,7 +110,7 @@ const platformTenant = async () => {
 };
 const policyOf = async (user: string, tenantId: string) => {
   const result = await as(user, POLICY, { t: tenantId });
-  const policy = result.data?.["signInPolicy"];
+  const policy = policyIn(result, "signInPolicy");
   if (policy === undefined) throw new Error(result.text);
   return policy;
 };
@@ -176,12 +148,17 @@ const eventsOf = async (tenantId: string) =>
     target: event["target"],
   }));
 
+/** The tenants whose stored sign-in policy always lost the version race. */
+class LosingTenants extends TenantsService {
+  override async updateSignIn(): Promise<never> {
+    throw new OptimisticLockError("lost");
+  }
+}
+
 describe("the contract", () => {
   test("no type of the console schema can return a secret", () => {
     const type = consoleSchema.getType("SocialProviderConfig");
-    const fields = Object.keys(
-      (type as { getFields(): Record<string, unknown> }).getFields(),
-    );
+    const fields = Object.keys(instance(type, GraphQLObjectType).getFields());
     expect(fields.sort()).toEqual([
       "callbackUrl",
       "clientId",
@@ -272,7 +249,7 @@ describe("the methods", () => {
       t: a,
       m: [{ type: "MAGIC_LINK", enabled: true }],
     });
-    const policy = result.data?.["updateSignInMethods"];
+    const policy = policyIn(result, "updateSignInMethods");
     expect(policy === undefined ? [] : enabledOf(policy)).toEqual([
       "PASSKEY",
       "EMAIL_CODE",
@@ -308,7 +285,7 @@ describe("the methods", () => {
       t: a,
       m: [{ type: "MAGIC_LINK", enabled: true }],
     });
-    expect(result.data?.["updateSignInMethods"]?.version).toBe(before);
+    expect(policyIn(result, "updateSignInMethods")?.version).toBe(before);
     expect((await stored(a)).version).toBe(before);
   });
 
@@ -332,6 +309,9 @@ describe("the methods", () => {
   test("the platform tenant keeps a first-party method: PLATFORM_FIRST_PARTY_METHOD", async () => {
     const platform = (await platformTenant())._id.toHexString();
     await access.grantTenant(platform, ADMIN_PLATFORM, "admin");
+    // A write on Clavix's own tenant is the platform's: the real directory
+    // finds the tenant, so the caller needs the platform role too.
+    await access.grantPlatform(ADMIN_PLATFORM, "admin");
     const before = await stored(platform);
     // Social providers do not count for the platform tenant.
     const refused = await as(ADMIN_PLATFORM, METHODS, {
@@ -349,7 +329,7 @@ describe("the methods", () => {
     expect(first.errors).toBeUndefined();
     const version = (await stored(platform)).version;
     const again = await as(ADMIN_PLATFORM, METHODS, { t: platform, m: one });
-    expect(again.data?.["updateSignInMethods"]?.version).toBe(version);
+    expect(policyIn(again, "updateSignInMethods")?.version).toBe(version);
     expect((await stored(platform)).version).toBe(version);
     // Turning the last one off is refused, magic link on or not.
     const last = await as(ADMIN_PLATFORM, METHODS, {
@@ -380,9 +360,9 @@ describe("the methods", () => {
       ],
     });
     expect(result.errors).toBeUndefined();
-    expect(enabledOf(result.data?.["updateSignInMethods"] as Policy)).toEqual(
-      [],
-    );
+    expect(
+      enabledOf(defined(policyIn(result, "updateSignInMethods"), "the policy")),
+    ).toEqual([]);
     await as(ADMIN_C, METHODS, {
       t: c,
       m: [
@@ -470,7 +450,7 @@ describe("the social providers", () => {
       i: { provider: "GOOGLE", clientId: "google-id", clientSecret: SECRET },
     });
     expect(result.text).not.toContain(SECRET);
-    expect(result.data?.["setSocialProvider"]?.social).toEqual([
+    expect(policyIn(result, "setSocialProvider")?.social).toEqual([
       {
         provider: "GOOGLE",
         clientId: "google-id",
@@ -520,22 +500,20 @@ describe("the social providers", () => {
       t: a,
       i: { provider: "GOOGLE", clientId: "google-id", clientSecret: SECRET },
     });
-    expect(again.data?.["setSocialProvider"]?.version).toBe(before.version);
+    expect(policyIn(again, "setSocialProvider")?.version).toBe(before.version);
     expect((await stored(a)).version).toBe(before.version);
 
     const renamed = await as(ADMIN_A, SET, {
       t: a,
       i: { provider: "GOOGLE", clientId: "google-id-2" },
     });
-    expect(renamed.data?.["setSocialProvider"]?.social[0]?.clientId).toBe(
+    expect(policyIn(renamed, "setSocialProvider")?.social[0]?.clientId).toBe(
       "google-id-2",
     );
     const after = await stored(a);
     expect(after.version).toBeGreaterThan(before.version);
     expect(after.signIn.social[0]?.secret).toEqual(
-      before.signIn.social[0]?.secret as NonNullable<
-        (typeof before.signIn.social)[number]
-      >["secret"],
+      before.signIn.social[0]?.secret,
     );
   });
 
@@ -572,9 +550,7 @@ describe("the social providers", () => {
       ],
     });
     expect(
-      off.data?.["updateSignInMethods"] === undefined
-        ? null
-        : enabledOf(off.data["updateSignInMethods"]),
+      enabledOf(defined(policyIn(off, "updateSignInMethods"), "the policy")),
     ).toEqual([]);
     const version = (await stored(a)).version;
     expect(codeOf(await as(ADMIN_A, REMOVE, { t: a, p: "GOOGLE" }))).toBe(
@@ -621,11 +597,13 @@ describe("the social providers", () => {
       m: [{ type: "EMAIL_CODE", enabled: true }],
     });
     const removed = await as(OWNER_A, REMOVE, { t: a, p: "GOOGLE" });
-    expect(removed.data?.["removeSocialProvider"]?.social).toEqual([]);
+    expect(policyIn(removed, "removeSocialProvider")?.social).toEqual([]);
     const after = await stored(a);
     expect(after.signIn.social).toEqual([]);
     const again = await as(OWNER_A, REMOVE, { t: a, p: "GOOGLE" });
-    expect(again.data?.["removeSocialProvider"]?.version).toBe(after.version);
+    expect(policyIn(again, "removeSocialProvider")?.version).toBe(
+      after.version,
+    );
     const janus = await janusIssuers.forRequest(
       new Request(issuerOf("sim-a", origin)),
     );
@@ -685,25 +663,24 @@ describe("concurrent changes", () => {
     expect([codeOf(first), codeOf(second)].sort()).toEqual([
       "NO_SIGN_IN_METHOD",
       undefined,
-    ] as unknown as string[]);
+    ]);
     expect(enabledOf(await policyOf(ADMIN_A, id))).toHaveLength(1);
   });
 
   test("a change that keeps losing the race is CONFLICT (409), nothing stored", async () => {
     const lost = new SignInPolicyService(
-      {
-        liveByIds: tenantsService.liveByIds.bind(tenantsService),
-        updateSignIn: async () => {
-          throw Object.create(OptimisticLockError.prototype);
-        },
-      } as unknown as typeof tenantsService,
+      new LosingTenants(mongo.db.tenants, {
+        ...quietTenants,
+        now: () => new Date(),
+        log: () => {},
+      }),
       secretBox,
       () => {},
     );
     const refusal = await lost
       .updateMethods(b, [{ type: "magicLink", enabled: true }])
       .catch((error: unknown) => error);
-    expect((refusal as GraphQLError).extensions).toMatchObject({
+    expect(instance(refusal, GraphQLError).extensions).toMatchObject({
       code: "CONFLICT",
       http: { status: 409 },
     });
@@ -715,15 +692,23 @@ describe("the multi-factor policy", () => {
     updateMfaPolicy(tenantId: $t, input: $i) { tenantId version mfa { mode totp } }
   }`;
   const READ = `query ($t: ID!) { signInPolicy(tenantId: $t) { mfa { mode totp } } }`;
-  type Mfa = { version: number; mfa: { mode: string; totp: boolean } };
   const mfaOf = (result: Result) =>
-    result.data?.["updateMfaPolicy"] as unknown as Mfa | undefined;
+    at(
+      result.data,
+      "updateMfaPolicy",
+      z
+        .looseObject({
+          version: z.number(),
+          mfa: z.object({ mode: z.string(), totp: z.boolean() }),
+        })
+        .optional(),
+    );
 
   test("off by default; an admin turns TOTP on and the tenant's janus follows; a left-out field keeps its value", async () => {
     const read = await as(ADMIN_A, READ, { t: a });
-    expect(read.data?.["signInPolicy"]).toEqual({
+    expect(at(read.data, "signInPolicy")).toEqual({
       mfa: { mode: "PASSKEY_SUFFICIENT", totp: false },
-    } as never);
+    });
     const before = (await stored(a)).version;
     const on = mfaOf(await as(ADMIN_A, MFA, { t: a, i: { totp: true } }));
     expect(on?.mfa).toEqual({ mode: "PASSKEY_SUFFICIENT", totp: true });

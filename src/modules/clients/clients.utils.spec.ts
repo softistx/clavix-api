@@ -45,7 +45,8 @@ describe("shape", () => {
       targetResources: ["https://r.test"],
       subjectClients: "any",
       subjectAgents: false,
-    } as never);
+      mode: "delegation",
+    });
     expect(shown.tokenExchange).toEqual({
       targetResources: ["https://r.test"],
       subjectClients: [],

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { z } from "zod";
 import { compileDetailType, digestOf } from "./resources.compile";
 import {
   DETAIL_LIMITS,
@@ -27,7 +26,7 @@ const payment: DetailTypeDefinition = {
 };
 
 const parse = (definition: DetailTypeDefinition, input: unknown) =>
-  (compileDetailType(definition) as z.ZodType).safeParse(input);
+  compileDetailType(definition).safeParse(input);
 const ok = (input: unknown, definition = payment) =>
   expect(parse(definition, input).success).toBe(true);
 const refused = (input: unknown, definition = payment) =>

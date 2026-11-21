@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import type { MemoryMailer } from "@softistx/mail";
 import type { Exporter, Signal } from "@softistx/telemetry";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -14,12 +13,13 @@ import {
 } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { memoryMailerOf } from "~/memory-mailer-of";
 import { quietTenants } from "~/ports";
 import { buildTelemetry } from "./build";
 import { parseOtlpHeaders } from "./otlp-headers";
 
 const EMAIL = "grace@example.test";
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

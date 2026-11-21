@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
-import type { MemoryMailer } from "@softistx/mail";
 import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -15,12 +14,17 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { at } from "~/body";
+import { challengeOfOptions } from "~/challenge-of";
 import { clientHeaders } from "~/client-header";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
+import { defined } from "~/narrow";
+import { testSecrets } from "~/ports";
 
 // `confirmSecondFactorWithPasskey` (clavix-api#293): the hosted second-factor
 // page answers a `SecondFactorChallenge` with a passkey bound to it.
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -29,10 +33,7 @@ const origin = {
 } as const;
 const policies = new SignInPolicyService(
   tenantsService,
-  {
-    seal: () => "",
-    open: () => "",
-  } as never,
+  testSecrets(),
   () => {},
 );
 
@@ -44,12 +45,6 @@ const tenantOf = async (slug: string) => {
   if (tenant === null) throw new Error(`no tenant ${slug}`);
   return tenant;
 };
-
-interface Answer {
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
 
 async function gql(
   slug: string,
@@ -67,12 +62,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "cookies">;
-  return {
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const REQUEST = `mutation ($email: EmailAddress!) {
@@ -108,8 +98,7 @@ const cookieOf = (answer: Answer) => {
   const header = answer.cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`));
   return header === undefined ? "" : (header.split(";")[0] ?? "");
 };
-const challengeOf = (options: string) =>
-  String((JSON.parse(options) as { challenge: unknown }).challenge);
+const challengeOf = challengeOfOptions;
 const handleOf = (id: string) => Buffer.from(id).toString("base64url");
 
 const A = "pkacme";
@@ -186,7 +175,7 @@ async function challengeFor(slug: string, email: string) {
   );
   expect(out.__typename).toBe("SecondFactorChallenge");
   expect(out.methods).toContain("passkey");
-  return out as { challenge: string; passkeyOptions: string };
+  return out;
 }
 
 /** The browser's answer to the challenge's `passkeyOptions`. */
@@ -323,7 +312,7 @@ describe("confirmSecondFactorWithPasskey", () => {
       assertion: await assertion(A, zoe, challenge.passkeyOptions),
     });
     expect(["TOKEN_EXPIRED", "TOKEN_UNKNOWN"]).toContain(
-      codeOf(late) as string,
+      defined(codeOf(late), "the refusal's code"),
     );
     expect(cookieOf(late)).toBe("");
   });

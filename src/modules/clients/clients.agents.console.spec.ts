@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
@@ -10,6 +12,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
 import { registerClient } from "./clients.register";
 
@@ -34,11 +37,12 @@ const UPDATE = `mutation($tenantId: ID!, $id: ID!, $input: UpdateClientInput!) {
   updateClient(tenantId: $tenantId, id: $id, input: $input) { ${CLIENT} }
 }`;
 
-type Page = {
-  items: { id: string; registration: string }[];
-  nextCursor: string | null;
-  totalCount: number;
-};
+const page = z.object({
+  items: z.array(z.object({ id: z.string(), registration: z.string() })),
+  nextCursor: z.string().nullable(),
+  totalCount: z.number(),
+});
+type Page = z.output<typeof page>;
 const list = async (
   as: typeof admin,
   tenantId: string,
@@ -46,16 +50,13 @@ const list = async (
 ) => {
   const result = await as(LIST, { tenantId, ...variables });
   expect(result.errors).toBeUndefined();
-  return result.data?.["clients"] as Page;
+  return at(result.data, "clients", page);
 };
 const idsOf = (page: Page) => page.items.map((item) => item.id);
 
 const storeOf = (tenantId: string) =>
   createMongoOAuth(oauthDb, { partition: partitionOf(tenantOf(tenantId)) });
-const tenantOf = (tenantId: string) => {
-  const { ObjectId } = require("mongodb") as typeof import("mongodb");
-  return new ObjectId(tenantId);
-};
+const tenantOf = (tenantId: string) => new ObjectId(tenantId);
 
 /** A client that registered itself: `registered` in janus, `dynamic` in the agents store. */
 async function dynamicAgent(slug: string, tenantId: string, name: string) {

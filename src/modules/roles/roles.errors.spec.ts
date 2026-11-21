@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { instance } from "~/narrow";
 import {
   codes,
   conflict,
@@ -21,8 +22,9 @@ describe("roles errors", () => {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(RolesError);
-    expect((thrown as RolesError).code).toBe("NOT_FOUND");
-    expect((thrown as RolesError).message).toBe("No such role");
+    const refused = instance(thrown, RolesError);
+    expect(refused.code).toBe("NOT_FOUND");
+    expect(refused.message).toBe("No such role");
   });
 
   test("a managed role and a taken name have their own code", () => {

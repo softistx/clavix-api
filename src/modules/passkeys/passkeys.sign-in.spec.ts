@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { JanusError } from "@softistx/janus";
 import {
   type Ceremony,
   softwareAuthenticator,
 } from "@softistx/janus-passkeys/testing";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
@@ -15,7 +17,10 @@ import {
 } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { ceremonyAnswer, challengeOfOptions } from "~/challenge-of";
 import { clientHeaders } from "~/client-header";
+import { type Answer, answerOf } from "~/gql-answer";
+import { instance } from "~/narrow";
 import { quietJanus, quietTenants } from "~/ports";
 
 const app = createTestApp();
@@ -45,13 +50,6 @@ const tenantOf = async (slug: string) => {
   return tenant;
 };
 
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
-
 async function gql(
   slug: string,
   query: string,
@@ -68,13 +66,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
-  return {
-    status: response.status,
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const SIGN_IN_OPTIONS = `mutation {
@@ -102,10 +94,15 @@ const cookieOf = (answer: Answer) => {
   const header = answer.cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`));
   return header === undefined ? "" : (header.split(";")[0] ?? "");
 };
-const field = <T>(answer: Answer, name: string) =>
-  answer.data?.[name] as T | undefined;
-const challengeOf = (options: string) =>
-  String((JSON.parse(options) as { challenge: unknown }).challenge);
+const field = <S extends z.ZodType>(
+  answer: Answer,
+  name: string,
+  schema: S,
+): z.output<S> | undefined => {
+  const value = answer.data?.[name];
+  return value === undefined ? undefined : schema.parse(value);
+};
+const challengeOf = challengeOfOptions;
 const handleOf = (id: string) => Buffer.from(id).toString("base64url");
 
 /** A user of the tenant with a fresh session; verified like an e-mail code sign-in leaves it. */
@@ -132,9 +129,10 @@ async function enroll(
   const authenticator = await softwareAuthenticator();
   const tenant = await tenantOf(slug);
   const options = await gql(slug, REGISTRATION, {}, cookie);
-  const registration = field<{ options: string; challenge: string }>(
+  const registration = field(
     options,
     "passkeyRegistrationOptions",
+    ceremonyAnswer,
   );
   if (registration === undefined) throw new Error("no registration options");
   const response = await authenticator.register({
@@ -165,10 +163,7 @@ async function assertion(
 ) {
   const tenant = await tenantOf(slug);
   const issued = await gql(slug, SIGN_IN_OPTIONS);
-  const challenge = field<{ options: string; challenge: string }>(
-    issued,
-    "passkeySignInOptions",
-  );
+  const challenge = field(issued, "passkeySignInOptions", ceremonyAnswer);
   if (challenge === undefined) throw new Error("no sign-in options");
   const response = await authenticator.assert({
     challenge: challengeOf(challenge.options),
@@ -209,17 +204,21 @@ describe("register, then sign in", () => {
       ADA,
     );
     expect(done.errors).toBeUndefined();
-    expect(field<{ name: string }>(done, "registerPasskey")?.name).toBe(
-      "Laptop",
-    );
+    expect(
+      field(done, "registerPasskey", z.looseObject({ name: z.string() }))?.name,
+    ).toBe("Laptop");
     const mine = await gql("acme", MINE, {}, cookie);
-    expect(field<unknown[]>(mine, "myPasskeys")).toHaveLength(1);
+    expect(field(mine, "myPasskeys", z.array(z.unknown()))).toHaveLength(1);
 
     const attempt = await assertion("acme", authenticator, handle);
     const signed = await gql("acme", SIGN_IN, attempt);
     expect(signed.errors).toBeUndefined();
     expect(
-      field<{ user: { id: string } }>(signed, "signInWithPasskey"),
+      field(
+        signed,
+        "signInWithPasskey",
+        z.looseObject({ user: z.looseObject({ id: z.string() }) }),
+      ),
     ).toMatchObject({ user: { id, email: ADA, emailVerified: true } });
     const header = signed.cookies.find((c) =>
       c.startsWith(`${SESSION_COOKIE}=`),
@@ -229,7 +228,9 @@ describe("register, then sign in", () => {
     expect(header).not.toContain("Domain");
 
     const me = await gql("acme", ME, {}, cookieOf(signed));
-    expect(field<{ email: string }>(me, "currentUser")?.email).toBe(ADA);
+    expect(
+      field(me, "currentUser", z.looseObject({ email: z.string() }))?.email,
+    ).toBe(ADA);
   });
 
   test("the sign-in challenge is spent by its first try", async () => {
@@ -349,9 +350,10 @@ describe("registration", () => {
 
   test("registering a response is refused the same way once the proof is withdrawn", async () => {
     const { id, cookie } = await userOf("acme", "ines@example.test");
-    const registration = field<{ options: string; challenge: string }>(
+    const registration = field(
       await gql("acme", REGISTRATION, {}, cookie),
       "passkeyRegistrationOptions",
+      ceremonyAnswer,
     );
     if (registration === undefined) throw new Error("no registration options");
     const tenant = await tenantOf("acme");
@@ -396,9 +398,10 @@ describe("registration", () => {
 
   test("a response that does not verify is PASSKEY_INVALID and spends the challenge", async () => {
     const { cookie } = await userOf("acme", "fay@example.test");
-    const asked = field<{ options: string; challenge: string }>(
+    const asked = field(
       await gql("acme", REGISTRATION, {}, cookie),
       "passkeyRegistrationOptions",
+      ceremonyAnswer,
     );
     const authenticator = await softwareAuthenticator();
     const tenant = await tenantOf("acme");
@@ -418,14 +421,15 @@ describe("registration", () => {
     expect(refused.status).toBe(400);
     expect(codeOf(refused)).toBe("PASSKEY_INVALID");
     const mine = await gql("acme", MINE, {}, cookie);
-    expect(field<unknown[]>(mine, "myPasskeys")).toEqual([]);
+    expect(field(mine, "myPasskeys", z.array(z.unknown()))).toEqual([]);
   });
 
   test("a non-JSON response is BAD_USER_INPUT, 400", async () => {
     const { cookie } = await userOf("acme", "ivan@example.test");
-    const asked = field<{ challenge: string }>(
+    const asked = field(
       await gql("acme", REGISTRATION, {}, cookie),
       "passkeyRegistrationOptions",
+      z.looseObject({ challenge: z.string() }),
     );
     const refused = await gql(
       "acme",
@@ -443,9 +447,10 @@ describe("registration", () => {
 
   test("a sign-in challenge is no registration challenge, and the reverse", async () => {
     const { cookie } = await userOf("acme", "hana@example.test");
-    const signIn = field<{ challenge: string }>(
+    const signIn = field(
       await gql("acme", SIGN_IN_OPTIONS),
       "passkeySignInOptions",
+      z.looseObject({ challenge: z.string() }),
     );
     const crossed = await gql(
       "acme",
@@ -454,9 +459,10 @@ describe("registration", () => {
       cookie,
     );
     expect(crossed.errors).toBeDefined();
-    const registration = field<{ challenge: string }>(
+    const registration = field(
       await gql("acme", REGISTRATION, {}, cookie),
       "passkeyRegistrationOptions",
+      z.looseObject({ challenge: z.string() }),
     );
     const back = await gql("acme", SIGN_IN, {
       challenge: registration?.challenge ?? "",
@@ -478,15 +484,18 @@ describe("removal", () => {
     const mine = await enroll("acme", "gus@example.test");
     const theirs = await enroll("acme", "hal@example.test");
     const listed = await gql("acme", MINE, {}, mine.cookie);
-    const [passkey] = field<{ id: string }[]>(listed, "myPasskeys") ?? [];
-    const theirId = field<{ id: string }[]>(
+    const [passkey] =
+      field(listed, "myPasskeys", z.array(z.looseObject({ id: z.string() }))) ??
+      [];
+    const theirId = field(
       await gql("acme", MINE, {}, theirs.cookie),
       "myPasskeys",
+      z.array(z.looseObject({ id: z.string() })),
     )?.[0]?.id;
 
     // Another user's credential id removes nothing.
     const foreign = await gql("acme", REMOVE, { id: theirId }, mine.cookie);
-    expect(field<boolean>(foreign, "removePasskey")).toBe(false);
+    expect(field(foreign, "removePasskey", z.boolean())).toBe(false);
     expect(
       (
         await gql(
@@ -498,7 +507,7 @@ describe("removal", () => {
     ).toBeUndefined();
 
     const removed = await gql("acme", REMOVE, { id: passkey?.id }, mine.cookie);
-    expect(field<boolean>(removed, "removePasskey")).toBe(true);
+    expect(field(removed, "removePasskey", z.boolean())).toBe(true);
     const refused = await gql(
       "acme",
       SIGN_IN,
@@ -535,9 +544,7 @@ describe("e-mail change", () => {
         () => undefined,
         (error: unknown) => error,
       );
-    expect((refused as { code?: string } | undefined)?.code).toBe(
-      "EMAIL_CHANGE_NEEDS_PROOF",
-    );
+    expect(instance(refused, JanusError).code).toBe("EMAIL_CHANGE_NEEDS_PROOF");
     expect((await auth.findUser(holder.id))?.email).toBe("ivy@example.test");
   });
 });

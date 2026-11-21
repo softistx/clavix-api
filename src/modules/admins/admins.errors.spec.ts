@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { GraphQLError } from "graphql";
 import { ResendRefusedError } from "@/modules/invitations";
+import { instance } from "~/narrow";
 import { alreadyMember, lastOwnerError, refusing } from "./admins.errors";
 
 describe("admins errors", () => {
@@ -22,9 +24,9 @@ describe("admins errors", () => {
     const caught = await refusing(async () => {
       throw new ResendRefusedError("RESEND_TOO_SOON", 30);
     }).catch((error: unknown) => error);
-    expect(
-      (caught as { extensions: { code: string } }).extensions["code"],
-    ).toBe("RESEND_TOO_SOON");
+    expect(instance(caught, GraphQLError).extensions["code"]).toBe(
+      "RESEND_TOO_SOON",
+    );
     await expect(
       refusing(async () => {
         throw new Error("boom");

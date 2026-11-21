@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { JanusError } from "@softistx/janus";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { ObjectId } from "mongodb";
 import { oauthDb } from "@/config/oauth-db";
@@ -86,7 +87,9 @@ async function registersFrom(origin: string, email: string) {
     await auth.passkeys.register(current, { challenge, response, name: "k" });
     return true;
   } catch (error) {
-    if ((error as { code?: string }).code === "PASSKEY_INVALID") return false;
+    if (error instanceof JanusError && error.code === "PASSKEY_INVALID") {
+      return false;
+    }
     throw error;
   }
 }

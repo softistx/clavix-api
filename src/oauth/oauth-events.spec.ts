@@ -7,6 +7,9 @@ import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { oauthListener } from "@/events/oauth-listener";
 import { registerClient } from "@/modules/clients";
+import { jsonOf } from "~/json";
+import { defined } from "~/narrow";
+import { deviceCodesBody } from "~/oauth-bodies";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 
 // D14: the OAuth events of a tenant's issuer reach that tenant's sign-in log
@@ -21,7 +24,7 @@ const ids: Record<string, string> = {};
 const logOf = async (slug: string) =>
   (
     await authEventsService.page(
-      ids[slug] as string,
+      defined(ids[slug], slug),
       {},
       { after: null, limit: 100 },
     )
@@ -80,7 +83,7 @@ describe("OAuth events in the sign-in log", () => {
         client_id: "tv",
         scope: "openid",
       });
-      const { user_code } = (await response.json()) as { user_code: string };
+      const { user_code } = await jsonOf(response, deviceCodesBody);
       if (decision === "approve") {
         await server.approveDevice({ id: "ada" }, user_code, {
           scopes: ["openid"],
@@ -105,11 +108,9 @@ describe("OAuth events in the sign-in log", () => {
   test("a client registration is recorded", async () => {
     const server = await serverOf("oev-a");
     await server.createClient({
-      clientId: "late",
       name: "Late",
       redirectUris: [REDIRECT],
-      type: "public",
-    } as never);
+    });
     expect((await logOf("oev-a")).map((e) => e.type)).toContain(
       "client.registered",
     );

@@ -18,6 +18,7 @@ import {
 } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
 import { quietTenants } from "~/ports";
 import { settled } from "./auth.outbox";
 import { createSignInThrottle, type SignInLimitConfig } from "./auth.throttle";
@@ -89,9 +90,7 @@ async function setup(limits: SignInLimitConfig) {
       },
       body: JSON.stringify({ query: REQUEST, variables: { email } }),
     });
-    const body = (await response.json()) as {
-      errors?: { message: string; extensions: Record<string, unknown> }[];
-    };
+    const body = await gqlOf(response);
     return { response, error: body.errors?.[0] };
   };
   return { ask, close: () => redis.close() };
@@ -113,7 +112,7 @@ describe("per client address", () => {
     }
     const { response, error } = await ask("lima", "203.0.113.1");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("MAIL_THROTTLED");
+    expect(error?.extensions?.["code"]).toBe("MAIL_THROTTLED");
     expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     await close();
   });
@@ -154,7 +153,7 @@ describe("per tenant", () => {
     }
     const { response, error } = await ask("lima", "198.51.100.99");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("MAIL_THROTTLED");
+    expect(error?.extensions?.["code"]).toBe("MAIL_THROTTLED");
     await close();
   });
 
@@ -188,7 +187,7 @@ describe("the answer", () => {
     expect(Object.keys(refused.error?.extensions ?? {}).sort()).toEqual(
       Object.keys(perAddress?.error?.extensions ?? {}).sort(),
     );
-    expect(refused.error?.extensions["code"]).toBe("MAIL_THROTTLED");
+    expect(refused.error?.extensions?.["code"]).toBe("MAIL_THROTTLED");
     expect(refused.response.headers.has("retry-after")).toBe(
       perAddress?.response.headers.has("retry-after") ?? false,
     );

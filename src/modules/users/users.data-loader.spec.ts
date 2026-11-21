@@ -4,6 +4,8 @@ import type {
   TenantUserView,
   UserSecondFactorView,
 } from "@/console/context";
+import { createExclusive } from "@/console/exclusive";
+import { withMembers } from "~/members";
 import { secondFactorLoader, userLoader } from "./users.data-loader";
 
 const NO_FACTOR: UserSecondFactorView = {
@@ -19,7 +21,7 @@ const user = (id: string): TenantUserView => ({
 });
 
 const requestWith = (users: Partial<ConsoleContext["users"]>) =>
-  ({ users }) as unknown as ConsoleContext;
+  withMembers({ exclusive: createExclusive(null), users });
 
 describe("userLoader", () => {
   test("loads of one tick are ONE findMany, in key order, null for a missing id", async () => {

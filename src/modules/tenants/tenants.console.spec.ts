@@ -17,6 +17,7 @@ import { createTestApp } from "~/app";
 import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { type GqlResult, gqlOf } from "~/gql";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 
 const deps = createConsoleDeps({ serverFor: async () => null });
@@ -25,13 +26,6 @@ const VIEWER = "tenants-platform-viewer";
 const ADMIN = "tenants-admin-acme";
 const OUTSIDER = "tenants-outsider";
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: {
-    message: string;
-    extensions?: { code?: string; field?: string };
-  }[];
-}
 const as = (userId: string, query: string) =>
   createTestApp({
     console: {
@@ -57,7 +51,7 @@ const as = (userId: string, query: string) =>
       },
       body: JSON.stringify({ query }),
     })
-    .then((r) => r.json() as Promise<GqlResult>);
+    .then(gqlOf);
 const code = (r: GqlResult) => r.errors?.[0]?.extensions?.code;
 const events = async () =>
   (await mongo.db.adminEvents.raw.find({}).sort({ _id: 1 }).toArray()).map(

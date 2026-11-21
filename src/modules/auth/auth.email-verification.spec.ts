@@ -7,17 +7,18 @@ import {
   test,
 } from "bun:test";
 import { JanusError } from "@softistx/janus";
+import type { JanusMail } from "@softistx/janus-mail";
 import {
   createMemorySigningKeys,
   rotateSigningKeys,
   s256Challenge,
 } from "@softistx/janus-oauth";
-import type { MemoryMailer } from "@softistx/mail";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { createLocalJWKSet, jwtVerify } from "jose";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
-import { mailer } from "@/config/mail";
+import { mailer, tenantMail } from "@/config/mail";
 import { noDetailTypes, noUserThrottle } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { openAppRedis } from "@/config/redis";
@@ -26,11 +27,18 @@ import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { VERIFY_EMAIL_PATH } from "@/mail/tenant-mail";
 import { registerClient } from "@/modules/clients";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { SESSION_COOKIE } from "@/modules/users";
+import { SESSION_COOKIE, type TenantJanus } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
+import { at as dataAt } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
+import { janusOver, signedAs } from "~/janus-double";
+import { jsonOf } from "~/json";
+import { memoryMailerOf } from "~/memory-mailer-of";
+import { recordOf } from "~/narrow";
 import { quietOAuth } from "~/ports";
+import { contextOf } from "~/spec-context";
 import { createTenantParOff } from "~/tenant-par-off";
 import { settled } from "./auth.outbox";
 import { AuthService } from "./auth.service";
@@ -39,7 +47,7 @@ import {
   type VerificationLimitConfig,
 } from "./auth.verification-throttle";
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -52,7 +60,7 @@ interface Answer {
   status: number;
   headers: Headers;
   data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
+  errors?: GqlResult["errors"];
 }
 
 async function gql(
@@ -72,7 +80,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "status" | "headers">;
+  const body = await gqlOf(response);
   return {
     status: response.status,
     headers: response.headers,
@@ -88,9 +96,17 @@ const CONFIRM = `mutation ($token: String!) {
 const ME = "{ currentUser { email emailVerified } }";
 const codeOf = (answer: Answer) => answer.errors?.[0]?.extensions?.["code"];
 const confirmed = (answer: Answer) =>
-  answer.data?.["confirmEmailVerification"] as
-    | { id: string; email: string; emailVerified: boolean }
-    | undefined;
+  dataAt(
+    answer.data,
+    "confirmEmailVerification",
+    z
+      .looseObject({
+        id: z.string(),
+        email: z.string(),
+        emailVerified: z.boolean(),
+      })
+      .optional(),
+  );
 
 const janusOf = async (slug: string) => {
   const auth = await janusIssuers.forRequest(new Request(url(slug)));
@@ -434,10 +450,10 @@ describe("the OIDC email_verified claim follows the flag", () => {
       }),
     );
     expect(response.status).toBe(200);
-    return (await response.json()) as {
-      access_token: string;
-      id_token: string;
-    };
+    return jsonOf(
+      response,
+      z.looseObject({ access_token: z.string(), id_token: z.string() }),
+    );
   }
 
   let secret = "";
@@ -477,16 +493,17 @@ describe("the OIDC email_verified claim follows the flag", () => {
       }),
     );
     const jwks = createLocalJWKSet(
-      (await (
-        await issuers.handle(new Request(at("acme", "/jwks.json")))
-      ).json()) as Parameters<typeof createLocalJWKSet>[0],
+      await jsonOf(
+        await issuers.handle(new Request(at("acme", "/jwks.json"))),
+        z.looseObject({ keys: z.array(z.looseObject({ kty: z.string() })) }),
+      ),
     );
     const { payload } = await jwtVerify(tokens.id_token, jwks, {
       issuer: hostOf("acme"),
       audience: "backend",
     });
     return {
-      userinfo: (await userinfo.json()) as Record<string, unknown>,
+      userinfo: recordOf(await userinfo.json(), "the userinfo"),
       idToken: payload,
     };
   };
@@ -566,8 +583,7 @@ describe("limits over Redis", () => {
 
   test("per client address and tenant: past the limit is 429, another address and another tenant have their own budget", async () => {
     const { request, close } = await setup({ ...base, ipLimit: 2 });
-    const a = [await signedIn("acme"), await signedIn("acme")];
-    const [a1, a2] = a as [(typeof a)[number], (typeof a)[number]];
+    const [a1, a2] = [await signedIn("acme"), await signedIn("acme")] as const;
     const g = await signedIn("globex");
     expect((await request("acme", a1)).status).toBe(200);
     expect((await request("acme", a2)).status).toBe(200);
@@ -581,16 +597,11 @@ describe("limits over Redis", () => {
 
   test("per tenant: past the limit is 429 from any address, and tenant A never spends B's budget", async () => {
     const { request, close } = await setup({ ...base, tenantLimit: 2 });
-    const users = [
+    const [u1, u2, u3] = [
       await signedIn("acme"),
       await signedIn("acme"),
       await signedIn("acme"),
-    ];
-    const [u1, u2, u3] = users as [
-      (typeof users)[number],
-      (typeof users)[number],
-      (typeof users)[number],
-    ];
+    ] as const;
     const g = await signedIn("globex");
     expect((await request("acme", u1, "198.51.100.1")).status).toBe(200);
     expect((await request("acme", u2, "198.51.100.2")).status).toBe(200);
@@ -641,26 +652,25 @@ describe("limits over Redis", () => {
 });
 
 describe("with a stubbed janus", () => {
-  const session = { user: { id: "u1", email: "a@b.c" } };
-  const serviceOver = (verifyEmail: object, mail: object = {}) =>
-    new AuthService({
+  const serviceOver = (
+    verifyEmail: Partial<TenantJanus["verifyEmail"]>,
+    mail: Partial<JanusMail> = {},
+  ) => {
+    const real = janusOver();
+    const auth = janusOver({
+      verifyEmail: { ...real.verifyEmail, ...verifyEmail },
+      authenticate: async () => signedAs("u1", "a@b.c"),
+    });
+    return new AuthService({
       log: () => {},
       now: () => new Date(),
-      issuers: {
-        forRequest: async () =>
-          ({ verifyEmail, authenticate: async () => session }) as never,
-      },
-      mailOf: () => mail as never,
+      issuers: { forRequest: async () => auth },
+      mailOf: (tenant) => ({ ...tenantMail(tenant), ...mail }),
       usage: { recordActive: async () => {} },
     });
+  };
   const ctx = () =>
-    ({
-      request: new Request("https://acme.example/graphql"),
-      ip: "198.51.100.9",
-      tenant: async () => ({ tenantId: "t1", status: "active" }),
-      verifyThrottle: noUserThrottle,
-      set: { headers: new Headers() },
-    }) as never;
+    contextOf({ throttles: { verifyThrottle: noUserThrottle } });
 
   test("a store outage on confirm is not turned into EMAIL_VERIFICATION_INVALID", async () => {
     const failure = Object.assign(new JanusError("STORE_FAILED"), {
@@ -682,12 +692,19 @@ describe("with a stubbed janus", () => {
       {
         prepare: async () => ({
           send: async () => ({
-            user: { id: "other", name: null },
+            user: signedAs("other").user,
+            token: "t",
             email: "a@b.c",
+            expiresAt: new Date(),
           }),
         }),
       },
-      { verifyEmail: async (issued: unknown) => sent.push(issued) },
+      {
+        verifyEmail: async (issued) => {
+          sent.push(issued);
+          return { messageId: null };
+        },
+      },
     );
     expect(await service.requestEmailVerification(ctx())).toBe(true);
     await settled();

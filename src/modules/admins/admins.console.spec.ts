@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { MemoryMailer } from "@softistx/mail";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { access } from "@/config/access";
@@ -17,6 +16,8 @@ import { createTestApp } from "~/app";
 import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
 
 // The bearer token is the user id: tokens are console.spec's business, this
 // file is about who may change the admins of a tenant.
@@ -43,7 +44,7 @@ const app = createTestApp({
     },
   },
 });
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -51,11 +52,6 @@ const origin = {
 } as const;
 const hosted = `${issuerOf(PLATFORM_TENANT_SLUG, origin)}/graphql`;
 
-interface Answer {
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-  cookies: string[];
-}
 async function post(
   url: string,
   query: string,
@@ -70,12 +66,7 @@ async function post(
     },
     body: JSON.stringify({ query }),
   });
-  const body = (await response.json()) as Answer;
-  return {
-    ...body,
-    data: body.data ?? null,
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 const asConsole = (bearer: string, query: string) =>
   post(`http://localhost${CONSOLE_PATH}`, query, bearer);
@@ -133,11 +124,13 @@ beforeAll(async () => {
   if (janus === null) throw new Error("no clavix janus");
   const user = async (email: string) =>
     (await janus.create({ email, name: email })).id;
-  [ownA, ownA2, admA, vwA, ownB] = (await Promise.all(
-    ["own-a", "own-a2", "adm-a", "vw-a", "own-b"].map((n) =>
-      user(`${n}@adm.test`),
-    ),
-  )) as [string, string, string, string, string];
+  [ownA, ownA2, admA, vwA, ownB] = await Promise.all([
+    user("own-a@adm.test"),
+    user("own-a2@adm.test"),
+    user("adm-a@adm.test"),
+    user("vw-a@adm.test"),
+    user("own-b@adm.test"),
+  ]);
   tenantA = (await tenantsService.create({ slug: "adm-a", name: "Alpha" })).id;
   tenantB = (await tenantsService.create({ slug: "adm-b", name: "Beta" })).id;
   await access.grantTenant(tenantA, ownA, "owner");
@@ -1046,9 +1039,11 @@ describe("platformOperators", () => {
     if (janus === null) throw new Error("no clavix janus");
     const user = async (n: string) =>
       (await janus.create({ email: `${n}@op.test`, name: n })).id;
-    [opOwner, opAdmin, opViewer] = (await Promise.all(
-      ["op-owner", "op-admin", "op-viewer"].map(user),
-    )) as [string, string, string];
+    [opOwner, opAdmin, opViewer] = await Promise.all([
+      user("op-owner"),
+      user("op-admin"),
+      user("op-viewer"),
+    ]);
     // The viewer is listed once, under their strongest role.
     await access.grantPlatform(opViewer, "viewer");
     await access.grantPlatform(opAdmin, "admin");

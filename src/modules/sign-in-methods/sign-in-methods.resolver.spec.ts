@@ -8,6 +8,7 @@ import {
   spyOn,
   test,
 } from "bun:test";
+import { z } from "zod";
 import { connectionsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
@@ -26,7 +27,12 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { fetchDouble } from "~/fetch-double";
+import { type GqlResult, gqlBody } from "~/gql";
+import { jsonOf } from "~/json";
+import { defined } from "~/narrow";
 import { createFlow } from "~/oauth-flow";
 import { quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
@@ -71,7 +77,7 @@ const SECRET = "gh-spec-secret-do-not-leak";
 interface Answer {
   status: number;
   data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
+  errors?: GqlResult["errors"];
   cookies: string[];
   text: string;
 }
@@ -95,7 +101,7 @@ async function gql(
     body: JSON.stringify({ query, variables }),
   });
   const text = await response.text();
-  const body = JSON.parse(text) as Pick<Answer, "data" | "errors">;
+  const body = gqlBody.parse(JSON.parse(text));
   return {
     status: response.status,
     data: body.data ?? null,
@@ -104,6 +110,17 @@ async function gql(
     text,
   };
 }
+const startSchema = z.looseObject({ url: z.string(), flow: z.string() });
+const completeSchema = z.looseObject({
+  created: z.boolean(),
+  replaced: z.boolean(),
+  user: z.looseObject({
+    id: z.string(),
+    email: z.string(),
+    name: z.string().nullable(),
+    emailVerified: z.boolean(),
+  }),
+});
 const codeOf = (answer: Answer) => answer.errors?.[0]?.extensions?.["code"];
 
 const HOSTED = "{ hostedSignInMethods { methods social { id label } } }";
@@ -247,9 +264,15 @@ describe("hostedSignInMethods", () => {
     };
     const offered = async () => {
       const answer = await gql("sih-social", HOSTED);
-      const hosted = answer.data?.["hostedSignInMethods"] as
-        | { social: { id: string; label: string }[] }
-        | undefined;
+      const hosted = at(
+        answer.data,
+        "hostedSignInMethods",
+        z
+          .looseObject({
+            social: z.array(z.object({ id: z.string(), label: z.string() })),
+          })
+          .optional(),
+      );
       return hosted?.social ?? [];
     };
 
@@ -382,10 +405,7 @@ describe("social sign-in", () => {
       r: "/account",
     });
     expect(answer.errors).toBeUndefined();
-    const start = answer.data?.["socialSignInStart"] as {
-      url: string;
-      flow: string;
-    };
+    const start = at(answer.data, "socialSignInStart", startSchema);
     const url = new URL(start.url);
     expect(url.origin + url.pathname).toBe(
       "https://github.com/login/oauth/authorize",
@@ -463,10 +483,7 @@ describe("social sign-in", () => {
       }),
     );
     expect(answer.errors).toBeUndefined();
-    const done = answer.data?.["socialSignInComplete"] as {
-      created: boolean;
-      user: { id: string; email: string; name: string; emailVerified: boolean };
-    };
+    const done = at(answer.data, "socialSignInComplete", completeSchema);
     expect(done.created).toBe(true);
     expect(active).toHaveBeenCalledTimes(1);
     expect(active.mock.calls[0]?.[1]).toBe(done.user.id);
@@ -516,11 +533,7 @@ describe("social sign-in", () => {
       }),
     );
     expect(answer.errors).toBeUndefined();
-    const done = answer.data?.["socialSignInComplete"] as {
-      created: boolean;
-      replaced: boolean;
-      user: { id: string; emailVerified: boolean };
-    };
+    const done = at(answer.data, "socialSignInComplete", completeSchema);
     expect(done).toMatchObject({ created: false, replaced: true });
     expect(done.user).toMatchObject({ id: holder.id, emailVerified: true });
     const events = await mongo.db.authEvents.raw
@@ -557,18 +570,15 @@ describe("social sign-in", () => {
         }),
       );
       expect(answer.errors).toBeUndefined();
-      return answer.data?.["socialSignInComplete"] as {
-        replaced: boolean;
-        user: { id: string };
-      };
+      return at(answer.data, "socialSignInComplete", completeSchema);
     };
     const replaced = await signIn();
     expect(replaced).toMatchObject({ replaced: true, user: { id: holder.id } });
     const refused = await refresh(held.refresh_token ?? "");
     expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: string }).error).toBe(
-      "invalid_grant",
-    );
+    expect(
+      (await jsonOf(refused, z.looseObject({ error: z.string() }))).error,
+    ).toBe("invalid_grant");
 
     // A grant the (now verified) user makes afterwards survives a plain sign-in.
     const kept = await flow.tokensOf("sih-grants", "openid", {
@@ -643,14 +653,15 @@ describe("social sign-in", () => {
     // The first run of the job fails (the store is still down for it), the retry succeeds.
     revokeDown.on = true;
     const down = createGrantsRevoke(issuers.serverFor);
-    await expect(down(jobs[0] as RevokeJob)).rejects.toThrow("store down");
+    const job = defined(jobs[0], "the queued revocation");
+    await expect(down(job)).rejects.toThrow("store down");
     revokeDown.on = false;
-    await handler?.({ data: jobs[0] as RevokeJob });
+    await handler?.({ data: job });
     const refused = await refresh();
     expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: string }).error).toBe(
-      "invalid_grant",
-    );
+    expect(
+      (await jsonOf(refused, z.looseObject({ error: z.string() }))).error,
+    ).toBe("invalid_grant");
     grantsRevokeQueue.current = previous;
   });
 
@@ -701,11 +712,7 @@ describe("social sign-in", () => {
         f: again.flow,
       }),
     );
-    const done = answer.data?.["socialSignInComplete"] as {
-      created: boolean;
-      replaced: boolean;
-      user: { id: string };
-    };
+    const done = at(answer.data, "socialSignInComplete", completeSchema);
     expect(done).toMatchObject({ created: false, replaced: false });
     const events = await mongo.db.authEvents.raw
       .find({ userId: done.user.id, type: "session.signIn" })
@@ -837,11 +844,7 @@ describe("social sign-in", () => {
     );
     expect(answer.errors).toBeUndefined();
     expect(
-      (
-        answer.data?.["socialSignInComplete"] as
-          | { created: boolean }
-          | undefined
-      )?.created,
+      at(answer.data, "socialSignInComplete", completeSchema).created,
     ).toBe(true);
   });
 });
@@ -851,10 +854,7 @@ const callbackOf = (slug: string, state: string) =>
 
 async function startOn(slug: string) {
   const started = await gql(slug, START, { p: "github" });
-  const start = started.data?.["socialSignInStart"] as {
-    url: string;
-    flow: string;
-  };
+  const start = at(started.data, "socialSignInStart", startSchema);
   return {
     url: start.url,
     flow: start.flow,
@@ -869,8 +869,8 @@ function github(email: string) {
     new Response(JSON.stringify(value), {
       headers: { ...clientHeaders, "content-type": "application/json" },
     });
-  const fake = (async (input: unknown, init?: RequestInit) => {
-    const request = new Request(input as string, init);
+  const fake = fetchDouble(async (input, init) => {
+    const request = new Request(input, init);
     const url = request.url;
     calls.push({
       url,
@@ -887,7 +887,7 @@ function github(email: string) {
       return json([{ email, primary: true, verified: true }]);
     }
     return new Response("unexpected", { status: 500 });
-  }) as typeof fetch;
+  });
   const run = async <T>(work: () => Promise<T>): Promise<T> => {
     const real = globalThis.fetch;
     globalThis.fetch = fake;

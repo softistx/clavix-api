@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ObjectId } from "mongodb";
+import { endpointDoc, sealedUnder } from "~/webhook-docs";
 import type { EndpointSecret } from "./webhooks.model";
-import type { AttemptRecord, WebhookEndpointDoc } from "./webhooks.types";
+import type { AttemptRecord } from "./webhooks.types";
 import {
   attemptDoc,
   behindCount,
@@ -9,14 +9,7 @@ import {
   deliveryEndpointOf,
 } from "./webhooks.utils";
 
-const doc = (patch: Partial<WebhookEndpointDoc> = {}) =>
-  ({
-    _id: new ObjectId(),
-    url: "https://hooks.example.com/in",
-    types: [],
-    enabled: true,
-    ...patch,
-  }) as WebhookEndpointDoc;
+const doc = endpointDoc;
 
 describe("contextOf", () => {
   test("binds a secret to its tenant and endpoint", () => {
@@ -47,8 +40,12 @@ describe("deliveryEndpointOf", () => {
 
 describe("behindCount", () => {
   test("counts the secrets sealed under another key", () => {
-    const entry = (kid: string) =>
-      ({ sealed: { kid } }) as unknown as EndpointSecret;
+    const entry = (kid: string): EndpointSecret => ({
+      sid: kid,
+      sealed: sealedUnder(kid),
+      createdAt: new Date(),
+      expiresAt: null,
+    });
     expect(behindCount([entry("k1"), entry("k2"), entry("k2")], "k2")).toBe(1);
     expect(behindCount([], "k2")).toBe(0);
   });

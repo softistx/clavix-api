@@ -6,7 +6,7 @@ import {
   createTenantKeys,
   type TenantKeys,
 } from "@/modules/keys";
-import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
+import { resolvedTenant } from "@/tenancy/resolved-tenant";
 import { quietKeys } from "~/ports";
 import { withPublicDocuments } from "./public-documents";
 
@@ -24,7 +24,16 @@ function setup(ttlSeconds = 60) {
   const resolver = {
     resolveRequest: async (request: Request) =>
       new URL(request.url).host === "acme.clavix.test"
-        ? ({ tenantId: "t1", version } as unknown as ResolvedTenant)
+        ? resolvedTenant.parse({
+            tenantId: "t1",
+            slug: "acme",
+            name: "Acme",
+            signUp: true,
+            issuer: "https://acme.clavix.test",
+            slugIssuer: "https://acme.clavix.test",
+            partition: "p",
+            version,
+          })
         : null,
   };
   const oauth = withPublicDocuments(

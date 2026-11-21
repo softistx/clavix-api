@@ -27,7 +27,7 @@ const adminEvent = (tenantId: string, action: string, at: Date) =>
     target: { type: "tenant", id: tenantId },
     at,
     requestId: "req",
-  } as never);
+  });
 const authEvent = (
   tenantId: string,
   userId: string,
@@ -206,7 +206,7 @@ describe("range and limit", () => {
         ip: null,
         userAgent: null,
         requestId: `r${i}`,
-      })) as never,
+      })),
     );
     await access.grantTenant(tenantB, "exp-admin", "admin");
     const response = await many({

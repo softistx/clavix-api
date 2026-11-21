@@ -19,18 +19,37 @@ const tenant = (plan: "free" | "pro" | "enterprise" = "free") => ({
   quotaOverrides: {},
 });
 
-type Counter = ConstructorParameters<typeof UsageService>[2];
+type Counter = NonNullable<ConstructorParameters<typeof UsageService>[2]>;
+type Key = Parameters<Counter["keyFor"]>[0];
+const keyOf = ({ tenantId, month }: Key) => `${tenantId}:${month}`;
+
+/** A complete counter whose `add` and `count` are the given ones; the rest is never reached. */
+function counterOf(add: Counter["add"], count: Counter["count"]): Counter {
+  const refused = async (): Promise<never> => {
+    throw new Error("not used by the usage service");
+  };
+  return {
+    definition: { name: "spec:mau", key: keyOf },
+    keyFor: keyOf,
+    add,
+    count,
+    merge: refused,
+    delete: refused,
+  };
+}
+
 function fakeCounter() {
   const seen = new Map<string, Set<string>>();
-  const counter = {
-    add: async (key: { tenantId: string; month: string }, id: string) => {
-      const k = `${key.tenantId}:${key.month}`;
-      seen.set(k, (seen.get(k) ?? new Set()).add(id));
+  return counterOf(
+    async (key, ...ids) => {
+      const set = seen.get(keyOf(key)) ?? new Set<string>();
+      const before = set.size;
+      for (const id of ids) set.add(id);
+      seen.set(keyOf(key), set);
+      return set.size !== before;
     },
-    count: async (key: { tenantId: string; month: string }) =>
-      seen.get(`${key.tenantId}:${key.month}`)?.size ?? 0,
-  };
-  return counter as unknown as Counter;
+    async (key) => seen.get(keyOf(key))?.size ?? 0,
+  );
 }
 
 const logged: string[] = [];
@@ -42,7 +61,7 @@ const sources = {
   connections: async () => 0,
 };
 const at = new Date("2026-11-12T12:00:00Z");
-const make = (mau: Counter) =>
+const make = (mau: Counter | undefined) =>
   new UsageService(
     mongo.db.usageCounters,
     sources,
@@ -113,14 +132,10 @@ describe("UsageService", () => {
   });
 
   test("recordActive never throws, and reading falls back on the snapshot", async () => {
-    const broken = {
-      add: async () => {
-        throw new Error("redis down");
-      },
-      count: async () => {
-        throw new Error("redis down");
-      },
-    } as unknown as Counter;
+    const down = async (): Promise<never> => {
+      throw new Error("redis down");
+    };
+    const broken = counterOf(down, down);
     const service = make(broken);
     await service.recordActive("65f0000000000000000000aa", "u");
     expect(logged[0]).toContain("redis down");

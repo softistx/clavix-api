@@ -6,6 +6,8 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { DataError } from "@softistx/mongo";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
@@ -19,6 +21,8 @@ import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { CliInputError } from "@/shared/cli";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { parseResourceArgs } from "./resources.cli";
@@ -82,10 +86,10 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor: service.storedFor,
 });
 
-const scopeNamesOf = async (resourceId: unknown) =>
+const scopeNamesOf = async (resourceId: ObjectId) =>
   (
     await mongo.db.scopes.raw
-      .find({ resourceId: resourceId as never })
+      .find({ resourceId: new ObjectId(resourceId) })
       .toArray()
   )
     .map((scope) => scope.name)
@@ -207,13 +211,15 @@ describe("resources:create", () => {
     expect(second).toMatchObject({ created: false, scopes: ["read"] });
     const alpha = await findTenant("resalpha");
     const stored = await mongo.db.resources.raw
-      .find({ tenantId: alpha?._id as never })
+      .find({ tenantId: defined(alpha, "alpha")._id })
       .toArray();
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ name: "Alpha API" });
     // The scopes are `Scope` documents of the resource, replaced by the re-run.
     expect(stored[0]?.["scopes"]).toBeUndefined();
-    expect(await scopeNamesOf(stored[0]?._id)).toEqual(["read"]);
+    expect(await scopeNamesOf(defined(stored[0], "the resource")._id)).toEqual([
+      "read",
+    ]);
   });
 
   test("refuses bad input, an unknown or suspended tenant and the userinfo URL", async () => {
@@ -264,12 +270,10 @@ describe("resources:create", () => {
     const stale = new Proxy(mongo.db.resources, {
       get(target, key, receiver) {
         const value = Reflect.get(target, key, receiver);
-        if (key !== "findFirst") return value;
+        if (key !== "findFirst" || typeof value !== "function") return value;
         return async (...args: unknown[]) => {
           reads += 1;
-          return reads === 1
-            ? undefined
-            : (value as (...a: unknown[]) => unknown).apply(target, args);
+          return reads === 1 ? undefined : Reflect.apply(value, target, args);
         };
       },
     });
@@ -281,10 +285,12 @@ describe("resources:create", () => {
     expect(result).toMatchObject({ created: false, scopes: ["write"] });
     const alpha = await findTenant("resalpha");
     const stored = await mongo.db.resources.raw
-      .find({ tenantId: alpha?._id as never, uri: API_RACE })
+      .find({ tenantId: defined(alpha, "alpha")._id, uri: API_RACE })
       .toArray();
     expect(stored).toHaveLength(1);
-    expect(await scopeNamesOf(stored[0]?._id)).toEqual(["write"]);
+    expect(await scopeNamesOf(defined(stored[0], "the resource")._id)).toEqual([
+      "write",
+    ]);
   });
 
   test("a store failure is not an input error: it reaches the script as it is", async () => {
@@ -331,16 +337,18 @@ describe("a registered resource in the issuer", () => {
     const clientId = "app";
     const response = await tokenFor("resalpha", clientId, API_A);
     expect(response.status).toBe(200);
-    const { access_token } = (await response.json()) as {
-      access_token: string;
-    };
+    const { access_token } = await jsonOf(response, tokenBody);
     const claims = claimsOf(access_token);
     expect(claims.aud).toBe(API_A);
     expect(claims.iss).toBe(url("resalpha", ""));
     // Verified against the tenant's own JWKS.
-    const jwks = (await (
-      await issuers.handle(new Request(url("resalpha", "/jwks.json")))
-    )?.json()) as { keys: { kid: string }[] };
+    const jwks = z
+      .object({ keys: z.array(z.object({ kid: z.string() })) })
+      .parse(
+        await (
+          await issuers.handle(new Request(url("resalpha", "/jwks.json")))
+        )?.json(),
+      );
     const header = JSON.parse(
       Buffer.from(access_token.split(".")[0] ?? "", "base64url").toString(),
     );
@@ -388,22 +396,21 @@ describe("a registered resource in the issuer", () => {
     const alpha = await findTenant("resalpha");
     const beta = await findTenant("resbeta");
     const forAlpha = await service.storedFor(
-      (await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never,
+      defined(await resolver.resolveHost(`resalpha.${DOMAIN}`), "tenant"),
     );
     const forBeta = await service.storedFor(
-      (await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never,
+      defined(await resolver.resolveHost(`resbeta.${DOMAIN}`), "tenant"),
     );
-    expect(alpha?._id.equals(beta?._id as never)).toBe(false);
+    expect(alpha?._id.equals(defined(beta, "beta")._id)).toBe(false);
     expect(Object.keys(forAlpha)).not.toContain(API_B);
     expect(Object.keys(forBeta)).toEqual([API_B]);
 
     const crossed = await authorize("resbeta", "app", API_A);
     expect(crossed.headers.get("location")).toContain("invalid_target");
     const own = await tokenFor("resbeta", "app", API_B);
-    expect(
-      claimsOf(((await own.json()) as { access_token: string }).access_token)
-        .aud,
-    ).toBe(API_B);
+    expect(claimsOf((await jsonOf(own, tokenBody)).access_token).aud).toBe(
+      API_B,
+    );
     const reverse = await authorize("resalpha", "app", API_B);
     expect(reverse.headers.get("location")).toContain("invalid_target");
   });
@@ -422,7 +429,7 @@ describe("a registered resource in the issuer", () => {
     expect(await consents()).toBe(true);
     const alpha = await findTenant("resalpha");
     await mongo.db.resources.raw.deleteOne({
-      tenantId: alpha?._id as never,
+      tenantId: defined(alpha, "alpha")._id,
       uri,
     });
     expect(await consents()).toBe(false);

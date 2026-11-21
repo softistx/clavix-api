@@ -8,6 +8,8 @@ import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver } from "@/config/tenancy";
 import { fingerprintOf } from "@/oauth/resolution";
+import { errorBody, jsonOf } from "~/json";
+import { defined, recordOf } from "~/narrow";
 import { createFlow, DOMAIN, REDIRECT } from "~/oauth-flow";
 import { mongoDetailTypeClients } from "./resources.client-lists";
 import { CatalogError } from "./resources.errors";
@@ -94,10 +96,10 @@ async function listTypes(slug: string, types: string[]) {
 const discovery = async (
   slug: string,
   path = "/.well-known/openid-configuration",
-) => (await (await flow.get(slug, path)).json()) as Record<string, unknown>;
+) => recordOf(await (await flow.get(slug, path)).json());
 
 async function par(slug: string, details: unknown, resource = PAY) {
-  const client = flow.clients[slug] as { id: string; secret: string };
+  const client = defined(flow.clients[slug], "the flow client");
   return flow.post(
     slug,
     "/par",
@@ -119,7 +121,7 @@ const good = [
   { type: "payment", amount: 12.5, currency: "EUR", actions: ["initiate"] },
 ];
 const errorOf = async (response: Response) =>
-  ((await response.json()) as { error: string }).error;
+  (await jsonOf(response, errorBody)).error;
 
 beforeAll(async () => {
   await flow.setUp("rar-a", [], { par: true });
@@ -184,8 +186,11 @@ describe("detail types served to janus", () => {
   });
 
   test("an edited type rebuilds the issuer on the next request, with no restart", async () => {
-    const tenant = await tenantResolver.resolveHost(`rar-a.${DOMAIN}`);
-    const before = fingerprintOf(await resourcesFor(tenant as never));
+    const tenant = defined(
+      await tenantResolver.resolveHost(`rar-a.${DOMAIN}`),
+      "the tenant",
+    );
+    const before = fingerprintOf(await resourcesFor(tenant));
     // The cap is tightened: 12.5 was accepted a moment ago, it is not now.
     await addType(
       "rar-a",
@@ -209,7 +214,7 @@ describe("detail types served to janus", () => {
         ],
       }),
     );
-    expect(fingerprintOf(await resourcesFor(tenant as never))).not.toBe(before);
+    expect(fingerprintOf(await resourcesFor(tenant))).not.toBe(before);
     expect(await errorOf(await par("rar-a", good))).toBe(
       "invalid_authorization_details",
     );
@@ -226,7 +231,10 @@ describe("detail types served to janus", () => {
     const response = await par("rar-b", good, OTHER);
     expect(await errorOf(response)).toBe("invalid_authorization_details");
     const served = await resourcesFor(
-      (await tenantResolver.resolveHost(`rar-b.${DOMAIN}`)) as never,
+      defined(
+        await tenantResolver.resolveHost(`rar-b.${DOMAIN}`),
+        "the tenant",
+      ),
     );
     expect(Object.keys(served[PAY] ?? {})).toEqual([]);
     expect(Object.keys(served[OTHER]?.authorizationDetails ?? {})).toEqual([

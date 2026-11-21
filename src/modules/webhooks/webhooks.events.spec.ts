@@ -35,16 +35,18 @@ describe("catalogue", () => {
 
 describe("userWebhookEvent", () => {
   test("carries ids only", () => {
-    const event = userWebhookEvent(TENANT, {
+    // A janus event never carries an address or an e-mail; a stray one must not leak.
+    const stray = { email: "a@b.c", ip: "203.0.113.9" };
+    const janusEvent: UserEvent = {
       id: "e1",
       type: "user.socialLinked",
       userId: "u1",
       userType: "customer",
       provider: "google",
       occurredAt: new Date(),
-      email: "a@b.c",
-      ip: "203.0.113.9",
-    } as unknown as UserEvent);
+      ...stray,
+    };
+    const event = userWebhookEvent(TENANT, janusEvent);
     expect(event.data).toEqual({
       tenantId: TENANT,
       userId: "u1",
@@ -71,7 +73,7 @@ describe("signedInWebhookEvent", () => {
     ).toBeUndefined();
     expect(
       signedInWebhookEvent(
-        signIn({ type: "session.signOut" as never }),
+        signIn({ type: "session.signOut" }),
         () => new Date(),
       ),
     ).toBeUndefined();

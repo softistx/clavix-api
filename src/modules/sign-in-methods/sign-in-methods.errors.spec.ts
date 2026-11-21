@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphQLError } from "graphql";
+import { z } from "zod";
+import { at } from "~/body";
 import { codes, methodDisabled, refusal } from "./sign-in-methods.errors";
 
 const detail = (error: GraphQLError) => ({
   code: error.extensions["code"],
-  status: (error.extensions["http"] as { status?: number } | undefined)?.status,
+  status: at(error.extensions, "http.status", z.number().optional()),
   message: error.message,
 });
 

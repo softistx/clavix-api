@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createConsoleDeps } from "@/config/console";
 import { CONSOLE_PATH } from "@/console/identity";
 import { createTestApp } from "~/app";
+import { gqlOf } from "~/gql";
 import { CLIENT_HEADER } from "./csrf";
 
 const consoleDeps = {
@@ -10,15 +11,8 @@ const consoleDeps = {
 };
 const json = { "content-type": "application/json" };
 const QUERY = JSON.stringify({ query: "{ __typename }" });
-const paths = [
-  "http://acme.clavix.test/graphql",
-  `http://localhost${CONSOLE_PATH}`,
-];
-
-interface Body {
-  data?: unknown;
-  errors?: { extensions?: { code?: string } }[];
-}
+const path = "http://acme.clavix.test/graphql";
+const paths = [path, `http://localhost${CONSOLE_PATH}`];
 
 const send = (
   required: boolean,
@@ -34,7 +28,7 @@ const send = (
     body: QUERY,
   });
 const codeOf = async (response: Response) =>
-  ((await response.json()) as Body).errors?.[0]?.extensions?.code;
+  (await gqlOf(response)).errors?.[0]?.extensions?.code;
 
 describe.each(paths)("%s", (url) => {
   test("on: a request without the header is 403 before it is parsed", async () => {
@@ -66,8 +60,8 @@ describe.each(paths)("%s", (url) => {
 });
 
 test("on: a refused request runs no resolver", async () => {
-  const response = await send(true, paths[0] as string, {});
-  const body = (await response.json()) as Body;
+  const response = await send(true, path, {});
+  const body = await gqlOf(response);
   expect(body.data).toBeUndefined();
 });
 
@@ -76,7 +70,7 @@ test("on: a consent operation without the header is 403, never NOT_FOUND", async
   // consent operation is NOT_FOUND (same-origin.spec.ts): a foreign Origin
   // would be 404 with the header present, and is 403 without it.
   const response = await createTestApp({ requireClientHeader: true }).request(
-    paths[0] as string,
+    path,
     {
       method: "POST",
       headers: { ...json, origin: "https://evil.clavix.test" },
@@ -93,6 +87,6 @@ test("on: the IDE page (an HTML GET with no query) needs no header", async () =>
   const response = await createTestApp({
     requireClientHeader: true,
     ide: true,
-  }).request(paths[0] as string, { headers: { accept: "text/html" } });
+  }).request(path, { headers: { accept: "text/html" } });
   expect(response.status).toBe(200);
 });

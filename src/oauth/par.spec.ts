@@ -5,6 +5,8 @@ import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
+import { errorBody, jsonOf } from "~/json";
+import { parBody, recordBody } from "~/oauth-bodies";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 
 const VERIFIER = "p".repeat(64);
@@ -65,7 +67,7 @@ async function errorOf(response: Response): Promise<string | null> {
     const location = response.headers.get("location") ?? "";
     return new URL(location, "https://x.invalid").searchParams.get("error");
   }
-  return ((await response.json()) as { error: string }).error;
+  return (await jsonOf(response, errorBody)).error;
 }
 
 describe("pushed authorization requests", () => {
@@ -84,7 +86,7 @@ describe("pushed authorization requests", () => {
   test("/par with Basic auth, then /authorize?request_uri= completes code + PKCE", async () => {
     const pushed = await push("par-on", "backend", secretOf("par-on"));
     expect(pushed.status).toBe(201);
-    const { request_uri } = (await pushed.json()) as { request_uri: string };
+    const { request_uri } = await jsonOf(pushed, parBody);
     const redirect = await authorize("par-on", {
       client_id: "backend",
       request_uri,
@@ -136,7 +138,7 @@ describe("pushed authorization requests", () => {
     expect(await errorOf(refused)).toBe("invalid_request");
     const pushed = await push("par-client", "pusher", pusherSecret);
     expect(pushed.status).toBe(201);
-    const { request_uri } = (await pushed.json()) as { request_uri: string };
+    const { request_uri } = await jsonOf(pushed, parBody);
     const accepted = await authorize("par-client", {
       client_id: "pusher",
       request_uri,
@@ -146,9 +148,10 @@ describe("pushed authorization requests", () => {
 
   test("discovery advertises the requirement only where it is on", async () => {
     const meta = async (slug: string) =>
-      (await (
-        await flow.get(slug, "/.well-known/oauth-authorization-server")
-      ).json()) as Record<string, unknown>;
+      jsonOf(
+        await flow.get(slug, "/.well-known/oauth-authorization-server"),
+        recordBody,
+      );
     const on = await meta("par-on");
     expect(on["require_pushed_authorization_requests"]).toBe(true);
     expect(on["pushed_authorization_request_endpoint"]).toBe(

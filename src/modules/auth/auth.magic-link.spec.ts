@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -15,13 +15,17 @@ import {
 } from "@/modules/tenants";
 import { MAGIC_LINK_LIFESPAN, SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
 import { quietTenants } from "~/ports";
 import { settled } from "./auth.outbox";
 
 // Magic link is the tenant's choice, off until it turns it on (its sign-in
 // policy, slice A5): "plain" never did, "acme" and "vault" did.
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -36,13 +40,6 @@ const service = new TenantsService(mongo.db.tenants, {
 });
 const policy = new SignInPolicyService(service, secretBox, () => {});
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
-
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
 
 async function gql(
   slug: string,
@@ -61,13 +58,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
-  return {
-    status: response.status,
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const REQUEST = `mutation ($email: EmailAddress!) {
@@ -146,7 +137,7 @@ describe("magic link off for a tenant that did not turn it on", () => {
     await gql("plain", REQUEST, { email: "ghost@example.test" });
     const users = await oauthDb
       .collection("partitionedUsers")
-      .countDocuments({ email: "ghost@example.test" } as never);
+      .countDocuments({ email: "ghost@example.test" });
     expect(users).toBe(0);
   });
 });
@@ -160,19 +151,14 @@ describe("magic link turned on by the tenant", () => {
     expect(answer.status).toBe(200);
     expect(mails).toHaveLength(1);
     expect(link).toStartWith(`${issuerOf("acme", origin)}/sign-in/link?token=`);
-    const requested = answer.data?.["requestMagicLink"] as
-      | { expiresAt: string }
-      | undefined;
-    const left = new Date(requested?.expiresAt ?? 0).getTime();
+    const expiresAt = at(answer.data, "requestMagicLink.expiresAt", z.string());
+    const left = new Date(expiresAt).getTime();
     expect(left - Date.now()).toBeGreaterThan(14 * 60_000);
     expect(MAGIC_LINK_LIFESPAN).toBe("15m");
 
     const signedIn = await gql("acme", CONFIRM, { token });
     expect(signedIn.status).toBe(200);
-    const confirmed = signedIn.data?.["confirmMagicLink"] as
-      | { user: { email: string; emailVerified: boolean } }
-      | undefined;
-    expect(confirmed?.user).toMatchObject({
+    expect(at(signedIn.data, "confirmMagicLink.user")).toMatchObject({
       email: "lin@example.test",
       emailVerified: true,
     });
@@ -195,7 +181,7 @@ describe("magic link turned on by the tenant", () => {
       },
       body: JSON.stringify({ query: ME }),
     });
-    expect(((await me.json()) as { data: unknown }).data).toEqual({
+    expect((await gqlOf(me)).data).toEqual({
       currentUser: { email: "lin@example.test", emailVerified: true },
     });
   });
@@ -206,11 +192,9 @@ describe("magic link turned on by the tenant", () => {
     const signedIn = await gql("acme", CONFIRM, { token }, undefined, {
       "user-agent": agent,
     });
-    const confirmed = signedIn.data?.["confirmMagicLink"] as {
-      user: { id: string };
-    };
+
     const auth = await janusIssuers.forRequest(new Request(url("acme")));
-    const id = confirmed.user.id;
+    const id = at(signedIn.data, "confirmMagicLink.user.id", z.string());
     expect(
       (await auth?.sessions.list({ id }))?.map((session) => session.device),
     ).toEqual([agent]);
@@ -261,7 +245,7 @@ describe("magic link turned on by the tenant", () => {
     expect(unknown.answer.errors).toBeUndefined();
     const users = await oauthDb
       .collection("partitionedUsers")
-      .countDocuments({ email: "stranger@example.test" } as never);
+      .countDocuments({ email: "stranger@example.test" });
     expect(users).toBe(0);
   });
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { Tenant } from "./tenants.model";
+import { tenantDoc } from "~/tenant-doc";
 import {
   escapeRegex,
   hostOf,
@@ -59,13 +59,7 @@ test("objectIdsOf keeps the valid ids only", () => {
 });
 
 test("registeredOf reports a stored tenant", () => {
-  const tenant = {
-    _id: new ObjectId(),
-    slug: "acme",
-    name: "Acme",
-    status: "active",
-    signUp: false,
-  } as unknown as Tenant;
+  const tenant = tenantDoc();
   expect(registeredOf(tenant, true)).toEqual({
     created: true,
     tenantId: tenant._id.toHexString(),

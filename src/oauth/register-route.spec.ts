@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { protectedResource, s256Challenge } from "@softistx/janus-oauth";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
@@ -9,6 +10,8 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import type { AgentsPolicy } from "@/modules/oauth-policy";
 import { partitionOf } from "@/modules/tenants";
+import { errorBody, jsonOf } from "~/json";
+import { defined } from "~/narrow";
 import { createFlow, DOMAIN } from "~/oauth-flow";
 import { createRegisterRoute } from "./register-route";
 import {
@@ -264,7 +267,7 @@ describe("throttle", () => {
       expect(statuses).toEqual([201, 201, 201, 429, 429]);
       expect(last?.headers.get("retry-after")).toBe("42");
       expect(
-        ((await (last as Response).json()) as { error: string }).error,
+        (await jsonOf(defined(last, "the last response"), errorBody)).error,
       ).toBe("temporarily_unavailable");
       expect(await countOf("ag-throttled")).toBe(3);
     } finally {
@@ -435,7 +438,10 @@ describe("agent records", () => {
       ...metadata,
       redirect_uris: [CALLBACK],
     });
-    const { client_id } = (await response.json()) as { client_id: string };
+    const { client_id } = await jsonOf(
+      response,
+      z.looseObject({ client_id: z.string() }),
+    );
     const a = await tenantResolver.resolveHost(`ag-open.${DOMAIN}`);
     const b = await tenantResolver.resolveHost(`ag-off.${DOMAIN}`);
     if (a === null || b === null) throw new Error("no tenant");
@@ -494,14 +500,14 @@ describe("agent records", () => {
       software_id: "x".repeat(17 * 1024),
     });
     expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toBe(
+    expect((await jsonOf(response, errorBody)).error).toBe(
       "invalid_client_metadata",
     );
   });
 });
 
 describe("the registration body is bounded", () => {
-  const post = (init: RequestInit) =>
+  const post = (init: RequestInit & { duplex?: "half" }) =>
     flow.issuers.register(
       new Request(flow.url("ag-open", "/register"), {
         method: "POST",
@@ -523,7 +529,7 @@ describe("the registration body is bounded", () => {
       body,
       duplex: "half",
       headers: { "content-length": String(17 * 1024) },
-    } as RequestInit);
+    });
     expect(response.status).toBe(413);
     expect(await countOf("ag-open")).toBe(before);
   });
@@ -539,9 +545,9 @@ describe("the registration body is bounded", () => {
       },
     });
     const before = await countOf("ag-open");
-    const response = await post({ body, duplex: "half" } as RequestInit);
+    const response = await post({ body, duplex: "half" });
     expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toBe(
+    expect((await jsonOf(response, errorBody)).error).toBe(
       "invalid_client_metadata",
     );
     // The cap is 16 KiB: a handful of 4 KiB chunks, not the whole stream.
@@ -579,7 +585,7 @@ describe("metadata documents: abuse limits", () => {
       expect(statuses).toEqual([302, 302, 429, 429]);
       expect(last?.headers.get("retry-after")).toBe("17");
       expect(
-        ((await (last as Response).json()) as { error: string }).error,
+        (await jsonOf(defined(last, "the last response"), errorBody)).error,
       ).toBe("temporarily_unavailable");
       // The cache serves the second request: one fetch, none once throttled.
       expect(fetched).toBeLessThanOrEqual(2);
@@ -621,9 +627,7 @@ describe("metadata documents: abuse limits", () => {
     fetched = 0;
     const refused = await authorize("ag-docs-quota");
     expect(refused.status).toBe(403);
-    expect(((await refused.json()) as { error: string }).error).toBe(
-      "access_denied",
-    );
+    expect((await jsonOf(refused, errorBody)).error).toBe("access_denied");
     expect(fetched).toBe(0);
     expect(await countOf("ag-docs-quota", "metadata")).toBe(0);
     // A client already recorded keeps working over the quota.

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { UserEvent } from "@softistx/janus";
 import {
   createMemoryWebhookQueue,
   mintWebhookSecret,
@@ -7,6 +6,7 @@ import {
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { createSecretBox } from "@/modules/sign-in-methods";
+import { fetchDouble } from "~/fetch-double";
 import {
   createWebhookDelivery,
   endpointIdOf,
@@ -42,7 +42,7 @@ let gate: Promise<void> = Promise.resolve();
 let inFlight = 0;
 let peak = 0;
 let calmReceived = 0;
-const receiver = (async (input: RequestInfo | URL) => {
+const receiver = fetchDouble(async (input) => {
   if (String(input).includes("flood")) {
     inFlight++;
     peak = Math.max(peak, inFlight);
@@ -50,7 +50,7 @@ const receiver = (async (input: RequestInfo | URL) => {
     inFlight--;
   } else calmReceived++;
   return new Response("", { status: 200 });
-}) as unknown as typeof fetch;
+});
 
 const open: ReturnType<typeof createWebhookDelivery>[] = [];
 const refused: string[] = [];
@@ -63,7 +63,7 @@ const makeDelivery = (caps: { maxInFlight: number; maxPending: number }) => {
       webhookQueueLimits(caps, (line) => refused.push(line)),
     ),
     retries: [],
-    poll: "10ms" as never,
+    poll: "10ms",
     onDisabled: async () => {},
     log: () => {},
   });
@@ -99,7 +99,7 @@ const created = (tenantId: string) =>
       userId: "u1",
       userType: "customer",
       occurredAt: new Date(),
-    } as unknown as UserEvent),
+    }),
   }) as const;
 
 const stall = () => {

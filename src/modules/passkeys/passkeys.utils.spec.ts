@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Passkey } from "@softistx/janus";
-import type { TenantJanus } from "@/modules/users";
+import { janusOver, passkeyOf, signedAs } from "~/janus-double";
 import {
   ceremonyOut,
   currentOf,
@@ -12,15 +11,13 @@ const request = new Request("https://acme.example/graphql");
 
 describe("currentOf", () => {
   test("answers the session of the request", async () => {
-    const current = { user: { id: "u1" } };
-    const auth = {
-      authenticate: async () => current,
-    } as unknown as TenantJanus;
-    expect(await currentOf(auth, request)).toBe(current as never);
+    const current = signedAs("u1");
+    const auth = janusOver({ authenticate: async () => current });
+    expect(await currentOf(auth, request)).toBe(current);
   });
 
   test("refuses an anonymous request as UNAUTHENTICATED", async () => {
-    const auth = { authenticate: async () => null } as unknown as TenantJanus;
+    const auth = janusOver({ authenticate: async () => null });
     const error = await currentOf(auth, request).catch((caught) => caught);
     expect(error.extensions.code).toBe("UNAUTHENTICATED");
   });
@@ -37,14 +34,7 @@ describe("responseOf", () => {
 });
 
 describe("passkeyOut", () => {
-  const base = {
-    credentialId: "cred",
-    name: "Laptop",
-    transports: ["internal"],
-    backupEligible: true,
-    backedUp: false,
-    createdAt: new Date("2026-11-20T00:00:00Z"),
-  } as unknown as Passkey;
+  const base = passkeyOf();
 
   test("shapes a passkey and nulls a never-used one", () => {
     expect(passkeyOut(base)).toEqual({

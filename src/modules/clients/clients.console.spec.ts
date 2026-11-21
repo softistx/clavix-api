@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
@@ -11,7 +12,10 @@ import { registerStoredResource } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
 import { createFlow } from "~/oauth-flow";
 import { registerClient } from "./clients.register";
 
@@ -39,12 +43,14 @@ const DELETE = `mutation($tenantId: ID!, $id: ID!) { deleteClient(tenantId: $ten
 const LIST = `query($tenantId: ID!, $q: String, $after: String, $first: Int) {
   clients(tenantId: $tenantId, q: $q, after: $after, first: $first) { items { ${CLIENT} } nextCursor totalCount }
 }`;
+const clientsPage = z.looseObject({
+  items: z.array(z.looseObject({ id: z.string() })),
+  nextCursor: z.string().nullable(),
+  totalCount: z.number(),
+});
+const secretOf = z.looseObject({ clientSecret: z.string() });
 const pageOf = (result: Awaited<ReturnType<typeof admin>>) =>
-  result.data?.["clients"] as {
-    items: unknown[];
-    nextCursor: string | null;
-    totalCount: number;
-  };
+  at(result.data, "clients", clientsPage);
 const GET = `query($tenantId: ID!, $id: ID!) { client(tenantId: $tenantId, id: $id) { ${CLIENT} } }`;
 
 const storeOf = async (tenantId: string) => {
@@ -62,9 +68,9 @@ const create = (
     input: { type: "PUBLIC", redirectUris: [REDIRECT], ...input },
   });
 const idsOf = (result: Awaited<ReturnType<typeof admin>>) =>
-  (
-    result.data?.["clients"] as { items: { id: string }[] } | undefined
-  )?.items.map((item) => item.id);
+  at(result.data, "clients", clientsPage.optional())?.items.map(
+    (item) => item.id,
+  );
 
 beforeAll(async () => {
   tenantA = (await tenantsService.create({ slug: "cli-a", name: "A" })).id;
@@ -95,10 +101,14 @@ describe("createClient", () => {
       type: "CONFIDENTIAL",
     });
     expect(result.errors).toBeUndefined();
-    const created = result.data?.["createClient"] as {
-      client: Record<string, unknown>;
-      clientSecret: string;
-    };
+    const created = at(
+      result.data,
+      "createClient",
+      z.looseObject({
+        client: z.record(z.string(), z.unknown()),
+        clientSecret: z.string(),
+      }),
+    );
     expect(created.client).toMatchObject({
       id: "back-end",
       name: "Back end",
@@ -135,7 +145,7 @@ describe("createClient", () => {
     });
     expect(codeOf(result)).toBe("CONFLICT");
     const after = await (await storeOf(tenantA)).findClient("back-end");
-    expect(after?.secretHash).toBe(before?.secretHash as string);
+    expect(after?.secretHash).toBe(before?.secretHash);
     expect(after?.name).toBe("Back end");
   });
 
@@ -158,10 +168,7 @@ describe("clients and client", () => {
     const first = await admin(LIST, { tenantId: tenantA, first: 1 });
     expect(first.errors).toBeUndefined();
     expect(idsOf(first)).toEqual(["back-end"]);
-    const page = first.data?.["clients"] as
-      | { nextCursor: string | null }
-      | undefined;
-    const cursor = page?.nextCursor ?? null;
+    const cursor = at(first.data, "clients.nextCursor", z.string().nullable());
     expect(cursor).not.toBeNull();
     const second = await admin(LIST, {
       tenantId: tenantA,
@@ -189,9 +196,7 @@ describe("clients and client", () => {
       });
       expect(result.errors).toBeUndefined();
       found.push(...(idsOf(result) ?? []));
-      after =
-        (result.data?.["clients"] as { nextCursor: string | null } | undefined)
-          ?.nextCursor ?? null;
+      after = at(result.data, "clients.nextCursor", z.string().nullable());
     } while (after !== null);
     expect(found).toEqual(["mobile-app"]);
   });
@@ -469,8 +474,8 @@ describe("updateClient", () => {
       redirectUris: ["https://app.example/cb2"],
     });
     const after = await (await storeOf(tenantA)).findClient("back-end");
-    expect(after?.secretHash).toBe(before?.secretHash as string);
-    expect(after?.createdAt).toEqual(before?.createdAt as Date);
+    expect(after?.secretHash).toBe(before?.secretHash);
+    expect(after?.createdAt).toEqual(before?.createdAt);
     // The list follows.
     expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "API" }))).toEqual([
       "back-end",
@@ -504,13 +509,11 @@ describe("rotateClientSecret", () => {
     const before = await (await storeOf(tenantA)).findClient("back-end");
     const result = await admin(ROTATE, { tenantId: tenantA, id: "back-end" });
     expect(result.errors).toBeUndefined();
-    const rotated = result.data?.["rotateClientSecret"] as {
-      clientSecret: string;
-    };
+    const rotated = at(result.data, "rotateClientSecret", secretOf);
     expect(rotated.clientSecret.length).toBeGreaterThan(20);
     const after = await (await storeOf(tenantA)).findClient("back-end");
     expect(after?.secretHash).toBeDefined();
-    expect(after?.secretHash).not.toBe(before?.secretHash as string);
+    expect(after?.secretHash).not.toBe(before?.secretHash);
   });
 
   test("a public client has none to rotate; an unknown one is NOT_FOUND", async () => {
@@ -918,13 +921,11 @@ describe("limits", () => {
 
   test("the list and the detail give the same creation date", async () => {
     const listed = await admin(LIST, { tenantId: tenantA, q: "ghost" });
-    const [item] = (
-      (listed.data?.["clients"] ?? { items: [] }) as {
-        items: Record<string, unknown>[];
-      }
-    ).items;
+    const [item] = at(listed.data, "clients", clientsPage).items;
     const got = await admin(GET, { tenantId: tenantA, id: "ghost" });
-    expect(item).toEqual(got.data?.["client"] as Record<string, unknown>);
+    expect(item).toEqual(
+      at(got.data, "client", z.looseObject({ id: z.string() })),
+    );
   });
 
   test("a cursor, a name or a list too long are BAD_USER_INPUT", async () => {
@@ -975,10 +976,10 @@ describe("admin events", () => {
       name: "Audited",
       type: "CONFIDENTIAL",
     });
-    const clientSecret = String(
-      (created.data?.["createClient"] as Record<string, unknown> | undefined)?.[
-        "clientSecret"
-      ],
+    const clientSecret = at(
+      created.data,
+      "createClient.clientSecret",
+      z.string(),
     );
     expect(clientSecret.length).toBeGreaterThan(20);
     const id = "audited";
@@ -988,12 +989,10 @@ describe("admin events", () => {
       input: { name: "Audited 2" },
     });
     const rotated = await admin(ROTATE, { tenantId: tenantA, id });
-    const second = String(
-      (
-        rotated.data?.["rotateClientSecret"] as
-          | Record<string, unknown>
-          | undefined
-      )?.["clientSecret"],
+    const second = at(
+      rotated.data,
+      "rotateClientSecret.clientSecret",
+      z.string(),
     );
     expect(second.length).toBeGreaterThan(20);
     await admin(DELETE, { tenantId: tenantA, id });
@@ -1057,9 +1056,7 @@ describe("createClient of one id at the very same time", () => {
       ["racer"],
     );
     // The stored secret is the winner's: rotating is the only way to another.
-    const winner = winners[0]?.data?.["createClient"] as {
-      clientSecret: string;
-    };
+    const winner = at(winners[0]?.data, "createClient", secretOf);
     const stored = await (await storeOf(tenantA)).findClient("racer");
     expect(stored?.secretHash).toBeString();
     expect(winner.clientSecret.length).toBeGreaterThan(20);
@@ -1104,7 +1101,7 @@ describe("the deleteClient trail", () => {
     const record = await store.findClient("by-script");
     // A record the console did not register (here from a client metadata document).
     await store.upsertClient({
-      ...(record as NonNullable<typeof record>),
+      ...defined(record, "the stored client"),
       source: "metadata",
     });
     await mongo.db.adminEvents.raw.deleteMany({});
@@ -1126,7 +1123,7 @@ describe("the deleteClient trail", () => {
     await create(admin, tenantA, { name: "One read", clientId: "one-read" });
     const record = await store.findClient("one-read");
     await store.upsertClient({
-      ...(record as NonNullable<typeof record>),
+      ...defined(record, "the stored client"),
       source: "metadata",
     });
     expect(await clientsService.delete(tenant, "one-read")).toEqual({
@@ -1134,7 +1131,7 @@ describe("the deleteClient trail", () => {
       unmanaged: true,
     });
     await store.upsertClient({
-      ...(record as NonNullable<typeof record>),
+      ...defined(record, "the stored client"),
       source: "registered",
     });
     expect(await clientsService.delete(tenant, "one-read")).toEqual({
@@ -1176,9 +1173,7 @@ describe("the tokens of a deleted client", () => {
       clientId: "token-app",
       type: "CONFIDENTIAL",
     });
-    const secret = (
-      (created.data?.["createClient"] ?? {}) as { clientSecret: string }
-    ).clientSecret;
+    const secret = at(created.data, "createClient", secretOf).clientSecret;
     const client = { id: "token-app", secret };
     const tokens = await flow.tokensOf("cli-tok", "openid", {
       client,
@@ -1195,10 +1190,7 @@ describe("the tokens of a deleted client", () => {
     expect(tokens.refresh_token).toBeString();
     const before = await refresh(tokens.refresh_token ?? "");
     expect(before.status).toBe(200);
-    const live = (await before.json()) as {
-      access_token: string;
-      refresh_token: string;
-    };
+    const live = await jsonOf(before, tokenBody);
     expect((await userinfo(live.access_token)).status).toBe(200);
 
     expect((await admin(DELETE, { tenantId, id: "token-app" })).data).toEqual({
@@ -1206,7 +1198,7 @@ describe("the tokens of a deleted client", () => {
     });
 
     expect((await userinfo(live.access_token)).status).toBe(401);
-    const after = await refresh(live.refresh_token);
+    const after = await refresh(defined(live.refresh_token, "a refresh token"));
     expect(after.status).toBeGreaterThanOrEqual(400);
     // The client itself no longer authenticates either.
     const code = await flow
@@ -1276,10 +1268,14 @@ describe("a repeat after a failed record", () => {
     await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
     const again = await create(admin, tenantA, input);
     expect(again.errors).toBeUndefined();
-    const result = again.data?.["createClient"] as {
-      client: { id: string };
-      clientSecret: string | null;
-    };
+    const result = at(
+      again.data,
+      "createClient",
+      z.looseObject({
+        client: z.looseObject({ id: z.string() }),
+        clientSecret: z.string().nullable(),
+      }),
+    );
     expect(result.client.id).toBe("replayed");
     expect(result.clientSecret).toBeNull();
     const events = await mongo.db.adminEvents.raw.find({}).toArray();
@@ -1315,10 +1311,12 @@ describe("a repeat after a failed record", () => {
       defaultScopes: ["read "],
     });
     expect(again.errors).toBeUndefined();
-    const result = again.data?.["createClient"] as
-      | { clientSecret: string | null }
-      | undefined;
-    expect(result?.clientSecret).toBeNull();
+    const result = at(
+      again.data,
+      "createClient",
+      z.looseObject({ clientSecret: z.string().nullable() }),
+    );
+    expect(result.clientSecret).toBeNull();
   });
 
   test("eight identical concurrent calls: one secret, seven null, one stored client", async () => {
@@ -1332,13 +1330,8 @@ describe("a repeat after a failed record", () => {
       ),
     );
     expect(results.every((r) => r.errors === undefined)).toBe(true);
-    const secrets = results.map(
-      (r) =>
-        (
-          r.data?.["createClient"] as
-            | { clientSecret: string | null }
-            | undefined
-        )?.clientSecret,
+    const secrets = results.map((r) =>
+      at(r.data, "createClient.clientSecret", z.string().nullable()),
     );
     expect(secrets.filter((secret) => typeof secret === "string")).toHaveLength(
       1,

@@ -7,19 +7,13 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
+import { jsonOf } from "~/json";
+import { answerBody } from "~/oauth-bodies";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 
 const API = "https://api.dp-open.example/v1";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-
-interface TokenAnswer {
-  access_token?: string;
-  token_type?: string;
-  refresh_token?: string | null;
-  error?: string;
-  error_description?: string;
-}
 
 /** A public client of the tenant, DPoP-bound or not. */
 async function publicClient(slug: string, dpopBound?: boolean) {
@@ -68,7 +62,7 @@ async function exchange(
           },
     ),
   );
-  return { response, json: (await response.clone().json()) as TokenAnswer };
+  return { response, json: await jsonOf(response.clone(), answerBody) };
 }
 
 const userinfo = (
@@ -138,7 +132,7 @@ describe("DPoP at /token", () => {
       { dpop: await key.proof("POST", url) },
     );
     expect(asked.status).toBe(400);
-    expect(((await asked.json()) as TokenAnswer).error).toBe("use_dpop_nonce");
+    expect((await jsonOf(asked, answerBody)).error).toBe("use_dpop_nonce");
     const nonce = asked.headers.get("dpop-nonce") ?? "";
     expect(nonce).not.toBe("");
     // The code was not spent: the retry with the nonce succeeds.
@@ -150,7 +144,7 @@ describe("DPoP at /token", () => {
       { dpop: await key.proof("POST", url, { nonce }) },
     );
     expect(retried.status).toBe(200);
-    const tokens = (await retried.json()) as TokenAnswer;
+    const tokens = await jsonOf(retried, answerBody);
     expect(tokens.token_type).toBe("DPoP");
     expect(decodeJwt(tokens.access_token ?? "")["cnf"]).toEqual({
       jkt: key.jkt,
@@ -205,7 +199,7 @@ describe("DPoP at /token", () => {
       { dpop: proof },
     );
     expect(replay.status).toBe(400);
-    expect(((await replay.json()) as TokenAnswer).error_description).toContain(
+    expect((await jsonOf(replay, answerBody)).error_description).toContain(
       "already used",
     );
   });
@@ -221,9 +215,7 @@ describe("DPoP at /token", () => {
       { dpop: await key.proof("POST", "http://localhost:3000/token") },
     );
     expect(wrong.status).toBe(400);
-    expect(((await wrong.json()) as TokenAnswer).error).toBe(
-      "invalid_dpop_proof",
-    );
+    expect((await jsonOf(wrong, answerBody)).error).toBe("invalid_dpop_proof");
   });
 });
 
@@ -261,13 +253,11 @@ describe("a public client's refresh token", () => {
     expect((await send(null)).status).toBe(400);
     const other = await send(await createDpopKey());
     expect(other.status).toBe(400);
-    expect(((await other.json()) as TokenAnswer).error).toBe(
-      "invalid_dpop_proof",
-    );
+    expect((await jsonOf(other, answerBody)).error).toBe("invalid_dpop_proof");
     // The same key works, and the new access token is bound to it.
     const ok = await send(key);
     expect(ok.status).toBe(200);
-    const refreshed = (await ok.json()) as TokenAnswer;
+    const refreshed = await jsonOf(ok, answerBody);
     expect(refreshed.token_type).toBe("DPoP");
     expect(decodeJwt(refreshed.access_token ?? "")["cnf"]).toEqual({
       jkt: key.jkt,
@@ -300,7 +290,7 @@ describe("DPoP required", () => {
       flow.basic(bound.id, bound.secret),
     );
     expect(without.status).toBe(400);
-    expect(((await without.json()) as TokenAnswer).error).toBe(
+    expect((await jsonOf(without, answerBody)).error).toBe(
       "invalid_dpop_proof",
     );
   });

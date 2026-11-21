@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { getCollection } from "@softistx/mongo";
 import { migrate, rollback } from "@softistx/mongo/migrations";
 import type { Db, ObjectId } from "mongodb";
+import { z } from "zod";
 import { scopes, tenants } from "@/modules/collections";
 import { freshMigrationDb } from "~/migrations";
+import { defined, parsed } from "~/narrow";
 import { clavixTenant } from "./2026-11-10-clavix-tenant.migration";
 import { id, scopesMigration } from "./2026-11-13-scopes.migration";
 
@@ -26,7 +28,9 @@ const scopeDocs = () =>
   db.collection("scopes").find().sort({ name: 1 }).toArray();
 const again = async () => {
   // Forget the record so the migration runs again on the same data.
-  await db.collection("nxgt_migrations").deleteMany({ _id: id as never });
+  await db
+    .collection<{ _id: string }>("nxgt_migrations")
+    .deleteMany({ _id: id });
   await migrate(db, [clavixTenant, scopesMigration]);
 };
 
@@ -34,7 +38,10 @@ beforeEach(async () => {
   db = await freshMigrationDb();
   await migrate(db, [clavixTenant]);
   const all = getCollection(db, tenants);
-  tenantId = (await all.findFirst({ slug: "clavix" }))?._id as ObjectId;
+  tenantId = defined(
+    await all.findFirst({ slug: "clavix" }),
+    "the clavix tenant",
+  )._id;
   other = (await all.create({ slug: "mig-b", name: "B", status: "active" }))
     ._id;
 });
@@ -95,10 +102,9 @@ describe(id, () => {
     await migrate(db, [clavixTenant, scopesMigration]);
     await rollback(db, [clavixTenant, scopesMigration]);
     const [resource] = await db.collection("resources").find().toArray();
-    expect([...((resource?.["scopes"] ?? []) as string[])].sort()).toEqual([
-      "read",
-      "write",
-    ]);
+    expect(
+      [...parsed(z.array(z.string()), resource?.["scopes"] ?? [])].sort(),
+    ).toEqual(["read", "write"]);
     expect(await getCollection(db, scopes).raw.countDocuments()).toBe(0);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { tenantsService } from "@/config/tenancy";
+import { defined } from "~/narrow";
 import {
   can,
   janusCount,
@@ -30,9 +31,9 @@ describe("the tenant purge", () => {
       target: { type: "tenant", id: a._id.toHexString() },
       at: new Date(),
       requestId: "r",
-    } as never);
+    });
     const trashed = await tenantsService.trash(a._id.toHexString());
-    const due = purgeAtOf(trashed.deletedAt as Date);
+    const due = purgeAtOf(defined(trashed.deletedAt, "the deletion date"));
     const bBefore = await janusOf(b._id.toHexString());
 
     expect(await run(due)).toEqual({
@@ -75,7 +76,7 @@ describe("the tenant purge", () => {
     const a = await seed("alpha");
     const id = a._id.toHexString();
     const trashed = await tenantsService.trash(id);
-    const due = purgeAtOf(trashed.deletedAt as Date);
+    const due = purgeAtOf(defined(trashed.deletedAt, "the deletion date"));
     state.failFor = id;
     expect(await run(due)).toEqual({ purged: [], failed: [id] });
     expect(await ownedCount(a)).toBe(2);

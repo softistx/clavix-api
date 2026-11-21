@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CliInputError } from "@/shared/cli";
+import { scopeDoc } from "~/resource-docs";
 import { CatalogError } from "./resources.errors";
 import {
   checkCanonicalRegistration,
@@ -18,7 +19,6 @@ import {
   sameUri,
   scopeNameProblem,
 } from "./resources.rules";
-import type { StoredScopeDoc } from "./resources.types";
 
 describe("resourceUriProblem loopback hosts", () => {
   test.each([
@@ -89,10 +89,10 @@ describe("scope and resource names", () => {
   });
 
   test("sameScopeDefinition compares texts and claims, not their order", () => {
-    const stored = {
+    const stored = scopeDoc({
       description: { fr: "f", en: "e" },
       claims: ["a", "b"],
-    } as StoredScopeDoc;
+    });
     expect(sameScopeDefinition(stored, { fr: "f", en: "e" }, ["b", "a"])).toBe(
       true,
     );

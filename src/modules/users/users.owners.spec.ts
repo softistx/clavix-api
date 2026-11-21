@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { GraphQLError } from "graphql";
 import type { ConsoleContext } from "@/console/context";
-import { createExclusive } from "@/console/exclusive";
+import { createExclusive, type Exclusive } from "@/console/exclusive";
 import type { Role } from "@/console/model";
 import { withMembers } from "~/members";
+import { instance } from "~/narrow";
 import { keepOwners, type OwnerChange } from "./users.owners";
 
 const PLATFORM = { slug: "clavix" };
@@ -20,6 +22,8 @@ interface Setup {
   manage?: boolean;
   /** Called on each read of the user's memberships: lets a spec grant meanwhile. */
   onMemberships?: (call: number) => void;
+  /** The lock of the memberships; a plain in-process one by default. */
+  exclusive?: Exclusive;
 }
 
 /** A console context in memory: only what `keepOwners` reads. */
@@ -28,7 +32,7 @@ function fake(setup: Setup = {}) {
   const platform = setup.platform ?? [];
   let reads = 0;
   const ctx = withMembers({
-    exclusive: createExclusive(null),
+    exclusive: setup.exclusive ?? createExclusive(null),
     canPlatform: async () => setup.manage ?? true,
     directory: {
       emailVerified: async (id: string) =>
@@ -106,21 +110,19 @@ describe("the user lock", () => {
     const key = "u:o1";
     const held: string[] = [];
     let readsUnder: boolean[] = [];
+    const inner = createExclusive(null);
+    const tracking: Exclusive = (k, work) =>
+      inner(k, () => {
+        held.push(k);
+        return work().finally(() => held.pop());
+      });
     const base = fake({
       owners: { t1: ["o1", "o2"] },
       onMemberships: () => {
         readsUnder.push(held.includes(key));
       },
+      exclusive: tracking,
     });
-    const inner = base.exclusive;
-    (base as { exclusive: unknown }).exclusive = ((
-      k: string,
-      work: () => Promise<unknown>,
-    ) =>
-      inner(k, () => {
-        held.push(k);
-        return work().finally(() => held.pop());
-      })) as typeof base.exclusive;
     readsUnder = [];
     await keepOwners(base, PLATFORM, "o1", async () => "done", "delete", key);
     // The first reads (the guard, the tenants to lock) are before any lock; the
@@ -156,9 +158,7 @@ describe("the memberships keep changing", () => {
       },
     });
     const error = await disable(ctx, "u").catch((e: unknown) => e);
-    const { extensions } = error as {
-      extensions: { code: string; http: { status: number } };
-    };
+    const { extensions } = instance(error, GraphQLError);
     expect(extensions).toEqual({ code: "CONFLICT", http: { status: 409 } });
   });
 });

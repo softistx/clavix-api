@@ -6,6 +6,7 @@ import {
 } from "@softistx/janus-oauth";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { decodeJwt } from "jose";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { noDetailTypes } from "@/config/no-ops";
@@ -21,7 +22,12 @@ import {
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
+import { ceremonyAnswer, challengeOfOptions } from "~/challenge-of";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
 import { quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 
@@ -67,10 +73,7 @@ const gql = async (query: string, variables = {}, cookie = "") => {
     body: JSON.stringify({ query, variables }),
   });
   return {
-    body: (await response.json()) as {
-      data?: Record<string, Record<string, string>>;
-      errors?: unknown;
-    },
+    body: await gqlOf(response),
     cookies: response.headers.getSetCookie(),
   };
 };
@@ -149,8 +152,11 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
   const issued = await gql(
     "mutation { passkeySignInOptions { options challenge } }",
   );
-  const { options = "", challenge = "" } =
-    issued.body.data?.["passkeySignInOptions"] ?? {};
+  const { options, challenge } = at(
+    issued.body.data,
+    "passkeySignInOptions",
+    ceremonyAnswer,
+  );
   await Bun.sleep(1100); // the sign-in time differs from the first session's
   const signedIn = await gql(
     "mutation ($c: String!, $r: String!) { signInWithPasskey(challenge: $c, response: $r) { expiresAt } }",
@@ -158,9 +164,7 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
       c: challenge,
       r: JSON.stringify(
         await authenticator.assert({
-          challenge: String(
-            (JSON.parse(options) as { challenge: string }).challenge,
-          ),
+          challenge: challengeOfOptions(options),
           origin: originOf(tenant),
           rpId: rpIdOf(tenant),
           userHandle: Buffer.from(user.id).toString("base64url"),
@@ -205,8 +209,11 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
     cookie,
   );
   expect(approved.body.errors).toBeUndefined();
-  const redirectTo =
-    approved.body.data?.["approveOAuthRequest"]?.["redirectTo"];
+  const redirectTo = at(
+    approved.body.data,
+    "approveOAuthRequest.redirectTo",
+    z.string(),
+  );
   const token = await issuers.handle(
     new Request(url("/token"), {
       method: "POST",
@@ -223,8 +230,11 @@ test("auth_time is present in the id_token after a passkey sign-in", async () =>
     }),
   );
   expect(token.status).toBe(200);
-  const { id_token } = (await token.json()) as { id_token: string };
-  expect(decodeJwt(id_token)["auth_time"]).toBe(
+  const idToken = defined(
+    (await jsonOf(token, tokenBody)).id_token,
+    "id_token",
+  );
+  expect(decodeJwt(idToken)["auth_time"]).toBe(
     Math.floor(session.session.authenticatedAt.getTime() / 1000),
   );
   expect(session.session.authenticatedAt.getTime()).toBeGreaterThan(

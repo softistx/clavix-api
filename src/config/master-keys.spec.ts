@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { defined } from "~/narrow";
 import { masterKeysProblem, parseMasterKeys } from "./master-keys";
 
 const a = Buffer.alloc(32, 1).toString("base64");
@@ -8,7 +9,7 @@ test("a single key keeps working", () => {
   expect(masterKeysProblem(a)).toBeUndefined();
   const keys = parseMasterKeys(a);
   expect(keys).toHaveLength(1);
-  expect(Buffer.from(keys[0] as Uint8Array)).toEqual(Buffer.alloc(32, 1));
+  expect(Buffer.from(defined(keys[0], "the key"))).toEqual(Buffer.alloc(32, 1));
 });
 
 test("a comma-separated list is a keyring, the first key being the current one", () => {

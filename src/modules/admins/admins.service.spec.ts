@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { GraphQLError } from "graphql";
 import { createExclusive } from "@/console/exclusive";
 import type { Role } from "@/console/model";
+import { defined, instance } from "~/narrow";
 import { AdminsService } from "./admins.service";
 import type { AdminsAccess } from "./admins.types";
 
@@ -48,7 +50,7 @@ function fake(
 
 const codeOf = (result: PromiseSettledResult<unknown>) =>
   result.status === "rejected"
-    ? (result.reason as { extensions?: { code?: string } }).extensions?.code
+    ? instance(result.reason, GraphQLError).extensions["code"]
     : "ok";
 
 describe("the last owner, under concurrent changes", () => {
@@ -103,7 +105,7 @@ describe("the last owner, under concurrent changes", () => {
     const [change] = await Promise.allSettled([
       service.changeRole("t", "x", "admin"),
     ]);
-    expect(codeOf(change as PromiseSettledResult<unknown>)).toBe("NOT_FOUND");
+    expect(codeOf(defined(change, "the settled change"))).toBe("NOT_FOUND");
     await service.removeMember("t", "x");
     expect(of("admin")).toEqual([]);
     expect(of("owner")).toEqual(["o"]);
@@ -129,7 +131,7 @@ describe("one owner rule: an owner who cannot sign in does not count", () => {
     const [removal] = await Promise.allSettled([
       service.removeMember("t", "y"),
     ]);
-    expect(codeOf(removal as PromiseSettledResult<unknown>)).toBe("LAST_OWNER");
+    expect(codeOf(defined(removal, "the settled removal"))).toBe("LAST_OWNER");
     expect(of("owner")).toEqual(["ghost", "y"]);
   });
 

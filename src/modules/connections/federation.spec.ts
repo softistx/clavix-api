@@ -10,7 +10,7 @@ import {
   type Ceremony,
   softwareAuthenticator,
 } from "@softistx/janus-passkeys/testing";
-import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -19,6 +19,7 @@ import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
+import type { Throttle } from "@/http/throttle/core";
 import { settled } from "@/modules/auth";
 import { registerClient } from "@/modules/clients";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
@@ -32,8 +33,17 @@ import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
-import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
+import { fetchDouble } from "~/fetch-double";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
+import {
+  noCustomDomains,
+  quietOAuth,
+  quietTenants,
+  testSecrets,
+} from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of
@@ -59,7 +69,7 @@ const origin = {
 const IDP_DOMAIN = "clavix.test";
 const IDP_HOST = `fedidp.${IDP_DOMAIN}`;
 const IDP_ISSUER = `https://${IDP_HOST}`;
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 
 const tenants = new TenantsService(mongo.db.tenants, {
   ...quietTenants,
@@ -67,27 +77,19 @@ const tenants = new TenantsService(mongo.db.tenants, {
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policies = new SignInPolicyService(
-  tenants,
-  {
-    seal: () => "",
-    open: () => "",
-  } as never,
-  () => {},
-);
+const policies = new SignInPolicyService(tenants, testSecrets(), () => {});
 // One recording throttle per budget: which one an operation spends is the point (G2-10).
-type Who = { tenantId: string; ip: string };
+type Who = { tenantId: string; ip: string | undefined };
 const checks: Who[] = [];
 const homeChecks: Who[] = [];
 const startChecks: Who[] = [];
 let throttled = false;
-const recording = (into: Who[]) =>
-  ({
-    check: async (key: Who) => {
-      into.push(key);
-      if (throttled) throw new Error("throttled");
-    },
-  }) as never;
+const recording = (into: Who[]): Throttle => ({
+  check: async (key) => {
+    into.push(key);
+    if (throttled) throw new Error("throttled");
+  },
+});
 const app = createTestApp({
   signInThrottle: recording(checks),
   homeRealmThrottle: recording(homeChecks),
@@ -143,12 +145,6 @@ const callbackOf = (slug: string, id: string) =>
 const CALLBACK = callbackOf("fedacme", "acme");
 const CALLBACK_BETA = callbackOf("fedacme", "beta");
 
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
 async function gql(
   slug: string,
   query: string,
@@ -167,20 +163,27 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Pick<Answer, "data" | "errors">;
-  return {
-    status: response.status,
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
-function dataOf<T>(answer: Answer, key: string): T {
+const startShape = z.object({ url: z.string(), flow: z.string() });
+const challengeShape = z.object({ challenge: z.string() });
+const userShape = z.object({ user: z.object({ id: z.string() }) });
+const completedShape = z.object({
+  user: z.object({ id: z.string() }),
+  created: z.boolean(),
+});
+const secretShape = z.object({ secret: z.string() });
+const optionsShape = z.object({ options: z.string(), challenge: z.string() });
+function dataOf<S extends z.ZodType>(
+  answer: Answer,
+  key: string,
+  schema: S,
+): z.output<S> {
   const value = answer.data?.[key];
   if (value === undefined || value === null) {
     throw new Error(`no ${key} in ${JSON.stringify(answer.errors)}`);
   }
-  return value as T;
+  return schema.parse(value);
 }
 const codeOf = (answer: Answer) => answer.errors?.[0]?.extensions?.["code"];
 const cookieOf = (answer: Answer) =>
@@ -254,10 +257,7 @@ async function federated(
 ) {
   const started = await gql(slug, START, { p: provider });
   if (started.errors !== undefined) return { started } as const;
-  const start = started.data?.["socialSignInStart"] as {
-    url: string;
-    flow: string;
-  };
+  const start = at(started.data, "socialSignInStart", startShape);
   const callback = await throughIdp(start.url, subject, acr);
   return {
     start,
@@ -338,14 +338,14 @@ beforeAll(async () => {
     );
   }
   // Every call to the IdP goes to its issuers in place of the network.
-  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const request = new Request(input as string, init);
+  globalThis.fetch = fetchDouble(async (input, init) => {
+    const request = new Request(input, init);
     if (new URL(request.url).host !== IDP_HOST) {
-      return realFetch(input as string, init);
+      return realFetch(input, init);
     }
     idpCalls.push(`${request.method} ${new URL(request.url).pathname}`);
     return idp.handle(request);
-  }) as typeof fetch;
+  });
 }, 30_000);
 
 afterAll(async () => {
@@ -424,7 +424,9 @@ describe("federated sign-in", () => {
   });
 
   test("a user typing ada@acme.test lands at Acme's IdP and comes back signed in, created by JIT on a tenant whose sign-up is closed", async () => {
-    const realm = (await homeOf("ada@acme.test")) as { connectionId: string };
+    const realm = z
+      .object({ connectionId: z.string() })
+      .parse(await homeOf("ada@acme.test"));
     const started = await federated("ada", "fedacme", realm.connectionId);
     if (!("start" in started) || started.start === undefined)
       throw new Error("the sign-in did not start");
@@ -435,10 +437,18 @@ describe("federated sign-in", () => {
     expect(target.searchParams.get("client_id")).toBe("clavix");
     expect(target.searchParams.get("redirect_uri")).toBe(CALLBACK);
     expect(started.done.errors).toBeUndefined();
-    const done = started.done.data?.["socialSignInComplete"] as {
-      created: boolean;
-      user: { id: string; email: string; emailVerified: boolean };
-    };
+    const done = at(
+      started.done.data,
+      "socialSignInComplete",
+      z.object({
+        created: z.boolean(),
+        user: z.object({
+          id: z.string(),
+          email: z.string(),
+          emailVerified: z.boolean(),
+        }),
+      }),
+    );
     expect(done.created).toBe(true);
     expect(done.user).toMatchObject({
       email: "ada@acme.test",
@@ -461,13 +471,10 @@ describe("federated sign-in", () => {
     if (!("done" in first) || !("done" in second))
       throw new Error("no sign-in");
     const idOf = (answer: Answer) =>
-      dataOf<{
-        user: { id: string };
-        created: boolean;
-      }>(answer, "socialSignInComplete").user.id;
+      dataOf(answer, "socialSignInComplete", completedShape).user.id;
     expect(idOf(second.done)).toBe(idOf(first.done));
     expect(
-      dataOf<{ created: boolean }>(second.done, "socialSignInComplete").created,
+      dataOf(second.done, "socialSignInComplete", completedShape).created,
     ).toBe(false);
   });
 
@@ -481,23 +488,20 @@ describe("federated sign-in", () => {
     const code = /\b(\d{6})\b/.exec(
       memory.sent.slice(before).at(-1)?.text ?? "",
     )?.[1];
-    const challenge = dataOf<{ challenge: string }>(
+    const challenge = dataOf(
       asked,
       "requestSignInCode",
+      challengeShape,
     ).challenge;
     const verified = await gql("fedacme", VERIFY, { c: challenge, k: code });
-    const known = dataOf<{ user: { id: string } }>(verified, "verifySignInCode")
-      .user.id;
+    const known = dataOf(verified, "verifySignInCode", userShape).user.id;
     graceId = known;
     await setSignUp("fedacme", false);
     await connectionsService.update(acme, "acme", { requireSso: true });
 
     const linked = await federated("grace");
     if (!("done" in linked)) throw new Error("no sign-in");
-    const done = linked.done.data?.["socialSignInComplete"] as {
-      created: boolean;
-      user: { id: string };
-    };
+    const done = dataOf(linked.done, "socialSignInComplete", completedShape);
     expect(done.created).toBe(false);
     expect(done.user.id).toBe(known);
   });
@@ -554,10 +558,7 @@ describe("federated sign-in", () => {
       const done = await federated("mia", "fedacme", "acme", "urn:acme:mfa");
       if (!("done" in done)) throw new Error("no sign-in");
       expect(done.done.errors).toBeUndefined();
-      const user = dataOf<{ user: { id: string } }>(
-        done.done,
-        "socialSignInComplete",
-      ).user;
+      const user = dataOf(done.done, "socialSignInComplete", userShape).user;
       const auth = await janusIssuers.forRequest(new Request(url("fedacme")));
       const [session] = (await auth?.sessions.list(user.id)) ?? [];
       expect(session?.amr).toEqual(["fed", "mfa"]);
@@ -569,10 +570,7 @@ describe("federated sign-in", () => {
 
   test("the callback of another tenant with this tenant's flow is refused (mix-up)", async () => {
     const started = await gql("fedacme", START, { p: "acme" });
-    const start = started.data?.["socialSignInStart"] as {
-      url: string;
-      flow: string;
-    };
+    const start = at(started.data, "socialSignInStart", startShape);
     const callback = await throughIdp(start.url, "ada");
     const calls = idpCalls.length;
     const mixed = await bffComplete("fedother", callback, start.flow);
@@ -599,10 +597,7 @@ describe("federated sign-in", () => {
     // A refused callback spends its flow, so each case starts its own.
     const trip = async () => {
       const started = await gql("fedacme", START, { p: "acme" });
-      const start = started.data?.["socialSignInStart"] as {
-        url: string;
-        flow: string;
-      };
+      const start = at(started.data, "socialSignInStart", startShape);
       expect(new URL(start.url).searchParams.get("redirect_uri")).toBe(
         CALLBACK,
       );
@@ -674,9 +669,10 @@ describe("single sign-on required (D3)", () => {
     const code = /\b(\d{6})\b/.exec(
       memory.sent.slice(before).at(-1)?.text ?? "",
     )?.[1];
-    const challenge = dataOf<{ challenge: string }>(
+    const challenge = dataOf(
       asked,
       "requestSignInCode",
+      challengeShape,
     ).challenge;
     await connectionsService.update(acme, "acme", { requireSso: true });
     const sessions = await activeSessions(graceId);
@@ -697,10 +693,7 @@ describe("single sign-on required (D3)", () => {
 describe("a connection turned off", () => {
   test("it is not discovered, does not start, and a flow begun before cannot complete", async () => {
     const started = await gql("fedacme", START, { p: "acme" });
-    const start = started.data?.["socialSignInStart"] as {
-      url: string;
-      flow: string;
-    };
+    const start = at(started.data, "socialSignInStart", startShape);
     const callback = await throughIdp(start.url, "ada");
     await connectionsService.update(acme, "acme", { enabled: false });
     expect(await homeOf("ada@acme.test")).toBeNull();
@@ -809,7 +802,7 @@ describe("single sign-on required: the other doors (D3)", () => {
     const email = "tess@acme.test";
     const { id: tessId, cookie } = await userWithSession(email);
     const enrolled = await gql("fedacme", ENROLL, {}, cookie);
-    const totp = dataOf<{ secret: string }>(enrolled, "enrollSecondFactor");
+    const totp = dataOf(enrolled, "enrollSecondFactor", secretShape);
     expect(
       (await gql("fedacme", ACTIVATE, { k: totpCode(totp.secret) }, cookie))
         .errors,
@@ -819,9 +812,10 @@ describe("single sign-on required: the other doors (D3)", () => {
     const again = memory.sent.length;
     const second = await gql("fedacme", REQUEST, { e: email });
     await settled();
-    const challenge = dataOf<{ challenge: string }>(
+    const challenge = dataOf(
       second,
       "requestSignInCode",
+      challengeShape,
     ).challenge;
     const code = codeFrom(again, email);
     await connectionsService.update(acme, "acme", { requireSso: true });
@@ -839,10 +833,10 @@ describe("single sign-on required: the other doors (D3)", () => {
     const asked3 = await gql("fedacme", REQUEST, { e: email });
     await settled();
     const issued = await gql("fedacme", CHALLENGE_OF, {
-      c: dataOf<{ challenge: string }>(asked3, "requestSignInCode").challenge,
+      c: dataOf(asked3, "requestSignInCode", challengeShape).challenge,
       k: codeFrom(third, email),
     });
-    const pending = dataOf<{ challenge: string }>(issued, "verifySignInCode");
+    const pending = dataOf(issued, "verifySignInCode", challengeShape);
     await connectionsService.update(acme, "acme", { requireSso: true });
     const live = await activeSessions(tessId);
     const blocked = await gql("fedacme", CONFIRM_TOTP, {
@@ -867,10 +861,14 @@ describe("single sign-on required: the other doors (D3)", () => {
     if (tenant === null) throw new Error("no tenant");
     const authenticator = await softwareAuthenticator();
     const challengeOf = (options: string) =>
-      String((JSON.parse(options) as { challenge: unknown }).challenge);
-    const reg = dataOf<{ options: string; challenge: string }>(
+      String(
+        z.object({ challenge: z.unknown() }).parse(JSON.parse(options))
+          .challenge,
+      );
+    const reg = dataOf(
       await gql("fedacme", REG_OPTIONS, {}, cookie),
       "passkeyRegistrationOptions",
+      optionsShape,
     );
     const registration = await authenticator.register({
       challenge: challengeOf(reg.options),
@@ -886,18 +884,19 @@ describe("single sign-on required: the other doors (D3)", () => {
     expect(registered.errors).toBeUndefined();
     await connectionsService.update(acme, "acme", { requireSso: true });
 
-    const issued = dataOf<{ options: string; challenge: string }>(
+    const issued = dataOf(
       await gql("fedacme", SIGN_IN_OPTIONS),
       "passkeySignInOptions",
+      optionsShape,
     );
-    const ceremony: Partial<Ceremony> = {
+    const ceremony: Ceremony = {
       challenge: challengeOf(issued.options),
       origin: originOf(tenant),
       rpId: rpIdOf(tenant),
       userHandle: Buffer.from(id).toString("base64url"),
       counter: 1,
     };
-    const response = await authenticator.assert(ceremony as Ceremony);
+    const response = await authenticator.assert(ceremony);
     const live = await activeSessions(id);
     const total = await sessionsOf(id);
     const refused = await gql("fedacme", PASSKEY, {

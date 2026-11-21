@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
@@ -10,7 +11,9 @@ import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fingerprintOf } from "@/oauth/resolution";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
+import { oneRow as one, recordsOf, rowsOf, textOf } from "~/rows";
 
 const API = "https://api.dt-a.example/v1";
 const admin = consoleAs("dt-admin-a");
@@ -42,13 +45,6 @@ const RESOURCE = `query($tenantId: ID!, $id: ID!) {
   resource(tenantId: $tenantId, id: $id) { id detailTypes { id type } }
 }`;
 const LIST = `query($tenantId: ID!) { resources(tenantId: $tenantId) { id detailTypes { type } } }`;
-
-type Result = Awaited<ReturnType<typeof admin>>;
-type Row = Record<string, unknown> & { id: string };
-const one = (result: Result, field: string) => {
-  expect(result.errors).toBeUndefined();
-  return result.data?.[field] as Row;
-};
 
 const text = (en: string) => ({ fr: en, en });
 const payment = (extra: Record<string, unknown> = {}) => ({
@@ -147,9 +143,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const tenantId of [tenantA, tenantB]) {
-    await mongo.db.resources.raw.deleteMany({ tenantId: tenantId as never });
-    await mongo.db.scopes.raw.deleteMany({ tenantId: tenantId as never });
-    await mongo.db.detailTypes.raw.deleteMany({ tenantId: tenantId as never });
+    await mongo.db.resources.raw.deleteMany({
+      tenantId: new ObjectId(tenantId),
+    });
+    await mongo.db.scopes.raw.deleteMany({ tenantId: new ObjectId(tenantId) });
+    await mongo.db.detailTypes.raw.deleteMany({
+      tenantId: new ObjectId(tenantId),
+    });
     await oauthDb
       .collection("oauthPartitionedClients")
       .deleteMany({ partition: tenantId });
@@ -171,12 +171,12 @@ describe("createDetailType", () => {
       name: { fr: "Paiement", en: "Payment" },
       actions: [{ value: "initiate", label: text("Start") }],
     });
-    expect((type["fields"] as Row[]).map((f) => f["kind"])).toEqual([
+    expect(recordsOf(type["fields"]).map((f) => f["kind"])).toEqual([
       "NUMBER",
       "ENUM",
       "STRING_LIST",
     ]);
-    expect((type["fields"] as Row[])[2]).toMatchObject({
+    expect(recordsOf(type["fields"])[2]).toMatchObject({
       required: false,
       max: 4,
       maxLength: 20,
@@ -200,9 +200,13 @@ describe("createDetailType", () => {
       await admin(CREATE, { tenantId: tenantA, input: payment() }),
       "createDetailType",
     );
-    const existing = (
-      await admin(RESOURCE, { tenantId: tenantA, id: resourceA })
-    ).data?.["resource"] as { detailTypes: { id: string; type: string }[] };
+    const existing = at(
+      (await admin(RESOURCE, { tenantId: tenantA, id: resourceA })).data,
+      "resource",
+      z.object({
+        detailTypes: z.array(z.object({ id: z.string(), type: z.string() })),
+      }),
+    );
     expect(existing.detailTypes.filter((t) => t.type === "payment")).toEqual([
       { id: again.id, type: "payment" },
     ]);
@@ -345,7 +349,7 @@ describe("createDetailType", () => {
 async function listIdOf(type: string) {
   const doc = await mongo.db.detailTypes.raw.findOne({
     type,
-    tenantId: new ObjectId(tenantA) as never,
+    tenantId: new ObjectId(tenantA),
   });
   return doc?._id.toHexString() ?? "";
 }
@@ -402,7 +406,7 @@ describe("updateDetailType", () => {
     const raw = await mongo.db.detailTypes.raw.findOne({
       _id: new ObjectId(id),
     });
-    expect(raw?.updatedAt.toISOString()).toBe(first["updatedAt"] as string);
+    expect(raw?.updatedAt.toISOString()).toBe(textOf(first["updatedAt"]));
   });
 
   test("an invalid change or a long label is BAD_USER_INPUT; an unknown id is NOT_FOUND", async () => {
@@ -458,14 +462,14 @@ describe("deleting (D6)", () => {
     await created(admin, tenantA, payment({ type: "refund" }));
     const stray = createMongoOAuth(oauthDb, { partition: tenantB });
     await stray.upsertClient({
-      _id: "other",
+      id: "other",
       name: "Other",
       redirectUris: ["https://o.example/cb"],
       source: "registered",
       createdAt: new Date(),
       expiresAt: null,
       authorizationDetailsTypes: ["refund"],
-    } as never);
+    });
     const id = await listIdOf("refund");
     expect(
       (await admin(DELETE, { tenantId: tenantA, id })).data?.[
@@ -518,9 +522,7 @@ describe("permissions and isolation", () => {
       await viewer(RESOURCE, { tenantId: tenantA, id: resourceA }),
       "resource",
     );
-    expect((read["detailTypes"] as Row[]).map((t) => t["type"])).toContain(
-      "keep",
-    );
+    expect(rowsOf(read["detailTypes"]).map((t) => t["type"])).toContain("keep");
     const refused = [
       await viewer(CREATE, {
         tenantId: tenantA,

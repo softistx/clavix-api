@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import { mongo } from "@/config/db";
+import { defined } from "~/narrow";
 import { quietTenants } from "~/ports";
+import { overriding } from "~/proxy-over";
 import {
   InvalidSlugError,
   PlatformTenantProtectedError,
@@ -130,7 +132,7 @@ describe("TenantsService", () => {
   test("the platform tenant cannot be suspended or deleted", async () => {
     const platform = await collection.findFirst({ slug: PLATFORM_TENANT_SLUG });
     expect(platform).toBeDefined();
-    const id = (platform as NonNullable<typeof platform>)._id;
+    const id = defined(platform, "the platform tenant")._id;
     await expect(service.suspend(id)).rejects.toThrow(
       PlatformTenantProtectedError,
     );
@@ -184,14 +186,15 @@ describe("TenantsService", () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     // One racing write after the first read: the retry reads again and wins.
     let raced = 0;
-    const racing = {
-      getById: async (id: never) => {
-        const found = await collection.getById(id);
+    const racing = overriding(
+      collection,
+      "getById",
+      async (...args: Parameters<typeof collection.getById>) => {
+        const found = await collection.getById(...args);
         if (raced++ === 0) await collection.update(found._id, { name: "B" });
         return found;
       },
-      update: collection.update.bind(collection),
-    } as unknown as typeof collection;
+    );
     const once = new TenantsService(racing, {
       ...quietTenants,
       now: () => new Date(),
@@ -201,14 +204,15 @@ describe("TenantsService", () => {
     expect((await once.suspend(tenant._id)).status).toBe("suspended");
     // Two racing writes: the second conflict reaches the caller.
     raced = -1;
-    const always = {
-      getById: async (id: never) => {
-        const found = await collection.getById(id);
+    const always = overriding(
+      collection,
+      "getById",
+      async (...args: Parameters<typeof collection.getById>) => {
+        const found = await collection.getById(...args);
         await collection.update(found._id, { name: `N${raced++}` });
         return found;
       },
-      update: collection.update.bind(collection),
-    } as unknown as typeof collection;
+    );
     await expect(
       new TenantsService(always, {
         ...quietTenants,
@@ -223,16 +227,17 @@ describe("TenantsService", () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     let reads = 0;
     const racing = (limit: number) =>
-      ({
-        getById: async (id: never) => {
-          const found = await collection.getById(id);
+      overriding(
+        collection,
+        "getById",
+        async (...args: Parameters<typeof collection.getById>) => {
+          const found = await collection.getById(...args);
           if (reads++ < limit) {
             await collection.update(found._id, { name: `N${reads}` });
           }
           return found;
         },
-        update: collection.update.bind(collection),
-      }) as unknown as typeof collection;
+      );
     const twice = new TenantsService(racing(2), {
       ...quietTenants,
       now: () => new Date(),
