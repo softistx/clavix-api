@@ -118,7 +118,7 @@ describe("detail types on a client (R3)", () => {
     });
   });
 
-  test("an unknown type, a missing PAR requirement and an unready consent page are BAD_USER_INPUT", async () => {
+  test("an unknown type, and a missing PAR requirement are BAD_USER_INPUT", async () => {
     expect(
       codeOf(
         await admin(
@@ -139,38 +139,30 @@ describe("detail types on a client (R3)", () => {
         ),
       ),
     ).toBe("BAD_USER_INPUT");
-    // A code client: the tenant has not opted in (CLAVIX_RAR_CONSENT_READY).
-    expect(
-      codeOf(
-        await admin(
-          CREATE,
-          withTypes({
-            name: "Code",
-            redirectUris: [REDIRECT],
-            grantTypes: undefined,
-            authorizationDetailsTypes: ["payment"],
-          }),
-        ),
-      ),
-    ).toBe("BAD_USER_INPUT");
     expect(await (await storeOf(tenantA)).findClient("phantom")).toBeNull();
-    expect(await (await storeOf(tenantA)).findClient("code")).toBeNull();
   });
 
-  test("a device-grant client cannot list a type while the consent page does not show them", async () => {
-    expect(
-      codeOf(
-        await admin(
-          CREATE,
-          withTypes({
-            name: "Living room",
-            type: "PUBLIC",
-            grantTypes: ["DEVICE_CODE"],
-            authorizationDetailsTypes: ["payment"],
-          }),
-        ),
-      ),
-    ).toBe("BAD_USER_INPUT");
+  test("a code client and a device-grant client list a type", async () => {
+    const code = await admin(
+      CREATE,
+      withTypes({
+        name: "Code",
+        redirectUris: [REDIRECT],
+        grantTypes: undefined,
+        authorizationDetailsTypes: ["payment"],
+      }),
+    );
+    expect(code.errors).toBeUndefined();
+    const device = await admin(
+      CREATE,
+      withTypes({
+        name: "Living room",
+        type: "PUBLIC",
+        grantTypes: ["DEVICE_CODE"],
+        authorizationDetailsTypes: ["payment"],
+      }),
+    );
+    expect(device.errors).toBeUndefined();
   });
 
   test("turning PAR off on a client that lists a type is refused", async () => {

@@ -1,6 +1,6 @@
 import { migrate, migrationStatus } from "@softistx/mongo/migrations";
 import { mongo } from "@/config/db";
-import { migrations } from "@/config/migrations";
+import { migrationsWith } from "@/config/migrations";
 
 // A deployment step, after `bun run db:sync` and before the new code rolls:
 // applies the pending migrations (src/migrations) and prints each one's state.
@@ -10,6 +10,11 @@ import { migrations } from "@/config/migrations";
 //   bun run db:migrate --dry-run   list what would run, write nothing
 //   bun run db:migrate --status    print the states only
 const args = Bun.argv.slice(2);
+const migrations = migrationsWith((clientSecret) =>
+  console.log(
+    `console client secret (shown once, stored hashed): ${clientSecret}`,
+  ),
+);
 try {
   if (!args.includes("--status")) {
     const result = await migrate(mongo.db, migrations, {

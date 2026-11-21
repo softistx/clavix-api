@@ -95,7 +95,6 @@ one needs on top:
 | `CLAVIX_DEVICE_USER_LIMIT` / `CLAVIX_DEVICE_USER_WINDOW_SECONDS`         | device user-code lookups per signed-in user: 20 per 600 s (see "Device authorization grant")                                                                                                                                                   |
 | `CLAVIX_DEVICE_IP_LIMIT` / `CLAVIX_DEVICE_IP_WINDOW_SECONDS`             | device user-code lookups per client address and tenant: 30 per 600 s                                                                                                                                                                           |
 | `CLAVIX_DEVICE_TENANT_LIMIT` / `CLAVIX_DEVICE_TENANT_WINDOW_SECONDS`     | device user-code lookups per tenant: 300 per 3600 s                                                                                                                                                                                            |
-| `CLAVIX_RAR_CONSENT_READY`                                               | tenants whose code or device clients may list authorization detail types: slugs separated by commas, or `*`; default none (temporary, see "Authorization details")                                                                             |
 | `CLAVIX_REGISTER_IP_LIMIT` / `CLAVIX_REGISTER_IP_WINDOW_SECONDS`         | `/register` calls per client address and tenant: 20 per 3600 s (see "Agent registration throttle" in docs/operations.md)                                                                                                                       |
 | `CLAVIX_REGISTER_TENANT_LIMIT` / `CLAVIX_REGISTER_TENANT_WINDOW_SECONDS` | `/register` calls per tenant: 500 per 3600 s                                                                                                                                                                                                   |
 | `CLAVIX_METADATA_IP_LIMIT` / `CLAVIX_METADATA_IP_WINDOW_SECONDS`         | metadata-document fetches (`/authorize`, `/par`) per client address and tenant: 30 per 60 s                                                                                                                                                    |
@@ -930,9 +929,6 @@ action or enum value its type no longer defines (what the page could show is the
 only narrow them, a re-consent that leaves one out revokes the grant's tokens (one that asks for none keeps the standing grant), and a token
 exchange inherits them on the same resource and drops them on another.
 
-**Consent gate (temporary).** The hosted pages (clavix-ui) do not render `details` yet. Until they do, a client that shows a consent page (its grants include `authorization_code`, for `/authorize`, or the device
-grant, for the hosted device review) can list types only on a tenant listed in `CLAVIX_RAR_CONSENT_READY` (slugs
-separated by commas, or `*`; default none). A token-exchange-only client has no consent page and is not held back. The variable goes away with the hosted pages' details.
 Details travel in the 4 KiB `/authorize` URL or the 8 KiB `/par` body, so prefer `/par`.
 
 **Managing the types (console API).** `Resource.detailTypes` lists a resource's types;

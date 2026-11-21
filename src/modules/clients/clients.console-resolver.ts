@@ -4,9 +4,9 @@ import { catalogTenant, refusing } from "@/console/modules/catalog-support";
 import { pageSize } from "@/console/modules/ids";
 import { keepConsoleClient } from "@/console/modules/reserved";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { CatalogError } from "@/modules/resources";
 import { fail } from "@/shared/errors";
 import { assertClientQuota } from "./clients.console-support";
+import { checkTokenExchangeShape } from "./clients.rules";
 import {
   clientsKey,
   isClientId,
@@ -21,18 +21,7 @@ const setClientTokenExchange: NonNullable<
   NonNullable<Resolvers["Mutation"]>["setClientTokenExchange"]
 > = async (_, { tenantId, id, input }, ctx) => {
   const tenant = await catalogTenant(ctx, tenantId);
-  const listed = input.subjectClients?.length ?? 0;
-  const agents = input.subjectAgents === true;
-  if (input.anySubjectClient === true ? listed > 0 : listed === 0 && !agents) {
-    await refusing(async () => {
-      throw new CatalogError(
-        "BAD_USER_INPUT",
-        input.anySubjectClient === true
-          ? "Give subjectClients or anySubjectClient, not both"
-          : "Give the clients whose tokens may be exchanged, subjectAgents, or anySubjectClient",
-      );
-    });
-  }
+  await refusing(async () => checkTokenExchangeShape(input));
   // Under the tenant's client lock: a delete in between would leave rules
   // of a client that is gone.
   const rules = await ctx.exclusive(clientsKey(tenant), () =>
@@ -48,7 +37,7 @@ const setClientTokenExchange: NonNullable<
             input.anySubjectClient === true
               ? "any"
               : (input.subjectClients ?? []),
-          subjectAgents: agents,
+          subjectAgents: input.subjectAgents === true,
         },
         resources.map((resource) => resource.uri),
       );

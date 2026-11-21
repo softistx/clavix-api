@@ -139,3 +139,28 @@ export const clientIdOf = (name: string): string =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 64)
     .replace(/-+$/g, "");
+
+/**
+ * The shape of a token exchange rule set (RFC 8693): the clients whose tokens
+ * may be exchanged are listed, or every agent's, or `anySubjectClient` stands
+ * for all of them; the last one excludes a list.
+ */
+export function checkTokenExchangeShape(input: {
+  subjectClients?: readonly string[] | null | undefined;
+  subjectAgents?: boolean | null | undefined;
+  anySubjectClient?: boolean | null | undefined;
+}) {
+  const listed = input.subjectClients?.length ?? 0;
+  if (input.anySubjectClient === true) {
+    if (listed > 0)
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        "Give subjectClients or anySubjectClient, not both",
+      );
+  } else if (listed === 0 && input.subjectAgents !== true) {
+    throw new CatalogError(
+      "BAD_USER_INPUT",
+      "Give the clients whose tokens may be exchanged, subjectAgents, or anySubjectClient",
+    );
+  }
+}

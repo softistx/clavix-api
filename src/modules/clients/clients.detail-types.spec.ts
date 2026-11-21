@@ -10,7 +10,7 @@ import { mongo } from "@/config/db";
 import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesService } from "@/config/resources";
-import { consentReadyOf, mongoClientDetailTypes } from "@/modules/resources";
+import { mongoClientDetailTypes } from "@/modules/resources";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 import { errorBody, jsonOf } from "~/json";
@@ -21,8 +21,7 @@ import { registerClient } from "./clients.register";
 const PAY = "https://pay.example/api";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const ready = mongoClientDetailTypes(mongo.db.detailTypes, () => true);
-const notReady = mongoClientDetailTypes(mongo.db.detailTypes, () => false);
+const ready = mongoClientDetailTypes(mongo.db.detailTypes);
 const text = (en: string) => ({ fr: en, en });
 const VERIFIER = "r".repeat(64);
 
@@ -162,64 +161,26 @@ describe("a client's detail types", () => {
     ).toBeUndefined();
   });
 
-  test("a code client of a tenant whose consent page is not ready cannot list a type (rarConsentReady)", async () => {
-    const message = await refusal(
-      register(
-        "r3-a",
-        { clientId: "unseen", detailTypes: ["payment"] },
-        notReady,
-      ),
-    );
-    expect(message).toContain("cannot let a client that uses /authorize");
-    // A device client has the hosted device review: refused too.
-    expect(
-      await refusal(
-        register(
-          "r3-a",
-          {
-            clientId: "tv",
-            redirectUris: [],
-            grants: [DEVICE_GRANT],
-            detailTypes: ["payment"],
-          },
-          notReady,
-        ),
-      ),
-    ).toContain("or the device grant");
-    // A token-exchange-only client has no consent page: allowed.
-    const exchange = await register(
-      "r3-a",
-      {
-        clientId: "svc",
-        redirectUris: [],
-        grants: [TOKEN_EXCHANGE_GRANT],
-        detailTypes: ["payment"],
-      },
-      notReady,
-    );
-    expect(exchange.detailTypes).toEqual(["payment"]);
-    // Adding the device grant to it is the refused step.
-    expect(
-      await refusal(
-        register(
-          "r3-a",
-          { clientId: "svc", grants: [TOKEN_EXCHANGE_GRANT, DEVICE_GRANT] },
-          notReady,
-        ),
-      ),
-    ).toContain("or the device grant");
-    // A ready tenant accepts a device client.
-    const device = await register(
-      "r3-a",
-      {
-        clientId: "tv",
-        redirectUris: [],
-        grants: [DEVICE_GRANT],
-        detailTypes: ["payment"],
-      },
-      ready,
-    );
+  test("a code client, a device client and a token-exchange client all list a type", async () => {
+    const code = await register("r3-a", {
+      clientId: "unseen",
+      detailTypes: ["payment"],
+    });
+    expect(code.detailTypes).toEqual(["payment"]);
+    const device = await register("r3-a", {
+      clientId: "tv",
+      redirectUris: [],
+      grants: [DEVICE_GRANT],
+      detailTypes: ["payment"],
+    });
     expect(device.detailTypes).toEqual(["payment"]);
+    const exchange = await register("r3-a", {
+      clientId: "svc",
+      redirectUris: [],
+      grants: [TOKEN_EXCHANGE_GRANT],
+      detailTypes: ["payment"],
+    });
+    expect(exchange.detailTypes).toEqual(["payment"]);
   });
 
   test("a tenant with no detail types: a client cannot list any", async () => {
@@ -228,13 +189,6 @@ describe("a client's detail types", () => {
         register("r3-a", { clientId: "bare", detailTypes: ["payment"] }, null),
       ),
     ).toContain("unknown detail type");
-  });
-
-  test("consentReadyOf reads slugs and *", () => {
-    expect(consentReadyOf("")("a")).toBe(false);
-    expect(consentReadyOf(" a , b ")("b")).toBe(true);
-    expect(consentReadyOf("a,b")("c")).toBe(false);
-    expect(consentReadyOf("*")("c")).toBe(true);
   });
 
   test("--detail-types reads a list, an empty value clears, absent keeps", () => {

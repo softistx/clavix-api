@@ -24,5 +24,15 @@ export const isOneOf = <T extends string>(
 ): value is T => list.some((item) => item === value);
 
 /** Whether a list holds at least one item (narrows it to a non-empty tuple, no cast). */
-export const isNonEmpty = <T>(list: readonly T[]): list is [T, ...T[]] =>
-  list.length > 0;
+export const isNonEmpty = <T>(
+  list: readonly T[],
+): list is readonly [T, ...T[]] => list.length > 0;
+
+/** The entries of an object that hold a string, as a record (a read with no cast). */
+export const stringsOf = (source: object): Record<string, string> => {
+  const strings: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string") strings[key] = value;
+  }
+  return strings;
+};

@@ -28,10 +28,9 @@ export const noThrottle: Throttle = { check: async () => {} };
 /** A per-user throttle without Redis (development, specs): no extra limit. */
 export const noUserThrottle: UserThrottle = { check: async () => {} };
 
-/** A tenant that lists no detail types (the console's own client): none stored, none consent-ready. */
+/** A tenant that lists no detail types (the console's own client): none stored. */
 export const noDetailTypes: ClientDetailTypes = {
   namesOf: async () => new Set<string>(),
-  consentReady: () => false,
 };
 
 /** The console's budgets without Redis (development, specs): every call is within them. */

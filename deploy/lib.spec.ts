@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import {
   envProblems,
   imageRepository,
   parseEnv,
+  requiredValue,
   staleImageIds,
   uiContext,
 } from "./lib";
@@ -151,5 +152,25 @@ describe("images", () => {
         current,
       ),
     ).toEqual(["sha256:old", "sha256:older"]);
+  });
+});
+
+describe("requiredValue", () => {
+  test("returns the value of a key the file holds", () => {
+    expect(requiredValue({ A: "x" }, "A")).toBe("x");
+  });
+
+  test("refuses a key the file lacks", () => {
+    const error = spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit");
+    });
+    try {
+      expect(() => requiredValue({}, "A")).toThrow("exit");
+      expect(error).toHaveBeenCalledWith("error: A is missing");
+    } finally {
+      error.mockRestore();
+      exit.mockRestore();
+    }
   });
 });

@@ -1,10 +1,10 @@
 import { basename, join } from "node:path";
 import { loadFilesSync } from "@graphql-tools/load-files";
 import { mergeTypeDefs } from "@graphql-tools/merge";
-import type { IResolvers } from "@graphql-tools/utils";
 import { scalarResolvers, scalarTypeDefs } from "@nxgt/graphql-scalars";
 import { constraintTypeDefs, withValidation } from "@nxgt/graphql-validation";
 import { createSchema } from "@softistx/graxia";
+import type { Resolvers } from "@/generated/graphql/resolvers";
 import { resolvers } from "@/modules";
 import { guardedSchema } from "@/modules/auth/auth.plugin";
 import {
@@ -49,7 +49,7 @@ const typeDefs = hostedTypeDefs();
 
 export const schema = guardedSchema(
   withValidation(
-    createSchema<Context, IResolvers>()({
+    createSchema<Context, Resolvers<Context>>()({
       typeDefs,
       // graxia merges the maps per type and field itself.
       resolvers: [scalarResolvers, resolvers, consentResolvers],

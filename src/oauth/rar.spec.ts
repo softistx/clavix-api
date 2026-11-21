@@ -72,7 +72,7 @@ const issuers = createClavixOAuthIssuers({
 });
 const app = createTestApp({ oauth: issuers });
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const ready = mongoClientDetailTypes(mongo.db.detailTypes, () => true);
+const ready = mongoClientDetailTypes(mongo.db.detailTypes);
 const text = (fr: string, en: string) => ({ fr, en });
 
 const url = (path = "/") => `${issuerOf(SLUG, origin)}${path}`;

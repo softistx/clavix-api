@@ -224,9 +224,6 @@ The message says which rule broke, and nothing was written:
   them with `Resource.detailTypes`, or create it first.
 - `a client that lists detail types must require PAR`: set `requirePushedAuthorizationRequests: true` (CLI
   `--require-par`) in the same call; turning PAR off on a client that lists types is refused likewise.
-- `cannot let a client that uses /authorize or the device grant list detail types yet`: the consent pages (`/authorize` and the
-  device review) do not show details yet, so the tenant must be in `CLAVIX_RAR_CONSENT_READY` (an operator sets it). A
-  token-exchange-only client is exempt.
 - `a client lists at most 50 detail types`.
 
 The CLI prints the same message as `clients:create: …`.

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   checkQuery,
   checkSizes,
+  checkTokenExchangeShape,
   clientIdOf,
   DEFAULT_GRANTS,
   MAX_QUERY,
@@ -71,5 +72,35 @@ describe("clients rules", () => {
     expect(sameClient(stored, { ...input, grants: ["refresh_token"] })).toBe(
       false,
     );
+  });
+});
+
+describe("checkTokenExchangeShape", () => {
+  test("accepts listed clients, the agents, or any client", () => {
+    expect(() =>
+      checkTokenExchangeShape({ subjectClients: ["web"] }),
+    ).not.toThrow();
+    expect(() =>
+      checkTokenExchangeShape({ subjectAgents: true }),
+    ).not.toThrow();
+    expect(() =>
+      checkTokenExchangeShape({ anySubjectClient: true }),
+    ).not.toThrow();
+  });
+
+  test("refuses an empty rule set", () => {
+    expect(() => checkTokenExchangeShape({})).toThrow("Give the clients whose");
+    expect(() =>
+      checkTokenExchangeShape({ subjectClients: [], subjectAgents: false }),
+    ).toThrow("Give the clients whose");
+  });
+
+  test("refuses any client together with a list", () => {
+    expect(() =>
+      checkTokenExchangeShape({
+        anySubjectClient: true,
+        subjectClients: ["web"],
+      }),
+    ).toThrow("not both");
   });
 });

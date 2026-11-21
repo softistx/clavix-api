@@ -1,4 +1,5 @@
 import { s256Challenge } from "@softistx/janus-oauth";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createIssuers } from "@/config/oauth";
@@ -30,6 +31,8 @@ const VERIFIER = "v".repeat(64);
 const clientOf = (chain: number) => `load-${chain}`;
 const RESOURCE = "https://api.load.test/v1";
 const MACHINE = "load-cc";
+const pushedOf = z.object({ request_uri: z.string().optional() });
+const grantedOf = z.object({ refresh_token: z.string().optional() });
 
 // The real end-user authentication of the tenants: the refresh grant checks the
 // user in the tenant's store, so each tenant gets one real user (a refresh of a
@@ -61,7 +64,7 @@ async function mintRefreshToken(slug: string): Promise<string> {
       body: query,
     }),
   );
-  const pushed = (await par.json()) as { request_uri?: string };
+  const pushed = pushedOf.parse(await par.json());
   if (par.status !== 201 || pushed.request_uri === undefined) {
     throw new Error(
       `${slug}: par answered ${par.status} ${JSON.stringify(pushed)}`,
@@ -87,11 +90,11 @@ async function mintRefreshToken(slug: string): Promise<string> {
   }
   const server = await issuers.serverFor(new Request(url(slug, "/")));
   if (server === null) throw new Error(`${slug}: no server`);
-  const { redirectTo } = await server.approve(
-    { id: userIds.get(slug) as string },
-    requestId,
-    { scopes: ["read"] },
-  );
+  const userId = userIds.get(slug);
+  if (userId === undefined) throw new Error(`${slug}: no user`);
+  const { redirectTo } = await server.approve({ id: userId }, requestId, {
+    scopes: ["read"],
+  });
   const code = new URL(redirectTo).searchParams.get("code") ?? "";
   const token = await issuers.handle(
     new Request(url(slug, "/token"), {
@@ -107,7 +110,7 @@ async function mintRefreshToken(slug: string): Promise<string> {
       }),
     }),
   );
-  const body = (await token.json()) as { refresh_token?: string };
+  const body = grantedOf.parse(await token.json());
   if (token.status !== 200 || body.refresh_token === undefined) {
     throw new Error(
       `${slug}: code exchange answered ${token.status} ${JSON.stringify(body)}`,

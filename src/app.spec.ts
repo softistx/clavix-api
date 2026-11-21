@@ -8,7 +8,7 @@ import { gqlOf } from "~/gql";
 
 const app = createTestApp();
 
-const Health = graphql(`
+const HEALTH_QUERY = graphql(`
   query Health {
     health {
       status
@@ -25,7 +25,7 @@ test("GET /healthz answers ok and the version", async () => {
 
 test("Query.health answers ok and the version through /graphql", async () => {
   const result = await graphqlClient(app, { headers: clientHeaders }).query(
-    Health,
+    HEALTH_QUERY,
   );
   expect(result.data?.health).toEqual({
     status: "ok",
@@ -67,8 +67,8 @@ test("the hosted schema is not introspected by default", async () => {
   );
   // An ordinary query still runs.
   expect(
-    (await graphqlClient(app, { headers: clientHeaders }).query(Health)).data
-      ?.health.status,
+    (await graphqlClient(app, { headers: clientHeaders }).query(HEALTH_QUERY))
+      .data?.health.status,
   ).toBe("ok");
 });
 

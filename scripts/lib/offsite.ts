@@ -97,16 +97,15 @@ export function s3Archives(config: OffsiteConfig): RemoteArchives {
   });
   return {
     async put(name, body, type) {
-      const size = typeof body === "string" ? undefined : body.size;
-      if (size === undefined) {
+      if (typeof body === "string") {
         await bound.put({ name }, body, { type });
         return;
       }
       // Streamed with its size: the archive is never held in memory, and the
       // timeout is idle time (nothing moved), not the length of the upload.
-      await bound.put({ name }, (body as Blob).stream(), {
+      await bound.put({ name }, body.stream(), {
         type,
-        size,
+        size: body.size,
         timeoutMs: 120_000,
       });
     },

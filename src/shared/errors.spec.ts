@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { badInput, fail } from "./errors";
+import { badInput, extensionCodeOf, fail } from "./errors";
 
 test("a refusal carries its code and message", () => {
   const error = fail("NOT_FOUND", "No such tenant");
@@ -60,4 +60,19 @@ test("badInput is a 400 BAD_USER_INPUT, with the field when given", () => {
     code: "BAD_USER_INPUT",
     http: { status: 400 },
   });
+});
+
+test("extensionCodeOf reads the code of a GraphQL error and of a plain object", () => {
+  expect(extensionCodeOf(fail("NOT_FOUND", "No such tenant"))).toBe(
+    "NOT_FOUND",
+  );
+  expect(extensionCodeOf({ extensions: { code: "X" } })).toBe("X");
+});
+
+test("extensionCodeOf is undefined when the value carries no code", () => {
+  expect(extensionCodeOf(new Error("plain"))).toBeUndefined();
+  expect(extensionCodeOf({ extensions: {} })).toBeUndefined();
+  expect(extensionCodeOf({ extensions: null })).toBeUndefined();
+  expect(extensionCodeOf(null)).toBeUndefined();
+  expect(extensionCodeOf("text")).toBeUndefined();
 });
