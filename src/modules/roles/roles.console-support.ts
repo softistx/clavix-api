@@ -4,6 +4,7 @@ import { rolesService } from "@/config/roles";
 import type { ConsoleContext } from "@/console/context";
 import { liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
 import { fail } from "@/shared/errors";
+import { userLoader } from "../users/users.data-loader";
 import { shape as userShape } from "../users/users.utils";
 import type { RoleDoc } from "./roles.types";
 import { shape } from "./roles.utils";
@@ -48,8 +49,9 @@ export async function memberPage(
     }
     throw error;
   }
+  const loader = userLoader(ctx, tenant.hex);
   const users = await Promise.all(
-    page.items.map((held) => ctx.users.find(tenant.hex, held.userId)),
+    page.items.map((held) => loader.load(held.userId)),
   );
   const items = page.items.flatMap((held, index) => {
     const user = users[index];

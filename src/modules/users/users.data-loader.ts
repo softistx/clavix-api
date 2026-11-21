@@ -1,6 +1,10 @@
 import { oncePerRequest } from "@softistx/alxia-graphql";
 import DataLoader from "dataloader";
-import type { ConsoleContext, UserSecondFactorView } from "@/console/context";
+import type {
+  ConsoleContext,
+  TenantUserView,
+  UserSecondFactorView,
+} from "@/console/context";
 
 /**
  * `TenantUser.secondFactor` of one tenant, batched per request: a page of users
@@ -16,4 +20,19 @@ export const secondFactorLoader = (
     ctx,
     `users.secondFactor:${tenantId}`,
     () => new DataLoader((ids) => ctx.users.secondFactors(tenantId, ids)),
+  );
+
+/**
+ * A pool user of one tenant by id, batched per request: a page of role members
+ * reads their records once (`ConsoleUsers.findMany`), not once per member.
+ * `null` for an id the pool does not hold.
+ */
+export const userLoader = (
+  ctx: ConsoleContext,
+  tenantId: string,
+): DataLoader<string, TenantUserView | null> =>
+  oncePerRequest(
+    ctx,
+    `users.byId:${tenantId}`,
+    () => new DataLoader((ids) => ctx.users.findMany(tenantId, ids)),
   );

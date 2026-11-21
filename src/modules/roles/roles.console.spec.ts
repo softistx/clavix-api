@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
@@ -363,6 +363,29 @@ describe("assignments", () => {
     expect(
       codeOf(await viewer(MEMBERS, { t: tenantA, r: id, after: "garbage!" })),
     ).toBe("BAD_USER_INPUT");
+  });
+
+  test("a page of members reads its users with ONE janus findMany", async () => {
+    const id = await make(admin, tenantA, "batched");
+    await admin(ASSIGN, { t: tenantA, r: id, u: userA1 });
+    await admin(ASSIGN, { t: tenantA, r: id, u: userA2 });
+    const resolved = await tenantResolver.resolveHost(
+      `rl-a.${env.CLAVIX_DOMAIN}`,
+    );
+    const auth = await forTenant(resolved as NonNullable<typeof resolved>);
+    const many = spyOn(auth as NonNullable<typeof auth>, "findMany");
+    const one = spyOn(auth as NonNullable<typeof auth>, "findUser");
+    try {
+      const page = (await viewer(MEMBERS, { t: tenantA, r: id })).data?.[
+        "roleMembers"
+      ] as { items: { user: { id: string } }[] };
+      expect(page.items.map((m) => m.user.id)).toEqual([userA1, userA2]);
+      expect(many).toHaveBeenCalledTimes(1);
+      expect(one).not.toHaveBeenCalled();
+    } finally {
+      many.mockRestore();
+      one.mockRestore();
+    }
   });
 
   test("totalCount is every holder, whatever the page; a role of another tenant counts 0", async () => {

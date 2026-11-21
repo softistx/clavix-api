@@ -111,6 +111,16 @@ export class UsersService implements ConsoleUsers {
     return user === null ? null : view(user);
   }
 
+  async findMany(tenantId: string, ids: readonly string[]) {
+    const found = new Map(
+      (await (await this.janus(tenantId)).findMany([...ids])).map((user) => [
+        user.id,
+        view(user),
+      ]),
+    );
+    return ids.map((id) => found.get(id) ?? null);
+  }
+
   async findByEmail(tenantId: string, email: string) {
     const user = await (await this.janus(tenantId)).findByEmail(email);
     return user === null ? null : view(user);
