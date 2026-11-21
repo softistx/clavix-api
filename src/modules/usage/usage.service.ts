@@ -20,9 +20,8 @@ export class UsageService {
     private readonly sources: UsageSources,
     /** `undefined` without Redis: nothing is counted, the last stored month is read. */
     private readonly mau: MauCounter | undefined,
-    private readonly log: (message: string) => void = (message) =>
-      console.warn(message),
-    private readonly now: () => Date = () => new Date(),
+    private readonly log: (message: string) => void,
+    private readonly now: () => Date,
   ) {}
 
   /**

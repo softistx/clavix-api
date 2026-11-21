@@ -12,7 +12,7 @@ import { drain, filterOf, RETENTION_BATCH, storedEvent } from "./audit.utils";
 export class AuditService {
   constructor(
     private readonly collection: TypedCollection<typeof authEvents>,
-    private readonly now: () => Date = () => new Date(),
+    private readonly now: () => Date,
   ) {}
 
   private scoped(tenantId: string) {

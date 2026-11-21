@@ -47,4 +47,6 @@ export const usageService = new UsageService(
     domains: (tenantId) => domainsService.count(new ObjectId(tenantId)),
   },
   redis?.mau,
+  (message) => console.warn(message),
+  () => new Date(),
 );
