@@ -542,7 +542,7 @@ in `src/console/modules/index.ts`) and records it once its change is stored; AGE
 events" has the rules:
 
 ```ts
-// src/console/modules/tenants/index.ts
+// src/modules/tenants/tenants.console-guards.ts
 export const tenantsAudits: Audits = {
   "Mutation.renameTenant": "tenant.rename",
 };

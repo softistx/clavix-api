@@ -30,6 +30,7 @@ import {
   domainsAudits,
   domainsGuards,
 } from "@/modules/domains/domains.console-resolver";
+import { me, meGuards } from "@/modules/me/me.console-resolver";
 import {
   oauthPolicy,
   oauthPolicyAudits,
@@ -51,6 +52,11 @@ import {
   signInMethodsGuards,
 } from "@/modules/sign-in-methods/sign-in-methods.console-resolver";
 import {
+  tenants,
+  tenantsAudits,
+  tenantsGuards,
+} from "@/modules/tenants/tenants.console-resolver";
+import {
   users,
   usersAudits,
   usersGuards,
@@ -62,8 +68,6 @@ import {
 } from "@/modules/webhooks/webhooks.console-resolver";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
-import { me, meGuards } from "./me";
-import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
 
 // One entry per module: its resolvers, the guard of each root field it adds
 // and the audit action of each mutation it adds. A root field with no guard is

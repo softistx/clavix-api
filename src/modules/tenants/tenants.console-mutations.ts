@@ -1,45 +1,15 @@
 import { tenantBySlug, tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
+import { SlugTakenError } from "@/modules/tenants";
+import { badInput, refusal } from "./tenants.console-errors";
+import { parentOf } from "./tenants.console-parent";
 import {
-  isPlanId,
-  type PlanId,
-  QUOTA_KEYS,
-  type QuotaOverrides,
-  SlugTakenError,
-} from "@/modules/tenants";
-import { badInput, refusal } from "./errors";
-import { asNotFound, notFound, writable } from "./lookup";
-import { parentOf } from "./parent";
-
-function planOrFail(plan: string): PlanId {
-  if (!isPlanId(plan)) throw badInput(`Unknown plan "${plan}"`, "plan");
-  return plan;
-}
-
-function overridesOrFail(
-  input:
-    | {
-        mau?: number | null;
-        clients?: number | null;
-        domains?: number | null;
-        agents?: number | null;
-        webhooks?: number | null;
-        connections?: number | null;
-      }
-    | null
-    | undefined,
-): QuotaOverrides {
-  const overrides: QuotaOverrides = {};
-  for (const key of QUOTA_KEYS) {
-    const value = input?.[key];
-    if (value === null || value === undefined) continue;
-    if (!Number.isInteger(value) || value < 0) {
-      throw badInput(`${key} must be 0 or more`, `quotaOverrides.${key}`);
-    }
-    overrides[key] = value;
-  }
-  return overrides;
-}
+  asNotFound,
+  notFound,
+  overridesOrFail,
+  planOrFail,
+  writable,
+} from "./tenants.console-support";
 
 export const tenantMutations: NonNullable<Resolvers["Mutation"]> = {
   createTenant: async (_, { input }, ctx) => {

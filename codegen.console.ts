@@ -22,9 +22,9 @@ const config: CodegenConfig = {
         enumsAsTypes: true,
         // `Me` has no stored document: its fields read the caller.
         mappers: {
-          Me: "@/console/modules/me#MeParent",
+          Me: "@/modules/me/me.types#MeParent",
           // A tenant by id, slug and name, and its stored document when read.
-          Tenant: "@/console/modules/tenants/parent#TenantParent",
+          Tenant: "@/modules/tenants/tenants.console-parent#TenantParent",
           // A user with its tenant, for the fields read from its pool.
           TenantUser: "@/modules/users/users.types#TenantUserParent",
           // An endpoint with its tenant, which its `deliveries` read through.

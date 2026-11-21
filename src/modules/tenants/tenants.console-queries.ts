@@ -1,23 +1,16 @@
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import type { Resolvers } from "@/generated/console/resolvers";
-import type { TenantState } from "@/modules/tenants";
-import { type effectiveQuotas, PLANS } from "@/modules/tenants";
+import { PLANS } from "@/modules/tenants";
 import { isMonth } from "@/modules/usage/usage.utils";
-import { badInput } from "./errors";
-import { notFound } from "./lookup";
-import { parentOf } from "./parent";
-
-const STATE = {
-  ACTIVE: "active",
-  SUSPENDED: "suspended",
-  DELETED: "deleted",
-} as const satisfies Record<string, TenantState>;
-const MAX_PAGE = 100;
-
-export const quotasOut = (quotas: ReturnType<typeof effectiveQuotas>) => ({
-  ...quotas,
-});
+import { badInput } from "./tenants.console-errors";
+import { parentOf } from "./tenants.console-parent";
+import {
+  MAX_PAGE,
+  notFound,
+  quotasOut,
+  STATE,
+} from "./tenants.console-support";
 
 export const tenantQueries: NonNullable<Resolvers["Query"]> = {
   tenants: async (_, { q, status, after, first }) => {
