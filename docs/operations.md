@@ -51,7 +51,7 @@ connection's callback to the route that received it; a public client could other
    `*.<domain>` (so `console.<domain>` and every `<slug>.<domain>` resolve), and
    ports 80 and 443 open.
 2. Build and publish the images yourself. Both repositories build with their
-   `Dockerfile`; `@softistx/*` comes from public npmjs, so no token is needed:
+   `Dockerfile`; `@softistx/*` comes from npmjs with a read token, passed as the BuildKit secret `npm_read` from `NPM_SOFTISTX_READ_TOKEN` (never baked in; unset is fine while the packages are public, plugins#233):
 
    ```sh
    docker build -t registry.example.com/clavix-api:0.1.0 .
@@ -595,7 +595,7 @@ bun deploy/deploy.ts
 
 In `deploy/.env`, set `CLAVIX_DOMAIN=clavixid.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
-no registry token (the `@softistx` packages come from public npmjs). The script refuses to run when the file is missing, readable by
+no registry token. The script reads `NPM_SOFTISTX_READ_TOKEN` from the environment, else `~/.config/secrets/npm-sofistx-read-token` on the host, and passes it to the image builds as a compose secret; it only warns when neither exists (the installs work only while the packages are public). The script refuses to run when the file is missing, readable by
 others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
 
 One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api

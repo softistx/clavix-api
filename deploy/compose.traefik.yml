@@ -25,6 +25,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      secrets: [npm_read]
     container_name: clavix-api
     networks: [default, proxy]
     environment:
@@ -58,6 +59,7 @@ services:
     build:
       context: ${CLAVIX_UI_CONTEXT:-../../clavix-ui}
       dockerfile: Dockerfile
+      secrets: [npm_read]
     container_name: clavix-ui
     networks: [default, proxy]
     environment:
