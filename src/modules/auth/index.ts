@@ -8,7 +8,7 @@ import {
   requireNoSso,
   requireNoSsoForUser,
   revokeIfSso,
-} from "@/modules/connections/sso-gate";
+} from "@/modules/connections";
 import { challengeOf } from "@/modules/mfa/challenge";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
 import type { TenantJanus } from "@/modules/users/tenant-janus";

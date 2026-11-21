@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { StoreFailure } from "@softistx/janus";
 import { mongo } from "@/config/db";
-import { ConnectionsService } from "@/modules/connections/connections.service";
+import { ConnectionsService } from "@/modules/connections";
 import {
   createSecretBox,
   emptySecretResealCounts,

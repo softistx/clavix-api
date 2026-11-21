@@ -5,11 +5,9 @@ import type { TxtAnswer } from "@/modules/domains/dns";
 import { createSecretBox } from "@/modules/sign-in-methods/secrets";
 import { QuotaExceededError } from "@/modules/usage/quota";
 import { ConnectionError } from "./connections.errors";
-import {
-  type ConnectionInput,
-  ConnectionsService,
-  txtNameOf,
-} from "./connections.service";
+import { ConnectionsService } from "./connections.service";
+import type { ConnectionInput } from "./connections.types";
+import { txtNameOf } from "./connections.utils";
 
 const collection = mongo.db.connections;
 const box = createSecretBox(

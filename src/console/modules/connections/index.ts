@@ -5,9 +5,11 @@ import {
 } from "@/config/connections";
 import { tenantAdmin } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { ConnectionError } from "@/modules/connections/connections.errors";
-import type { ConnectionDoc } from "@/modules/connections/connections.model";
-import { txtNameOf } from "@/modules/connections/connections.service";
+import {
+  type ConnectionDoc,
+  ConnectionError,
+  txtNameOf,
+} from "@/modules/connections";
 import { callbackUrlOf } from "@/modules/sign-in-methods/social";
 import { effectiveQuotas } from "@/modules/tenants/plan.schema";
 import { fail } from "@/shared/errors";

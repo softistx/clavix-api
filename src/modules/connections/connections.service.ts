@@ -2,11 +2,9 @@ import {
   type ConnectionSource,
   domainOfEmail,
   type OidcConnection,
-  type OidcConnectionsOptions,
 } from "@softistx/janus-social";
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import type { TxtResolver } from "@/modules/domains/dns";
 import {
   mintToken,
   VERIFY_COOLDOWN_SECONDS,
@@ -18,102 +16,32 @@ import {
 } from "@/modules/sign-in-methods/secrets";
 import { assertWithinQuota } from "@/modules/usage/quota";
 import { ConnectionError } from "./connections.errors";
-import type {
-  ConnectionDoc,
-  ConnectionEmailTrust,
-  connections,
-} from "./connections.model";
+import type { ConnectionDoc, connections } from "./connections.model";
 import { checked, partsOf } from "./connections.record";
-
-export type { ConnectionDoc } from "./connections.model";
-
-/** Where the TXT record of an e-mail domain goes: apart from the custom domains' `_clavix`. */
-export const txtNameOf = (domain: string) => `_clavix-sso.${domain}`;
-
-/** The domains one connection may hold. */
-export const MAX_DOMAINS = 20;
-
-/** The accounts linked through a connection, counted by the identity store (`CONNECTION_IN_USE`). */
-export type LinkCounter = (
-  tenantId: string,
-  connectionId: string,
-) => Promise<number>;
-
-/** A domain as claim stores it: trimmed, lower case (janus's own normalisation of the rest). */
-const normalDomain = (domain: string) => domain.trim().toLowerCase();
-
-export interface ConnectionInput {
-  id: string;
-  name: string;
-  issuer: string;
-  clientId: string;
-  clientSecret: string;
-  clientAuthentication?: "post" | "basic" | null | undefined;
-  idTokenSignedResponseAlg?: string | null | undefined;
-  scopes?: readonly string[] | null | undefined;
-  emailTrust?: ConnectionEmailTrust | undefined;
-  claims?: ClaimsInput | null | undefined;
-  requireSso?: boolean | undefined;
-  jit?: boolean | undefined;
-  showButton?: boolean | undefined;
-  upstreamMfa?: { acr: string } | null | undefined;
-  enabled?: boolean | undefined;
-}
-
-export interface ClaimsInput {
-  email?: string | null | undefined;
-  emailVerified?: string | null | undefined;
-  name?: string | null | undefined;
-  picture?: string | null | undefined;
-}
-
-/** Fields left out stay as they are; `null` clears an optional one. */
-export type ConnectionPatch = Partial<
-  Omit<ConnectionInput, "id" | "clientSecret">
->;
-
-/** How the guard resolves an identity provider's host; `node:dns` by default. */
-export type HostResolver = NonNullable<OidcConnectionsOptions["resolveHost"]>;
-export type ConnectionsFetch = NonNullable<OidcConnectionsOptions["fetch"]>;
-
-export interface ConnectionsOptions {
-  txt: TxtResolver;
-  links: LinkCounter;
-  /** Reads the issuer's metadata: whether it advertises the `iss` response parameter (RFC 9207). Absent: never pinned. */
-  advertisesIss?: (issuer: string) => Promise<boolean>;
-  now?: () => Date;
-  log?: (message: string) => void;
-}
-
-const contextOf = (tenantId: string, connectionId: string) =>
-  `${tenantId}:${connectionId}`;
-
-const claimsOf = (claims: ClaimsInput | null | undefined) => {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(claims ?? {})) {
-    if (typeof value === "string" && value !== "") out[key] = value;
-  }
-  return out;
-};
-
-function nameOf(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed === "" || trimmed.length > 100) {
-    throw new ConnectionError(
-      "BAD_USER_INPUT",
-      "The name is 1 to 100 characters",
-      "name",
-    );
-  }
-  return trimmed;
-}
+import { MAX_DOMAINS, nameOf } from "./connections.rules";
+import type {
+  ConnectionInput,
+  ConnectionPatch,
+  ConnectionsFetch,
+  ConnectionsOptions,
+  HostResolver,
+} from "./connections.types";
+import {
+  changesOf,
+  claimsOf,
+  contextOf,
+  newDocOf,
+  nextOf,
+  normalDomain,
+  txtNameOf,
+} from "./connections.utils";
 
 /**
- * A tenant's enterprise OIDC connections (M4, F1). Every method takes the
- * tenant's id and reads or writes through its scope, so a connection of A is
- * unknown to B. Each record passes janus's `checkConnection` before it is
- * stored. The client secret is sealed, bound to its tenant and connection,
- * and is never returned or logged.
+ * A tenant's enterprise OIDC connections (M4, F1): the one service of the
+ * domain. Every method takes the tenant's id and reads or writes through its
+ * scope, so a connection of A is unknown to B. Each record passes janus's
+ * `checkConnection` before it is stored. The client secret is sealed, bound to
+ * its tenant and connection, and is never returned or logged.
  */
 export class ConnectionsService {
   private readonly now: () => Date;
@@ -128,22 +56,6 @@ export class ConnectionsService {
   ) {
     this.now = options.now ?? (() => new Date());
     this.log = options.log ?? ((message) => console.warn(message));
-  }
-
-  /**
-   * Whether the issuer advertises the `iss` response parameter (RFC 9207), so
-   * the record pins it (`requireIssParameter`): a provider that later drops the
-   * line cannot lift the requirement. A provider that cannot be read now is
-   * `false`; the library still requires `iss` whenever the metadata says so.
-   */
-  private async issAdvertised(issuer: string): Promise<boolean> {
-    const probe = this.options.advertisesIss;
-    if (probe === undefined) return false;
-    try {
-      return await probe(issuer);
-    } catch {
-      return false;
-    }
   }
 
   private scoped(tenantId: string) {
@@ -169,7 +81,10 @@ export class ConnectionsService {
     return found;
   }
 
-  private async get(tenantId: string, connectionId: string) {
+  private async get(
+    tenantId: string,
+    connectionId: string,
+  ): Promise<ConnectionDoc> {
     const found = await this.find(tenantId, connectionId);
     if (found === undefined) {
       throw new ConnectionError("NOT_FOUND", "No such connection");
@@ -177,9 +92,83 @@ export class ConnectionsService {
     return found;
   }
 
-  /** The record janus would read, for a stored document (secret opened). */
-  private openSecret(tenantId: string, doc: ConnectionDoc): string {
-    return this.box.open(doc.secret, contextOf(tenantId, doc.connectionId));
+  /** A domain of `domains` that another enabled connection of the tenant already holds. */
+  private async assertDomainsFree(
+    tenantId: string,
+    except: ConnectionDoc,
+    domains: readonly string[],
+  ): Promise<void> {
+    if (domains.length === 0) return;
+    const others = await this.scoped(tenantId).findMany({
+      filter: { enabled: true, "domains.domain": { $in: [...domains] } },
+    });
+    if (others.some((other) => !other._id.equals(except._id))) {
+      throw new ConnectionError(
+        "DOMAIN_TAKEN",
+        "A domain of this connection is already held by another enabled connection",
+        "domains",
+      );
+    }
+  }
+
+  /** Refuses while accounts are linked through the connection. */
+  private async assertUnlinked(
+    tenantId: string,
+    connectionId: string,
+    message: string,
+    field?: string,
+  ): Promise<void> {
+    if ((await this.options.links(tenantId, connectionId)) > 0) {
+      throw new ConnectionError("CONNECTION_IN_USE", message, field);
+    }
+  }
+
+  /** A domain to claim: not on the connection yet, within the cap, held by no other connection of the tenant. */
+  private async assertClaimable(
+    tenantId: string,
+    current: ConnectionDoc,
+    domain: string,
+  ): Promise<void> {
+    if (current.domains.some((entry) => entry.domain === domain)) {
+      throw new ConnectionError(
+        "CONFLICT",
+        "This domain is already on the connection",
+        "domain",
+      );
+    }
+    if (current.domains.length >= MAX_DOMAINS) {
+      throw new ConnectionError(
+        "BAD_USER_INPUT",
+        `A connection holds at most ${MAX_DOMAINS} domains`,
+        "domain",
+      );
+    }
+    const held = await this.scoped(tenantId).findMany({
+      filter: { "domains.domain": domain },
+    });
+    if (held.length > 0) {
+      throw new ConnectionError(
+        "DOMAIN_TAKEN",
+        "This domain is already on a connection of this tenant",
+        "domain",
+      );
+    }
+  }
+
+  /**
+   * Whether the issuer advertises the `iss` response parameter (RFC 9207), so
+   * the record pins it (`requireIssParameter`): a provider that later drops the
+   * line cannot lift the requirement. A provider that cannot be read now is
+   * `false`; the library still requires `iss` whenever the metadata says so.
+   */
+  private async issAdvertised(issuer: string): Promise<boolean> {
+    const probe = this.options.advertisesIss;
+    if (probe === undefined) return false;
+    try {
+      return await probe(issuer);
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -209,7 +198,6 @@ export class ConnectionsService {
       requireIss,
       revision: 1,
     });
-    const scoped = this.scoped(tenantId);
     if (await this.find(tenantId, record.id)) {
       throw new ConnectionError(
         "CONFLICT",
@@ -217,31 +205,23 @@ export class ConnectionsService {
         "id",
       );
     }
+    const scoped = this.scoped(tenantId);
     assertWithinQuota("connections", await scoped.count(), quota);
-    return scoped.create({
-      _id: new ObjectId(),
-      connectionId: record.id,
-      name,
-      issuer: record.issuer,
-      clientId: record.client.id,
-      secret: this.box.seal(input.clientSecret, contextOf(tenantId, record.id)),
-      clientAuthentication: record.client.authentication ?? null,
-      idTokenSignedResponseAlg: record.client.idTokenSignedResponseAlg ?? null,
-      scopes:
-        input.scopes === undefined || input.scopes === null
-          ? null
-          : [...(record.scopes ?? [])],
-      emailTrust,
-      claims: claimsOf(record.claims),
-      domains: [],
-      requireSso: input.requireSso ?? true,
-      jit: input.jit ?? true,
-      showButton: input.showButton ?? false,
-      upstreamMfa: input.upstreamMfa ?? null,
-      requireIss,
-      enabled: input.enabled ?? true,
-      revision: 1,
-    });
+    const secret = this.box.seal(
+      input.clientSecret,
+      contextOf(tenantId, record.id),
+    );
+    return scoped.create(
+      newDocOf({
+        id: new ObjectId(),
+        input,
+        record,
+        name,
+        emailTrust,
+        requireIss,
+        secret,
+      }),
+    );
   }
 
   async update(
@@ -253,27 +233,7 @@ export class ConnectionsService {
     // A patch never carries the secret (`setSecret` replaces it), so it is
     // not opened: a rename works under a dropped key. The placeholder only
     // satisfies the record's shape check.
-    const secret = "unopened-secret";
-    const next = {
-      issuer: patch.issuer ?? current.issuer,
-      clientId: patch.clientId ?? current.clientId,
-      clientAuthentication:
-        patch.clientAuthentication === undefined
-          ? current.clientAuthentication
-          : patch.clientAuthentication,
-      idTokenSignedResponseAlg:
-        patch.idTokenSignedResponseAlg === undefined
-          ? current.idTokenSignedResponseAlg
-          : patch.idTokenSignedResponseAlg,
-      scopes: patch.scopes === undefined ? current.scopes : patch.scopes,
-      emailTrust: patch.emailTrust ?? current.emailTrust,
-      claims:
-        patch.claims === undefined ? current.claims : claimsOf(patch.claims),
-      upstreamAcr:
-        patch.upstreamMfa === undefined
-          ? (current.upstreamMfa?.acr ?? null)
-          : (patch.upstreamMfa?.acr ?? null),
-    };
+    const next = nextOf(current, patch);
     const domains = current.domains.map((entry) => entry.domain);
     const requireIss =
       next.issuer === current.issuer
@@ -283,46 +243,34 @@ export class ConnectionsService {
       connectionId,
       ...next,
       requireIss,
-      clientSecret: secret,
+      clientSecret: "unopened-secret",
       domains,
       revision: current.revision + 1,
     });
     if (record.issuer !== current.issuer) {
-      if ((await this.options.links(tenantId, connectionId)) > 0) {
-        throw new ConnectionError(
-          "CONNECTION_IN_USE",
-          "Accounts are linked through this connection: its issuer cannot change. Create a new connection instead",
-          "issuer",
-        );
-      }
+      await this.assertUnlinked(
+        tenantId,
+        connectionId,
+        "Accounts are linked through this connection: its issuer cannot change. Create a new connection instead",
+        "issuer",
+      );
     }
     const enabled = patch.enabled ?? current.enabled;
     if (enabled && !current.enabled) {
       await this.assertDomainsFree(tenantId, current, domains);
     }
-    return this.scoped(tenantId).update(current._id, {
-      ...(patch.name === undefined ? {} : { name: nameOf(patch.name) }),
-      issuer: record.issuer,
-      clientId: record.client.id,
-      clientAuthentication: record.client.authentication ?? null,
-      idTokenSignedResponseAlg: record.client.idTokenSignedResponseAlg ?? null,
-      scopes: next.scopes === null ? null : [...(record.scopes ?? [])],
-      emailTrust: next.emailTrust,
-      claims: claimsOf(record.claims),
-      ...(patch.requireSso === undefined
-        ? {}
-        : { requireSso: patch.requireSso }),
-      ...(patch.jit === undefined ? {} : { jit: patch.jit }),
-      ...(patch.showButton === undefined
-        ? {}
-        : { showButton: patch.showButton }),
-      ...(patch.upstreamMfa === undefined
-        ? {}
-        : { upstreamMfa: patch.upstreamMfa }),
-      requireIss,
-      enabled,
-      revision: current.revision + 1,
-    });
+    return this.scoped(tenantId).update(
+      current._id,
+      changesOf({
+        patch,
+        current,
+        next,
+        record,
+        name: patch.name === undefined ? undefined : nameOf(patch.name),
+        requireIss,
+        enabled,
+      }),
+    );
   }
 
   /** Replaces the client secret (sealed). */
@@ -343,6 +291,19 @@ export class ConnectionsService {
       secret: this.box.seal(clientSecret, contextOf(tenantId, connectionId)),
       revision: current.revision + 1,
     });
+  }
+
+  /** Removes a connection; refused while accounts are linked through it. */
+  async delete(tenantId: string, connectionId: string): Promise<boolean> {
+    const current = await this.find(tenantId, connectionId);
+    if (current === undefined) return false;
+    await this.assertUnlinked(
+      tenantId,
+      connectionId,
+      "Accounts are linked through this connection: switch it off instead",
+    );
+    await this.scoped(tenantId).delete(current._id);
+    return true;
   }
 
   /**
@@ -387,39 +348,6 @@ export class ConnectionsService {
     return counts;
   }
 
-  /** Removes a connection; refused while accounts are linked through it. */
-  async delete(tenantId: string, connectionId: string): Promise<boolean> {
-    const current = await this.find(tenantId, connectionId);
-    if (current === undefined) return false;
-    if ((await this.options.links(tenantId, connectionId)) > 0) {
-      throw new ConnectionError(
-        "CONNECTION_IN_USE",
-        "Accounts are linked through this connection: switch it off instead",
-      );
-    }
-    await this.scoped(tenantId).delete(current._id);
-    return true;
-  }
-
-  /** A domain of `domains` that another enabled connection of the tenant already holds. */
-  private async assertDomainsFree(
-    tenantId: string,
-    except: ConnectionDoc,
-    domains: readonly string[],
-  ) {
-    if (domains.length === 0) return;
-    const others = await this.scoped(tenantId).findMany({
-      filter: { enabled: true, "domains.domain": { $in: [...domains] } },
-    });
-    if (others.some((other) => !other._id.equals(except._id))) {
-      throw new ConnectionError(
-        "DOMAIN_TAKEN",
-        "A domain of this connection is already held by another enabled connection",
-        "domains",
-      );
-    }
-  }
-
   /** Claims a domain: normalised by janus, a TXT token minted, not verified yet. */
   async addDomain(
     tenantId: string,
@@ -427,33 +355,14 @@ export class ConnectionsService {
     domain: string,
   ): Promise<ConnectionDoc> {
     const current = await this.get(tenantId, connectionId);
+    const secret = this.box.open(
+      current.secret,
+      contextOf(tenantId, current.connectionId),
+    );
     const normalised = checked({
-      ...partsOf(current, this.openSecret(tenantId, current), [domain]),
+      ...partsOf(current, secret, [domain]),
     }).domains[0] as string;
-    if (current.domains.some((entry) => entry.domain === normalised)) {
-      throw new ConnectionError(
-        "CONFLICT",
-        "This domain is already on the connection",
-        "domain",
-      );
-    }
-    if (current.domains.length >= MAX_DOMAINS) {
-      throw new ConnectionError(
-        "BAD_USER_INPUT",
-        `A connection holds at most ${MAX_DOMAINS} domains`,
-        "domain",
-      );
-    }
-    const held = await this.scoped(tenantId).findMany({
-      filter: { "domains.domain": normalised },
-    });
-    if (held.length > 0) {
-      throw new ConnectionError(
-        "DOMAIN_TAKEN",
-        "This domain is already on a connection of this tenant",
-        "domain",
-      );
-    }
+    await this.assertClaimable(tenantId, current, normalised);
     return this.scoped(tenantId).update(current._id, {
       domains: [
         ...current.domains,
@@ -639,7 +548,11 @@ export class ConnectionsService {
       .map((entry) => entry.domain);
     if (verified.length === 0) return null;
     try {
-      return checked(partsOf(doc, this.openSecret(tenantId, doc), verified));
+      const secret = this.box.open(
+        doc.secret,
+        contextOf(tenantId, doc.connectionId),
+      );
+      return checked(partsOf(doc, secret, verified));
     } catch (error) {
       // The connection's id and the error's name only: a message could quote the record.
       this.log(
