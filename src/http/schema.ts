@@ -17,21 +17,34 @@ import type { Context } from "./context";
 // `../..` of src/http/ under `bun dev` and `bun test`, `..` of dist/ for the
 // bundle.
 const bundled = basename(import.meta.dir) === "dist";
-const typeDefs = mergeTypeDefs([
-  scalarTypeDefs,
-  constraintTypeDefs,
-  consentTypeDefs,
-  ...loadFilesSync(
-    [
-      join(import.meta.dir, bundled ? ".." : join("..", ".."), "src"),
-      // The console API has its own schema (src/console/schema.ts): its
-      // folder and every module's `<name>.console.graphqls`.
-      `!${join(import.meta.dir, bundled ? ".." : join("..", ".."), "src", "console")}/**`,
-      "!**/*.console.graphqls",
-    ],
-    { extensions: ["graphqls"] },
-  ),
-]);
+const src = join(import.meta.dir, bundled ? ".." : join("..", ".."), "src");
+
+/**
+ * The hosted SDL: every src/**\/*.graphqls but the console's. Every pattern is
+ * built from `src`, never relative, since a relative negation resolves against
+ * process.cwd() and a server started elsewhere would load the console roots.
+ */
+export const hostedTypeDefs = () =>
+  mergeTypeDefs([
+    scalarTypeDefs,
+    constraintTypeDefs,
+    consentTypeDefs,
+    ...loadFilesSync(
+      [
+        src,
+        // The console API has its own schema (src/console/schema.ts): its
+        // folder and every module's `<name>.console.graphqls`.
+        `!${join(src, "console")}/**`,
+        `!${join(src, "**", "*.console.graphqls")}`,
+      ],
+      // No ignored extensions: the default `d` one drops every file named
+      // `<module>.d….graphqls` (consent.detail-labels.graphqls) from a folder
+      // pattern. There are no `.spec` or `.test` SDL files to skip.
+      { extensions: ["graphqls"], ignoredExtensions: [] },
+    ),
+  ]);
+
+const typeDefs = hostedTypeDefs();
 
 export const schema = guardedSchema(
   withValidation(

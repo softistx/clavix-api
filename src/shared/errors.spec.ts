@@ -39,3 +39,13 @@ test("headers alone leave retryAfter out, and extra fields are kept", () => {
     http: { headers: { "retry-after": "3" } },
   });
 });
+
+test("an extra code never overrides the refusal's own", () => {
+  const error = fail("BAD_USER_INPUT", "bad", {
+    extra: { code: "OTHER", missing: ["mfa"] },
+  });
+  expect(error.extensions).toEqual({
+    code: "BAD_USER_INPUT",
+    missing: ["mfa"],
+  });
+});

@@ -46,8 +46,8 @@ export function fail(
   } satisfies ErrorHttp;
   return new GraphQLError(message, {
     extensions: {
-      code,
       ...extra,
+      code,
       ...(retryAfter === undefined ? {} : { retryAfter }),
       ...(Object.keys(http).length === 0 ? {} : { http }),
       ...(field === undefined ? {} : { field }),
