@@ -121,3 +121,36 @@ describe("createGrantsRevoke", () => {
     expect(seen).toEqual([{ id: "u" }]);
   });
 });
+
+describe("serverOf", () => {
+  const service = new ConsentService({ log: quiet, now: () => new Date() });
+  const request = new Request("https://acme.example.test/oauth/authorize");
+  const server = { id: "srv" };
+  // `fail` raises a GraphQLError: its code and HTTP status sit in `extensions`.
+  const notFound = {
+    extensions: { code: "NOT_FOUND", http: { status: 404 } },
+  };
+
+  test("refuses a context without an oauth servers registry", async () => {
+    const refusal = service.serverOf({ request, tenant: async () => null });
+    await expect(refusal).rejects.toMatchObject(notFound);
+  });
+
+  test("refuses a request no server answers", async () => {
+    const refusal = service.serverOf({
+      request,
+      oauthServers: { serverFor: async () => null },
+      tenant: async () => null,
+    });
+    await expect(refusal).rejects.toMatchObject(notFound);
+  });
+
+  test("refuses a null tenant behind a known server", async () => {
+    const refusal = service.serverOf({
+      request,
+      oauthServers: { serverFor: async () => server },
+      tenant: async () => null,
+    });
+    await expect(refusal).rejects.toMatchObject(notFound);
+  });
+});

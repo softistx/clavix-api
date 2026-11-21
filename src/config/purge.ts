@@ -1,4 +1,4 @@
-import type { Collection, ObjectId } from "mongodb";
+import type { ObjectId } from "mongodb";
 import * as appCollections from "@/modules/collections";
 import type { OwnedCollectionPurger, PartitionPurger } from "@/modules/tenants";
 import { isOwned } from "@/tenancy/owned";
@@ -13,18 +13,16 @@ import { domainsService, tenantsService } from "./tenancy";
  * The tenant-owned collections of the app (`isOwned`: `adminEvents`, the
  * platform's record, is not one), each emptied of one tenant's documents.
  */
-export const ownedPurgers = (): OwnedCollectionPurger[] =>
-  Object.entries(appCollections)
-    .filter(([, definition]) => isOwned(definition))
-    .map(([key, definition]) => ({
-      name: definition.name,
-      deleteOwnedBy: async (tenantId: ObjectId) => {
-        const { raw } = (
-          mongo.db as unknown as Record<string, { raw: Collection }>
-        )[key] as { raw: Collection };
-        return (await raw.deleteMany({ tenantId })).deletedCount;
-      },
+export const ownedPurgers = (): OwnedCollectionPurger[] => {
+  const registry = { ...appCollections };
+  return (Object.keys(registry) as (keyof typeof registry)[])
+    .filter((key) => isOwned(registry[key]))
+    .map((key) => ({
+      name: registry[key].name,
+      deleteOwnedBy: async (tenantId: ObjectId) =>
+        (await mongo.db[key].raw.deleteMany({ tenantId })).deletedCount,
     }));
+};
 
 /** The purge job over the real stores: the janus partition purges, the owned collections, the roles. */
 export const createTenantPurge =

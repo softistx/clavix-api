@@ -14,6 +14,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the
@@ -45,8 +46,7 @@ const tenantOf = async (slug: string) => {
 };
 
 interface Answer {
-  // biome-ignore lint/suspicious/noExplicitAny: an untyped GraphQL response body, read by path in the specs
-  data: Record<string, any> | null;
+  data: Record<string, unknown> | null;
   errors?: { message: string; extensions?: Record<string, unknown> }[];
   cookies: string[];
 }
@@ -122,15 +122,17 @@ async function holder(slug: string, email: string) {
   );
   if (result.status !== "signedIn") throw new Error("no session");
   const cookie = `${SESSION_COOKIE}=${result.token}`;
-  const secret = (await gql(slug, ENROLL, {}, cookie)).data?.[
-    "enrollSecondFactor"
-  ].secret as string;
+  const secret = at<string>(
+    (await gql(slug, ENROLL, {}, cookie)).data,
+    "enrollSecondFactor.secret",
+  );
   await gql(slug, ACTIVATE, { code: totpCode(secret) }, cookie);
   const tenant = await tenantOf(slug);
   const authenticator = await softwareAuthenticator();
-  const options = (await gql(slug, REG_OPTIONS, {}, cookie)).data?.[
-    "passkeyRegistrationOptions"
-  ] as { options: string; challenge: string };
+  const options = at<{ options: string; challenge: string }>(
+    (await gql(slug, REG_OPTIONS, {}, cookie)).data,
+    "passkeyRegistrationOptions",
+  );
   const response = await authenticator.register({
     challenge: challengeOf(options.options),
     origin: originOf(tenant),
@@ -157,7 +159,7 @@ async function challengeFor(slug: string, email: string) {
   const before = memory.sent.length;
   const asked = await gql(slug, REQUEST, { email });
   await settled();
-  const token = asked.data?.["requestSignInCode"].challenge as string;
+  const token = at<string>(asked.data, "requestSignInCode.challenge");
   const code =
     /\b(\d{6})\b/.exec(
       memory.sent
@@ -166,7 +168,12 @@ async function challengeFor(slug: string, email: string) {
         .at(-1)?.text ?? "",
     )?.[1] ?? "";
   const stopped = await gql(slug, VERIFY, { challenge: token, code });
-  const out = stopped.data?.["verifySignInCode"];
+  const out = at<{
+    __typename: string;
+    methods: string[];
+    challenge: string;
+    passkeyOptions: string;
+  }>(stopped.data, "verifySignInCode");
   expect(out.__typename).toBe("SecondFactorChallenge");
   expect(out.methods).toContain("passkey");
   return out as { challenge: string; passkeyOptions: string };
@@ -200,7 +207,7 @@ const OPTIONS = `mutation ($challenge: String!) {
   requestSecondFactorPasskeyOptions(challenge: $challenge) { options }
 }`;
 const optionsOf = (answer: Answer) =>
-  answer.data?.["requestSecondFactorPasskeyOptions"]?.options as string;
+  at<string>(answer.data, "requestSecondFactorPasskeyOptions.options");
 
 beforeAll(async () => {
   await tenantsService.create({ slug: A, name: "Acme", signUp: true });
@@ -239,7 +246,9 @@ describe("requestSecondFactorPasskeyOptions", () => {
       assertion: await assertion(A, ada, optionsOf(again)),
     });
     expect(done.errors).toBeUndefined();
-    expect(done.data?.["confirmSecondFactorWithPasskey"].user.email).toBe(ADA);
+    expect(at(done.data, "confirmSecondFactorWithPasskey.user.email")).toBe(
+      ADA,
+    );
     expect(cookieOf(done)).not.toBe("");
   });
 
