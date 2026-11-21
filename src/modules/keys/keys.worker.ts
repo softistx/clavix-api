@@ -15,7 +15,7 @@ export interface RotationQueue {
  */
 export async function startKeyRotation(
   deps: RotationDeps,
-  queue?: RotationQueue,
+  queue: RotationQueue,
 ) {
   const log = deps.log;
   const pass = async () => {
@@ -24,5 +24,5 @@ export async function startKeyRotation(
       throw new Error(`keys: rotation failed for ${failed} tenant(s)`);
   };
   await pass().catch((error) => log(String(error)));
-  queue?.work(pass).on("error", (error) => log(`keys: ${String(error)}`));
+  queue.work(pass).on("error", (error) => log(`keys: ${String(error)}`));
 }

@@ -39,34 +39,33 @@ export interface ClavixOAuthOptions {
   claimsFor: ClaimsFor;
   /**
    * The tenants' own resources (their APIs, `resources:create`); the userinfo
-   * resource is always added. Default: none, so only OIDC clients that ask for
-   * userinfo's resource (or none) succeed. Read on every request, so a resource
+   * resource is always added. Read on every request, so a resource
    * registered by script serves at once: its fingerprint is part of the
    * issuer's cache version.
    */
-  resourcesFor?: ResourcesFor;
+  resourcesFor: ResourcesFor;
   /**
    * The `roles` claim (slice A2c): in the id_token and userinfo (tenant-wide
    * roles, released by the `openid` scope) and in the JWT access tokens
-   * (tenant-wide plus the roles of the token's resource). Absent: no claim.
+   * (tenant-wide plus the roles of the token's resource).
    */
-  rolesFor?: RolesFor;
+  rolesFor: RolesFor;
   /**
-   * The token exchange rules of a tenant's clients (`clientPolicies`). Absent:
-   * no client may exchange tokens.
+   * The token exchange rules of a tenant's clients (`clientPolicies`): a client
+   * with none may not exchange tokens.
    */
-  exchangeRulesFor?: ExchangeRulesFor;
-  /** Whether a client is an agent (`agentClients`); with `subjectAgents` rules. Absent: none is. */
-  agentCheckFor?: AgentCheckFor;
+  exchangeRulesFor: ExchangeRulesFor;
+  /** Whether a client is an agent (`agentClients`); with `subjectAgents` rules. */
+  agentCheckFor: AgentCheckFor;
   /** The transport of the Client ID Metadata Documents fetch; for specs. Default: janus's own. */
   metadataTransport?: MetadataTransport;
   /** The ports a metadata document may be served on (`CLAVIX_METADATA_PORTS`). Default: 443. */
   metadataPorts?: readonly number[];
   /**
    * The listener of a tenant's OAuth events, built per tenant so its events
-   * can only reach that tenant's log (D12, D14). Absent: none is reported.
+   * can only reach that tenant's log (D12, D14).
    */
-  eventsFor?: (tenant: ResolvedTenant) => OAuthEventListener;
+  eventsFor: (tenant: ResolvedTenant) => OAuthEventListener;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
   clock: Clock;

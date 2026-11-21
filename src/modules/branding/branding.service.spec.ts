@@ -6,17 +6,18 @@ import {
   parse,
 } from "graphql";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
 import { brandingService } from "@/config/branding";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noThrottle } from "@/config/no-ops";
 import { tenantsService } from "@/config/tenancy";
 import type { AuditAction, AuditTarget } from "@/console/audit";
 import type { ConsoleContext } from "@/console/context";
 import type { Permission } from "@/console/model";
 import { consoleSchema } from "@/console/schema";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { BrandingConflictError } from "./branding.errors";
 import { LOGO_MAX_BYTES } from "./branding.logo";
@@ -489,9 +490,9 @@ describe("permissions and isolation", () => {
 });
 
 describe("the public side", () => {
-  const app = createApp({
-    signInThrottle: undefined,
-    passkeyThrottle: undefined,
+  const app = createTestApp({
+    signInThrottle: noThrottle,
+    passkeyThrottle: noThrottle,
   });
   const host = (slug: string) => `http://${slug}.${env.CLAVIX_DOMAIN}`;
 

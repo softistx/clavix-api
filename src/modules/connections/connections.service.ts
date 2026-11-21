@@ -159,10 +159,8 @@ export class ConnectionsService {
    * `false`; the library still requires `iss` whenever the metadata says so.
    */
   private async issAdvertised(issuer: string): Promise<boolean> {
-    const probe = this.options.advertisesIss;
-    if (probe === undefined) return false;
     try {
-      return await probe(issuer);
+      return await this.options.advertisesIss(issuer);
     } catch {
       return false;
     }

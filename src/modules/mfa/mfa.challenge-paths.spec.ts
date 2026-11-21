@@ -10,7 +10,6 @@ import {
 } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
@@ -22,6 +21,7 @@ import { settled } from "@/modules/auth";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
 // The second-factor challenge on the sign-in paths mfa.spec does not walk
@@ -29,7 +29,7 @@ import { clientHeaders } from "~/client-header";
 // tenant, and the usage it records (clavix-api#290).
 
 const memory = mailer as MemoryMailer;
-const app = createApp();
+const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

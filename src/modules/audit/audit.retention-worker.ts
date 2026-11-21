@@ -8,17 +8,17 @@ export interface RetentionQueue {
 }
 
 /**
- * Runs the retention on each daily tick of the queue. Without a queue
- * (development, no Redis) nothing runs. A pass that left a tenant unfinished
+ * Runs the retention on each daily tick of the queue. The server starts it
+ * only with a queue (development, no Redis: no worker). A pass that left a tenant unfinished
  * throws, so the queue retries it.
  */
 export function startAuditRetention(
   run: () => Promise<RetentionReport>,
-  queue: RetentionQueue | undefined,
+  queue: RetentionQueue,
   log: (message: string) => void,
 ) {
   queue
-    ?.work(async () => {
+    .work(async () => {
       const { failed } = await run();
       if (failed > 0) {
         throw new Error(`audit: retention left ${failed} step(s) unfinished`);

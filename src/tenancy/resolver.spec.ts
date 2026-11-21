@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
+import { noCustomDomains } from "~/ports";
 import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
 import { memoryTenantCache, type TenantCache } from "./tenant-cache";
@@ -19,6 +20,7 @@ function setup(
   const lookups: string[] = [];
   const logged: string[] = [];
   const resolver = createTenantResolver({
+    ...noCustomDomains,
     lookup: async (slug) => {
       lookups.push(slug);
       return records.find((r) => r.slug === slug);
@@ -63,6 +65,7 @@ describe("resolveHost", () => {
 
   test("the issuer carries a configured scheme and port", async () => {
     const resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async () => acme,
       cache: memoryTenantCache(Date.now),
       config: { scheme: "http", domain: "clavix.test", port: 3000 },
@@ -214,6 +217,7 @@ describe("cache-aside race", () => {
       },
     };
     resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async (slug) => records.find((r) => r.slug === slug),
       cache,
       config,
@@ -243,6 +247,7 @@ describe("cache-aside race", () => {
       },
     };
     const resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async (slug) => records.find((r) => r.slug === slug),
       cache,
       config,
@@ -289,6 +294,7 @@ describe("custom domains", () => {
     primary?: string,
   ) {
     return createTenantResolver({
+      ...noCustomDomains,
       lookup: async (slug) => (slug === record.slug ? record : undefined),
       lookupById: async (id) => (id.equals(record._id) ? record : undefined),
       domains: {
@@ -324,6 +330,7 @@ describe("custom domains", () => {
 
   test("carries the origins of the tenant's verified domains (ADR-0036), none without a directory", async () => {
     const resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async () => acme,
       domains: {
         tenantOfHost: async () => undefined,

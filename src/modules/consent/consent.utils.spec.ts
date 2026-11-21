@@ -13,10 +13,9 @@ describe("perRequest", () => {
     expect(await read(b, reader)).toBe(2);
   });
 
-  test("reads nothing without a request or a reader", () => {
+  test("reads nothing without a request", () => {
     const read = perRequest<number>();
     expect(read(undefined, async () => 1)).toBeUndefined();
-    expect(read(new Request("https://a.test/"), undefined)).toBeUndefined();
   });
 });
 

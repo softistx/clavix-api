@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -14,13 +13,14 @@ import { passkeyThrottled } from "@/modules/passkeys";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the
 // challenge reads the passkey options again, with no attempt counted.
 
 const memory = mailer as MemoryMailer;
-let app = createApp();
+let app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -352,7 +352,7 @@ describe("requestSecondFactorPasskeyOptions", () => {
     await holder(A, "ray@example.test");
     const challenge = await challengeFor(A, "ray@example.test");
     let calls = 0;
-    const limited = createApp({
+    const limited = createTestApp({
       passkeyThrottle: {
         check: async () => {
           calls += 1;
@@ -392,7 +392,7 @@ describe("requestSecondFactorPasskeyOptions", () => {
 
   test("an unknown host is NOT_FOUND and spends no throttle budget", async () => {
     let calls = 0;
-    const limited = createApp({
+    const limited = createTestApp({
       passkeyThrottle: {
         check: async () => {
           calls += 1;

@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -13,13 +12,14 @@ import { janusIssuers } from "@/config/users";
 import { CONSOLE_PATH } from "@/console/identity";
 import { adminScope } from "@/modules/invitations/invitations.rules";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
 // The bearer token is the user id: tokens are console.spec's business, this
 // file is about who may change the admins of a tenant.
 const deps = createConsoleDeps({ serverFor: async () => null });
-const app = createApp({
+const app = createTestApp({
   console: {
     ...verifiedCallers(deps),
     authenticate: async (request) => {

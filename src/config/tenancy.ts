@@ -20,12 +20,12 @@ export interface TenancyOptions {
   tenants: TypedCollection<typeof tenants>;
   cache: TenantCache;
   config: PublicOrigin;
-  /** The custom domains hosts resolve through (A4). Default: none, only slug hosts resolve. */
-  domains?: DomainDirectory;
+  /** The custom domains hosts resolve through (A4). */
+  domains: DomainDirectory;
   /** A tenant's verified custom hosts, dropped from the cache with its slug host on each tenant write. */
-  hostsOf?: (tenantId: ObjectId) => Promise<string[]>;
-  /** Gives a new tenant its first signing key. Default: none. */
-  onCreated?: (tenantId: string) => void | Promise<void>;
+  hostsOf: (tenantId: ObjectId) => Promise<string[]>;
+  /** Gives a new tenant its first signing key. */
+  onCreated: (tenantId: string) => void | Promise<void>;
   /** Where a hook failure is logged. */
   log: (message: string) => void;
 }
@@ -49,19 +49,16 @@ export function createTenancy({
     cache,
     config,
     log,
-    ...(domains === undefined
-      ? {}
-      : {
-          domains,
-          lookupById: (id) => tenants.findById(id, { withDeleted: true }),
-        }),
+    domains,
+    lookupById: (id) => tenants.findById(id, { withDeleted: true }),
   });
   const tenantsService = new TenantsService(tenants, {
+    domain: config.domain,
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
     log,
     now: clock,
-    ...(hostsOf === undefined ? {} : { hostsOf }),
-    ...(onCreated === undefined ? {} : { onCreated }),
+    hostsOf,
+    onCreated,
   });
   return { tenantResolver, tenantsService };
 }
@@ -70,9 +67,13 @@ export function createTenancy({
 // The domain store and the resolver refer to each other (a domain write drops
 // hosts from the cache; a custom host resolves through the store): the
 // closures below are called only after both exist.
-const origin = {
+/** The tenants' parent domain, read once from the environment. */
+export const tenantDomain = env.CLAVIX_DOMAIN;
+
+/** Where a tenant's issuer lives: scheme, parent domain and port, read once from the environment. */
+export const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
-  domain: env.CLAVIX_DOMAIN,
+  domain: tenantDomain,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 

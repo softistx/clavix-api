@@ -13,16 +13,16 @@ import type { ServerSource, WithServers } from "./consent.types";
  */
 export const oauthContext = (
   oauth: ServerSource,
-  texts?: ScopeTextsFor,
-  detailTexts?: DetailTextsFor,
-  agents?: AgentsFor,
+  texts: ScopeTextsFor,
+  detailTexts: DetailTextsFor,
+  agents: AgentsFor,
 ) =>
   definePlugin({
     name: "clavix-oauth-context",
     onContext: (): WithServers => ({
       oauthServers: oauth,
-      ...(texts === undefined ? {} : { scopeTextsFor: texts }),
-      ...(detailTexts === undefined ? {} : { detailTextsFor: detailTexts }),
-      ...(agents === undefined ? {} : { agentsFor: agents }),
+      scopeTextsFor: texts,
+      detailTextsFor: detailTexts,
+      agentsFor: agents,
     }),
   });

@@ -9,11 +9,11 @@ import {
 import { getCollection } from "@softistx/mongo";
 import { generateKeyPair, SignJWT } from "jose";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -35,8 +35,10 @@ import {
 } from "@/modules/tenants";
 import { userinfoOf } from "@/oauth/building";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
+import { quietOAuth } from "~/ports";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
 import {
@@ -66,6 +68,7 @@ const FOREIGN = { id: "spec-foreign", secret: "" };
 const clock = fixedClock(new Date());
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -85,7 +88,7 @@ const issuers = createClavixOAuthIssuers({
 const serverOfClavix = async () =>
   issuers.serverFor(new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)));
 const deps = createConsoleDeps(issuers);
-const app = createApp({
+const app = createTestApp({
   oauth: issuers,
   console: {
     ...deps,
@@ -226,7 +229,12 @@ beforeAll(async () => {
     { now: clock.now(), lead: "1h", retireAfter: "2h" },
   );
   const registered = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+      detailTypes: noDetailTypes,
+    },
     {
       tenant: PLATFORM_TENANT_SLUG,
       name: "Spec console",
@@ -241,7 +249,12 @@ beforeAll(async () => {
   FOREIGN.secret =
     (
       await registerClient(
-        { now: () => new Date(), db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: PLATFORM_TENANT_SLUG,
           name: "Spec foreign",
@@ -672,7 +685,7 @@ describe("the guard", () => {
       typeDefs: "extend type Query { open: String! }",
       resolvers: { Query: { open: () => "secret" } },
     });
-    const guarded = createApp({
+    const guarded = createTestApp({
       oauth: issuers,
       console: {
         ...deps,
@@ -1083,7 +1096,7 @@ describe("the guards over HTTP", () => {
     },
   });
   const as = (userId: string, query: string, scopes = ["console"]) =>
-    createApp({
+    createTestApp({
       oauth: issuers,
       console: {
         ...deps,
@@ -1157,18 +1170,18 @@ describe("the guards over HTTP", () => {
 
 describe("authentication failures", () => {
   const withAuth = (authenticate: () => Promise<never>) =>
-    createApp({ oauth: issuers, console: { ...deps, authenticate } }).request(
-      `http://localhost${CONSOLE_PATH}`,
-      {
-        method: "POST",
-        headers: {
-          ...clientHeaders,
-          "content-type": "application/json",
-          authorization: "Bearer x",
-        },
-        body: JSON.stringify({ query: ME }),
+    createTestApp({
+      oauth: issuers,
+      console: { ...deps, authenticate },
+    }).request(`http://localhost${CONSOLE_PATH}`, {
+      method: "POST",
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        authorization: "Bearer x",
       },
-    );
+      body: JSON.stringify({ query: ME }),
+    });
 
   test("a store outage is a 503, not a 401", async () => {
     expect(

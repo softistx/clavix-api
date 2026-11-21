@@ -34,14 +34,14 @@ export interface DomainsServiceOptions {
    * (the claimed host, and the tenant's other hosts when its issuer moved).
    * Errors are logged and swallowed.
    */
-  onHostsChanged?: (hosts: string[]) => void | Promise<void>;
+  onHostsChanged: (hosts: string[]) => void | Promise<void>;
   /** The slug host of a tenant, for the cache invalidation of its issuer. */
-  slugHostOf?: (tenantId: string) => Promise<string | undefined>;
+  slugHostOf: (tenantId: string) => Promise<string | undefined>;
   /**
    * Records what the platform did to a claim by itself (a lapse, an eviction)
    * as an admin event. A failure is logged and never fails the write.
    */
-  record?: (event: DomainSystemEvent) => Promise<void>;
+  record: (event: DomainSystemEvent) => Promise<void>;
   now: () => Date;
   log: (message: string) => void;
 }
@@ -248,7 +248,7 @@ export class DomainsService {
    * for it.
    */
   async recheckAll(
-    onUnverified: (domain: DomainDoc) => Promise<void> = async () => {},
+    onUnverified: (domain: DomainDoc) => Promise<void>,
   ): Promise<RecheckReport> {
     const report = { checked: 0, unverified: 0 };
     const verified = await this.collection.findMany({
@@ -398,7 +398,7 @@ export class DomainsService {
 
   private async emit(event: DomainSystemEvent) {
     try {
-      await this.options.record?.(event);
+      await this.options.record(event);
     } catch (error) {
       this.log(
         `domains: could not record the ${event.action} event: ${String(error)}`,
@@ -407,11 +407,9 @@ export class DomainsService {
   }
 
   private async changed(tenantId: ObjectId, hosts: string[]) {
-    const notify = this.options.onHostsChanged;
-    if (notify === undefined) return;
     try {
-      const slugHost = await this.options.slugHostOf?.(tenantId.toHexString());
-      await notify(hostsToForget(hosts, slugHost));
+      const slugHost = await this.options.slugHostOf(tenantId.toHexString());
+      await this.options.onHostsChanged(hostsToForget(hosts, slugHost));
     } catch (error) {
       this.log(`domains: cache invalidation failed: ${String(error)}`);
     }

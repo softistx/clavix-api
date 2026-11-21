@@ -13,10 +13,10 @@ export type ServerSource = Required<Pick<OAuthHandle, "serverFor">>;
  * tenants' scope texts, detail type texts and agents.
  */
 export type WithServers = {
-  oauthServers?: ServerSource;
-  scopeTextsFor?: ScopeTextsFor;
-  detailTextsFor?: DetailTextsFor;
-  agentsFor?: AgentsFor;
+  oauthServers: ServerSource;
+  scopeTextsFor: ScopeTextsFor;
+  detailTextsFor: DetailTextsFor;
+  agentsFor: AgentsFor;
 };
 
 /** A context as the consent fields read it: the readers and the request. */

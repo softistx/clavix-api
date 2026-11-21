@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createApp } from "@/app";
+import { createTestApp } from "~/app";
 import { readiness } from "./health.ready";
 
 const up = async () => true;
@@ -41,7 +41,7 @@ describe("readiness", () => {
 
 describe("GET /readyz and /healthz", () => {
   test("/readyz answers 200 against the test Mongo", async () => {
-    const response = await createApp().request("/readyz");
+    const response = await createTestApp().request("/readyz");
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       status: "ok",
@@ -50,7 +50,7 @@ describe("GET /readyz and /healthz", () => {
   });
 
   test("/readyz answers 503 when a dependency is down", async () => {
-    const app = createApp({
+    const app = createTestApp({
       ready: () => readiness({ mongo: down, redis: up }),
     });
     const response = await app.request("/readyz");
@@ -60,7 +60,7 @@ describe("GET /readyz and /healthz", () => {
   });
 
   test("/healthz does not touch the dependencies", async () => {
-    const app = createApp({
+    const app = createTestApp({
       ready: () => {
         throw new Error("must not be called");
       },

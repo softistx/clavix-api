@@ -5,6 +5,7 @@ import { access, linkTenantToPlatform } from "@/config/access";
 import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
@@ -230,6 +231,7 @@ describe("clients and client", () => {
   test("the grant types a script recorded are shown", async () => {
     await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
@@ -419,6 +421,7 @@ describe("clients and client", () => {
   test("a client made by the script is listed too", async () => {
     await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),

@@ -10,25 +10,20 @@ import type { ClaimsFor, RolesFor } from "./ports";
 /** What the OIDC provider of the issuers reads of the options. */
 export interface OidcOptions {
   claimsFor: ClaimsFor;
-  rolesFor?: RolesFor;
+  rolesFor: RolesFor;
 }
 
-/**
- * The claims of a tenant's user with its `roles` claim (slice A2c) when the
- * `rolesFor` port is given.
- */
+/** The claims of a tenant's user with its `roles` claim (slice A2c). */
 async function withRoles(
   options: OidcOptions,
   tenant: ResolvedTenant,
   subject: OidcSubject,
   claims: OidcClaims | Promise<OidcClaims>,
 ): Promise<OidcClaims> {
-  return options.rolesFor === undefined
-    ? claims
-    : {
-        ...(await claims),
-        roles: await options.rolesFor(tenant)(subject.id, null),
-      };
+  return {
+    ...(await claims),
+    roles: await options.rolesFor(tenant)(subject.id, null),
+  };
 }
 
 /**

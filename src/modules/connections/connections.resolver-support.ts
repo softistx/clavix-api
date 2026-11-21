@@ -19,7 +19,7 @@ export async function homeRealmScope(ctx: Context) {
   }
   requireLive(tenant);
   ctx.set.headers.set("cache-control", "no-store");
-  await ctx.homeRealmThrottle?.check({
+  await ctx.homeRealmThrottle.check({
     tenantId: tenant.tenantId,
     ip: ctx.ip,
   });

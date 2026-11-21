@@ -17,14 +17,14 @@ export interface RecheckDeps {
 }
 
 /**
- * Runs the TXT recheck on each tick of the queue (every 6 hours). Without a
- * queue (development, no Redis) nothing runs: there is no pass at start, since
+ * Runs the TXT recheck on each tick of the queue (every 6 hours). The caller
+ * starts it only with a queue (no Redis, no worker): there is no pass at start, since
  * a recheck is slow and not needed to serve.
  */
-export function startDomainRecheck(deps: RecheckDeps, queue?: RecheckQueue) {
+export function startDomainRecheck(deps: RecheckDeps, queue: RecheckQueue) {
   const log = deps.log;
   queue
-    ?.work(async () => {
+    .work(async () => {
       await deps.recheckAll(deps.notify);
     })
     .on("error", (error) => log(`domains: ${String(error)}`));

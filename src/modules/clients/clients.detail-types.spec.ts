@@ -7,6 +7,7 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { scopeToTenant } from "@softistx/mongo";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesService } from "@/config/resources";
 import { consentReadyOf, mongoClientDetailTypes } from "@/modules/resources";
@@ -34,7 +35,7 @@ const register = (
       now: () => new Date(),
       db: oauthDb,
       findTenant,
-      ...(port === null ? {} : { detailTypes: port }),
+      detailTypes: port === null ? noDetailTypes : port,
     },
     {
       tenant: slug,
@@ -220,12 +221,12 @@ describe("a client's detail types", () => {
     expect(device.detailTypes).toEqual(["payment"]);
   });
 
-  test("without the types port a client cannot list any", async () => {
+  test("a tenant with no detail types: a client cannot list any", async () => {
     expect(
       await refusal(
         register("r3-a", { clientId: "bare", detailTypes: ["payment"] }, null),
       ),
-    ).toContain("not available");
+    ).toContain("unknown detail type");
   });
 
   test("consentReadyOf reads slugs and *", () => {

@@ -11,11 +11,11 @@ import {
   softwareAuthenticator,
 } from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
@@ -31,7 +31,9 @@ import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of
@@ -60,6 +62,7 @@ const IDP_ISSUER = `https://${IDP_HOST}`;
 const memory = mailer as MemoryMailer;
 
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -85,7 +88,7 @@ const recording = (into: Who[]) =>
       if (throttled) throw new Error("throttled");
     },
   }) as never;
-const app = createApp({
+const app = createTestApp({
   signInThrottle: recording(checks),
   homeRealmThrottle: recording(homeChecks),
   ssoStartThrottle: recording(startChecks),
@@ -93,6 +96,7 @@ const app = createApp({
 
 // The upstream: its own OAuth issuers over the same database, like oidc.spec.
 const idpResolver = (await import("@/tenancy/resolver")).createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: (slug: string) => mongo.db.tenants.findFirst({ slug }),
   cache: (await import("@/tenancy/tenant-cache")).noTenantCache,
@@ -118,6 +122,7 @@ const claimsFor: ClaimsFor = () => async (subject) => ({
   email_verified: true,
 });
 const idp = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: idpResolver,
@@ -305,6 +310,7 @@ beforeAll(async () => {
   });
   const registered = await registerClient(
     {
+      detailTypes: noDetailTypes,
       now: () => new Date(),
       db: oauthDb,
       findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),

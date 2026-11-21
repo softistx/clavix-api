@@ -11,6 +11,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../test/tenant-par-off";
 import { createClavixOAuthIssuers } from "./issuers";
 import type { AuthFor, SigningKeysFor } from "./ports";
@@ -23,12 +24,14 @@ const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
@@ -67,6 +70,7 @@ const resourcesFor = () => ({
   [NO_SCOPE_RESOURCE]: { scopes: [] },
 });
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,

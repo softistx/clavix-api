@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { graphqlClient } from "@softistx/alxia-graphql/testing";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { graphql } from "~/generated/graphql";
-import { createApp } from "./app";
 import { version } from "./modules/health";
 
-const app = createApp();
+const app = createTestApp();
 
 const Health = graphql(`
   query Health {
@@ -34,11 +34,11 @@ test("Query.health answers ok and the version through /graphql", async () => {
 
 // The page runs a third-party script on the origin that holds the session
 // cookie: it is never served unless the IDE is switched on (development).
-const openIde = (target: ReturnType<typeof createApp>) =>
+const openIde = (target: ReturnType<typeof createTestApp>) =>
   target.request("http://localhost/graphql", {
     headers: { accept: "text/html,application/xhtml+xml" },
   });
-const introspect = async (target: ReturnType<typeof createApp>) => {
+const introspect = async (target: ReturnType<typeof createTestApp>) => {
   const response = await target.request("http://localhost/graphql", {
     method: "POST",
     headers: { ...clientHeaders, "content-type": "application/json" },
@@ -75,7 +75,7 @@ test("the hosted schema is not introspected by default", async () => {
 });
 
 test("with the IDE switched on (development) the page and introspection are back", async () => {
-  const dev = createApp({ ide: true });
+  const dev = createTestApp({ ide: true });
   const response = await openIde(dev);
   expect(response.headers.get("content-type")).toContain("text/html");
   expect((await introspect(dev)).errors).toBeUndefined();

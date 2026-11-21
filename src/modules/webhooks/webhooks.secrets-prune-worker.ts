@@ -8,18 +8,18 @@ export interface SecretsPruneQueue {
 }
 
 /**
- * Runs the clean-up on each daily tick of the queue. Without a queue
- * (development, no Redis) nothing runs: an expired secret is ignored at send
+ * Runs the clean-up on each daily tick of the queue. The server starts it
+ * only with a queue (development, no Redis: no worker): an expired secret is ignored at send
  * time anyway. A pass that left a tenant unfinished throws, so the queue
  * retries it.
  */
 export function startWebhookSecretsPrune(
   run: () => Promise<SecretsPruneReport>,
-  queue: SecretsPruneQueue | undefined,
+  queue: SecretsPruneQueue,
   log: (message: string) => void,
 ) {
   queue
-    ?.work(async () => {
+    .work(async () => {
       const { failed } = await run();
       if (failed > 0) {
         throw new Error(

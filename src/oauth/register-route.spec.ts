@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
+import { noThrottle } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
@@ -458,6 +459,7 @@ describe("agent records", () => {
     const route = createRegisterRoute({
       resolver: tenantResolver,
       serverFor: flow.issuers.serverFor,
+      throttle: noThrottle,
       agents: {
         ...agentClientsService,
         count: async () => 0,

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { ObjectId } from "mongodb";
 import {
-  agentKindsOf,
   capability,
   clientsKey,
   grantsOf,
@@ -107,15 +106,18 @@ describe("target, clientsKey and isClientId", () => {
 
 describe("clients utils: views and settings", () => {
   test("viewOf hides the secret hash and defaults the grants", () => {
-    const view = viewOf({
-      id: "web",
-      name: "Web",
-      redirectUris: [],
-      source: "registered",
-      createdAt: new Date(0),
-      expiresAt: null,
-      secretHash: "h",
-    });
+    const view = viewOf(
+      {
+        id: "web",
+        name: "Web",
+        redirectUris: [],
+        source: "registered",
+        createdAt: new Date(0),
+        expiresAt: null,
+        secretHash: "h",
+      },
+      new Map(),
+    );
     expect(view.type).toBe("confidential");
     expect(view.grantTypes).toEqual(["authorization_code", "refresh_token"]);
     expect(view).not.toHaveProperty("secretHash");
@@ -130,11 +132,11 @@ describe("clients utils: views and settings", () => {
       createdAt: new Date(0),
       expiresAt: null,
     });
-    expect(registrationOf(record("metadata"))).toBe("metadata");
+    expect(registrationOf(record("metadata"), new Map())).toBe("metadata");
     expect(
       registrationOf(record("registered"), new Map([["a", "dynamic"]])),
     ).toBe("dynamic");
-    expect(registrationOf(record("registered"))).toBe("console");
+    expect(registrationOf(record("registered"), new Map())).toBe("console");
   });
 
   test("capability returns the method or throws", () => {
@@ -146,10 +148,5 @@ describe("clients utils: views and settings", () => {
     expect(sentSettings({ requirePar: false, grants: undefined })).toEqual({
       requirePar: false,
     });
-  });
-
-  test("agentKindsOf reads none without the store", async () => {
-    const tenant = { _id: { toHexString: () => "t" } } as never;
-    expect((await agentKindsOf(undefined, tenant)(["a"])).size).toBe(0);
   });
 });

@@ -142,7 +142,7 @@ export class AuthService {
     requireLive(tenant);
     requireMethod(tenant, "emailCode");
     ctx.set.headers.set("cache-control", "no-store");
-    await ctx.signInThrottle?.check({ tenantId: tenant.tenantId, ip: ctx.ip });
+    await ctx.signInThrottle.check({ tenantId: tenant.tenantId, ip: ctx.ip });
     await requireNoSso(tenant.tenantId, email);
     const mail = this.ports.mailOf(tenant);
     const { signUp } = tenant;
@@ -209,7 +209,7 @@ export class AuthService {
     // Off: before any budget, store or mail is touched.
     if (!auth.magicLink.enabled) throw magicLinkDisabled();
     ctx.set.headers.set("cache-control", "no-store");
-    await ctx.signInThrottle?.check({ tenantId: tenant.tenantId, ip: ctx.ip });
+    await ctx.signInThrottle.check({ tenantId: tenant.tenantId, ip: ctx.ip });
     await requireNoSso(tenant.tenantId, email);
     const mail = this.ports.mailOf(tenant);
     const { signUp } = tenant;
@@ -269,7 +269,7 @@ export class AuthService {
     requireLive(tenant);
     const { user } = await this.signedIn(auth, ctx.request);
     ctx.set.headers.set("cache-control", "no-store");
-    await ctx.verifyThrottle?.check({
+    await ctx.verifyThrottle.check({
       tenantId: tenant.tenantId,
       userId: user.id,
       ip: ctx.ip,

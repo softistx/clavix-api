@@ -14,7 +14,7 @@ import { unique } from "@/shared/values";
  * for it is `invalid_authorization_details`.
  */
 export async function detailTypesOf(
-  port: ClientDetailTypes | undefined,
+  port: ClientDetailTypes,
   tenant: CliTenant,
   asked: readonly string[] | undefined,
   kept: readonly string[],
@@ -23,11 +23,6 @@ export async function detailTypesOf(
   const listed = unique(asked ?? kept);
   if (listed.length === 0) return [];
   if (asked !== undefined) {
-    if (port === undefined) {
-      throw new CliInputError(
-        "detail types are not available here: the tenant's types are not wired",
-      );
-    }
     const known = await port.namesOf(tenant);
     const unknown = listed.filter((type) => !known.has(type));
     if (unknown.length > 0) {
@@ -41,7 +36,7 @@ export async function detailTypesOf(
       "a client that lists detail types must require PAR (--require-par): authorization details in a URL are not protected",
     );
   }
-  if (client.hasConsent && (port === undefined || !port.consentReady(tenant))) {
+  if (client.hasConsent && !port.consentReady(tenant)) {
     throw new CliInputError(
       `tenant "${tenant.slug}" cannot let a client that uses /authorize or the device grant list detail types yet: its consent pages do not show them (a token-exchange-only client can; see CLAVIX_RAR_CONSENT_READY)`,
     );

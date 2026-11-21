@@ -157,7 +157,7 @@ export function capability<T>(method: T | undefined, name: string): T {
 /** How a janus record was registered: a metadata document is one, a registered client the agents store knows is dynamic. */
 export const registrationOf = (
   record: OAuthClientRecord,
-  agents: AgentKinds = new Map(),
+  agents: AgentKinds,
 ): ClientRegistration =>
   record.source === "metadata"
     ? "metadata"
@@ -166,7 +166,7 @@ export const registrationOf = (
 /** A janus record as the console shows it, without its secret hash. */
 export const viewOf = (
   record: OAuthClientRecord,
-  agents?: AgentKinds,
+  agents: AgentKinds,
 ): ClientView => ({
   clientId: record.id,
   name: record.name,
@@ -183,11 +183,11 @@ export const viewOf = (
   defaultScopes: record.defaultScopes ?? [],
 });
 
-/** Reads the tenant's agents among some client ids (bounded by them; none without the store). */
+/** Reads the tenant's agents among some client ids (bounded by them). */
 export const agentKindsOf =
-  (agents: AgentsReader | undefined, tenant: CliTenant): AgentKindsOf =>
+  (agents: AgentsReader, tenant: CliTenant): AgentKindsOf =>
   async (clientIds): Promise<AgentKinds> =>
-    (await agents?.kinds(tenant._id.toHexString(), clientIds)) ?? new Map();
+    await agents.kinds(tenant._id.toHexString(), clientIds);
 
 /**
  * The settings a create or an update call sent, without the omitted ones:

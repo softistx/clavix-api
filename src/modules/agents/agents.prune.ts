@@ -21,9 +21,8 @@ export interface PruneDeps {
    * (the console's clients lock), serialized with the console's client writes.
    * Consent approval does not take it: a grant made between the two is revoked
    * with the agent (a very small window).
-   * Without it they run unserialized.
    */
-  locked?<T>(tenantId: string, work: () => Promise<T>): Promise<T>;
+  locked<T>(tenantId: string, work: () => Promise<T>): Promise<T>;
   /** The admin event of one deleted agent. */
   emit(event: AgentPruneEvent): Promise<void>;
   log: (message: string) => void;
@@ -64,7 +63,7 @@ export async function pruneAgents(
     }
     for (const clientId of ids) {
       try {
-        const run = deps.locked?.bind(deps) ?? ((_t, work) => work());
+        const run = deps.locked.bind(deps);
         const removed = await run(tenantId, async () => {
           if (await deps.hasStandingGrant(tenantId, clientId)) return false;
           return deps.remove(tenantId, clientId);

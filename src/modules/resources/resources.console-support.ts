@@ -1,9 +1,8 @@
 import { ObjectId } from "mongodb";
 import { clientPoliciesService } from "@/config/client-policies";
-import { env } from "@/config/env";
 import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
-import { tenantResolver } from "@/config/tenancy";
+import { tenantDomain, tenantResolver } from "@/config/tenancy";
 import type { ConsoleContext } from "@/console/context";
 import { refusing } from "@/console/modules/catalog-support";
 import { keepConsoleResource } from "@/console/modules/reserved";
@@ -17,10 +16,10 @@ import { resourceShape, target } from "./resources.utils";
 // primary host when it has one) and DPoP policy come from the resolved
 // tenant, read once per request however many resources it shows. A host that
 // does not resolve gives `null` documents, never an error.
-export const documentsOf = (slug: string) => {
+export const documentsOf = (slug: string, domain: string) => {
   let tenant: ReturnType<typeof tenantResolver.resolveHost> | undefined;
   return async (resource: StoredResourceDoc, scopes: StoredScopeDoc[]) => {
-    tenant ??= tenantResolver.resolveHost(hostOf(slug, env.CLAVIX_DOMAIN));
+    tenant ??= tenantResolver.resolveHost(hostOf(slug, domain));
     const resolved = await tenant;
     if (resolved === null) return null;
     return protectedResourceDocument({
@@ -41,7 +40,7 @@ export async function showResources(tenant: CliTenant) {
     resourcesService.listScopes(tenant._id),
     resourcesService.listDetailTypes(tenant._id),
   ]);
-  const documentOf = documentsOf(tenant.slug);
+  const documentOf = documentsOf(tenant.slug, tenantDomain);
   return Promise.all(
     found.map(async (resource) =>
       resourceShape(
@@ -69,7 +68,7 @@ export async function showResource(
     resource,
     scopes,
     types,
-    await documentsOf(tenant.slug)(resource, scopes),
+    await documentsOf(tenant.slug, tenantDomain)(resource, scopes),
   );
 }
 

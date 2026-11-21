@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { noQueue } from "@/config/no-ops";
 import { keyRotation } from "./keys.queue";
 import { startKeyRotation } from "./keys.worker";
 
@@ -29,15 +30,18 @@ describe("startKeyRotation", () => {
 
   test("with no queue only the start pass runs", async () => {
     let n = 0;
-    await startKeyRotation({
-      signingKeysFor: () => {
-        n += 1;
-        throw new Error("x");
+    await startKeyRotation(
+      {
+        signingKeysFor: () => {
+          n += 1;
+          throw new Error("x");
+        },
+        activeTenantIds: async () => ["x"],
+        now: () => new Date(),
+        log: () => {},
       },
-      activeTenantIds: async () => ["x"],
-      now: () => new Date(),
-      log: () => {},
-    });
+      noQueue,
+    );
     expect(n).toBe(1);
   });
 });

@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -13,13 +12,14 @@ import { settled } from "@/modules/auth";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
 // `confirmSecondFactorWithPasskey` (clavix-api#293): the hosted second-factor
 // page answers a `SecondFactorChallenge` with a passkey bound to it.
 
 const memory = mailer as MemoryMailer;
-const app = createApp();
+const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,

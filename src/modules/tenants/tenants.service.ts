@@ -7,7 +7,6 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { env } from "@/config/env";
 import { newTenantOAuthPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
 import {
   InvalidSlugError,
@@ -60,10 +59,10 @@ export class TenantsService {
     private readonly collection: TypedCollection<typeof tenants>,
     options: TenantsServiceOptions,
   ) {
-    this.domain = options.domain ?? env.CLAVIX_DOMAIN;
-    this.onHostsChanged = options.onHostsChanged ?? (() => {});
-    this.hostsOf = options.hostsOf ?? (() => []);
-    this.onCreated = options.onCreated ?? (() => {});
+    this.domain = options.domain;
+    this.onHostsChanged = options.onHostsChanged;
+    this.hostsOf = options.hostsOf;
+    this.onCreated = options.onCreated;
     this.log = options.log;
     this.now = options.now;
   }

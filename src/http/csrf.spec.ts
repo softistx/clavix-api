@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { createApp } from "@/app";
 import { createConsoleDeps } from "@/config/console";
 import { CONSOLE_PATH } from "@/console/identity";
+import { createTestApp } from "~/app";
 import { CLIENT_HEADER } from "./csrf";
 
 const consoleDeps = {
@@ -25,10 +25,14 @@ const send = (
   url: string,
   headers: Record<string, string>,
 ) =>
-  createApp({ requireClientHeader: required, console: consoleDeps }).request(
-    url,
-    { method: "POST", headers: { ...json, ...headers }, body: QUERY },
-  );
+  createTestApp({
+    requireClientHeader: required,
+    console: consoleDeps,
+  }).request(url, {
+    method: "POST",
+    headers: { ...json, ...headers },
+    body: QUERY,
+  });
 const codeOf = async (response: Response) =>
   ((await response.json()) as Body).errors?.[0]?.extensions?.code;
 
@@ -71,7 +75,7 @@ test("on: a consent operation without the header is 403, never NOT_FOUND", async
   // The client header runs before the same-origin guard, whose refusal of a
   // consent operation is NOT_FOUND (same-origin.spec.ts): a foreign Origin
   // would be 404 with the header present, and is 403 without it.
-  const response = await createApp({ requireClientHeader: true }).request(
+  const response = await createTestApp({ requireClientHeader: true }).request(
     paths[0] as string,
     {
       method: "POST",
@@ -86,7 +90,7 @@ test("on: a consent operation without the header is 403, never NOT_FOUND", async
 });
 
 test("on: the IDE page (an HTML GET with no query) needs no header", async () => {
-  const response = await createApp({
+  const response = await createTestApp({
     requireClientHeader: true,
     ide: true,
   }).request(paths[0] as string, { headers: { accept: "text/html" } });

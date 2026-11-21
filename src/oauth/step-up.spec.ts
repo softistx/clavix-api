@@ -8,9 +8,9 @@ import {
 } from "@softistx/janus-oauth";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
@@ -18,7 +18,9 @@ import { registerClient } from "@/modules/clients";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "../../test/tenant-par-off";
 import { ACR } from "./authentication-level";
 import { createClavixOAuthIssuers } from "./issuers";
@@ -46,6 +48,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
@@ -55,7 +58,7 @@ const issuers = createClavixOAuthIssuers({
   claimsFor,
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read"] } }),
 });
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 const policies = new SignInPolicyService(
   tenantsService,
   {
@@ -282,6 +285,7 @@ beforeAll(async () => {
     });
     const registered = await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
@@ -486,6 +490,7 @@ describe("the device flow", () => {
   const device = async (slug: string) => {
     await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),

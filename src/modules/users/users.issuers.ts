@@ -5,7 +5,6 @@ import type { SecretBox } from "@/modules/sign-in-methods";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import { fingerprintOf } from "./users.rp";
-import { ephemeralSecondFactorKeys } from "./users.second-factor-keys";
 import type { ConnectionsOf } from "./users.social";
 import {
   buildTenantJanus,
@@ -22,15 +21,15 @@ export interface TenantJanusOptions {
    * The sealing keys of the TOTP secrets and recovery codes
    * (`secondFactorKeysOf(masterKeys)`): the first seals, every one opens.
    */
-  secondFactorKeys?: [SealingKey, ...SealingKey[]];
-  /** Opens the tenants' sealed social secrets; without it no tenant has a social provider. */
-  secrets?: SecretBox;
-  /** The tenants' enterprise OIDC connections (M4, F1); without it no tenant has one. */
-  connections?: ConnectionsOf;
-  /** What accepting an invitation of this tenant checks and does; nothing when left out. */
-  invitationHooks?: InvitationHooksFor;
-  /** Hears the user events of one tenant's instance (D12); nothing when left out. */
-  events?: (tenant: ResolvedTenant) => UserEventListener;
+  secondFactorKeys: [SealingKey, ...SealingKey[]];
+  /** Opens the tenants' sealed social secrets. */
+  secrets: SecretBox;
+  /** The tenants' enterprise OIDC connections (M4, F1). */
+  connections: ConnectionsOf;
+  /** What accepting an invitation of this tenant checks and does (`noInvitationHooks` for a tenant with none). */
+  invitationHooks: InvitationHooksFor;
+  /** Hears the user events of one tenant's instance (D12). */
+  events: (tenant: ResolvedTenant) => UserEventListener;
 }
 
 /**
@@ -41,7 +40,7 @@ export function createTenantJanusIssuers({
   resolver,
   db,
   log,
-  secondFactorKeys = ephemeralSecondFactorKeys(),
+  secondFactorKeys,
   secrets,
   connections,
   invitationHooks,
@@ -70,8 +69,8 @@ export function createTenantJanusIssuers({
         tenant,
         log,
         secrets,
-        invitationHooks?.(tenant),
-        events?.(tenant),
+        invitationHooks(tenant),
+        events(tenant),
         secondFactorKeys,
         connections,
       ),

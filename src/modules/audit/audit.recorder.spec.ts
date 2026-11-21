@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -16,18 +15,21 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a
 // recorder that is down never fails the sign-in (D13).
 const memory = mailer as MemoryMailer;
-const app = createApp();
+const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),

@@ -1,12 +1,12 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 import { adminEvents } from "./admin-events/admin-events.model";
@@ -95,7 +95,7 @@ const as = (
   query: string,
   options: { recorder?: AdminEventRecorder; headers?: HeadersInit } = {},
 ) =>
-  createApp({
+  createTestApp({
     console: {
       ...verifiedCallers(deps),
       ...(options.recorder === undefined

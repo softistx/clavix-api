@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { s256Challenge } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
@@ -39,7 +40,12 @@ beforeAll(async () => {
   await flow.setUp("par-off");
   await flow.setUp("par-client");
   const registered = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: "par-client",
       name: "Pushing",
@@ -161,7 +167,10 @@ describe("the /par endpoint of a suspended tenant", () => {
     const tenant = await findTenant("par-off");
     if (tenant === undefined) throw new Error("no tenant");
     await tenantsService.suspend(tenant._id);
-    const guarded = withTenantState(flow.issuers, { resolver: tenantResolver });
+    const guarded = withTenantState(flow.issuers, {
+      resolver: tenantResolver,
+      onActive: async () => {},
+    });
     const response = await guarded.handle(
       new Request(flow.url("par-off", "/par"), { method: "POST" }),
     );

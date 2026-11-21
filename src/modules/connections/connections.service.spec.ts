@@ -27,6 +27,7 @@ const service = new ConnectionsService(collection, box, {
     },
   },
   links: async () => linked,
+  advertisesIss: async () => false,
   now: () => clock,
   log: (message) => logged.push(message),
 });

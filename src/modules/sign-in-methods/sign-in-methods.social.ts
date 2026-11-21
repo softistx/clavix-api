@@ -23,7 +23,7 @@ const PRESETS = { google, github, microsoft } as const;
 export function socialProvidersOf(
   tenant: ResolvedTenant,
   box: SecretBox,
-  onSkipped: (provider: SocialProviderId, reason: string) => void = () => {},
+  onSkipped: (provider: SocialProviderId, reason: string) => void,
 ): Record<string, SocialProvider> {
   const providers: Record<string, SocialProvider> = {};
   for (const entry of enabledSocial(tenant.signIn)) {

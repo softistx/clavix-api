@@ -1,4 +1,3 @@
-import { mintWebhookSecret } from "@softistx/janus-webhooks";
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import {
@@ -57,7 +56,7 @@ export class WebhooksService {
     private readonly options: WebhooksServiceOptions,
   ) {
     this.now = options.now;
-    this.mint = options.mint ?? mintWebhookSecret;
+    this.mint = options.mint;
     this.log = options.log;
   }
 

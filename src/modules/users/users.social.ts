@@ -18,9 +18,10 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 /** Where a tenant's enterprise OIDC connections are read (`ConnectionsService`). */
 export interface ConnectionsOf {
   sourceOf(tenantId: string): ConnectionSource;
-  /** Specs only: the host resolver of the guard's address check; DNS when absent. */
-  resolveHost?(): OidcConnectionsOptions["resolveHost"];
-  fetch?(): OidcConnectionsOptions["fetch"];
+  /** The host resolver of the guard's address check; `undefined`: janus's own (DNS). */
+  resolveHost(): OidcConnectionsOptions["resolveHost"];
+  /** The transport of the requests to an identity provider; `undefined`: janus's own. */
+  fetch(): OidcConnectionsOptions["fetch"];
   /** Whether a connection may create a user at a first sign-in (D4); read on every sign-up. */
   jitAllowed(tenantId: string, connectionId: string): Promise<boolean>;
 }
@@ -41,13 +42,12 @@ function nameOf(name: string | undefined): { name?: string } {
  */
 function connectionsOfTenant(
   tenant: ResolvedTenant,
-  connections: ConnectionsOf | undefined,
+  connections: ConnectionsOf,
   log: (message: string) => void,
 ): OidcConnections | undefined {
-  if (connections === undefined) return undefined;
   try {
-    const resolveHost = connections.resolveHost?.();
-    const fetcher = connections.fetch?.();
+    const resolveHost = connections.resolveHost();
+    const fetcher = connections.fetch();
     return oidcConnections({
       source: connections.sourceOf(tenant.tenantId),
       ...(resolveHost === undefined ? {} : { resolveHost }),
@@ -96,13 +96,12 @@ function trustingUpstreamMfa(
 function signUpOf(
   tenant: ResolvedTenant,
   hasStatic: (provider: string) => boolean,
-  connections: ConnectionsOf | undefined,
+  connections: ConnectionsOf,
 ) {
   return async (profile: SocialProfile) => {
     const allowed = hasStatic(profile.provider)
       ? tenant.signUp
-      : (await connections?.jitAllowed(tenant.tenantId, profile.provider)) ===
-        true;
+      : await connections.jitAllowed(tenant.tenantId, profile.provider);
     if (!allowed) {
       throw new SocialError(
         "SIGN_UP_DISABLED",
@@ -130,25 +129,20 @@ export const unverifiedHolderOf =
 /** The tenant's own social apps (ADR-0035) and enterprise connections. A new user: through a connection when its `jit` is on, through a static app only where sign-up is open. */
 export function socialConfigOf(
   tenant: ResolvedTenant,
-  secrets: SecretBox | undefined,
+  secrets: SecretBox,
   log: (message: string) => void,
-  connections?: ConnectionsOf,
+  connections: ConnectionsOf,
 ): { config: SocialConfig | undefined; realms?: OidcConnections } {
-  const providers =
-    secrets === undefined
-      ? {}
-      : socialProvidersOf(tenant, secrets, (provider, reason) =>
-          log(
-            `social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`,
-          ),
-        );
+  const providers = socialProvidersOf(tenant, secrets, (provider, reason) =>
+    log(`social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`),
+  );
   const realms = connectionsOfTenant(tenant, connections, log);
   const hasStatic = Object.keys(providers).length > 0;
   if (!hasStatic && realms === undefined) return { config: undefined };
   return {
     config: {
       ...(hasStatic ? { providers } : {}),
-      ...(realms === undefined || connections === undefined
+      ...(realms === undefined
         ? {}
         : {
             resolveProvider: trustingUpstreamMfa(

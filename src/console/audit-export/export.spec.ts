@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { exportAs } from "~/console";
 
 const admin = exportAs("exp-admin");
@@ -248,7 +248,7 @@ describe("guards and recording", () => {
   });
 
   test("no token is a 401 with a challenge; the other methods are refused", async () => {
-    const app = createApp({
+    const app = createTestApp({
       console: {
         ...(await import("@/config/console")).createConsoleDeps({
           serverFor: async () => null,

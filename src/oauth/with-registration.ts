@@ -28,8 +28,8 @@ export interface RegistrationOptions {
     tenant: ResolvedTenant,
     clientId: string,
   ) => Promise<boolean>;
-  /** Limits the document fetch per address and tenant; none without Redis. */
-  throttle?: MetadataThrottle | undefined;
+  /** Limits the document fetch per address and tenant (`noThrottle` without Redis). */
+  throttle: MetadataThrottle;
   /** The `agents` quota that applies to the tenant (`null`: no limit). */
   agentQuotaOf: (tenantId: string) => Promise<number | null>;
   /** Serializes a tenant's new agents (count, fetch, record); see `agentsQuotaKey`. */
@@ -57,7 +57,7 @@ async function clientIdOf(request: Request): Promise<string | null> {
 interface RegistrationContext
   extends Omit<RegistrationOptions, "register" | "throttle"> {
   handle: (request: Request) => Promise<Response>;
-  throttle: MetadataThrottle | undefined;
+  throttle: MetadataThrottle;
 }
 
 /** The fetch limits, before janus fetches a document: a refusal is the response. */
@@ -67,7 +67,7 @@ async function throttleMetadata(
   ip: string | undefined,
 ): Promise<Response | null> {
   try {
-    await throttle?.check({ tenantId: tenant.tenantId, ip });
+    await throttle.check({ tenantId: tenant.tenantId, ip });
     return null;
   } catch (error) {
     if (!(error instanceof MetadataThrottledError)) throw error;

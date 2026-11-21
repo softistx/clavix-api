@@ -3,7 +3,6 @@ import {
   createMemorySigningKeys,
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
-import { createApp } from "@/app";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -19,8 +18,10 @@ import {
 } from "@/console/identity";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
+import { quietOAuth } from "~/ports";
 
 // A tenant-level role on the `clavix` tenant is not the platform's: every
 // console write that targets it needs the platform permission.
@@ -31,6 +32,7 @@ let OWNER = "";
 // The real wiring (issuers, grants): deleting a user needs the user's grants.
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
@@ -48,7 +50,7 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor,
 });
 // The bearer token is the user id: tokens are console.spec's business.
-const app = createApp({
+const app = createTestApp({
   oauth: issuers,
   console: {
     ...verifiedCallers(createConsoleDeps(issuers)),

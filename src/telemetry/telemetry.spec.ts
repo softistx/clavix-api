@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
 import type { Exporter, Signal } from "@softistx/telemetry";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -13,7 +12,9 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import { buildTelemetry } from "./build";
 import { parseOtlpHeaders } from "./otlp-headers";
 
@@ -25,6 +26,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -64,7 +66,7 @@ test("a sign-in request is traced with its tenant and no e-mail or address", asy
     production: false,
     exporters: [exporter],
   });
-  const app = createApp({ telemetry });
+  const app = createTestApp({ telemetry });
   const response = await app.request(`${issuerOf("tele", origin)}/graphql`, {
     method: "POST",
     headers: {
@@ -109,7 +111,7 @@ test("probes are not traced and read no tenant", async () => {
     production: false,
     exporters: [exporter],
   });
-  const app = createApp({ telemetry });
+  const app = createTestApp({ telemetry });
   expect((await app.request("/healthz")).status).toBe(200);
   await telemetry.close();
   expect(signals).toEqual([]);
@@ -117,7 +119,7 @@ test("probes are not traced and read no tenant", async () => {
 
 test("with no endpoint set there is no exporter, and requests still answer", async () => {
   const telemetry = buildTelemetry({ version: "test", production: false });
-  const app = createApp({ telemetry });
+  const app = createTestApp({ telemetry });
   const response = await app.request(`${issuerOf("tele", origin)}/graphql`, {
     method: "POST",
     headers: { ...clientHeaders, "content-type": "application/json" },

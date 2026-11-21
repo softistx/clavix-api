@@ -13,7 +13,7 @@ import {
   operatorScope,
 } from "@/modules/invitations/invitations.rules";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { buildTenantJanus } from "@/modules/users";
+import { quietJanus } from "~/ports";
 import { adminInvitationHooks } from "./admins.hooks";
 import { AdminsService } from "./admins.service";
 
@@ -93,11 +93,9 @@ describe("the tenant's membership lock cannot be taken", () => {
       `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
     );
     if (clavix === null) throw new Error("no clavix tenant");
-    const auth = buildTenantJanus(
+    const auth = quietJanus(
       oauthDb,
       clavix,
-      () => {},
-      undefined,
       adminInvitationHooks({
         access,
         exclusive,
@@ -147,11 +145,9 @@ describe("the operator invitation (operators:grant --create)", () => {
     );
     if (clavix === null) throw new Error("no clavix tenant");
     held = false;
-    const auth = buildTenantJanus(
+    const auth = quietJanus(
       oauthDb,
       clavix,
-      () => {},
-      undefined,
       adminInvitationHooks({
         access,
         exclusive,
@@ -189,11 +185,9 @@ describe("an owner invitation for an account that is gone", () => {
     );
     if (clavix === null) throw new Error("no clavix tenant");
     held = false;
-    const auth = buildTenantJanus(
+    const auth = quietJanus(
       oauthDb,
       clavix,
-      () => {},
-      undefined,
       adminInvitationHooks({
         access,
         exclusive,

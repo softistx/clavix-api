@@ -11,6 +11,8 @@ const ask = (
     secret: SECRET,
     platformDomain: "clavix.test",
     allowed: async (host) => allowedHosts.includes(host),
+    allowedPlatformHost: async () => false,
+    limit: async () => true,
     log: () => {},
     ...over,
   });

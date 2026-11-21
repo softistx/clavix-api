@@ -25,8 +25,8 @@ const NO_STORE = { "cache-control": "no-store" } as const;
 export interface RegisterRouteDeps {
   resolver: Pick<TenantResolver, "resolveRequest">;
   serverFor: OAuthIssuers["serverFor"];
-  /** Per address and tenant, and per tenant; none without Redis. */
-  throttle?: RegisterThrottle | undefined;
+  /** Per address and tenant, and per tenant (`noThrottle` without Redis). */
+  throttle: RegisterThrottle;
   agents: AgentClientsPort;
   /** The `agents` quota that applies to the tenant (`null`: no limit). */
   agentQuotaOf: (tenantId: string) => Promise<number | null>;
@@ -125,7 +125,7 @@ async function throttleRegistration(
   ip: string | undefined,
 ): Promise<Response | null> {
   try {
-    await throttle?.check({ tenantId: tenant.tenantId, ip });
+    await throttle.check({ tenantId: tenant.tenantId, ip });
     return null;
   } catch (error) {
     if (!(error instanceof RegisterThrottledError)) throw error;

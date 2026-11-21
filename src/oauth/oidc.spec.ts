@@ -7,11 +7,13 @@ import {
 } from "@softistx/janus-oauth";
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../test/tenant-par-off";
 import { createClavixOAuthIssuers, userinfoOf } from "./issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "./ports";
@@ -24,12 +26,14 @@ const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: findTenant,
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
@@ -66,6 +70,7 @@ const claimsFor: ClaimsFor = (tenant) => async (subject) => ({
 });
 
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
@@ -117,7 +122,12 @@ async function setUp(slug: string, withKey = true) {
     });
   }
   const registered = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: slug,
       name: "Back end",
@@ -291,7 +301,7 @@ describe("userinfo", () => {
       `Bearer ${tokens.access_token}`,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ sub: "user-acme" });
+    expect(await response.json()).toEqual({ sub: "user-acme", roles: [] });
   });
 
   test("profile and email release their claims, read in the tenant's user pool", async () => {
@@ -304,6 +314,7 @@ describe("userinfo", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       sub: "user-acme",
+      roles: [],
       name: "Name of acme",
       family_name: "Doe",
       email: "user-acme@acme.test",
@@ -320,6 +331,7 @@ describe("userinfo", () => {
     );
     expect(await response.json()).toEqual({
       sub: "user-globex",
+      roles: [],
       email: "user-globex@globex.test",
       email_verified: true,
     });

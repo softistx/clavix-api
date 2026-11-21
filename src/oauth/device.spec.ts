@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
@@ -27,7 +28,12 @@ const register = (
   grants: readonly string[] | undefined,
 ) =>
   registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: slug,
       name: `Device ${clientId}`,
@@ -210,7 +216,10 @@ describe("tenant state", () => {
     const tenant = await findTenant("dev-susp");
     if (tenant === undefined) throw new Error("no tenant");
     await tenantsService.suspend(tenant._id);
-    const guarded = withTenantState(flow.issuers, { resolver: tenantResolver });
+    const guarded = withTenantState(flow.issuers, {
+      resolver: tenantResolver,
+      onActive: async () => {},
+    });
     const response = await guarded.handle(
       new Request(flow.url("dev-susp", "/device_authorization"), {
         method: "POST",

@@ -6,9 +6,9 @@ import {
 } from "@softistx/janus-oauth";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
@@ -20,7 +20,9 @@ import {
 } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // A passkey sign-in, then the OAuth flow of the same tenant: the id_token's
@@ -35,6 +37,7 @@ const origin = {
 } as const;
 const keys = createMemorySigningKeys();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
@@ -44,9 +47,10 @@ const issuers = createClavixOAuthIssuers({
   claimsFor,
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read"] } }),
 });
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 const url = (path: string) => `${issuerOf("acme", origin)}${path}`;
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -84,6 +88,7 @@ beforeAll(async () => {
   });
   const registered = await registerClient(
     {
+      detailTypes: noDetailTypes,
       now: () => new Date(),
       db: oauthDb,
       findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),

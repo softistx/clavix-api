@@ -72,8 +72,8 @@ export interface DeliveryDeps {
   webhooks: WebhooksService;
   /** The guarded `fetch` (D21): checks the address on every send. */
   fetch: typeof fetch;
-  /** The shared queue (Redis); in memory when absent. */
-  queue?: WebhookQueue;
+  /** The shared queue (Redis, or the in-memory one bound in config). */
+  queue: WebhookQueue;
   /** Default: the Standard Webhooks schedule. */
   retries?: readonly Duration[];
   /** Default 10 s (D20). */
@@ -178,7 +178,7 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
   const listener = webhooks<ClavixWebhookEvent>({
     endpoints: endpointResolver(deps),
     fetch: deps.fetch,
-    ...(deps.queue === undefined ? {} : { queue: deps.queue }),
+    queue: deps.queue,
     ...(deps.retries === undefined ? {} : { retries: deps.retries }),
     ...(deps.timeout === undefined ? {} : { timeout: deps.timeout }),
     ...(deps.poll === undefined ? {} : { poll: deps.poll }),

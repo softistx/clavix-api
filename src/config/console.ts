@@ -17,6 +17,7 @@ import { clavixTenant, consoleDirectory } from "./console-directory";
 import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
+import { noBudgets, unthrottled } from "./no-ops";
 import { redis } from "./redis";
 import { clock, reportError, warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
@@ -80,12 +81,14 @@ export function createConsoleDeps(
     exclusive,
     budgets:
       redis === undefined
-        ? undefined
+        ? noBudgets
         : createConsoleBudgets(redis.limits, warn),
-    auditExport:
-      redis === undefined
-        ? {}
-        : { throttle: createExportThrottle(redis.limits.auditExport, warn) },
+    auditExport: {
+      throttle:
+        redis === undefined
+          ? unthrottled
+          : createExportThrottle(redis.limits.auditExport, warn),
+    },
     adminEvents: adminEventRecorder,
     activity: { admin: adminEventReader, auth: authEventsService },
     directory: consoleDirectory,

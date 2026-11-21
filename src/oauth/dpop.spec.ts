@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { decodeJwt } from "jose";
 import { mongo } from "@/config/db";
 import { dpopNonceSecretOf } from "@/config/keys";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { registerClient } from "@/modules/clients";
@@ -23,7 +24,12 @@ interface TokenAnswer {
 /** A public client of the tenant, DPoP-bound or not. */
 async function publicClient(slug: string, dpopBound?: boolean) {
   await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: slug,
       name: "Pub",
@@ -97,7 +103,12 @@ beforeAll(async () => {
   }));
   // A confidential client that must bind its tokens, on a tenant that does not require it.
   const bound = await registerClient(
-    { now: () => new Date(), db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: "dp-client",
       name: "Bound",

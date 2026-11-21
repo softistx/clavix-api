@@ -7,7 +7,6 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { MemoryMailer } from "@softistx/mail";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -22,8 +21,10 @@ import { authFor, claimsFor, forTenant } from "@/config/users";
 import { CONSOLE_PATH } from "@/console/identity";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { quietOAuth } from "~/ports";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -32,6 +33,7 @@ const origin = {
 } as const;
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
@@ -50,7 +52,7 @@ const issuers = createClavixOAuthIssuers({
 });
 // The bearer token is the user id: tokens are console.spec's business.
 const deps = createConsoleDeps(issuers);
-const app = createApp({
+const app = createTestApp({
   oauth: issuers,
   console: {
     ...verifiedCallers(deps),

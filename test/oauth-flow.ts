@@ -6,6 +6,7 @@ import {
 import { withAgentRegistration } from "@/config/agents-registration";
 import { agentCheckFor, exchangeRulesFor } from "@/config/client-policies";
 import { mongo } from "@/config/db";
+import { noDetailTypes, noThrottle } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -20,6 +21,7 @@ import type {
   RegisterThrottle,
 } from "@/oauth/register-throttle";
 import type { MetadataTransport } from "@/oauth/registration";
+import { quietOAuth } from "~/ports";
 import {
   basic,
   type FlowClient,
@@ -72,6 +74,7 @@ function issuersOf(
   signingKeysFor: (tenantId: string) => SigningKeyStore,
 ) {
   const base = createClavixOAuthIssuers({
+    ...quietOAuth,
     clock: { now: () => new Date() },
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
@@ -92,8 +95,8 @@ function issuersOf(
   });
   return withAgentRegistration(
     base,
-    options.registerThrottle ?? undefined,
-    options.metadataThrottle ?? undefined,
+    options.registerThrottle ?? noThrottle,
+    options.metadataThrottle ?? noThrottle,
   );
 }
 
@@ -125,7 +128,12 @@ function setUpOf(
       await registerStoredResource({ tenant: slug, uri, scopes: ["read"] });
     }
     const registered = await registerClient(
-      { db: oauthDb, findTenant, now: () => new Date() },
+      {
+        detailTypes: noDetailTypes,
+        db: oauthDb,
+        findTenant,
+        now: () => new Date(),
+      },
       {
         tenant: slug,
         name: "Back end",

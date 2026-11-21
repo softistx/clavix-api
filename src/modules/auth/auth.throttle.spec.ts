@@ -7,7 +7,6 @@ import {
   test,
 } from "bun:test";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { openAppRedis } from "@/config/redis";
@@ -17,7 +16,9 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import { settled } from "./auth.outbox";
 import { createSignInThrottle, type SignInLimitConfig } from "./auth.throttle";
 
@@ -27,6 +28,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -72,7 +74,7 @@ async function setup(limits: SignInLimitConfig) {
     if (ready) break;
     await Bun.sleep(20);
   }
-  const app = createApp({
+  const app = createTestApp({
     signInThrottle: createSignInThrottle(redis.limits, (message) => {
       throw new Error(message); // a spec never runs with Redis down
     }),

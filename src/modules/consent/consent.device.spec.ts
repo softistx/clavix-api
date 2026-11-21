@@ -6,10 +6,10 @@ import {
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -18,7 +18,9 @@ import { registerClient } from "@/modules/clients";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { createDeviceThrottle } from "./consent.device-throttle";
 
@@ -38,6 +40,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
@@ -83,7 +86,7 @@ const throttled = (budgets: { user: number; ip?: number; tenant?: number }) => {
   };
 };
 
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 
 interface GqlResult {
@@ -164,6 +167,7 @@ beforeAll(async () => {
     });
     await registerClient(
       {
+        detailTypes: noDetailTypes,
         now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
@@ -425,7 +429,7 @@ describe("tenant isolation", () => {
 
 describe("the throttle on code lookups", () => {
   const counters = throttled({ user: 3 });
-  const limited = createApp({
+  const limited = createTestApp({
     oauth: issuers,
     deviceThrottle: counters.throttle,
   });
@@ -465,7 +469,10 @@ describe("the throttle on code lookups", () => {
 
   test("a tenant budget trips for any user, and a refused user spends no tenant budget", async () => {
     const tight = throttled({ user: 1, tenant: 2 });
-    const app2 = createApp({ oauth: issuers, deviceThrottle: tight.throttle });
+    const app2 = createTestApp({
+      oauth: issuers,
+      deviceThrottle: tight.throttle,
+    });
     const lookup = (slug: string) =>
       gql(
         slug,
@@ -485,7 +492,10 @@ describe("the throttle on code lookups", () => {
 
   test("one approval of a live code counts once, not twice", async () => {
     const once = throttled({ user: 10 });
-    const app3 = createApp({ oauth: issuers, deviceThrottle: once.throttle });
+    const app3 = createTestApp({
+      oauth: issuers,
+      deviceThrottle: once.throttle,
+    });
     const { user_code } = await deviceCodes("dacme");
     const before = once.user.calls;
     const approved = await gql(

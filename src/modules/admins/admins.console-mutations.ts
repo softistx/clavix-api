@@ -11,7 +11,7 @@ export const adminsMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenant = await liveTenant(ctx.directory, tenantId);
     const known = await ctx.directory.findUserByEmail(email);
     if (known !== null) await ctx.members.assertNotMember(tenantId, known.id);
-    await ctx.budgets?.invitation({ tenantId });
+    await ctx.budgets.invitation({ tenantId });
     const inviter = await ctx.directory.findUser(ctx.principal.userId);
     const invitation = await refusing(() =>
       ctx.admins.invite({

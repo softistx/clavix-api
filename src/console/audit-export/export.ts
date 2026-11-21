@@ -25,7 +25,7 @@ export async function serveAuditExport(
   const { tenantId, log, format } = params;
   const now = deps.now();
   const start = rangeStart(tenant.plan, params.from, now);
-  const maxRows = deps.auditExport?.maxRows ?? EXPORT_MAX_ROWS;
+  const maxRows = deps.auditExport.maxRows ?? EXPORT_MAX_ROWS;
   const filter = { from: start, to: params.to };
   const truncated = await exceeds(deps, params, filter, maxRows);
   const failure = await recordExport(deps, userId, tenantId, log);

@@ -10,26 +10,31 @@ import {
   createMetadataThrottle,
   createRegisterThrottle,
 } from "@/oauth/register-throttle";
+import { noThrottle, noUserThrottle } from "./no-ops";
 import { redis } from "./redis";
 import { warn } from "./runtime";
 
-// The anonymous operations' limits on the app's Redis; none without REDIS_URL
-// (development), where only janus's own limits apply.
+// The anonymous operations' limits on the app's Redis; the named no-op without
+// REDIS_URL (development), where only janus's own limits apply.
 export const signInThrottle =
-  redis === undefined ? undefined : createSignInThrottle(redis.limits, warn);
+  redis === undefined ? noThrottle : createSignInThrottle(redis.limits, warn);
 export const passkeyThrottle =
-  redis === undefined ? undefined : createPasskeyThrottle(redis.limits, warn);
+  redis === undefined ? noThrottle : createPasskeyThrottle(redis.limits, warn);
 export const homeRealmThrottle =
-  redis === undefined ? undefined : createHomeRealmThrottle(redis.limits, warn);
+  redis === undefined
+    ? noThrottle
+    : createHomeRealmThrottle(redis.limits, warn);
 export const ssoStartThrottle =
-  redis === undefined ? undefined : createSsoStartThrottle(redis.limits, warn);
+  redis === undefined ? noThrottle : createSsoStartThrottle(redis.limits, warn);
 export const verifyThrottle =
   redis === undefined
-    ? undefined
+    ? noUserThrottle
     : createVerificationThrottle(redis.limits, warn);
 export const deviceThrottle =
-  redis === undefined ? undefined : createDeviceThrottle(redis.limits, warn);
+  redis === undefined
+    ? noUserThrottle
+    : createDeviceThrottle(redis.limits, warn);
 export const registerThrottle =
-  redis === undefined ? undefined : createRegisterThrottle(redis.limits, warn);
+  redis === undefined ? noThrottle : createRegisterThrottle(redis.limits, warn);
 export const metadataThrottle =
-  redis === undefined ? undefined : createMetadataThrottle(redis.limits, warn);
+  redis === undefined ? noThrottle : createMetadataThrottle(redis.limits, warn);

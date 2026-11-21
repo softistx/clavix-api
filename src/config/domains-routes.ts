@@ -10,6 +10,7 @@ import { tlsAskGate } from "@/modules/domains/domains.tls-limit";
 import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
+import { unlimited } from "./no-ops";
 import { redis } from "./redis";
 import { warn } from "./runtime";
 import { domainsService, tenantResolver } from "./tenancy";
@@ -43,10 +44,10 @@ export const tlsAskOver = (secret: string | undefined) =>
       },
     }),
     // Fails closed when Redis is down (`tlsAskGate`); no Redis at all
-    // (development, specs): no limit.
+    // (development, specs): `unlimited`.
     limit:
       askLimits === undefined
-        ? undefined
+        ? unlimited
         : tlsAskGate(
             () =>
               askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),

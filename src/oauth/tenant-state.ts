@@ -24,7 +24,7 @@ export const suspendedResponse = () =>
 export interface TenantStateOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
   /** Called after a token was issued or refreshed, with the tenant and the user (`sub`). Must not throw. */
-  onActive?: (tenantId: string, userId: string) => void | Promise<void>;
+  onActive: (tenantId: string, userId: string) => void | Promise<void>;
 }
 
 /**

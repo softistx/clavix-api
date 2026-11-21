@@ -9,7 +9,6 @@ import {
 import { defineRedis, openRedis } from "@softistx/redis";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { RedisClient } from "bun";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { tenantResolver } from "@/config/tenancy";
@@ -19,7 +18,9 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import {
   createHomeRealmThrottle,
   createSsoStartThrottle,
@@ -33,6 +34,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -82,7 +84,7 @@ async function setup(code: SsoLimitConfig, sso: SsoLimitConfig) {
   const fail = (message: string) => {
     throw new Error(message); // a spec never runs with Redis down
   };
-  const app = createApp({
+  const app = createTestApp({
     signInThrottle: createSignInThrottle(redis.limits, fail),
     homeRealmThrottle: createHomeRealmThrottle(redis.limits, fail),
     ssoStartThrottle: createSsoStartThrottle(redis.limits, fail),

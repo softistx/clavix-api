@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import { noDetailTypes } from "@/config/no-ops";
 import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
 import type { CliTenant } from "@/shared/cli";
 import { ClientsService } from "./clients.service";
@@ -22,6 +23,7 @@ const service = () =>
     db: {} as Db,
     policies: {} as ClientPoliciesService,
     agents,
+    detailTypes: noDetailTypes,
     now: () => new Date(0),
   });
 

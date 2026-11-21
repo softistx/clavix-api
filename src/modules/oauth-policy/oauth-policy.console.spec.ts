@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import type { GraphQLError } from "graphql";
-import { createApp } from "@/app";
 import { access } from "@/config/access";
 import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
+import { noBudgets, unthrottled } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
@@ -13,6 +13,7 @@ import { createExclusive } from "@/console/exclusive";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { OAuthPolicyService } from "@/modules/oauth-policy/oauth-policy.service";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 
 interface Policy {
@@ -32,8 +33,10 @@ const as = async (
   query: string,
   variables: Record<string, unknown> = {},
 ): Promise<Result> => {
-  const response = await createApp({
+  const response = await createTestApp({
     console: {
+      auditExport: { throttle: unthrottled },
+      budgets: noBudgets,
       now: () => new Date(),
       reportError: () => {},
       authenticate: async () => ({

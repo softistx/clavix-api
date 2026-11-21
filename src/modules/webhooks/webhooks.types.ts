@@ -41,7 +41,7 @@ export interface WebhooksServiceOptions {
   policy: UrlPolicy;
   now: () => Date;
   /** Mints a `whsec_` secret; a spec fixes it. */
-  mint?: () => string;
+  mint: () => string;
   log: (message: string) => void;
 }
 

@@ -7,7 +7,6 @@ import {
   test,
 } from "bun:test";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { openAppRedis } from "@/config/redis";
@@ -18,7 +17,9 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import {
   createPasskeyThrottle,
   type PasskeyLimitConfig,
@@ -30,6 +31,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -57,7 +59,7 @@ type Answer = {
 };
 
 async function post(
-  app: ReturnType<typeof createApp>,
+  app: ReturnType<typeof createTestApp>,
   slug: string,
   ip: string,
   query: string,
@@ -91,7 +93,7 @@ async function setup(limits: PasskeyLimitConfig) {
     if (ready) break;
     await Bun.sleep(20);
   }
-  const app = createApp({
+  const app = createTestApp({
     passkeyThrottle: createPasskeyThrottle(redis.limits, (message) => {
       throw new Error(message); // a spec never runs with Redis down
     }),
@@ -114,7 +116,7 @@ const base: PasskeyLimitConfig = {
 describe("unknown host", () => {
   test("is NOT_FOUND and spends no throttle budget", async () => {
     let checks = 0;
-    const app = createApp({
+    const app = createTestApp({
       passkeyThrottle: {
         check: async () => {
           checks += 1;

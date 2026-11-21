@@ -5,6 +5,7 @@ import { access } from "@/config/access";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
@@ -63,6 +64,7 @@ async function dynamicAgent(slug: string, tenantId: string, name: string) {
       now: () => new Date(),
       db: oauthDb,
       findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
+      detailTypes: noDetailTypes,
     },
     { tenant: slug, name, redirectUris: [REDIRECT] },
   );
@@ -101,6 +103,7 @@ beforeAll(async () => {
   );
   await registerClient(
     {
+      detailTypes: noDetailTypes,
       now: () => new Date(),
       db: oauthDb,
       findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
@@ -109,6 +112,7 @@ beforeAll(async () => {
   );
   await registerClient(
     {
+      detailTypes: noDetailTypes,
       now: () => new Date(),
       db: oauthDb,
       findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
@@ -120,6 +124,7 @@ beforeAll(async () => {
   // Tenant B: one console client and one agent, never seen from A.
   await registerClient(
     {
+      detailTypes: noDetailTypes,
       now: () => new Date(),
       db: oauthDb,
       findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),

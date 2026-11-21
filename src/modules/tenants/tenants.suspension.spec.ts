@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryMailer } from "@softistx/mail";
-import { createApp } from "@/app";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -9,7 +8,9 @@ import { settled } from "@/modules/auth";
 import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
+import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { quietDomains } from "~/ports";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { issuerOf } from "./tenants.utils";
 
@@ -19,7 +20,7 @@ const origin = {
   domain: env.CLAVIX_DOMAIN,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
-const app = createApp();
+const app = createTestApp();
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 
 interface Answer {
@@ -129,6 +130,7 @@ describe("a suspension and the cached custom hosts", () => {
     const records = new Map<string, TxtAnswer>();
     let clock = new Date("2026-11-12T12:00:00Z");
     const store = new DomainsService(mongo.db.domains, {
+      ...quietDomains,
       dns: {
         resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
       },
@@ -151,12 +153,13 @@ describe("a suspension and the cached custom hosts", () => {
     await store.setPrimary(created._id, second._id.toHexString());
     // The primary's record disappears for good: it lapses, and still resolves.
     records.delete(`_clavix.${primary}`);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     clock = new Date(clock.getTime() + (RECHECK_GRACE_DAYS + 1) * 86_400_000);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     expect(await store.verifiedHostsOf(created._id)).toEqual([kept]);
 
     const tenancy = createTenancy({
+      onCreated: async () => {},
       log: () => {},
       tenants: mongo.db.tenants,
       cache: memoryTenantCache(Date.now),

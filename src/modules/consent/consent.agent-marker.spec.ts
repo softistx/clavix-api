@@ -30,6 +30,5 @@ describe("agentMarksReader", () => {
     await read(request, agents, "c2");
     expect(reads).toBe(2);
     expect(read(undefined, agents, "c1")).toBeUndefined();
-    expect(read(request, undefined, "c1")).toBeUndefined();
   });
 });
