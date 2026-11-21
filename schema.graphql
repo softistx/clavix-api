@@ -190,11 +190,11 @@ type ConsentDetail {
 One line of an authorization detail: a stable `kind`, and its typed values (one per item of a list).
 """
 type ConsentDetailRow {
-  """The field's key when `kind` is `field`, `null` otherwise."""
+  """The field's key when `kind` is `FIELD`, `null` otherwise."""
   key: String
   kind: ConsentRowKind!
   """
-  The field's label in the viewer's language (`Accept-Language`, the key when the tenant wrote none); `null` unless `kind` is `field`.
+  The field's label in the viewer's language (`Accept-Language`, the key when the tenant wrote none); `null` unless `kind` is `FIELD`.
   """
   label: String
   values: [ConsentDetailValue!]!

@@ -68,7 +68,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   - **D2, protocol endpoints**: the OAuth/OIDC routes (`src/oauth`, `mountOAuth`: authorize, token, PAR, device, JWKS, discovery,
     userinfo, registration) are plain Request/Response routes beside `/graphql`; they are RFC-defined and cannot be GraphQL.
   - **D8, a console face per module**: each console resolver lives in its owning module as role files (`<m>.console*`), not in a parallel tree.
-- Hosted GraphQL enum values are UPPER_SNAKE (errors, `ConsentRowKind`, `ConsentValueKind`); errors keep theirs (D3, see Errors); the client header and `CLAVIX_REQUIRE_CLIENT_HEADER` are in "Same-origin guard and shutdown".
+- Hosted GraphQL enum values are UPPER_SNAKE (errors, `ConsentRowKind`, `ConsentValueKind`; D3, see Errors); the client header and `CLAVIX_REQUIRE_CLIENT_HEADER` are in "Same-origin guard and shutdown".
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
