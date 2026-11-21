@@ -1,11 +1,11 @@
 import { denial } from "@softistx/janus-graphql";
 import { clientsService } from "@/config/clients";
 import { resourcesService } from "@/config/resources";
+import { catalogTenant, refusing } from "@/console/modules/catalog-support";
+import { keepConsoleClient } from "@/console/modules/reserved";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { CatalogError } from "@/modules/resources";
-import { catalogTenant, refusing } from "../catalog-support";
-import { keepConsoleClient } from "../reserved";
-import { clientsKey, shape, target } from "./shape";
+import { CatalogError } from "../resources";
+import { clientsKey, shape, target } from "./clients.utils";
 
 /** Replaces a client's token exchange rules (RFC 8693), under the tenant's client lock. */
 export const setClientTokenExchange: NonNullable<

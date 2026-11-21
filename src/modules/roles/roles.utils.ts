@@ -41,3 +41,25 @@ export function countsByRole(
   for (const { _id, n } of grouped) counts.set(_id.toHexString(), n);
   return counts;
 }
+
+/** What the console shows of a role, with its member count. */
+export const shape = (role: RoleDoc, memberCount: number) => ({
+  id: role._id.toHexString(),
+  name: role.name,
+  description: role.description === "" ? null : role.description,
+  resourceId: role.resourceId?.toHexString() ?? null,
+  managed: role.managed,
+  memberCount,
+  createdAt: role.createdAt,
+});
+
+/** What an admin event names: the role or user id and its tenant. */
+export const target = (
+  type: "role" | "user",
+  id: string,
+  tenantId: string,
+) => ({
+  type,
+  id,
+  tenantId,
+});

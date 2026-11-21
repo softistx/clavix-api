@@ -344,10 +344,12 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   also removes their console relations (`access.removeUser`); every mutation that changes the account of a `clavix` user
   who holds a platform role or owns a tenant needs platform `manage` (`keepOwners`, `src/modules/users/users.owners.ts`: disable, enable,
   delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
-- **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
-  action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
-  there, never in `src/modules`.
-- **`clients` and `resources`** (issue #9) are thin: resolvers call `ClientsService`
+- **A slice adds a module** under `src/modules/<name>/` (`<name>.console.graphqls`, `<name>.console-resolver.ts`,
+  `<name>.console-guards.ts` with the guards and the audit action of each mutation: "Admin events" below) and lists it in
+  `src/console/modules/index.ts`. The modules not yet folded (A15, A16) still sit in `src/console/modules/<name>/`.
+- **`clients` and `resources`** (issue #9) are thin: their console resolvers (A14: `<name>.console-resolver.ts`, with
+  `-guards`, `-support`, and for resources `-queries` and `-mutations`; the SDL is `<name>.console.graphqls`, the shapes
+  and the input mapping `<name>.utils.ts`) call `ClientsService`
   (`src/modules/clients`, wired in `src/config/clients.ts`) and `ResourcesService`
   (`src/modules/resources`), after `liveTenant` (`catalog-support.ts`: a suspended tenant is
   readable, its writes are refused by the guard; a trashed one is `NOT_FOUND`). Queries are `onTenant("view")`, mutations `onTenant("edit")`; each mutation records
@@ -477,7 +479,7 @@ does two things, and nothing else touches the collection:
 - The request id is minted per HTTP request by the console plugin; a client's `x-request-id` is
   never used.
 
-## End-user roles (`src/modules/roles`, `src/console/modules/roles`)
+## End-user roles (`src/modules/roles`)
 
 A role is a named claim value a tenant gives to its end users (not a console admin role, which is
 `access`). Two tenant-owned collections (`roles.model.ts`, purged with the tenant by `ownedPurgers`):
@@ -660,8 +662,9 @@ comparison is `domains.check.ts`.
   service (`role-assignments`, `role-claims`, `role-counts`, `role-crud`, the four roles import cycles) are folded into
   it; the types are in `roles.types.ts`, the input checks in `roles.rules.ts`, the pure claim, sort and count helpers in
   `roles.utils.ts`, the refusal builders and codes in `roles.errors.ts`, each with its spec, and `roles.service.spec.ts`
-  runs the service on the test database. No hosted resolver: the roles are console-only until A13 folds
-  `src/console/modules/roles` in. The barrel (`index.ts`) exports the service, the error and the types; `i18n/codes.ts`
+  runs the service on the test database. No hosted resolver: the roles are console-only (A14 folded
+  `src/console/modules/roles` into the module: `roles.console.graphqls`, `roles.console-resolver.ts` with its `-support` and
+  `-guards`, `roles.console.spec.ts`; the member and count shapes and the audit target are in `roles.utils.ts`). The barrel (`index.ts`) exports the service, the error and the types; `i18n/codes.ts`
   keeps importing `roles.errors` as a leaf. Behaviour, error codes and throttles are unchanged.
 - Layout (A12, audit, agents, usage): the three modules are flat `<name>.<role>.ts`, each with one service built in
   its `src/config/<name>.ts` and registered in `services()` (`audit`, `agents`, `usage`). `AuditService`
