@@ -331,7 +331,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   `permitted` (`guard.ts`), which the audit export's route uses too (`log=auth` on `clavix` is the platform's `edit`); a new way into the console that checks a role goes through it, never `access.can` bare. A tenant-level
   role on `clavix` never writes there (`modules/platform-writes.spec.ts`). Deleting a `clavix` user
   also removes their console relations (`access.removeUser`); every mutation that changes the account of a `clavix` user
-  who holds a platform role or owns a tenant needs platform `manage` (`keepOwners`, `users/operators.ts`: disable, enable,
+  who holds a platform role or owns a tenant needs platform `manage` (`keepOwners`, `src/console/modules/users/operators.ts`: disable, enable,
   delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
 - **A slice adds a module** under `src/console/modules/<name>/` (SDL, resolvers, guards, the audit
   action of each mutation: "Admin events" below) and lists it in `modules/index.ts`; the SDL lives
@@ -372,7 +372,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   relation store has no conditional write, so the last-owner check (`LAST_OWNER`) only holds under it.
   Go through `changeRole` / `removeMember` (`service.ts`); never grant or revoke a tenant role bare.
   **One owner rule** (`otherLiveOwners`, `service.ts`): an owner counts only while they exist and can
-  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`users/operators.ts`: disable,
+  sign in (`directory.findUser(...).active`). `setRole`, `keepOwners` (`src/console/modules/users/operators.ts`: disable,
   delete and un-verify of a `clavix` user (`OwnerChange`; `touch` checks the caller only, no count), tenant ownerships and the last live platform owner, under
   `PLATFORM_OWNERS_KEY` then the members locks) and the accept hooks (`accept.ts`: no `owner` for a
   ghost, a deleted or disabled inviter) all use it. A repeat `disableUser` or un-verify is never `LAST_OWNER`.
