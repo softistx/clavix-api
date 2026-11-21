@@ -221,12 +221,12 @@ describe("a client's detail types", () => {
     expect(device.detailTypes).toEqual(["payment"]);
   });
 
-  test("without the types port a client cannot list any", async () => {
+  test("a tenant with no detail types: a client cannot list any", async () => {
     expect(
       await refusal(
         register("r3-a", { clientId: "bare", detailTypes: ["payment"] }, null),
       ),
-    ).toContain("not available");
+    ).toContain("unknown detail type");
   });
 
   test("consentReadyOf reads slugs and *", () => {

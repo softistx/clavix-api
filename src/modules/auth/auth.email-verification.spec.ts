@@ -18,7 +18,7 @@ import { createLocalJWKSet, jwtVerify } from "jose";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
-import { noDetailTypes } from "@/config/no-ops";
+import { noDetailTypes, noUserThrottle } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { openAppRedis } from "@/config/redis";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
@@ -658,6 +658,7 @@ describe("with a stubbed janus", () => {
       request: new Request("https://acme.example/graphql"),
       ip: "198.51.100.9",
       tenant: async () => ({ tenantId: "t1", status: "active" }),
+      verifyThrottle: noUserThrottle,
       set: { headers: new Headers() },
     }) as never;
 

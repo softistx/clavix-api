@@ -122,7 +122,7 @@ describe("listClientViews", () => {
     expect(next.nextCursor).toBeNull();
   });
 
-  test("a client that is not registered here is left out", async () => {
+  test("a metadata-document client is listed once the agents are read", async () => {
     const store = await storeWith([
       record("https://client.example/meta", {
         source: "metadata",
@@ -131,6 +131,7 @@ describe("listClientViews", () => {
       record("mine"),
     ]);
     expect((await all(store.listClients, { limit: 10 })).flat()).toEqual([
+      "https://client.example/meta",
       "mine",
     ]);
   });
@@ -143,7 +144,7 @@ test("capability refuses a store without the method", () => {
 });
 
 describe("countClientViews", () => {
-  test("counts every registered client over several reads, with or without q", async () => {
+  test("counts every listed client (a metadata document too) over several reads, with or without q", async () => {
     const store = await storeWith([
       ...Array.from({ length: 130 }, (_, n) => record(`app-${pad(n)}`)),
       record("other", { name: "Zed" }),
@@ -151,7 +152,7 @@ describe("countClientViews", () => {
     ]);
     expect(
       await countClientViews(store.listClients, { agents: noAgentKinds }),
-    ).toBe(131);
+    ).toBe(132);
     expect(
       await countClientViews(store.listClients, {
         q: "  APP-12 ",
