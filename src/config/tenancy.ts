@@ -70,7 +70,8 @@ export function createTenancy({
 /** The tenants' parent domain, read once from the environment. */
 export const tenantDomain = env.CLAVIX_DOMAIN;
 
-const origin = {
+/** Where a tenant's issuer lives: scheme, parent domain and port, read once from the environment. */
+export const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: tenantDomain,
   port: env.CLAVIX_PUBLIC_PORT,
