@@ -1,6 +1,6 @@
 import { INVITATION_PATH } from "@/mail/tenant-mail";
-import { InvitationsService } from "@/modules/invitations/invitations.service";
-import type { TenantInvitations } from "@/modules/invitations/invitations.types";
+import type { TenantInvitations } from "@/modules/invitations";
+import { InvitationsService } from "@/modules/invitations";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
 import { tenantMail } from "./mail";

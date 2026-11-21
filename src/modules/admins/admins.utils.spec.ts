@@ -6,6 +6,7 @@ import {
   PLATFORM_OWNERS_KEY,
   ROLE_OF,
   resendKey,
+  roleOf,
   shapeInvitation,
 } from "./admins.utils";
 
@@ -45,5 +46,19 @@ describe("admins utils", () => {
     expect(
       shapeInvitation({ ...base, invitedBy: null }, names).invitedBy,
     ).toBeNull();
+  });
+});
+
+describe("roleOf", () => {
+  const access = (held: Record<string, string[]>) => ({
+    holders: async (_tenant: string, role: string) => held[role] ?? [],
+  });
+
+  it("answers the strongest role held, or null", async () => {
+    const held = access({ owner: ["a"], admin: ["a", "b"], viewer: ["c"] });
+    expect(await roleOf(held, "t", "a")).toBe("owner");
+    expect(await roleOf(held, "t", "b")).toBe("admin");
+    expect(await roleOf(held, "t", "c")).toBe("viewer");
+    expect(await roleOf(held, "t", "d")).toBeNull();
   });
 });

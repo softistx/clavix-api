@@ -6,8 +6,7 @@ import {
   adminTenantOf,
   isOperatorScope,
 } from "@/modules/invitations/invitations.rules";
-import { roleOf } from "./admins.service";
-import { membersKey } from "./admins.utils";
+import { membersKey, roleOf } from "./admins.utils";
 
 interface Accepting {
   invitation: { scope: string; role: string; invitedBy?: string | null };

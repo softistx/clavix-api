@@ -5,7 +5,7 @@ import type {
   TenantUserView,
   UserSecondFactorView,
 } from "@/console/context";
-import { TenantUnavailableError } from "@/modules/invitations/invitations.errors";
+import { TenantUnavailableError } from "@/modules/invitations";
 import { userScope } from "@/modules/invitations/invitations.rules";
 import { gone } from "./users.errors";
 import type { TenantJanus } from "./users.tenant-janus";

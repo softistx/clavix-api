@@ -1,10 +1,10 @@
 import type { AdminInvitation, ConsoleAdmins } from "@/console/context";
 import { isRole } from "@/console/model";
-import { adminScope } from "@/modules/invitations/invitations.rules";
 import type {
   PendingInvitation,
   TenantInvitations,
-} from "@/modules/invitations/invitations.types";
+} from "@/modules/invitations";
+import { adminScope } from "@/modules/invitations/invitations.rules";
 
 const toAdminInvitation = (invitation: PendingInvitation): AdminInvitation => ({
   ...invitation,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConsoleContext } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
 import type { Role } from "@/console/model";
+import { withMembers } from "~/members";
 import { keepOwners, type OwnerChange } from "./users.owners";
 
 const PLATFORM = { slug: "clavix" };
@@ -26,7 +27,7 @@ function fake(setup: Setup = {}) {
   const owners = setup.owners ?? {};
   const platform = setup.platform ?? [];
   let reads = 0;
-  const ctx = {
+  const ctx = withMembers({
     exclusive: createExclusive(),
     canPlatform: async () => setup.manage ?? true,
     directory: {
@@ -53,7 +54,7 @@ function fake(setup: Setup = {}) {
           .map(([tenantId]) => ({ tenantId, role: "owner" as const }));
       },
     },
-  } as unknown as ConsoleContext;
+  });
   return ctx;
 }
 

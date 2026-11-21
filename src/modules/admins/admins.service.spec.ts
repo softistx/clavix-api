@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createExclusive } from "@/console/exclusive";
 import type { Role } from "@/console/model";
-import { type AdminsAccess, changeRole, removeMember } from "./admins.service";
+import { AdminsService } from "./admins.service";
+import type { AdminsAccess } from "./admins.types";
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 1));
 
@@ -20,6 +21,7 @@ function fake(
       await tick();
       return [...(held.get(role) ?? [])];
     },
+    platformHolders: async () => [],
     grantTenant: async (_tenant, user, role) => {
       await tick();
       held.get(role)?.add(user);
@@ -36,7 +38,12 @@ function fake(
         ? null
         : { id, email: `${id}@t.test`, active: !disabled.includes(id) },
   };
-  return { deps: { access, exclusive: createExclusive(), directory }, of };
+  const service = new AdminsService({
+    access,
+    exclusive: createExclusive(),
+    directory,
+  });
+  return { service, of };
 }
 
 const codeOf = (result: PromiseSettledResult<unknown>) =>
@@ -46,20 +53,20 @@ const codeOf = (result: PromiseSettledResult<unknown>) =>
 
 describe("the last owner, under concurrent changes", () => {
   test("two owners removed at the same moment: one goes, the other is refused", async () => {
-    const { deps, of } = fake({ owner: ["a", "b"] });
+    const { service, of } = fake({ owner: ["a", "b"] });
     const results = await Promise.allSettled([
-      removeMember(deps, "t", "a"),
-      removeMember(deps, "t", "b"),
+      service.removeMember("t", "a"),
+      service.removeMember("t", "b"),
     ]);
     expect(results.map(codeOf)).toEqual(["ok", "LAST_OWNER"]);
     expect(of("owner")).toEqual(["b"]);
   });
 
   test("two owners demoted at the same moment: an owner stays", async () => {
-    const { deps, of } = fake({ owner: ["a", "b"] });
+    const { service, of } = fake({ owner: ["a", "b"] });
     const results = await Promise.allSettled([
-      changeRole(deps, "t", "a", "admin"),
-      changeRole(deps, "t", "b", "viewer"),
+      service.changeRole("t", "a", "admin"),
+      service.changeRole("t", "b", "viewer"),
     ]);
     expect(results.map(codeOf)).toEqual(["ok", "LAST_OWNER"]);
     expect(of("owner")).toEqual(["b"]);
@@ -70,21 +77,21 @@ describe("the last owner, under concurrent changes", () => {
   test("a no-op on b beside b's promotion and a's demotion never leaves no owner", async () => {
     // Unserialised, the first call read `b` as an admin, then revoked the
     // owner role `b` got meanwhile, after `a` had stepped down.
-    const { deps, of } = fake({ owner: ["a"], admin: ["b"] });
+    const { service, of } = fake({ owner: ["a"], admin: ["b"] });
     await Promise.allSettled([
-      changeRole(deps, "t", "b", "admin"),
-      changeRole(deps, "t", "b", "owner"),
-      changeRole(deps, "t", "a", "admin"),
+      service.changeRole("t", "b", "admin"),
+      service.changeRole("t", "b", "owner"),
+      service.changeRole("t", "a", "admin"),
     ]);
     expect(of("owner")).toEqual(["b"]);
     expect(of("admin")).toEqual(["a"]);
   });
 
   test("two changes of one member: the member keeps exactly one role", async () => {
-    const { deps, of } = fake({ owner: ["o"], viewer: ["a"] });
+    const { service, of } = fake({ owner: ["o"], viewer: ["a"] });
     const results = await Promise.all([
-      changeRole(deps, "t", "a", "admin"),
-      changeRole(deps, "t", "a", "viewer"),
+      service.changeRole("t", "a", "admin"),
+      service.changeRole("t", "a", "viewer"),
     ]);
     expect(results).toEqual(["admin", "viewer"]);
     expect(of("admin")).toEqual([]);
@@ -92,12 +99,12 @@ describe("the last owner, under concurrent changes", () => {
   });
 
   test("a change answers NOT_FOUND for a non-member; removing one is a no-op", async () => {
-    const { deps, of } = fake({ owner: ["o"] });
+    const { service, of } = fake({ owner: ["o"] });
     const [change] = await Promise.allSettled([
-      changeRole(deps, "t", "x", "admin"),
+      service.changeRole("t", "x", "admin"),
     ]);
     expect(codeOf(change as PromiseSettledResult<unknown>)).toBe("NOT_FOUND");
-    await removeMember(deps, "t", "x");
+    await service.removeMember("t", "x");
     expect(of("admin")).toEqual([]);
     expect(of("owner")).toEqual(["o"]);
   });
@@ -105,25 +112,33 @@ describe("the last owner, under concurrent changes", () => {
 
 describe("one owner rule: an owner who cannot sign in does not count", () => {
   test("disable X, then Y steps down or is removed: LAST_OWNER, nothing changed", async () => {
-    const { deps, of } = fake({ owner: ["x", "y"] }, { disabled: ["x"] });
+    const { service, of } = fake({ owner: ["x", "y"] }, { disabled: ["x"] });
     const results = await Promise.allSettled([
-      changeRole(deps, "t", "y", "admin"),
-      removeMember(deps, "t", "y"),
+      service.changeRole("t", "y", "admin"),
+      service.removeMember("t", "y"),
     ]);
     expect(results.map(codeOf)).toEqual(["LAST_OWNER", "LAST_OWNER"]);
     expect(of("owner")).toEqual(["x", "y"]);
   });
 
   test("an owner whose account is gone does not count either", async () => {
-    const { deps, of } = fake({ owner: ["ghost", "y"] }, { gone: ["ghost"] });
-    const [removal] = await Promise.allSettled([removeMember(deps, "t", "y")]);
+    const { service, of } = fake(
+      { owner: ["ghost", "y"] },
+      { gone: ["ghost"] },
+    );
+    const [removal] = await Promise.allSettled([
+      service.removeMember("t", "y"),
+    ]);
     expect(codeOf(removal as PromiseSettledResult<unknown>)).toBe("LAST_OWNER");
     expect(of("owner")).toEqual(["ghost", "y"]);
   });
 
   test("a live owner beside the one stepping down is enough", async () => {
-    const { deps, of } = fake({ owner: ["x", "y", "z"] }, { disabled: ["x"] });
-    await removeMember(deps, "t", "y");
+    const { service, of } = fake(
+      { owner: ["x", "y", "z"] },
+      { disabled: ["x"] },
+    );
+    await service.removeMember("t", "y");
     expect(of("owner")).toEqual(["x", "z"]);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { TenantUnavailableError } from "@/modules/invitations/invitations.errors";
-import type { TenantInvitations } from "@/modules/invitations/invitations.types";
+import type { TenantInvitations } from "@/modules/invitations";
+import { TenantUnavailableError } from "@/modules/invitations";
 import { UsersService } from "./users.service";
 import type { TenantJanus } from "./users.tenant-janus";
 

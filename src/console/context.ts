@@ -1,5 +1,6 @@
 import type { CoreContext } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
+import type { AdminsService } from "@/modules/admins/admins.service";
 import type { AuditService } from "@/modules/audit/audit.service";
 import type { PlanId } from "@/modules/tenants";
 import type { Access } from "./access";
@@ -251,6 +252,8 @@ export interface ConsoleExtras {
   readonly access: Access;
   readonly directory: ConsoleDirectory;
   readonly admins: ConsoleAdmins;
+  /** The memberships: who holds which role, and their writes (the one owner rule). */
+  readonly members: AdminsService;
   readonly users: ConsoleUsers;
   /** One at a time per key (a tenant's memberships). */
   readonly exclusive: Exclusive;
