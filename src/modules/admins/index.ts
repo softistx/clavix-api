@@ -1,6 +1,6 @@
 // The module's import surface (admins: the console's memberships). The console
 // resolvers are `admins.console-resolver.ts`, loaded by `console/modules`;
-// `config/admins.ts` builds the service. The invitation hooks and the janus
+// the console plugin builds the service. The invitation hooks and the janus
 // port are imported by file where they are wired (`config/users.ts`,
 // `config/console.ts`).
 

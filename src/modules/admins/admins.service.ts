@@ -13,8 +13,8 @@ import { membersKey, roleOf } from "./admins.utils";
  * The console's roles: who holds which on a tenant or on the platform, and the
  * writes of a tenant's memberships. The relation store has no conditional
  * write, so every membership write runs under the tenant's `membersKey`
- * (`Exclusive`). Built in `src/config/admins.ts`; the console's plugin builds
- * one over its own ports for the resolvers.
+ * (`Exclusive`). Built by the console's plugin over its own ports
+ * (`ctx.members`).
  */
 export class AdminsService {
   private readonly access: AdminsServiceOptions["access"];

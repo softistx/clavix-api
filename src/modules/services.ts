@@ -1,4 +1,3 @@
-import { adminsService } from "@/config/admins";
 import { agentClientsService } from "@/config/agent-clients";
 import { authEventsService } from "@/config/audit";
 import { authService } from "@/config/auth";
@@ -28,7 +27,6 @@ import { webhooksService } from "@/config/webhooks-service";
  * needs a per-request one (D10 follow-up).
  */
 export const services = () => ({
-  admins: adminsService,
   agents: agentClientsService,
   audit: authEventsService,
   auth: authService,
