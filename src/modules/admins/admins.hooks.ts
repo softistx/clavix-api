@@ -1,12 +1,13 @@
 import { InvitationInvalidError } from "@softistx/janus";
+import type { Access } from "@/console/access";
+import type { Exclusive } from "@/console/exclusive";
+import { isRole } from "@/console/model";
 import {
   adminTenantOf,
   isOperatorScope,
 } from "@/modules/invitations/invitations.rules";
-import type { Access } from "../../access";
-import type { Exclusive } from "../../exclusive";
-import { isRole } from "../../model";
-import { membersKey, roleOf } from "./service";
+import { roleOf } from "./admins.service";
+import { membersKey } from "./admins.utils";
 
 interface Accepting {
   invitation: { scope: string; role: string; invitedBy?: string | null };

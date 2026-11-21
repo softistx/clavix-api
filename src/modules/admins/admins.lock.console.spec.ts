@@ -6,16 +6,16 @@ import { env } from "@/config/env";
 import { sharedLockOf } from "@/config/exclusive";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { createExclusive } from "@/console/exclusive";
+import { userKey } from "@/console/modules/user-key";
 import {
   adminScope,
   operatorScope,
 } from "@/modules/invitations/invitations.rules";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { buildTenantJanus } from "@/modules/users/tenant-janus";
-import { createExclusive } from "../../exclusive";
-import { userKey } from "../user-key";
-import { adminInvitationHooks } from "./accept";
-import { changeRole, removeMember } from "./service";
+import { adminInvitationHooks } from "./admins.hooks";
+import { changeRole, removeMember } from "./admins.service";
 
 // A Redis whose lock cannot be taken (held by another past `wait`) until `free`.
 let held = true;

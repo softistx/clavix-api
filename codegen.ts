@@ -3,7 +3,7 @@ import { clientCodegenScalars, codegenScalars } from "@nxgt/graphql-scalars";
 
 // `bun run generate` writes, from every src/**/*.graphqls and the SDL of
 // @nxgt/graphql-scalars and @constraint (generated/graphql/):
-// (The console API's SDL under src/console/ is apart: codegen.console.ts.)
+// (The console API's SDL, under src/console/ and in the modules' `*.console.graphqls`, is apart: codegen.console.ts.)
 // - src/generated/graphql/resolvers.ts: the schema's types and `Resolvers`,
 //   whose context is the app's own (`Context`, src/http/context.ts). A module
 //   maps a type to the document it stores with `mappers`.
@@ -13,6 +13,7 @@ import { clientCodegenScalars, codegenScalars } from "@nxgt/graphql-scalars";
 const schema = [
   "src/**/*.graphqls",
   "!src/console/**/*.graphqls",
+  "!src/**/*.console.graphqls",
   "generated/graphql/**/*.graphqls",
 ];
 

@@ -1,35 +1,11 @@
 import { oauthPolicyService as service } from "@/config/oauth-policy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { agentsNeedPushOrProof } from "@/modules/oauth-policy/oauth-policy.rules";
-import type { Tenant } from "@/modules/tenants";
-import type { Audits } from "../../audit";
-import { type Guards, onTenant } from "../../guard";
-import { tenantArg } from "../ids";
+import { MODE, policyOf } from "./oauth-policy.utils";
 
-export const oauthPolicyGuards: Guards = {
-  "Query.oauthPolicy": onTenant("view", tenantArg),
-  "Mutation.updateOAuthPolicy": onTenant("edit", tenantArg),
-};
-
-const policyOf = (tenant: Tenant) => ({
-  tenantId: tenant._id.toHexString(),
-  par: { required: tenant.oauth.par.required },
-  dpop: { required: tenant.oauth.dpop.required },
-  agents: {
-    ...tenant.oauth.agents,
-    dynamic: MODE_NAME[tenant.oauth.agents.dynamic],
-  },
-  agentsNeedPushOrProof: agentsNeedPushOrProof(tenant.oauth),
-  version: tenant.version,
-});
-
-// `dynamic` on the wire is the enum's name.
-const MODE = { OFF: "off", RESTRICTED: "restricted", OPEN: "open" } as const;
-const MODE_NAME = {
-  off: "OFF",
-  restricted: "RESTRICTED",
-  open: "OPEN",
-} as const;
+export {
+  oauthPolicyAudits,
+  oauthPolicyGuards,
+} from "./oauth-policy.console-guards";
 
 export const oauthPolicy: Resolvers = {
   Query: {
@@ -63,9 +39,4 @@ export const oauthPolicy: Resolvers = {
       return policyOf(tenant);
     },
   },
-};
-
-/** The audit action of each mutation (audit.spec.ts). */
-export const oauthPolicyAudits: Audits = {
-  "Mutation.updateOAuthPolicy": "oauthPolicy.update",
 };

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { createExclusive } from "../../exclusive";
-import type { Role } from "../../model";
-import { type AdminsAccess, changeRole, removeMember } from "./service";
+import { createExclusive } from "@/console/exclusive";
+import type { Role } from "@/console/model";
+import { type AdminsAccess, changeRole, removeMember } from "./admins.service";
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 1));
 

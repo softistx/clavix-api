@@ -1,16 +1,10 @@
 import { denial } from "@softistx/janus-graphql";
-import { fail } from "@/shared/errors";
-import type { Access } from "../../access";
-import type { ConsoleDirectory } from "../../context";
-import type { Exclusive } from "../../exclusive";
-import { ROLES, type Role } from "../../model";
-
-const conflict = (code: "LAST_OWNER" | "ALREADY_MEMBER", message: string) =>
-  fail(code, message, { status: 409 });
-
-/** The refusal of a change that would leave a tenant, or the platform, with no owner who can sign in. */
-export const lastOwnerError = (of: "tenant" | "platform" = "tenant") =>
-  conflict("LAST_OWNER", `A ${of} keeps at least one owner`);
+import type { Access } from "@/console/access";
+import type { ConsoleDirectory } from "@/console/context";
+import type { Exclusive } from "@/console/exclusive";
+import { ROLES, type Role } from "@/console/model";
+import { alreadyMember, lastOwnerError } from "./admins.errors";
+import { membersKey } from "./admins.utils";
 
 /**
  * The one owner rule, for every write: an owner counts only while they exist
@@ -34,12 +28,6 @@ export type AdminsAccess = Pick<
   Access,
   "holders" | "grantTenant" | "revokeTenant"
 >;
-
-/** The `Exclusive` key of a tenant's memberships: every write of them runs under it. */
-export const membersKey = (tenantId: string) => `console:members:${tenantId}`;
-
-/** The `Exclusive` key of the platform owners: the check of the last one runs under it. */
-export const PLATFORM_OWNERS_KEY = "console:platform-owners";
 
 /** The role a user holds directly on the tenant (the strongest), or `null`. */
 export async function roleOf(
@@ -164,6 +152,6 @@ export async function assertNotMember(
   userId: string,
 ) {
   if ((await roleOf(access, tenantId, userId)) !== null) {
-    throw conflict("ALREADY_MEMBER", "Already an admin of this tenant");
+    throw alreadyMember();
   }
 }

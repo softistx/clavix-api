@@ -10,10 +10,9 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
-import { CONSOLE_CLIENT_ID } from "@/console/identity";
+import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { OAuthPolicyService } from "@/modules/oauth-policy/oauth-policy.service";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { CONSOLE_PATH } from "../../identity";
 
 interface Policy {
   tenantId: string;
