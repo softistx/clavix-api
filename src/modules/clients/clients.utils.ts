@@ -157,7 +157,7 @@ export function capability<T>(method: T | undefined, name: string): T {
 /** How a janus record was registered: a metadata document is one, a registered client the agents store knows is dynamic. */
 export const registrationOf = (
   record: OAuthClientRecord,
-  agents: AgentKinds = new Map(),
+  agents: AgentKinds,
 ): ClientRegistration =>
   record.source === "metadata"
     ? "metadata"
@@ -166,7 +166,7 @@ export const registrationOf = (
 /** A janus record as the console shows it, without its secret hash. */
 export const viewOf = (
   record: OAuthClientRecord,
-  agents?: AgentKinds,
+  agents: AgentKinds,
 ): ClientView => ({
   clientId: record.id,
   name: record.name,

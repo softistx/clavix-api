@@ -40,3 +40,8 @@ export const noBudgets: ConsoleBudgets = {
   invitation: async () => {},
   inviteCaller: { consume: async () => ({ allowed: true, retryAfter: 0 }) },
 };
+
+/** A background queue without Redis (development): its worker never ticks, only the pass at start runs. */
+export const noQueue = {
+  work: () => ({ on: () => {} }),
+};

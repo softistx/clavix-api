@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { noQueue } from "@/config/no-ops";
 import { tenantPurge } from "./tenants.purge-queue";
 import { startTenantPurge } from "./tenants.purge-worker";
 
@@ -37,7 +38,7 @@ describe("startTenantPurge", () => {
         runs += 1;
         return { purged: [], failed: [] };
       },
-      undefined,
+      noQueue,
       () => {},
     );
     expect(runs).toBe(1);

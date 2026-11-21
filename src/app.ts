@@ -22,7 +22,7 @@ import { CLIENT_HEADER, useClientHeader } from "./http/csrf";
 import { serveReadyz } from "./http/readyz";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
-import type { ThrottleContext } from "./http/throttle/context";
+import { type ThrottleContext, throttlesOf } from "./http/throttle/context";
 import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/auth.plugin";
 import { LOGO_PATH } from "./modules/branding/branding.logo-route";
@@ -66,6 +66,27 @@ export interface AppOptions extends AppPorts {
   requireClientHeader?: boolean;
 }
 
+/** The base app: context, health and readiness probes, the logo, the TLS ask and the body limit. */
+function baseOf(options: AppOptions) {
+  return (
+    createBase(
+      tenantResolver,
+      throttlesOf(options),
+      options.telemetry ?? appTelemetry,
+    )
+      .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
+      // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
+      .all("/readyz", ({ request }) =>
+        serveReadyz(request, options.ready ?? readyz),
+      )
+      .all(LOGO_PATH, ({ request }) => serveLogo(request))
+      // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/domains.tls-ask.ts).
+      .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
+      .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
+      .bodyLimit(BODY_LIMIT)
+  );
+}
+
 // `GET /healthz`, the liveness probe (no dependency is checked), `GET /readyz`, the OAuth
 // endpoints when `oauth` is given (the issuers of src/oauth, which
 // src/server.ts passes), then POST and GET /graphql behind the base's
@@ -76,28 +97,7 @@ export function createApp(options: AppOptions) {
   const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
   const requireClient =
     options.requireClientHeader ?? env.CLAVIX_REQUIRE_CLIENT_HEADER;
-  const base = createBase(
-    tenantResolver,
-    {
-      signInThrottle: options.signInThrottle,
-      passkeyThrottle: options.passkeyThrottle,
-      homeRealmThrottle: options.homeRealmThrottle,
-      ssoStartThrottle: options.ssoStartThrottle,
-      verifyThrottle: options.verifyThrottle,
-      deviceThrottle: options.deviceThrottle,
-    },
-    options.telemetry ?? appTelemetry,
-  )
-    .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
-    // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
-    .all("/readyz", ({ request }) =>
-      serveReadyz(request, options.ready ?? readyz),
-    )
-    .all(LOGO_PATH, ({ request }) => serveLogo(request))
-    // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/domains.tls-ask.ts).
-    .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
-    .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
-    .bodyLimit(BODY_LIMIT);
+  const base = baseOf(options);
   const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)
   ).plugin((app) =>

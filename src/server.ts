@@ -11,6 +11,7 @@ import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
 import { createGrantsRevoke } from "./config/grants-revoke";
 import { signingKeysFor } from "./config/keys";
+import { noQueue } from "./config/no-ops";
 import { createIssuers } from "./config/oauth";
 import { createTenantPurge } from "./config/purge";
 import { redis } from "./config/redis";
@@ -41,14 +42,14 @@ await startKeyRotation(
     now: clock,
     log: warn,
   },
-  redis?.queues.keyRotation,
+  redis?.queues.keyRotation ?? noQueue,
 );
 
 // The trash is emptied daily: a pass at start (it finishes a purge left claimed),
 // then one per tick on the Redis queue. Only tenants deleted 30 days ago or more.
 await startTenantPurge(
   createTenantPurge(clock),
-  redis?.queues.tenantPurge,
+  redis?.queues.tenantPurge ?? noQueue,
   warn,
 );
 

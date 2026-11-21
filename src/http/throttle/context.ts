@@ -18,3 +18,13 @@ export interface ThrottleContext {
   /** The signed-in device verification lookups: per user, client address and tenant. */
   readonly deviceThrottle: UserThrottle;
 }
+
+/** The six throttles of a set of options, as `createBase` decorates them onto the context. */
+export const throttlesOf = (options: ThrottleContext): ThrottleContext => ({
+  signInThrottle: options.signInThrottle,
+  passkeyThrottle: options.passkeyThrottle,
+  homeRealmThrottle: options.homeRealmThrottle,
+  ssoStartThrottle: options.ssoStartThrottle,
+  verifyThrottle: options.verifyThrottle,
+  deviceThrottle: options.deviceThrottle,
+});

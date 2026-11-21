@@ -15,7 +15,7 @@ export interface PurgeQueue {
  */
 export async function startTenantPurge(
   run: () => Promise<PurgeReport>,
-  queue: PurgeQueue | undefined,
+  queue: PurgeQueue,
   log: (message: string) => void,
 ) {
   const pass = async () => {
@@ -24,5 +24,5 @@ export async function startTenantPurge(
       throw new Error(`tenants: purge failed for ${failed.length} tenant(s)`);
   };
   await pass().catch((error) => log(String(error)));
-  queue?.work(pass).on("error", (error) => log(`tenants: ${String(error)}`));
+  queue.work(pass).on("error", (error) => log(`tenants: ${String(error)}`));
 }
