@@ -4,7 +4,6 @@ import {
   type SecondFactorResolvers,
   secondFactorResolvers,
 } from "@softistx/janus-graphql";
-import { GraphQLError } from "graphql";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import type { Resolvers } from "@/generated/graphql/resolvers";
@@ -12,6 +11,7 @@ import type { Context } from "@/http/context";
 import { recordingSignIn } from "@/modules/auth/sign-in-events";
 import { revokeIfSso } from "@/modules/connections/sso-gate";
 import { requireMethod } from "@/modules/sign-in-methods/gate";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import {
   confirmPasskeyStepUp,
@@ -25,9 +25,11 @@ const FRESH_WITHIN = "10m" as const;
 
 /** TOTP is off for the tenant: nobody starts a factor (one that exists is kept). */
 export const secondFactorDisabled = () =>
-  new GraphQLError("Two-factor authentication is not offered by this tenant", {
-    extensions: { code: "SECOND_FACTOR_DISABLED", http: { status: 403 } },
-  });
+  fail(
+    "SECOND_FACTOR_DISABLED",
+    "Two-factor authentication is not offered by this tenant",
+    { status: 403 },
+  );
 
 // `auth` is a function of the context: janus-graphql asks it on every field for
 // the instance of the tenant that serves the request (nxgt-janus#914).

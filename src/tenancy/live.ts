@@ -1,4 +1,4 @@
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import {
   isLive,
   type ResolvedTenant,
@@ -7,9 +7,7 @@ import {
 
 /** The refusal of a sign-in or a token on a suspended or deleted tenant (ADR-0039). */
 export const tenantSuspended = () =>
-  new GraphQLError("This service is suspended", {
-    extensions: { code: TENANT_SUSPENDED, http: { status: 403 } },
-  });
+  fail(TENANT_SUSPENDED, "This service is suspended", { status: 403 });
 
 /** Passes a live tenant, throws `TENANT_SUSPENDED` for a suspended or deleted one. */
 export function requireLive(tenant: Pick<ResolvedTenant, "status">): void {

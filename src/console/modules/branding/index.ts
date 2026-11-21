@@ -1,5 +1,4 @@
 import { denial } from "@softistx/janus-graphql";
-import { GraphQLError } from "graphql";
 import { brandingService } from "@/config/branding";
 import { tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
@@ -10,6 +9,7 @@ import {
   BrandingInputError,
   THEME_NAME,
 } from "@/modules/branding/theme";
+import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { tenantArg, tenantIdOf } from "../ids";
@@ -51,27 +51,19 @@ const shape = (
 // The service's refusals as GraphQL errors; anything else passes through.
 function refusal(error: unknown): unknown {
   if (error instanceof BrandingContrastError) {
-    return new GraphQLError(error.message, {
-      extensions: {
-        code: error.code,
-        http: { status: 422 },
-        failures: error.failures,
-      },
+    return fail(error.code, error.message, {
+      status: 422,
+      extra: { failures: error.failures },
     });
   }
   if (error instanceof BrandingInputError) {
-    return new GraphQLError(error.message, {
-      extensions: {
-        code: error.code,
-        http: { status: 400 },
-        field: error.field,
-      },
+    return fail(error.code, error.message, {
+      status: 400,
+      field: error.field,
     });
   }
   if (error instanceof BrandingConflictError) {
-    return new GraphQLError(error.message, {
-      extensions: { code: error.code, http: { status: 409 } },
-    });
+    return fail(error.code, error.message, { status: 409 });
   }
   return error;
 }

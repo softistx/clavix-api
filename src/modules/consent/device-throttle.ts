@@ -1,4 +1,3 @@
-import { GraphQLError } from "graphql";
 import {
   type BoundLimits,
   createUserThrottle,
@@ -8,6 +7,7 @@ import {
   type UserThrottle,
   userAndTenantLimits,
 } from "@/http/throttle/core";
+import { fail } from "@/shared/errors";
 
 export type DeviceLimitConfig = UserLimitConfig;
 export type DeviceThrottle = UserThrottle;
@@ -24,12 +24,9 @@ export const deviceLimits = (config: DeviceLimitConfig) => {
 
 /** `DEVICE_CODE_THROTTLED`, 429, `retryAfter` in the error and `Retry-After` (seconds). */
 export const deviceCodeThrottled = (retryAfter: number) =>
-  new GraphQLError("Too many device codes tried", {
-    extensions: {
-      code: "DEVICE_CODE_THROTTLED",
-      retryAfter,
-      http: { status: 429, headers: { "retry-after": String(retryAfter) } },
-    },
+  fail("DEVICE_CODE_THROTTLED", "Too many device codes tried", {
+    status: 429,
+    retryAfter,
   });
 
 /**

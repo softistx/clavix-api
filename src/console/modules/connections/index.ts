@@ -1,4 +1,3 @@
-import { GraphQLError } from "graphql";
 import type { ObjectId } from "mongodb";
 import {
   connectionsService as connections,
@@ -11,6 +10,7 @@ import type { ConnectionDoc } from "@/modules/connections/connections.model";
 import { txtNameOf } from "@/modules/connections/connections.service";
 import { callbackUrlOf } from "@/modules/sign-in-methods/social";
 import { effectiveQuotas } from "@/modules/tenants/plan.schema";
+import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant } from "../catalog-support";
@@ -63,20 +63,10 @@ async function refusing<T>(call: () => Promise<T>): Promise<T> {
     return await call();
   } catch (error) {
     if (error instanceof ConnectionError) {
-      throw new GraphQLError(error.message, {
-        extensions: {
-          code: error.code,
-          http: {
-            status: STATUS[error.code],
-            ...(error.retryAfter === undefined
-              ? {}
-              : { headers: { "retry-after": String(error.retryAfter) } }),
-          },
-          ...(error.field === undefined ? {} : { field: error.field }),
-          ...(error.retryAfter === undefined
-            ? {}
-            : { retryAfter: error.retryAfter }),
-        },
+      throw fail(error.code, error.message, {
+        status: STATUS[error.code],
+        field: error.field,
+        retryAfter: error.retryAfter,
       });
     }
     throw refusal(error);

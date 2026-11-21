@@ -1,12 +1,12 @@
 import { denial } from "@softistx/janus-graphql";
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import type { Access } from "../../access";
 import type { ConsoleDirectory } from "../../context";
 import type { Exclusive } from "../../exclusive";
 import { ROLES, type Role } from "../../model";
 
 const conflict = (code: "LAST_OWNER" | "ALREADY_MEMBER", message: string) =>
-  new GraphQLError(message, { extensions: { code, http: { status: 409 } } });
+  fail(code, message, { status: 409 });
 
 /** The refusal of a change that would leave a tenant, or the platform, with no owner who can sign in. */
 export const lastOwnerError = (of: "tenant" | "platform" = "tenant") =>

@@ -1,4 +1,4 @@
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 
 /**
  * The refusal of an action that needs a proved e-mail address: HTTP 403 with
@@ -7,9 +7,7 @@ import { GraphQLError } from "graphql";
  * page and the console both map it to "verify your e-mail first".
  */
 export const emailUnverified = () =>
-  new GraphQLError("Verify your e-mail first", {
-    extensions: { code: "EMAIL_UNVERIFIED", http: { status: 403 } },
-  });
+  fail("EMAIL_UNVERIFIED", "Verify your e-mail first", { status: 403 });
 
 /**
  * Throws `EMAIL_UNVERIFIED` (403) unless the user's e-mail is proved. Takes

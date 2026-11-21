@@ -1,4 +1,3 @@
-import { GraphQLError } from "graphql";
 import type { ObjectId } from "mongodb";
 import { domainStore, tenantAdmin } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
@@ -7,6 +6,7 @@ import type { DomainError } from "@/modules/domains/domains.errors";
 import { DomainError as DomainErrorClass } from "@/modules/domains/domains.errors";
 import type { DomainDoc } from "@/modules/domains/domains.service";
 import { effectiveQuotas } from "@/modules/tenants/plan.schema";
+import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant } from "../catalog-support";
@@ -48,20 +48,10 @@ async function refusing<T>(call: () => Promise<T>): Promise<T> {
   } catch (error) {
     if (error instanceof DomainErrorClass) {
       const failure: DomainError = error;
-      throw new GraphQLError(failure.message, {
-        extensions: {
-          code: failure.code,
-          http: {
-            status: STATUS[failure.code],
-            ...(failure.retryAfter === undefined
-              ? {}
-              : { headers: { "retry-after": String(failure.retryAfter) } }),
-          },
-          ...(failure.retryAfter === undefined
-            ? {}
-            : { retryAfter: failure.retryAfter }),
-          ...(failure.code === "BAD_USER_INPUT" ? { field: "host" } : {}),
-        },
+      throw fail(failure.code, failure.message, {
+        status: STATUS[failure.code],
+        retryAfter: failure.retryAfter,
+        field: failure.code === "BAD_USER_INPUT" ? "host" : undefined,
       });
     }
     throw refusal(error);

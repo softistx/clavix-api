@@ -1,8 +1,9 @@
 import { MapperKind, mapSchema } from "@graphql-tools/utils";
 import { denial } from "@softistx/janus-graphql";
-import { GraphQLError, type GraphQLSchema } from "graphql";
+import type { GraphQLSchema } from "graphql";
 import { ObjectId } from "mongodb";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { fail } from "@/shared/errors";
 import { requireVerifiedEmail } from "@/users/verified-email";
 import type { ConsoleContext } from "./context";
 import type { Permission } from "./model";
@@ -63,9 +64,7 @@ async function targetOf(ctx: ConsoleContext, tenantId: string) {
  * stays readable, nothing in it changes until the platform resumes the tenant.
  */
 const suspended = () =>
-  new GraphQLError("The tenant is suspended", {
-    extensions: { code: "TENANT_SUSPENDED", http: { status: 403 } },
-  });
+  fail("TENANT_SUSPENDED", "The tenant is suspended", { status: 403 });
 
 /**
  * Whether the caller's roles give `permission` on the tenant, for every way

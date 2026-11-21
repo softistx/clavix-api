@@ -1,5 +1,5 @@
 import { JanusError } from "@softistx/janus";
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import type { TenantJanus } from "@/users/tenant-janus";
 import { afterAnswer } from "./outbox";
 import { createIfOpen, type SignInDeps } from "./sign-in";
@@ -8,8 +8,8 @@ const LIFESPAN_MS = 15 * 60_000; // = MAGIC_LINK_LIFESPAN ("15m"), checked by ma
 
 /** The surface does not exist while the switch is off: 404, nothing counted, issued or sent. */
 export const magicLinkDisabled = () =>
-  new GraphQLError("Magic-link sign-in is disabled", {
-    extensions: { code: "MAGIC_LINK_DISABLED", http: { status: 404 } },
+  fail("MAGIC_LINK_DISABLED", "Magic-link sign-in is disabled", {
+    status: 404,
   });
 
 /**
@@ -35,8 +35,8 @@ export async function requestMagicLink(
 
 /** Every refusal alike: the page offers a new link whatever went wrong. */
 export const magicLinkInvalid = () =>
-  new GraphQLError("The link is invalid or has expired", {
-    extensions: { code: "MAGIC_LINK_INVALID", http: { status: 401 } },
+  fail("MAGIC_LINK_INVALID", "The link is invalid or has expired", {
+    status: 401,
   });
 
 export async function confirmMagicLink(

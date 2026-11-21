@@ -8,11 +8,12 @@ import type { Resolvers } from "@/generated/graphql/resolvers";
 import type { Context } from "@/http/context";
 import { adminTenantOf } from "@/invitations/scope";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 
 const invalid = () =>
-  new GraphQLError("The invitation is invalid or has expired", {
-    extensions: { code: "INVITATION_INVALID", http: { status: 400 } },
+  fail("INVITATION_INVALID", "The invitation is invalid or has expired", {
+    status: 400,
   });
 
 // Every refusal alike, so a code cannot be told apart from a spent one.

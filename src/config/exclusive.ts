@@ -1,6 +1,6 @@
 import { RedisError } from "@softistx/redis";
-import { GraphQLError } from "graphql";
 import { createExclusive, type SharedLock } from "@/console/exclusive";
+import { fail } from "@/shared/errors";
 import { redis } from "./redis";
 
 /** The shared lock over an app Redis: a lock that cannot be taken is a retryable 503. */
@@ -16,9 +16,7 @@ export const sharedLockOf = (app: {
   return (key, work, options) =>
     app.lock(key, work, options).catch((error: unknown) => {
       if (!(error instanceof RedisError)) throw error;
-      throw new GraphQLError("Try again later", {
-        extensions: { code: "SERVICE_UNAVAILABLE", http: { status: 503 } },
-      });
+      throw fail("SERVICE_UNAVAILABLE", "Try again later", { status: 503 });
     });
 };
 

@@ -1,15 +1,17 @@
 import { JanusError, MailThrottledError } from "@softistx/janus";
 import type { JanusMail } from "@softistx/janus-mail";
-import { GraphQLError } from "graphql";
+import { fail } from "@/shared/errors";
 import type { TenantJanus } from "@/users/tenant-janus";
 import { afterAnswer } from "./outbox";
 import { emailVerificationThrottled } from "./verification-throttle";
 
 /** Every refusal alike: the page offers a new link whatever went wrong. */
 export const emailVerificationInvalid = () =>
-  new GraphQLError("The verification link is invalid or has expired", {
-    extensions: { code: "EMAIL_VERIFICATION_INVALID", http: { status: 400 } },
-  });
+  fail(
+    "EMAIL_VERIFICATION_INVALID",
+    "The verification link is invalid or has expired",
+    { status: 400 },
+  );
 
 /**
  * Mails the signed-in user a verification link. Always `true`: janus counts

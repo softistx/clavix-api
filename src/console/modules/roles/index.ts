@@ -1,10 +1,10 @@
 import { denial } from "@softistx/janus-graphql";
 import { InvalidCursorError } from "@softistx/mongo";
-import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { RoleDoc } from "@/modules/roles/roles.service";
+import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import type { ConsoleContext } from "../../context";
 import { type Guards, onTenant } from "../../guard";
@@ -102,8 +102,8 @@ export const roles: Resolvers = {
         });
       } catch (error) {
         if (error instanceof InvalidCursorError) {
-          throw new GraphQLError("The cursor is not valid", {
-            extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+          throw fail("BAD_USER_INPUT", "The cursor is not valid", {
+            status: 400,
           });
         }
         throw error;

@@ -1,9 +1,9 @@
 import { denial } from "@softistx/janus-graphql";
-import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../../context";
 import { refusing } from "../admins/errors";
 import { idArg, liveTenant, tenantIdOf } from "../ids";
@@ -18,8 +18,8 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenantId = tenantIdOf(given);
     const tenant = await liveTenant(ctx.directory, tenantId);
     if ((await ctx.users.findByEmail(tenantId, email)) !== null) {
-      throw new GraphQLError("This address already has an account", {
-        extensions: { code: "USER_EXISTS", http: { status: 409 } },
+      throw fail("USER_EXISTS", "This address already has an account", {
+        status: 409,
       });
     }
     await ctx.budgets?.invitation({ tenantId });
@@ -57,8 +57,8 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     idArg(userId, "userId");
     const name = input.name.trim();
     if (name === "" || [...name].length > MAX_NAME) {
-      throw new GraphQLError("The name must be 1 to 200 characters", {
-        extensions: { code: "BAD_USER_INPUT", http: { status: 400 } },
+      throw fail("BAD_USER_INPUT", "The name must be 1 to 200 characters", {
+        status: 400,
       });
     }
     await liveTenant(ctx.directory, tenantId);

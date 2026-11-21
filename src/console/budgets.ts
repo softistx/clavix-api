@@ -1,11 +1,11 @@
 import { type FieldLimit, fieldRateLimit } from "@softistx/alxia-graphql";
 import { defineRateLimit, GuardError, type LimitResult } from "@softistx/redis";
-import { GraphQLError } from "graphql";
 import {
   type Bound,
   logSkipped,
   retryAfterSeconds,
 } from "@/http/throttle/core";
+import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "./context";
 
 export interface ConsoleLimitConfig {
@@ -59,13 +59,7 @@ export const consoleLimits = (config: ConsoleLimitConfig) => ({
 
 /** The console's refusal past a budget: `RATE_LIMITED`, 429, `retryAfter` (seconds) in the error and `Retry-After`. */
 export const rateLimited = (retryAfter: number) =>
-  new GraphQLError("Too many requests", {
-    extensions: {
-      code: "RATE_LIMITED",
-      retryAfter,
-      http: { status: 429, headers: { "retry-after": String(retryAfter) } },
-    },
-  });
+  fail("RATE_LIMITED", "Too many requests", { status: 429, retryAfter });
 
 /**
  * What the console's mutations spend (`ctx.budgets`; none without Redis).

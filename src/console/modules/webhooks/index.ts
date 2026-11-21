@@ -1,4 +1,3 @@
-import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
 import { tenantAdmin } from "@/config/tenancy";
 import {
@@ -11,6 +10,7 @@ import { effectiveQuotas } from "@/modules/tenants/plan.schema";
 import { WEBHOOK_EVENT_TYPES } from "@/modules/webhooks/events";
 import type { WebhookEndpointDoc } from "@/modules/webhooks/webhook-endpoints.service";
 import { WebhookError } from "@/modules/webhooks/webhooks.errors";
+import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant } from "../catalog-support";
@@ -48,12 +48,9 @@ async function refusing<T>(call: () => Promise<T>): Promise<T> {
     return await call();
   } catch (error) {
     if (error instanceof WebhookError) {
-      throw new GraphQLError(error.message, {
-        extensions: {
-          code: error.code,
-          http: { status: STATUS[error.code] },
-          ...(error.field === undefined ? {} : { field: error.field }),
-        },
+      throw fail(error.code, error.message, {
+        status: STATUS[error.code],
+        field: error.field,
       });
     }
     throw refusal(error);

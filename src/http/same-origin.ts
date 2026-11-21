@@ -1,5 +1,6 @@
 import { definePlugin } from "@softistx/graxia";
 import { parse } from "graphql";
+import { errorBody } from "@/shared/errors";
 
 /** The root fields of the consent API: a refused request that asks only for these sees `NOT_FOUND`, as if no such request existed. */
 export const CONSENT_FIELDS: ReadonlySet<string> = new Set([
@@ -43,30 +44,18 @@ async function asksOnlyForConsent(request: Request): Promise<boolean> {
 }
 
 const notFound = () =>
-  new Response(
-    JSON.stringify({
-      errors: [{ message: "Not found", extensions: { code: "NOT_FOUND" } }],
-    }),
-    {
-      status: 404,
-      // No CORS header: a foreign page cannot read the answer either.
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-      },
+  new Response(errorBody("NOT_FOUND", "Not found"), {
+    status: 404,
+    // No CORS header: a foreign page cannot read the answer either.
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
     },
-  );
+  });
 
 const forbidden = () =>
   new Response(
-    JSON.stringify({
-      errors: [
-        {
-          message: "Cross-origin requests are not allowed",
-          extensions: { code: "FORBIDDEN" },
-        },
-      ],
-    }),
+    errorBody("FORBIDDEN", "Cross-origin requests are not allowed"),
     {
       status: 403,
       headers: {

@@ -1,8 +1,8 @@
-import { GraphQLError } from "graphql";
 import {
   type ResendRefusal,
   ResendRefusedError,
 } from "@/invitations/tenant-invitations";
+import { fail } from "@/shared/errors";
 
 const RESEND_STATUS = {
   NOT_FOUND: 404,
@@ -27,17 +27,9 @@ export async function refusing<T>(call: () => Promise<T>): Promise<T> {
   } catch (error) {
     if (!(error instanceof ResendRefusedError)) throw error;
     const { code, retryAfter } = error;
-    throw new GraphQLError(RESEND_MESSAGE[code], {
-      extensions: {
-        code,
-        http: {
-          status: RESEND_STATUS[code],
-          ...(retryAfter === undefined
-            ? {}
-            : { headers: { "retry-after": String(retryAfter) } }),
-        },
-        ...(retryAfter === undefined ? {} : { retryAfter }),
-      },
+    throw fail(code, RESEND_MESSAGE[code], {
+      status: RESEND_STATUS[code],
+      retryAfter,
     });
   }
 }

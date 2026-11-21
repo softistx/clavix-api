@@ -1,5 +1,7 @@
 import { createStateKey, definePlugin } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
+import type { ErrorCode } from "@/i18n/codes";
+import { errorBody } from "@/shared/errors";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
 import type { ExportThrottle } from "./audit-export/throttle";
@@ -77,21 +79,18 @@ export interface ConsoleDeps {
 
 export const refusal = (
   status: number,
-  code: string,
+  code: ErrorCode,
   message: string,
   headers: HeadersInit = {},
 ) =>
-  new Response(
-    JSON.stringify({ errors: [{ message, extensions: { code } }] }),
-    {
-      status,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        ...headers,
-      },
+  new Response(errorBody(code, message), {
+    status,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      ...headers,
     },
-  );
+  });
 
 /**
  * Verifies the request's token: the principal, or the response that refuses it
