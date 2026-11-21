@@ -9,6 +9,7 @@ import {
   envFileProblem,
   envProblems,
   imageRepository,
+  npmReadToken,
   parseEnv,
   requiredValue,
   staleImageIds,
@@ -172,5 +173,18 @@ describe("requiredValue", () => {
       error.mockRestore();
       exit.mockRestore();
     }
+  });
+});
+
+describe("npmReadToken", () => {
+  test("takes the environment, then the host file, else empty", () => {
+    const dir = mkdtempSync(join(tmpdir(), "npm-read-"));
+    const file = join(dir, "token");
+    expect(npmReadToken({}, file)).toBe("");
+    writeFileSync(file, "from-file\n");
+    expect(npmReadToken({}, file)).toBe("from-file");
+    expect(npmReadToken({ NPM_SOFTISTX_READ_TOKEN: "from-env" }, file)).toBe(
+      "from-env",
+    );
   });
 });

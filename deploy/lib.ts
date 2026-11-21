@@ -4,7 +4,8 @@
  * names it builds and the `docker compose` invocation of the staging stack.
  */
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { $ } from "bun";
 
@@ -120,6 +121,25 @@ export function composeEnv(
   return { ...env, ...derived };
 }
 
+/**
+ * The @softistx read token for the image builds (a compose secret): the env's,
+ * else the host's ~/.config/secrets/npm-sofistx-read-token. Empty when neither
+ * exists, with a warning that never fails the deploy (plugins#233). The value is
+ * never printed.
+ */
+export function npmReadToken(
+  shell: Record<string, string | undefined>,
+  file = resolve(homedir(), ".config/secrets/npm-sofistx-read-token"),
+): string {
+  const fromEnv = shell["NPM_SOFTISTX_READ_TOKEN"]?.trim();
+  if (fromEnv) return fromEnv;
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 /** The UI checkout the image is built from, as an absolute path. */
 export function uiContext(values: Record<string, string>): string {
   const ctx = values["CLAVIX_UI_CONTEXT"] || "../../clavix-ui";
@@ -181,6 +201,12 @@ export async function loadStack(): Promise<Stack> {
   const derived: Record<string, string> = {
     CLAVIX_DOMAIN_RE: domainRegex(requiredValue(values, "CLAVIX_DOMAIN")),
   };
+  const npmToken = npmReadToken(process.env);
+  if (!npmToken)
+    console.warn(
+      "warning: NPM_SOFTISTX_READ_TOKEN unset: @softistx installs work only while the packages are public (plugins#233)",
+    );
+  derived["NPM_SOFTISTX_READ_TOKEN"] = npmToken;
   const env = composeEnv(process.env, values, derived);
   const files = [
     "-f",

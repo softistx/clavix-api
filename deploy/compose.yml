@@ -169,6 +169,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/tools.Dockerfile
+      secrets: [npm_read]
     entrypoint: ["bun"]
     command: ["/scripts/mongo-backup.js", "/backups"]
     deploy:
@@ -195,6 +196,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/tools.Dockerfile
+      secrets: [npm_read]
     entrypoint: ["bun", "/scripts/mongo-restore.js"]
     deploy:
       resources:
@@ -208,6 +210,12 @@ services:
       - ${MONGO_TLS_DIR:-./tls}/ca:/etc/mongo-tls-ca:ro
     depends_on:
       mongo: { condition: service_healthy }
+
+# The read token for @softistx installs at build time (a BuildKit secret, never
+# in an image layer); empty or unset while the packages are public.
+secrets:
+  npm_read:
+    environment: NPM_SOFTISTX_READ_TOKEN
 
 volumes:
   mongo-data:

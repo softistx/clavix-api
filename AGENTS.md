@@ -912,7 +912,7 @@ one is refused (docs/troubleshooting.md).
 `bun run verify` = `generate` (scalars and validation SDL, then both codegen configs), `schema:print --check`, `check:ci` (`biome ci`),
 `typecheck` (`bun check`), `test` (`bun test --timeout=30000`); run `bun run build` too before a PR (CI does: `generate`, then the bundle).
 CI (`.github/workflows/ci.yml`, on pull requests into `develop` only) runs `verify`, then `build`. `bunx biome ci .` on the head catches
-what a lint-only run misses (import order, format). The `@softistx/*` packages come from npmjs (public): `bun install` needs no token.
+what a lint-only run misses (import order, format). The `@softistx/*` packages come from npmjs with a read token (`NPM_SOFTISTX_READ_TOKEN`, read by `bunfig.toml`; unset while they are public).
 
 ## Tests and the machine
 
