@@ -1,7 +1,16 @@
+import {
+  CLIENT_CREDENTIALS_GRANT,
+  DEVICE_GRANT,
+  TOKEN_EXCHANGE_GRANT,
+} from "@softistx/janus-oauth";
 import { CatalogError } from "@/modules/resources";
-import type { ClientView } from "./client-listing";
+import type {
+  ClientView,
+  CreateClientInput,
+  OfferedGrant,
+} from "./clients.types";
 
-/** The size limits and the "same client" test of the clients service. */
+// The size limits and the "same client" test of the clients service.
 const MAX_NAME = 100;
 const MAX_REDIRECT_URIS = 20;
 const MAX_DETAIL_TYPES = 50;
@@ -52,20 +61,7 @@ const sameSet = (a: readonly string[], b: readonly string[]) => {
 };
 
 /** The stored client has the input's name, type and redirect URIs. */
-export function sameClient(
-  stored: ClientView,
-  input: {
-    name: string;
-    type: "public" | "confidential";
-    redirectUris: readonly string[];
-    requirePar?: boolean | undefined;
-    dpopBound?: boolean | undefined;
-    detailTypes?: readonly string[] | undefined;
-    grants?: readonly string[] | undefined;
-    allowedScopes?: readonly string[] | undefined;
-    defaultScopes?: readonly string[] | undefined;
-  },
-) {
+export function sameClient(stored: ClientView, input: CreateClientInput) {
   const wanted = new Set(input.redirectUris);
   const wantedGrants = new Set(input.grants);
   return (
@@ -103,3 +99,43 @@ export function checkQuery(q: string | undefined) {
     );
   }
 }
+
+/**
+ * The grant types Clavix offers. A client's `grantTypes` is enforced by janus-oauth on
+ * `/authorize`, the code exchange, the refresh grant and the device grant
+ * (`unauthorized_client`), and an explicit list is taken as written: a client
+ * that refreshes lists `refresh_token` beside `authorization_code` or the
+ * device URN. A list needs `authorization_code` or the device grant
+ * (`refresh_token` alone is refused by janus). The device grant is never
+ * implied: a client opts in. The token exchange grant (RFC 8693) is the same,
+ * for a confidential client only, and it also needs the client's rules
+ * (`clientPolicies`): with none, every exchange is refused. The client
+ * credentials grant (RFC 6749 section 4.4) is the same: a confidential
+ * client only, never implied, with the scopes it may ask for
+ * (`allowedScopes`), and served only for a resource that opted in
+ * (`allowClientCredentials`).
+ */
+export const OFFERED_GRANTS = [
+  "authorization_code",
+  "refresh_token",
+  DEVICE_GRANT,
+  TOKEN_EXCHANGE_GRANT,
+  CLIENT_CREDENTIALS_GRANT,
+] as const satisfies readonly OfferedGrant[];
+
+/** What a client with no recorded `grantTypes` may use (janus's default). */
+export const DEFAULT_GRANTS = ["authorization_code", "refresh_token"] as const;
+
+/** Whether a client with these grants goes through a browser redirect (it needs a redirect URI). */
+export const usesRedirect = (grants: readonly string[] | undefined) =>
+  grants === undefined || grants.includes("authorization_code");
+
+/** The default client id of a name: lowercase `a-z0-9-`. */
+export const clientIdOf = (name: string): string =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");

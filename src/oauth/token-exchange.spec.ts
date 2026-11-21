@@ -8,7 +8,7 @@ import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { createFlow } from "~/oauth-flow";
 
 const SOURCE = "https://source.tx.example/api";

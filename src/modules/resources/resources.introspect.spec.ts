@@ -7,7 +7,7 @@ import {
 } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,

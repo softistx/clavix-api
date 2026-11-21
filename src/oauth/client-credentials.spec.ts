@@ -7,7 +7,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createConsoleAuthenticator } from "@/console/auth";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { createFlow } from "~/oauth-flow";
 import { withTenantState } from "./tenant-state";
 

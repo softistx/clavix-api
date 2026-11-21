@@ -4,12 +4,8 @@ import {
   hashOAuthSecret,
   type OAuthClientRecord,
 } from "@softistx/janus-oauth";
-import {
-  capability,
-  countClientViews,
-  listClientViews,
-  MAX_READS,
-} from "./client-listing";
+import { countClientViews, listClientViews, MAX_READS } from "./clients.search";
+import { capability } from "./clients.utils";
 
 const record = (
   id: string,

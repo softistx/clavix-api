@@ -4,7 +4,7 @@ import { mongo } from "@/config/db";
 import { dpopNonceSecretOf } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { createFlow, REDIRECT } from "~/oauth-flow";
 

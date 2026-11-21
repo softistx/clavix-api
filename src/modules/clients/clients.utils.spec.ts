@@ -2,13 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { DEVICE_GRANT } from "@softistx/janus-oauth";
 import { ObjectId } from "mongodb";
 import {
+  agentKindsOf,
+  capability,
   clientsKey,
   grantsOf,
   isClientId,
   kindsOf,
+  registrationOf,
+  sentSettings,
   settingsOf,
   shape,
   target,
+  viewOf,
 } from "./clients.utils";
 
 const tenant = { _id: new ObjectId() };
@@ -97,5 +102,54 @@ describe("target, clientsKey and isClientId", () => {
     expect(isClientId("my-app-1")).toBe(true);
     expect(isClientId("My App")).toBe(false);
     expect(isClientId("a".repeat(65))).toBe(false);
+  });
+});
+
+describe("clients utils: views and settings", () => {
+  test("viewOf hides the secret hash and defaults the grants", () => {
+    const view = viewOf({
+      id: "web",
+      name: "Web",
+      redirectUris: [],
+      source: "registered",
+      createdAt: new Date(0),
+      expiresAt: null,
+      secretHash: "h",
+    });
+    expect(view.type).toBe("confidential");
+    expect(view.grantTypes).toEqual(["authorization_code", "refresh_token"]);
+    expect(view).not.toHaveProperty("secretHash");
+  });
+
+  test("registrationOf: a metadata document, a known agent, else console", () => {
+    const record = (source: "registered" | "metadata") => ({
+      id: "a",
+      name: "A",
+      redirectUris: [],
+      source,
+      createdAt: new Date(0),
+      expiresAt: null,
+    });
+    expect(registrationOf(record("metadata"))).toBe("metadata");
+    expect(
+      registrationOf(record("registered"), new Map([["a", "dynamic"]])),
+    ).toBe("dynamic");
+    expect(registrationOf(record("registered"))).toBe("console");
+  });
+
+  test("capability returns the method or throws", () => {
+    expect(capability(() => 1, "x")()).toBe(1);
+    expect(() => capability(undefined, "listClients")).toThrow("listClients");
+  });
+
+  test("sentSettings drops the omitted settings", () => {
+    expect(sentSettings({ requirePar: false, grants: undefined })).toEqual({
+      requirePar: false,
+    });
+  });
+
+  test("agentKindsOf reads none without the store", async () => {
+    const tenant = { _id: { toHexString: () => "t" } } as never;
+    expect((await agentKindsOf(undefined, tenant)(["a"])).size).toBe(0);
   });
 });

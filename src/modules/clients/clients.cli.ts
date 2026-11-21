@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { CliInputError } from "@/shared/cli";
-import { OFFERED_GRANTS, type RegisterClientInput } from "./register-client";
+import { OFFERED_GRANTS } from "./clients.rules";
+import type { RegisterClientInput } from "./clients.types";
 
 export const USAGE = `Usage: bun run clients:create --tenant <slug> --name <name> --redirect-uri <uri> [options]
 

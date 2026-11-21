@@ -11,7 +11,7 @@ import {
   consoleAudience,
   consoleRedirectUri,
 } from "@/console/identity";
-import { registerClient } from "@/modules/clients/register-client";
+import { registerClient } from "@/modules/clients";
 import {
   detailTypes,
   mongoDetailTypeClients,
