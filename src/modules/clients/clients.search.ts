@@ -12,8 +12,8 @@ export const MAX_READS = 20;
 
 /**
  * What a listing keeps: a client matching `q` (part of its name or id, any
- * case) whose registration is wanted. A metadata-document client is listed
- * only when the agents are read (`filter.agents`).
+ * case) whose registration is wanted (`filter.kinds`, told apart with the
+ * agents `filter.agents` reads).
  */
 const matcher = (
   q: string | undefined,
