@@ -13,7 +13,7 @@ import type {
   ValueDraft,
 } from "@/modules/resources/catalog";
 import { protectedResourceDocument } from "@/modules/resources/protected-resource-document";
-import { hostOf } from "@/modules/tenants/identity";
+import { hostOf } from "@/modules/tenants";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { catalogTenant, refusing } from "../catalog-support";

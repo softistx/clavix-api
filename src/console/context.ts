@@ -1,7 +1,7 @@
 import type { CoreContext } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { AuthEventsService } from "@/modules/audit/auth-events.service";
-import type { PlanId } from "@/modules/tenants/plan.schema";
+import type { PlanId } from "@/modules/tenants";
 import type { Access } from "./access";
 import type { AdminEventReader } from "./admin-events/reader";
 import type { Audit } from "./audit";

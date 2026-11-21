@@ -6,8 +6,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
 import { registerClient } from "@/modules/clients/register-client";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { assertWithinQuota, QuotaExceededError } from "./quota";
 import { UsageService } from "./usage.service";
 

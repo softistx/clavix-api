@@ -6,7 +6,7 @@ import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { exportAs } from "~/console";
 
 const admin = exportAs("exp-admin");

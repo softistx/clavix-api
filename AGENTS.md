@@ -68,7 +68,7 @@ Every paged console connection (`TenantUserPage`, `ClientPage`, `RoleMemberPage`
 `SwitchableTenantPage`) exposes `totalCount`: all the matches, ignoring the cursor and `first`,
 honouring the search (`q`, `status`, `emailPrefix`). It is counted by the module's tenant-scoped
 service (`clientsService.count`, `rolesService.membersCount` through `scopeToTenant`,
-`ctx.users.count`, `tenantAdmin.count` sharing its `filterOf` with `list`), never by a copy of the
+`ctx.users.count`, `tenantsService.count` sharing its `filterOf` with `list`), never by a copy of the
 filter. The lists that are plain arrays (resources, scopes, roles, memberships, adminInvitations,
 domains) have no connection: their length is the count. A new paged connection adds `totalCount`
 the same way.
@@ -302,8 +302,8 @@ outside the specs.
 ## Tenants by script
 
 `bun run tenants:create` (`src/scripts/tenants-create.ts`, README "Tenants") creates a tenant by script (the console API's
-`createTenant` does too). It only parses flags (`src/modules/tenants/cli.ts`) and calls `registerTenant`
-(`register-tenant.ts`), which goes through `TenantsService.create` (the one place for slug rules,
+`createTenant` does too). It only parses flags (`src/modules/tenants/tenants.cli.ts`) and calls `TenantsService.register`,
+which goes through `TenantsService.create` (the one place for slug rules,
 reserved slugs and the first-key hook; never copy them). Idempotent on the slug: same values report
 `created: false`, other values are refused, a deleted tenant's slug stays reserved.
 
@@ -544,10 +544,17 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 
 ## Tenants, plans, usage and the trash (`src/modules/tenants`, `src/modules/usage`, `src/console/modules/tenants`)
 
-- **Two services on the one collection**: `TenantsService` creates and flips the status (script and
-  tests); `TenantAdminService` (`config/tenancy.ts`: `tenantAdmin`) is what the console uses: `find` /
-  `get` (trash included, a purging tenant is gone), `list`, `update`, `setPlan`, `trash`, `restore` and
-  the three writes of the purge. Every write drops the tenant's host from the resolver's cache.
+- Layout (A5): `tenants.model.ts`, `.plan.ts`, `.trash.ts`, `.hooks.ts`, `.rules.ts` (slug rules), `.utils.ts`
+  (hosts, issuers, partitions, list filters, `stateOf`), `.errors.ts`, `.types.ts`, `.cli.ts`, the purge queue and
+  worker (`.purge-queue.ts`, `.purge-worker.ts`), and `tenants.service.ts`: one service per domain (owner,
+  2026-11-20), `TenantsService` (`config/tenancy.ts`: `tenantsService`), holding every business method: create and
+  `register` (script), the status flips, `update`, `setPlan`, `updateSignIn` / `updateOAuth`, `replaceSocial`,
+  `find` / `get` (trash included, a purging tenant is gone), `list`, `count`, `trash`, `restore`, and the purge
+  (`purgeDue`, `claimPurge`, `markPurged`, `purge`). Every write drops the tenant's hosts from the resolver's
+  cache. No split by action; the cap is per method (50 lines or more is a finding, 80 the hard cap); its spec
+  `tenants.service.spec.ts` sits beside it. `index.ts` is the import surface for other modules (the purge queue
+  and worker are imported by file in `server.ts` and `config/redis.ts`, so the barrel never loads the queue), and
+  `src/modules/services.ts` wires `tenants`.
 - **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
@@ -556,7 +563,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   and `/authorize` and `/token` (`oauth/tenant-state.ts`, a 403 JSON `access_denied`, not a redirect).
   Discovery, jwks, userinfo, introspect, revoke, `signOut` and `currentUser` keep answering: tokens
   already issued live to expiry, and the console stays readable.
-- **Plans** (`plan.schema.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
+- **Plans** (`tenants.plan.ts`): `free`, `pro`, `enterprise`; `effectiveQuotas` = plan, then the tenant's
   `quotaOverrides` (setting a key to `null` removes the override; an override cannot express "no limit").
 - **Usage** (`UsageService`, `config/usage.ts`): monthly active users are a Redis unique counter
   (`clavix:usage.mau`, 400 days), counted at sign-in, passkey and social sign-in and a successful `/token` (the `sub`
@@ -565,8 +572,8 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   `oauthPartitionedClients` by `partition`; domains are counted from `domainStore`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
   clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
-- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `purgeTenants`
-  (`purge.ts`) claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
+- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `TenantsService.purge`
+  claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
   partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
   record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a
   tombstone (slug, `deletedAt`, `purgedAt`) that keeps the slug reserved. The Redis MAU counters (hashed, no user ids) are not deleted: they expire on their own after 400 days.
@@ -717,7 +724,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Domain ownership: `addConnectionDomain` returns a TXT name `_clavix-sso.<domain>` and token;
   `verifyConnectionDomain` reads the TXT (60 s cooldown) and can be asked again. A domain is claimed
   by one enabled connection per tenant (`DOMAIN_TAKEN`).
-- Quota `connections` (free 1, pro 5, enterprise unlimited; `plan.schema.ts`, usage, console `Quotas`).
+- Quota `connections` (free 1, pro 5, enterprise unlimited; `tenants.plan.ts`, usage, console `Quotas`).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
 - **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
   (`connections.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata

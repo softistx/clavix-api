@@ -4,7 +4,7 @@ import { redis } from "@/config/redis";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
 import { rotateNow } from "@/modules/keys";
 import { parseRotateArgs, ROTATE_USAGE } from "@/modules/keys/cli";
-import { partitionOf } from "@/modules/tenants/identity";
+import { partitionOf } from "@/modules/tenants";
 import { CliInputError, UnknownTenantError } from "@/shared/cli";
 
 // Emergency rotation (a signing key leaked): retires the tenant's current key

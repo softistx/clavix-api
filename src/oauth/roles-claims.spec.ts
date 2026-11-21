@@ -5,7 +5,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { catalog } from "@/config/resources";
 import { rolesFor, rolesService } from "@/config/roles";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createFlow } from "~/oauth-flow";
 
 const X = "https://x.roles.test/api";

@@ -4,7 +4,7 @@ import { env } from "@/config/env";
 import { createTenancy } from "@/config/tenancy";
 import type { TxtAnswer } from "@/modules/domains/dns";
 import { DomainStore } from "@/modules/domains/domains.service";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 
 // createTenancy (the wiring of src/config/tenancy.ts) on the wired collection,

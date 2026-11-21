@@ -1,9 +1,7 @@
 import type { TypedCollection } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
-import { TenantAdminService, TenantsService } from "@/modules/tenants";
-import type { PublicOrigin } from "@/modules/tenants/identity";
-import { hostOf } from "@/modules/tenants/identity";
-import type { tenants } from "@/modules/tenants/tenants.model";
+import type { PublicOrigin, tenants } from "@/modules/tenants";
+import { hostOf, TenantsService } from "@/modules/tenants";
 import { createTenantResolver, type DomainDirectory } from "@/tenancy/resolver";
 import {
   noTenantCache,
@@ -58,11 +56,7 @@ export function createTenancy({
     ...(hostsOf === undefined ? {} : { hostsOf }),
     ...(onCreated === undefined ? {} : { onCreated }),
   });
-  const tenantAdmin = new TenantAdminService(tenants, tenantsService, {
-    onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
-    ...(hostsOf === undefined ? {} : { hostsOf }),
-  });
-  return { tenantResolver, tenantsService, tenantAdmin };
+  return { tenantResolver, tenantsService };
 }
 
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
@@ -78,14 +72,14 @@ const origin = {
 export const domainStore = createDomainStore({
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
   slugHostOf: async (tenantId) => {
-    const tenant = await tenantAdmin.find(tenantId);
+    const tenant = await tenantsService.find(tenantId);
     return tenant === undefined
       ? undefined
       : hostOf(tenant.slug, env.CLAVIX_DOMAIN);
   },
 });
 
-export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
+export const { tenantResolver, tenantsService } = createTenancy({
   tenants: mongo.db.tenants,
   // The first signing key, and the platform link (the console's permissions).
   onCreated: async (tenantId) => {

@@ -18,7 +18,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
 import { webhookDelivery } from "@/config/webhooks";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { type ConsoleResult, consoleRequestAs } from "~/console";
 import {
   type ConsoleLimitConfig,

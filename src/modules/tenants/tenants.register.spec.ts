@@ -3,11 +3,11 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients/register-client";
-import { parseTenantArgs } from "./cli";
-import { partitionOf } from "./identity";
-import { registerTenant, TenantInputError } from "./register-tenant";
-import { PLATFORM_TENANT_SLUG, RESERVED_SLUGS } from "./slug";
+import { parseTenantArgs } from "./tenants.cli";
+import { TenantInputError } from "./tenants.errors";
+import { PLATFORM_TENANT_SLUG, RESERVED_SLUGS } from "./tenants.rules";
 import { TenantsService } from "./tenants.service";
+import { partitionOf } from "./tenants.utils";
 
 const collection = mongo.db.tenants;
 const created: string[] = [];
@@ -17,7 +17,6 @@ const service = new TenantsService(collection, {
     created.push(id);
   },
 });
-const options = { service, collection };
 
 afterEach(async () => {
   created.length = 0;
@@ -44,9 +43,9 @@ describe("parseTenantArgs", () => {
   });
 });
 
-describe("registerTenant", () => {
+describe("TenantsService.register", () => {
   test("creates an active, closed tenant and gives it its first key hook", async () => {
-    const result = await registerTenant(options, {
+    const result = await service.register({
       slug: "acme",
       name: " Acme ",
     });
@@ -63,38 +62,38 @@ describe("registerTenant", () => {
   });
 
   test("a re-run with the same name creates nothing; another name is refused", async () => {
-    const first = await registerTenant(options, { slug: "acme", name: "Acme" });
-    const again = await registerTenant(options, { slug: "acme", name: "Acme" });
+    const first = await service.register({ slug: "acme", name: "Acme" });
+    const again = await service.register({ slug: "acme", name: "Acme" });
     expect(again).toMatchObject({ created: false, tenantId: first.tenantId });
     expect(created).toEqual([first.tenantId]);
     await expect(
-      registerTenant(options, { slug: "acme", name: "Other" }),
+      service.register({ slug: "acme", name: "Other" }),
     ).rejects.toThrow(/already exists/);
     await expect(
-      registerTenant(options, { slug: "acme", name: "Acme", signUp: true }),
+      service.register({ slug: "acme", name: "Acme", signUp: true }),
     ).rejects.toThrow(/already exists/);
     expect(await collection.raw.countDocuments({ slug: "acme" })).toBe(1);
   });
 
   test("refuses invalid and reserved slugs with the module's own rules", async () => {
     for (const slug of ["A", "x", "-ab", "has space", ...RESERVED_SLUGS]) {
-      await expect(
-        registerTenant(options, { slug, name: "N" }),
-      ).rejects.toThrow(TenantInputError);
+      await expect(service.register({ slug, name: "N" })).rejects.toThrow(
+        TenantInputError,
+      );
     }
-    await expect(
-      registerTenant(options, { slug: "ok", name: " " }),
-    ).rejects.toThrow(TenantInputError);
+    await expect(service.register({ slug: "ok", name: " " })).rejects.toThrow(
+      TenantInputError,
+    );
     expect(
       await collection.raw.countDocuments({ slug: { $ne: "clavix" } }),
     ).toBe(0);
   });
 
   test("a deleted tenant's slug stays reserved", async () => {
-    const first = await registerTenant(options, { slug: "gone", name: "Gone" });
+    const first = await service.register({ slug: "gone", name: "Gone" });
     await service.delete(first.tenantId);
     await expect(
-      registerTenant(options, { slug: "gone", name: "Gone" }),
+      service.register({ slug: "gone", name: "Gone" }),
     ).rejects.toThrow(/deleted tenant/);
     expect(await collection.raw.countDocuments({ slug: "gone" })).toBe(1);
   });
@@ -102,8 +101,8 @@ describe("registerTenant", () => {
 
 describe("isolation between tenants", () => {
   test("a tenant created by script has its own partition: nothing of another tenant is in it", async () => {
-    const a = await registerTenant(options, { slug: "isoa", name: "A" });
-    const b = await registerTenant(options, { slug: "isob", name: "B" });
+    const a = await service.register({ slug: "isoa", name: "A" });
+    const b = await service.register({ slug: "isob", name: "B" });
     expect(a.tenantId).not.toBe(b.tenantId);
     expect(a.slug).not.toBe(b.slug);
 
@@ -118,9 +117,9 @@ describe("isolation between tenants", () => {
     expect(await storeOf(b.tenantId).findClient("app")).toBeNull();
 
     // A's slug cannot be taken over through a registration on B's name.
-    await expect(
-      registerTenant(options, { slug: "isoa", name: "B" }),
-    ).rejects.toThrow(TenantInputError);
+    await expect(service.register({ slug: "isoa", name: "B" })).rejects.toThrow(
+      TenantInputError,
+    );
     expect((await findTenant("isoa"))?.name).toBe("A");
   });
 });

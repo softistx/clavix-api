@@ -3,9 +3,10 @@ import {
   effectiveQuotas,
   overridesOf,
   planOf,
-} from "@/modules/tenants/plan.schema";
-import { stateOf, type TenantState } from "@/modules/tenants/tenants.admin";
-import { purgeAtOf } from "@/modules/tenants/trash.schema";
+  purgeAtOf,
+  stateOf,
+  type TenantState,
+} from "@/modules/tenants";
 import { docOf } from "./lookup";
 import { tenantMutations } from "./mutations";
 import { quotasOut, tenantQueries } from "./queries";

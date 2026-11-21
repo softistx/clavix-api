@@ -13,7 +13,7 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { verifiedCallers } from "~/console";
 import { CONSOLE_PATH } from "../../identity";
 

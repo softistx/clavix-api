@@ -3,7 +3,7 @@ import {
   InvalidSlugError,
   PlatformTenantProtectedError,
   SlugTakenError,
-} from "@/modules/tenants/tenants.errors";
+} from "@/modules/tenants";
 import { QuotaExceededError } from "@/modules/usage/quota";
 import { fail } from "@/shared/errors";
 

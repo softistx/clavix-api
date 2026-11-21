@@ -1,6 +1,6 @@
 import type { OAuthIssuers } from "@softistx/janus-oauth";
 import type { RevokeEnqueuer } from "@/modules/consent/revoke-job";
-import { issuerOf } from "@/modules/tenants/identity";
+import { issuerOf } from "@/modules/tenants";
 import { env } from "./env";
 import { redis } from "./redis";
 import { tenantsService } from "./tenancy";

@@ -1,12 +1,12 @@
 import { ObjectId } from "mongodb";
-import { tenantAdmin } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import {
   webhookEndpoints as endpoints,
   webhookDeliveries,
 } from "@/config/webhook-endpoints";
 import { webhookDelivery } from "@/config/webhooks";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { effectiveQuotas } from "@/modules/tenants/plan.schema";
+import { effectiveQuotas } from "@/modules/tenants";
 import { WEBHOOK_EVENT_TYPES } from "@/modules/webhooks/events";
 import type { WebhookEndpointDoc } from "@/modules/webhooks/webhook-endpoints.service";
 import { WebhookError } from "@/modules/webhooks/webhooks.errors";
@@ -131,7 +131,7 @@ export const webhooks: Resolvers = {
   Mutation: {
     createWebhookEndpoint: async (_, { tenantId, input }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const stored = await tenantAdmin.find(tenant._id.toHexString());
+      const stored = await tenantsService.find(tenant._id.toHexString());
       const quota = stored === undefined ? 0 : effectiveQuotas(stored).webhooks;
       const created = await ctx.exclusive(webhooksKey(tenant), () =>
         refusing(() =>

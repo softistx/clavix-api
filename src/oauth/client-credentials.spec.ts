@@ -147,9 +147,7 @@ describe("the client credentials grant", () => {
     const store = (
       await import("@softistx/janus-oauth-mongo")
     ).createMongoOAuth(oauthDb, {
-      partition: (await import("@/modules/tenants/identity")).partitionOf(
-        tenantId,
-      ),
+      partition: (await import("@/modules/tenants")).partitionOf(tenantId),
     });
     await store.upsertClient({
       id: "forced-public",

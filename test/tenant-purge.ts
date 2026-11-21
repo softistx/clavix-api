@@ -14,9 +14,8 @@ import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { createPartitionPurger } from "@/config/partition-purger";
 import { ownedPurgers } from "@/config/purge";
-import { tenantAdmin, tenantsService } from "@/config/tenancy";
-import { type PartitionPurger, purgeTenants } from "@/modules/tenants/purge";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { tenantsService } from "@/config/tenancy";
+import { type PartitionPurger, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 
 export const DAY = 24 * 60 * 60 * 1000;
 export const at = (date: Date, days: number) =>
@@ -38,9 +37,8 @@ export const partitions: PartitionPurger = {
 };
 export const logged: string[] = [];
 export const run = (now: Date) =>
-  purgeTenants(
+  tenantsService.purge(
     {
-      registry: tenantAdmin,
       owned: ownedPurgers(),
       memberships: access,
       partitions,

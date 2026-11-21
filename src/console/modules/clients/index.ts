@@ -1,6 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
 import { clientsService } from "@/config/clients";
-import { tenantAdmin } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
@@ -39,7 +39,7 @@ const MAX_PAGE = 100;
 /** Clients are a hard quota: one more past the plan's is `QUOTA_EXCEEDED` (409). */
 async function assertClientQuota(tenant: { _id: { toHexString(): string } }) {
   const id = tenant._id.toHexString();
-  const doc = await tenantAdmin.find(id);
+  const doc = await tenantsService.find(id);
   if (doc === undefined) throw denial("NOT_FOUND", "No such tenant");
   try {
     assertWithinQuota(

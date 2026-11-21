@@ -8,12 +8,12 @@ import {
 } from "@/modules/connections/connections.discovery";
 import { ConnectionsService } from "@/modules/connections/connections.service";
 import { systemTxtResolver } from "@/modules/domains/dns";
-import { hostOf } from "@/modules/tenants/identity";
+import { hostOf } from "@/modules/tenants";
 import { socialOf } from "@/modules/users/tenant-janus";
 import { mongo } from "./db";
 import { env } from "./env";
 import { connectionSecretBox } from "./keys";
-import { tenantAdmin, tenantResolver } from "./tenancy";
+import { tenantResolver, tenantsService } from "./tenancy";
 
 // The accounts linked through a connection, counted by the tenant's own janus
 // instance (`auth.social.countLinks`): its stores count within the tenant's
@@ -21,7 +21,7 @@ import { tenantAdmin, tenantResolver } from "./tenancy";
 // social instance has no link. `./users` imports this module, so `forTenant`
 // is read at call time only.
 const linkCount = async (tenantId: string, connectionId: string) => {
-  const tenant = await tenantAdmin.find(tenantId);
+  const tenant = await tenantsService.find(tenantId);
   const resolved =
     tenant === undefined
       ? null

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
-import { PLAN_IDS } from "@/modules/tenants/plan.schema";
+import { PLAN_IDS } from "@/modules/tenants";
 
 /**
  * What a host resolves to: plain data, so it can sit in Redis. `issuer` and

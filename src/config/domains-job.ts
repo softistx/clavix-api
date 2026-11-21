@@ -4,7 +4,7 @@ import type { RecheckDeps } from "@/modules/domains/recheck-worker";
 import { access } from "./access";
 import { env } from "./env";
 import { mailer } from "./mail";
-import { domainStore, tenantAdmin } from "./tenancy";
+import { domainStore, tenantsService } from "./tenancy";
 
 /**
  * The recheck over the real stores. A domain that lapses mails the tenant's
@@ -16,7 +16,7 @@ export const domainRecheckDeps = (
   recheckAll: (onUnverified) => domainStore.recheckAll(onUnverified),
   notify: async (domain) => {
     const tenantId = domain.tenantId.toHexString();
-    const tenant = await tenantAdmin.find(tenantId);
+    const tenant = await tenantsService.find(tenantId);
     if (tenant === undefined) return;
     const owners = await Promise.all(
       (await access.owners(tenantId)).map((id) => findUser(id)),

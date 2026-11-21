@@ -12,7 +12,7 @@ import {
   registerResource,
   storedResourcesFor,
 } from "@/modules/resources/register-resource";
-import { issuerOf } from "@/modules/tenants/identity";
+import { issuerOf } from "@/modules/tenants";
 import { userinfoOf } from "@/oauth/building";
 import { mongo } from "./db";
 import { env } from "./env";

@@ -1,4 +1,4 @@
-import type { PurgeReport } from "./purge";
+import type { PurgeReport } from "./tenants.types";
 
 /** The queue surface the worker needs (`redis.queues.tenantPurge`). */
 export interface PurgeQueue {
@@ -11,7 +11,7 @@ export interface PurgeQueue {
  * Runs a pass now (a restart finishes a purge left claimed), then one per daily
  * tick when a queue is given. A pass with a failed tenant throws so the queue
  * retries it; at start a failure is logged. Only tenants whose 30 days of
- * trash are over are touched (`purgeTenants`).
+ * trash are over are touched (`TenantsService.purge`).
  */
 export async function startTenantPurge(
   run: () => Promise<PurgeReport>,

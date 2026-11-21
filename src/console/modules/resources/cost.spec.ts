@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { mongo } from "@/config/db";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { consoleRequestAs } from "~/console";
 
 // The console UI's Applications read (clavix-ui `app/api/resources.server.ts`): every resource with

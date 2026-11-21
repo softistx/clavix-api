@@ -1,7 +1,6 @@
 import { OptimisticLockError } from "@softistx/mongo";
 import type { ErrorCode } from "@/i18n/codes";
-import type { Tenant } from "@/modules/tenants/tenants.model";
-import type { TenantsService } from "@/modules/tenants/tenants.service";
+import type { Tenant, TenantsService } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import {
   AgentsInputError,

@@ -30,7 +30,7 @@ import {
   passkeyLimits,
 } from "@/modules/passkeys/throttle";
 import { ssoLimits } from "@/modules/sign-in-methods/sso-throttle";
-import { tenantPurge } from "@/modules/tenants/purge-queue";
+import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
 import { webhookSecretsPrune } from "@/modules/webhooks/secrets-prune.queue";
 import {

@@ -9,9 +9,11 @@ import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { buildTenantJanus, SESSION_COOKIE } from "@/modules/users/tenant-janus";
 

@@ -5,12 +5,8 @@ import {
 } from "@softistx/mongo";
 import type { BoundUniqueCounter } from "@softistx/redis";
 import { ObjectId } from "mongodb";
-import {
-  effectiveQuotas,
-  type QuotaKey,
-  type Quotas,
-} from "@/modules/tenants/plan.schema";
-import type { Tenant } from "@/modules/tenants/tenants.model";
+import type { Tenant } from "@/modules/tenants";
+import { effectiveQuotas, type QuotaKey, type Quotas } from "@/modules/tenants";
 import { type monthlyActiveUsers, monthOf } from "./mau";
 import type { usageCounters } from "./usage.model";
 

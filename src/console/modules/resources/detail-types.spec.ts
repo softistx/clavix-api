@@ -8,7 +8,7 @@ import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fingerprintOf } from "@/oauth/resolution";
 import { codeOf, consoleAs } from "~/console";
 

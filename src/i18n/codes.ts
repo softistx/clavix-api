@@ -10,7 +10,7 @@ import { codes as passkeys } from "@/modules/passkeys/passkeys.errors";
 import { codes as resources } from "@/modules/resources/catalog.errors";
 import { codes as roles } from "@/modules/roles/roles.errors";
 import { codes as signInMethods } from "@/modules/sign-in-methods/sign-in-methods.errors";
-import { codes as tenants } from "@/modules/tenants/tenants.errors";
+import { codes as tenants } from "@/modules/tenants";
 import { defineCodes } from "./define-codes";
 
 // Answers every module gives alike, so declared here.

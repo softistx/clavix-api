@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import { mongo } from "@/config/db";
-import { PLATFORM_TENANT_SLUG } from "./slug";
 import {
   InvalidSlugError,
   PlatformTenantProtectedError,
   SlugTakenError,
 } from "./tenants.errors";
+import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { TenantsService } from "./tenants.service";
 
 // The wired collection: it carries the slug hooks (src/config/db.ts).
@@ -197,6 +197,32 @@ describe("TenantsService", () => {
     await expect(
       new TenantsService(always, { domain: "clavix.test" }).reactivate(
         tenant._id,
+      ),
+    ).rejects.toThrow(OptimisticLockError);
+  });
+
+  test("a policy change retries three times: two races win, a third reaches the caller", async () => {
+    const tenant = await service.create({ slug: "acme", name: "Acme" });
+    let reads = 0;
+    const racing = (limit: number) =>
+      ({
+        getById: async (id: never) => {
+          const found = await collection.getById(id);
+          if (reads++ < limit) {
+            await collection.update(found._id, { name: `N${reads}` });
+          }
+          return found;
+        },
+        update: collection.update.bind(collection),
+      }) as unknown as typeof collection;
+    const twice = new TenantsService(racing(2), { domain: "clavix.test" });
+    await twice.updateSignIn(tenant._id, (t) => t.signIn);
+    expect(reads).toBe(3);
+    reads = 0;
+    await expect(
+      new TenantsService(racing(3), { domain: "clavix.test" }).updateSignIn(
+        tenant._id,
+        (t) => t.signIn,
       ),
     ).rejects.toThrow(OptimisticLockError);
   });

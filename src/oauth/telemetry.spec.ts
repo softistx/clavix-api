@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Exporter, Signal } from "@softistx/telemetry";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { buildTelemetry } from "@/telemetry/build";
 import { createFlow } from "~/oauth-flow";
 

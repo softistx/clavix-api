@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
-import { type RegisterTenantInput, TenantInputError } from "./register-tenant";
+import { TenantInputError } from "./tenants.errors";
+import type { RegisterTenantInput } from "./tenants.types";
 
 export const USAGE = `Usage: bun run tenants:create --slug <slug> --name <name> [options]
 

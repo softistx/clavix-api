@@ -16,11 +16,11 @@ import { resources } from "@/modules/resources/resources.model";
 import { scopes } from "@/modules/resources/scopes.model";
 import {
   issuerOf,
+  PLATFORM_TENANT_SLUG,
   type PublicOrigin,
   partitionOf,
-} from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { tenants } from "@/modules/tenants/tenants.model";
+  tenants,
+} from "@/modules/tenants";
 
 export const NAME = "Clavix console";
 

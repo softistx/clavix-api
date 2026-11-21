@@ -9,7 +9,7 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
-import { partitionOf } from "@/modules/tenants/identity";
+import { partitionOf } from "@/modules/tenants";
 import {
   CliInputError,
   type CliTenant,

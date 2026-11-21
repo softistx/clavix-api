@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { tenantAdmin, tenantsService } from "@/config/tenancy";
+import { tenantsService } from "@/config/tenancy";
 import {
   can,
   janusCount,
@@ -14,7 +14,7 @@ import {
   useTenantPurgeHooks,
 } from "~/tenant-purge";
 import { SlugTakenError } from "./tenants.errors";
-import { purgeAtOf } from "./trash.schema";
+import { purgeAtOf } from "./tenants.trash";
 
 useTenantPurgeHooks();
 
@@ -31,7 +31,7 @@ describe("the tenant purge", () => {
       at: new Date(),
       requestId: "r",
     } as never);
-    const trashed = await tenantAdmin.trash(a._id.toHexString());
+    const trashed = await tenantsService.trash(a._id.toHexString());
     const due = purgeAtOf(trashed.deletedAt as Date);
     const bBefore = await janusOf(b._id.toHexString());
 
@@ -61,12 +61,12 @@ describe("the tenant purge", () => {
     const tomb = await mongo.db.tenants.raw.findOne({ _id: a._id });
     expect(tomb).toMatchObject({ slug: "alpha", name: "" });
     expect(tomb?.["purgedAt"]).toBeInstanceOf(Date);
-    expect(await tenantAdmin.find(a._id.toHexString())).toBeUndefined();
+    expect(await tenantsService.find(a._id.toHexString())).toBeUndefined();
     await expect(
       tenantsService.create({ slug: "alpha", name: "again" }),
     ).rejects.toBeInstanceOf(SlugTakenError);
     expect(
-      (await tenantAdmin.list({ first: 50 })).items.map((t) => t.slug),
+      (await tenantsService.list({ first: 50 })).items.map((t) => t.slug),
     ).not.toContain("alpha");
     // A second run finds nothing to do.
     expect(await run(due)).toEqual({ purged: [], failed: [] });
@@ -74,7 +74,7 @@ describe("the tenant purge", () => {
   test("a purge that failed is resumed by the next run, and cannot be restored meanwhile", async () => {
     const a = await seed("alpha");
     const id = a._id.toHexString();
-    const trashed = await tenantAdmin.trash(id);
+    const trashed = await tenantsService.trash(id);
     const due = purgeAtOf(trashed.deletedAt as Date);
     state.failFor = id;
     expect(await run(due)).toEqual({ purged: [], failed: [id] });
@@ -82,7 +82,7 @@ describe("the tenant purge", () => {
     // The OAuth part went before the outage; the users are still there.
     expect(await janusCount(id)).toBeGreaterThan(0);
     // Claimed: it resolves nowhere and cannot be restored.
-    await expect(tenantAdmin.restore(id)).rejects.toThrow();
+    await expect(tenantsService.restore(id)).rejects.toThrow();
     state.failFor = undefined;
     expect(await run(due)).toEqual({ purged: [id], failed: [] });
     expect(await ownedCount(a)).toBe(0);

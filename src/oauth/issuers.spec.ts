@@ -8,8 +8,7 @@ import {
 } from "@softistx/janus-oauth";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { createTenantParOff } from "../../test/tenant-par-off";

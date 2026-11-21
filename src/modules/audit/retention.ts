@@ -1,5 +1,8 @@
-import type { PlanId } from "../tenants/plan.schema";
-import { PLATFORM_RETENTION_DAYS, planOf } from "../tenants/plan.schema";
+import {
+  PLATFORM_RETENTION_DAYS,
+  type PlanId,
+  planOf,
+} from "@/modules/tenants";
 
 /** The actor the retention job acts as (D16); it records no event per deletion. */
 export const RETENTION_ACTOR = "system:audit:retention";

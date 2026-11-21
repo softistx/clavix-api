@@ -2,7 +2,7 @@ import { denial } from "@softistx/janus-graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../../context";
 import { refusing } from "../admins/errors";

@@ -2,8 +2,8 @@ import { defineCollection, id, type ReadDocumentOf } from "@softistx/mongo";
 import { z } from "zod";
 import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
-import { planFields } from "./plan.schema";
-import { trashFields } from "./trash.schema";
+import { planFields } from "./tenants.plan";
+import { trashFields } from "./tenants.trash";
 
 // A slug is reserved for good: the unique index is not partial, so a deleted
 // tenant keeps its slug (its issuer was registered by relying parties).

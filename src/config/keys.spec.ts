@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { jwksFor, signingKeysFor } from "@/config/keys";
 import { tenantsService } from "@/config/tenancy";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { clearDatabase } from "~/db";
 
 afterEach(async () => {

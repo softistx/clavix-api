@@ -22,9 +22,11 @@ import {
   type RevokeJob,
   startGrantsRevoke,
 } from "@/modules/consent/revoke-job";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";

@@ -8,9 +8,11 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { settled } from "@/modules/auth/outbox";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  TenantsService,
+} from "@/modules/tenants";
 import { buildTelemetry } from "./build";
 import { parseOtlpHeaders } from "./otlp-headers";
 

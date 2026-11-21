@@ -9,8 +9,8 @@ import {
   type SocialProviderId,
 } from "@/modules/sign-in-methods/sign-in.schema";
 import { callbackUrlOf } from "@/modules/sign-in-methods/social";
-import { hostOf, issuerOf } from "@/modules/tenants/identity";
-import type { Tenant } from "@/modules/tenants/tenants.model";
+import type { Tenant } from "@/modules/tenants";
+import { hostOf, issuerOf } from "@/modules/tenants";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
 import { tenantArg } from "../ids";

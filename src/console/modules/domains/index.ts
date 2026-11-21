@@ -1,11 +1,11 @@
 import type { ObjectId } from "mongodb";
-import { domainStore, tenantAdmin } from "@/config/tenancy";
+import { domainStore, tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { txtNameOf } from "@/modules/domains/domain-host";
 import type { DomainError } from "@/modules/domains/domains.errors";
 import { DomainError as DomainErrorClass } from "@/modules/domains/domains.errors";
 import type { DomainDoc } from "@/modules/domains/domains.service";
-import { effectiveQuotas } from "@/modules/tenants/plan.schema";
+import { effectiveQuotas } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
@@ -95,7 +95,7 @@ export const domains: Resolvers = {
   Mutation: {
     addDomain: async (_, { tenantId, host }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const stored = await tenantAdmin.find(tenant._id.toHexString());
+      const stored = await tenantsService.find(tenant._id.toHexString());
       const quota = stored === undefined ? 0 : effectiveQuotas(stored).domains;
       // The quota count and the insert are not atomic: one claim at a time
       // per tenant, across processes when there is a shared lock.

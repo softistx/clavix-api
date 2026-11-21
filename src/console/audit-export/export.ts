@@ -1,4 +1,4 @@
-import { planOf } from "@/modules/tenants/plan.schema";
+import { planOf } from "@/modules/tenants";
 import { permitted } from "../guard";
 import { CONSOLE_EXPORT_PATH } from "../identity";
 import type { Permission } from "../model";

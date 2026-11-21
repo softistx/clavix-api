@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { tenantPurge } from "./purge-queue";
-import { startTenantPurge } from "./purge-worker";
+import { tenantPurge } from "./tenants.purge-queue";
+import { startTenantPurge } from "./tenants.purge-worker";
 
 describe("startTenantPurge", () => {
   test("runs a pass at start, then one per tick; a failed tenant fails the tick", async () => {
