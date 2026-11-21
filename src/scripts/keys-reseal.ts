@@ -6,7 +6,13 @@ import { warn } from "@/config/runtime";
 import { signInPolicyService } from "@/config/sign-in-policy";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
-import { RESEAL_USAGE, resealAllTenants, resealExitCode } from "@/modules/keys";
+import {
+  RESEAL_USAGE,
+  resealAllTenants,
+  resealExitCode,
+  resealSecondFactorOf,
+} from "@/modules/keys";
+import { secondFactorKeysOf } from "@/modules/users";
 
 // Step 3 of a master-key rotation (docs/operations.md, "Rotating the master
 // key"): seals again, under the first key of CLAVIX_KEYS_MASTER_KEY (a
@@ -27,6 +33,10 @@ try {
     db: mongo.db,
     masterKeys,
     log: warn,
+    resealSecondFactor: resealSecondFactorOf(
+      mongo.db,
+      secondFactorKeysOf(masterKeys),
+    ),
     tenantIds: () => tenantsService.allIds(),
     secretStores: {
       webhookSecrets: (tenantId) => webhooksService.resealSecrets(tenantId),

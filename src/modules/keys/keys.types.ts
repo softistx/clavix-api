@@ -62,8 +62,8 @@ export interface ResealDeps {
   /** Every tenant partition (hex ids), the suspended and the trashed included. */
   tenantIds: () => Promise<string[]>;
   log: (message: string) => void;
-  /** Seals a partition's TOTP secrets again; janus's `secondFactor.reseal` under the keyring by default. */
-  resealSecondFactor?: ResealSecondFactor;
+  /** Seals a partition's TOTP secrets again (`resealSecondFactorOf(db, secondFactorKeysOf(masterKeys))`). */
+  resealSecondFactor: ResealSecondFactor;
   /**
    * The stores of Clavix's own sealed secrets, each sealing one tenant's
    * envelopes again under the same keyring. Required: a store left out would

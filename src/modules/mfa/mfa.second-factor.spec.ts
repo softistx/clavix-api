@@ -9,7 +9,11 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
 import { settled } from "@/modules/auth";
-import { resealAllTenants, resealExitCode } from "@/modules/keys";
+import {
+  resealAllTenants,
+  resealExitCode,
+  resealSecondFactorOf,
+} from "@/modules/keys";
 import {
   emptySecretResealCounts,
   SignInPolicyService,
@@ -360,6 +364,10 @@ describe("a keyring rotation", () => {
     const report = await resealAllTenants({
       db: mongo.db as never,
       masterKeys: ring,
+      resealSecondFactor: resealSecondFactorOf(
+        mongo.db as never,
+        secondFactorKeysOf(ring),
+      ),
       tenantIds: async () => [tenant.partition],
       log: () => {},
       secretStores: noStores,
@@ -376,6 +384,10 @@ describe("a keyring rotation", () => {
     const again = await resealAllTenants({
       db: mongo.db as never,
       masterKeys: ring,
+      resealSecondFactor: resealSecondFactorOf(
+        mongo.db as never,
+        secondFactorKeysOf(ring),
+      ),
       tenantIds: async () => [tenant.partition],
       log: () => {},
       secretStores: noStores,

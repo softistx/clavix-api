@@ -1,6 +1,11 @@
 import { env } from "@/config/env";
 import { noInvitationHooks, noThrottle, noUserThrottle } from "@/config/no-ops";
 import type { AgentKindsOf, AgentsReader } from "@/modules/clients";
+import {
+  createKeyGenerations,
+  KeysService,
+  type TenantKeys,
+} from "@/modules/keys";
 import { createSecretBox } from "@/modules/sign-in-methods";
 import type { ConnectionsOf, InvitationHooks } from "@/modules/users";
 import { buildTenantJanus, ephemeralSecondFactorKeys } from "@/modules/users";
@@ -106,3 +111,10 @@ export const noAgents: AgentsReader = {
 
 /** Listing filter with no agents told apart. */
 export const noAgentKinds: AgentKindsOf = async () => new Map();
+
+/** `KeysService` over some tenant keys: a silent log, the system clock unless the spec fixes one. */
+export const quietKeys = (
+  keys: TenantKeys,
+  now: () => Date = () => new Date(),
+  log: (message: string) => void = () => {},
+) => new KeysService({ keys, generations: createKeyGenerations(), now, log });

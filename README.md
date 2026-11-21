@@ -160,7 +160,7 @@ Each tenant has its own signing keys (ADR-0010), kept in the `oauthSigningKeys` 
 `@softistx/janus-oauth-mongo`: the private JWK is encrypted with `CLAVIX_KEYS_MASTER_KEY`
 (AES-256-GCM) and the store of a tenant, partitioned by its id, cannot read another's. Janus signs;
 Clavix adds no `jose`.
-- `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (`src/config/keys.ts`; `tenantId` is the
+- `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (methods of `KeysService`, built in `src/config/keys.ts`; `tenantId` is the
   tenant's id in hex, `partitionOf`) give the OAuth endpoints the `SigningKeyStore` and the public JWKS.
 - A tenant gets its first key when it is created (`TenantsService.create`). If that call fails it is
   logged and the tenant stands; the hourly job creates the key within the hour.
