@@ -1,13 +1,13 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { rolesService } from "@/config/roles";
 import { adminScope } from "@/modules/invitations/invitations.rules";
+import { userMutations } from "@/modules/users/users.console-mutations";
+import { keepOwners } from "@/modules/users/users.owners";
 import type { ConsoleContext } from "../context";
 import { createExclusive } from "../exclusive";
 import { adminInvitationHooks } from "./admins/accept";
 import { membersKey, PLATFORM_OWNERS_KEY } from "./admins/service";
 import { userKey } from "./user-key";
-import { userMutations } from "./users/mutations";
-import { keepOwners } from "./users/operators";
 
 // The lock order every writer keeps, so two of them cannot deadlock:
 // the platform owners, then the tenants' members (sorted), then the user.

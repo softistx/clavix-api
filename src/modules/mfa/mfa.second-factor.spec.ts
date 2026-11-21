@@ -311,10 +311,8 @@ describe("reset by an admin", () => {
     const user = await auth.findUser(id);
     expect(user?.hasSecondFactor).toBe(true);
     // The console's port (`ConsoleUsers.resetSecondFactor`) is exercised through its pool.
-    const { createJanusUsers } = await import(
-      "@/console/modules/users/janus-users"
-    );
-    const users = createJanusUsers({
+    const { UsersService } = await import("@/modules/users/users.service");
+    const users = new UsersService({
       janusOf: async () => auth,
       grantsOf: async () => {
         throw new Error("not used");

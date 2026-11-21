@@ -1,15 +1,15 @@
 import { denial } from "@softistx/janus-graphql";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
+import { refusing } from "@/console/modules/admins/errors";
+import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
+import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
-import type { ConsoleContext } from "../../context";
-import { refusing } from "../admins/errors";
-import { idArg, liveTenant, tenantIdOf } from "../ids";
-import { userKey } from "../user-key";
-import { keepOwners } from "./operators";
-import { shape, target } from "./shapes";
+import { setActive } from "./users.console-support";
+import { keepOwners } from "./users.owners";
+import { shape, target } from "./users.utils";
 
 const MAX_NAME = 200;
 
@@ -162,32 +162,18 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     await ctx.audit("user.revokeGrant", target("grant", grantId, tenantId));
     return revoked;
   },
+  revokeUserSession: async (_, { tenantId: given, userId, sessionId }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    idArg(userId, "userId");
+    idArg(sessionId, "sessionId");
+    await liveTenant(ctx.directory, tenantId);
+    const ended = await ctx.users.revokeSession(tenantId, userId, sessionId);
+    // Recorded on a repeat and on a session that is not this user's too:
+    // the id is only named, never read.
+    await ctx.audit(
+      "user.revokeSession",
+      target("session", sessionId, tenantId),
+    );
+    return ended;
+  },
 };
-
-async function setActive(
-  ctx: ConsoleContext,
-  given: string,
-  userId: string,
-  active: boolean,
-) {
-  const tenantId = tenantIdOf(given);
-  idArg(userId, "userId");
-  const tenant = await liveTenant(ctx.directory, tenantId);
-  // Under the user lock (taken by `keepOwners`) like the accept hooks: an
-  // owner role is not granted to an account disabled meanwhile. Enabling goes
-  // through it too: an operator an owner disabled is the owners' to bring back.
-  const user = await keepOwners(
-    ctx,
-    tenant,
-    userId,
-    () => ctx.users.setActive(tenantId, userId, active),
-    active ? "touch" : "disable",
-    userKey(tenantId, userId),
-  );
-  if (user === null) throw denial("NOT_FOUND", "No such user");
-  await ctx.audit(
-    active ? "user.enable" : "user.disable",
-    target("user", userId, tenantId),
-  );
-  return shape(user, tenantId);
-}

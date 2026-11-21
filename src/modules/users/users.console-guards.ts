@@ -1,6 +1,6 @@
-import type { Audits } from "../../audit";
-import { type Guards, onTenant } from "../../guard";
-import { tenantArg } from "../ids";
+import type { Audits } from "@/console/audit";
+import { type Guards, onTenant } from "@/console/guard";
+import { tenantArg } from "@/console/modules/ids";
 
 // Reading the users is `view`; changing them is `edit` (a tenant admin).
 export const usersGuards: Guards = {
@@ -10,6 +10,9 @@ export const usersGuards: Guards = {
   "Query.user": onTenant("view", tenantArg),
   "Query.userInvitations": onTenant("view", tenantArg),
   "Query.userGrants": onTenant("view", tenantArg),
+  // A user's sessions: read is `view`, ending one is `edit`.
+  "Query.userSessions": onTenant("view", tenantArg),
+  "Mutation.revokeUserSession": onTenant("edit", tenantArg),
   "Mutation.inviteUser": onTenant("edit", tenantArg),
   "Mutation.revokeInvitation": onTenant("edit", tenantArg),
   "Mutation.updateUser": onTenant("edit", tenantArg),
@@ -36,4 +39,5 @@ export const usersAudits: Audits = {
   "Mutation.setUserEmailVerified": "user.setEmailVerified",
   "Mutation.resetUserSecondFactor": "user.resetSecondFactor",
   "Mutation.revokeGrant": "user.revokeGrant",
+  "Mutation.revokeUserSession": "user.revokeSession",
 };

@@ -19,10 +19,10 @@ import { rolesService } from "@/config/roles";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { authFor, claimsFor, forTenant } from "@/config/users";
+import { CONSOLE_PATH } from "@/console/identity";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { verifiedCallers } from "~/console";
-import { CONSOLE_PATH } from "../../identity";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,

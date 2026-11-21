@@ -3,9 +3,9 @@ import type { StoredAdminEvent } from "@/console/admin-events/reader";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { isAuthEventType } from "@/modules/audit/audit.model";
 import type { StoredAuthEvent } from "@/modules/audit/audit.types";
+import { badInput } from "@/modules/users/users.errors";
 import type { ConsoleContext } from "../../context";
 import { liveTenant, tenantIdOf } from "../ids";
-import { badInput } from "../users/shapes";
 
 const MAX_PAGE = 100;
 const MAX_TYPES = 20;

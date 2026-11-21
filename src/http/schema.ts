@@ -24,8 +24,10 @@ const typeDefs = mergeTypeDefs([
   ...loadFilesSync(
     [
       join(import.meta.dir, bundled ? ".." : join("..", ".."), "src"),
-      // The console API has its own schema (src/console/schema.ts).
+      // The console API has its own schema (src/console/schema.ts): its
+      // folder and every module's `<name>.console.graphqls`.
       `!${join(import.meta.dir, bundled ? ".." : join("..", ".."), "src", "console")}/**`,
+      "!**/*.console.graphqls",
     ],
     { extensions: ["graphqls"] },
   ),

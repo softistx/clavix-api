@@ -9,13 +9,17 @@ import type { ConsoleContext } from "./context";
 import { type Guards, guardSchema } from "./guard";
 import { guards, resolvers } from "./modules";
 
-// Every src/console/**/*.graphqls: the console API's SDL, apart from the hosted
-// pages' (src/http/schema.ts leaves this folder out). Read at startup from
-// src/console, beside dist/ for the bundle.
+// The console API's SDL: every src/console/**/*.graphqls and every module's
+// `<name>.console.graphqls`, apart from the hosted pages' (src/http/schema.ts
+// leaves both out). Read at startup from src/, beside dist/ for the bundle.
 const bundled = basename(import.meta.dir) === "dist";
-const sources = bundled
-  ? join(import.meta.dir, "..", "src", "console")
-  : import.meta.dir;
+const src = bundled
+  ? join(import.meta.dir, "..", "src")
+  : join(import.meta.dir, "..");
+const sources = [
+  join(src, "console", "**", "*.graphqls"),
+  join(src, "modules", "**", "*.console.graphqls"),
+];
 
 const consoleSources = [
   scalarTypeDefs,

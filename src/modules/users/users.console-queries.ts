@@ -1,7 +1,8 @@
 import { JanusError } from "@softistx/janus";
+import { liveTenant, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { liveTenant, tenantIdOf } from "../ids";
-import { badInput, grantShape, shape } from "./shapes";
+import { badInput } from "./users.errors";
+import { grantShape, shape } from "./users.utils";
 
 const MAX_PAGE = 100;
 const MAX_PREFIX = 254;
@@ -83,5 +84,14 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
     const tenantId = tenantIdOf(given);
     await liveTenant(ctx.directory, tenantId);
     return (await ctx.users.grants(tenantId, userId)).map(grantShape);
+  },
+  userSessions: async (_, { tenantId: given, userId }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    await liveTenant(ctx.directory, tenantId);
+    return (await ctx.users.sessions(tenantId, userId)).map((session) => ({
+      ...session,
+      device: session.device ?? null,
+      lastUsedAt: session.lastUsedAt ?? null,
+    }));
   },
 };

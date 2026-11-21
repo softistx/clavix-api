@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { RoleDoc } from "@/modules/roles";
+import { shape as userShape } from "@/modules/users/users.utils";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import type { ConsoleContext } from "../../context";
@@ -11,7 +12,6 @@ import { type Guards, onTenant } from "../../guard";
 import { refusing } from "../catalog-support";
 import { idArg, liveTenant, tenantArg, tenantIdOf } from "../ids";
 import { userKey } from "../user-key";
-import { shape as userShape } from "../users/shapes";
 
 const view = onTenant("view", tenantArg);
 const edit = onTenant("edit", tenantArg);

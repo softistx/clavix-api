@@ -1,10 +1,10 @@
 import { freshPerMutation } from "@softistx/alxia-graphql";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { userMutations } from "./mutations";
-import { userQueries } from "./queries";
-import { secondFactorLoader } from "./second-factor-loader";
+import { userMutations } from "./users.console-mutations";
+import { userQueries } from "./users.console-queries";
+import { secondFactorLoader } from "./users.data-loader";
 
-export { usersAudits, usersGuards } from "./guards";
+export { usersAudits, usersGuards } from "./users.console-guards";
 
 export const users: Resolvers = freshPerMutation({
   TenantUser: {

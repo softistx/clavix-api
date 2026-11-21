@@ -1,6 +1,6 @@
 import { oncePerRequest } from "@softistx/alxia-graphql";
 import DataLoader from "dataloader";
-import type { ConsoleContext, UserSecondFactorView } from "../../context";
+import type { ConsoleContext, UserSecondFactorView } from "@/console/context";
 
 /**
  * `TenantUser.secondFactor` of one tenant, batched per request: a page of users
