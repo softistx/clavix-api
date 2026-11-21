@@ -15,3 +15,6 @@ export const noInvitationHooks: InvitationHooks = {
 
 /** The audit export's budget without Redis (development, specs): every export is within it. */
 export const unthrottled: ExportThrottle = async () => null;
+
+/** The TLS ask's limit without Redis (development, specs): every ask is within it. */
+export const unlimited = async (): Promise<boolean> => true;

@@ -10,6 +10,7 @@ import { tlsAskGate } from "@/modules/domains/domains.tls-limit";
 import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
+import { unlimited } from "./no-ops";
 import { redis } from "./redis";
 import { warn } from "./runtime";
 import { domainsService, tenantResolver } from "./tenancy";
@@ -21,9 +22,6 @@ export { TLS_ASK_PATH, WEBAUTHN_WELL_KNOWN };
  * when it is a verified custom domain of a live tenant.
  */
 const askLimits = redis?.limits;
-
-/** No Redis (development, specs): every ask is within the limit. */
-const unlimited = async (): Promise<boolean> => true;
 
 /** The ask over the real stores, with the given secret (specs pass their own). */
 export const tlsAskOver = (secret: string | undefined) =>
