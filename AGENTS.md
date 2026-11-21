@@ -764,7 +764,7 @@ An error's `extensions.http.status` and `headers` (a throttle's `Retry-After`) a
 itself (`errorHttp`, on by default since 0.10: highest status wins, `http` is stripped from the body, `spec: true` ignores
 the status under `application/json`); no plugin of this API carries it. `useWithoutQuotedValues`
 (`src/http/coercion.ts`) scrubs the coercion errors in `onResultChunk` (streams) and `onResponse` (plain JSON). The console is
-`useConsole` (`onRequest` verifies the token, `onContext` adds the principal); `useInviteBudget` is
+`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 50 000 in `app.ts`: the UI's nested reads of stored lists cost more than graxia's default 5 000, and a refused document is a 200 with no `data`; `modules/resources/cost.spec.ts`); `useInviteBudget` is
 `fieldRateLimit`, whose 429 and `Retry-After` are graxia's. A client that sends a GET or a non-JSON POST sends
 `x-graphql-csrf: 1`. The JSON plugins match `application/json` and `application/graphql-response+json` (parameters
 ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. Unexpected resolver errors and janus 5xx errors go to the app's telemetry
