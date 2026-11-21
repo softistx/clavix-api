@@ -1,5 +1,6 @@
 import { connectionsService } from "@/config/connections";
 import { tenantsService } from "@/config/tenancy";
+import { webhooksService } from "@/config/webhooks-service";
 
 /**
  * The modules' services (D10). A module's entry is added as it adopts the
@@ -11,4 +12,5 @@ import { tenantsService } from "@/config/tenancy";
 export const services = () => ({
   connections: connectionsService,
   tenants: tenantsService,
+  webhooks: webhooksService,
 });

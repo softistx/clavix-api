@@ -32,7 +32,7 @@ import {
 import { ssoLimits } from "@/modules/sign-in-methods/sso-throttle";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";
-import { webhookSecretsPrune } from "@/modules/webhooks/secrets-prune.queue";
+import { webhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-queue";
 import {
   type MetadataLimitConfig,
   metadataLimits,

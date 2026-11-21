@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pruneWebhookSecrets } from "./secrets-prune";
+import { pruneWebhookSecrets } from "./webhooks.secrets-prune";
 
 describe("pruneWebhookSecrets", () => {
   test("sums the pruned endpoints and survives a failing tenant", async () => {

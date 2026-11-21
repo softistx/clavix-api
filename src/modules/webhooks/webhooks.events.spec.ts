@@ -6,7 +6,7 @@ import {
   signedInWebhookEvent,
   userWebhookEvent,
   WEBHOOK_EVENT_TYPES,
-} from "./events";
+} from "./webhooks.events";
 
 const TENANT = "a".repeat(24);
 const signIn = (patch: Partial<AuthEvent> = {}): AuthEvent => ({

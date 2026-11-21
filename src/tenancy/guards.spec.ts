@@ -104,7 +104,7 @@ const allowed = [
   "src/modules/agents/",
   "src/config/agent-clients.ts",
   "src/modules/webhooks/",
-  "src/config/webhook-endpoints.ts",
+  "src/config/webhooks-service.ts",
   "src/modules/connections/",
   "src/config/connections.ts",
 ];

@@ -1,15 +1,14 @@
 import { ObjectId } from "mongodb";
 import { tenantsService } from "@/config/tenancy";
-import {
-  webhookEndpoints as endpoints,
-  webhookDeliveries,
-} from "@/config/webhook-endpoints";
 import { webhookDelivery } from "@/config/webhooks";
+import { webhooksService } from "@/config/webhooks-service";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { effectiveQuotas } from "@/modules/tenants";
-import { WEBHOOK_EVENT_TYPES } from "@/modules/webhooks/events";
-import type { WebhookEndpointDoc } from "@/modules/webhooks/webhook-endpoints.service";
-import { WebhookError } from "@/modules/webhooks/webhooks.errors";
+import {
+  WEBHOOK_EVENT_TYPES,
+  type WebhookEndpointDoc,
+  WebhookError,
+} from "@/modules/webhooks";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";
@@ -95,7 +94,7 @@ export const webhooks: Resolvers = {
     // Under the endpoint's own `view` guard: it is reached through a guarded query or mutation.
     deliveries: async (endpoint, { first }) =>
       (
-        await webhookDeliveries.list(
+        await webhooksService.listAttempts(
           endpoint.tenantId,
           endpoint.id,
           first ?? undefined,
@@ -116,11 +115,16 @@ export const webhooks: Resolvers = {
   Query: {
     webhookEndpoints: async (_, { tenantId }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      return (await endpoints.list(tenant._id.toHexString())).map(shape);
+      return (
+        await webhooksService.listEndpoints(tenant._id.toHexString())
+      ).map(shape);
     },
     webhookEndpoint: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
-      const found = await endpoints.find(tenant._id.toHexString(), id);
+      const found = await webhooksService.findEndpoint(
+        tenant._id.toHexString(),
+        id,
+      );
       return found === undefined ? null : shape(found);
     },
     webhookEventTypes: async (_, { tenantId }, ctx) => {
@@ -135,7 +139,7 @@ export const webhooks: Resolvers = {
       const quota = stored === undefined ? 0 : effectiveQuotas(stored).webhooks;
       const created = await ctx.exclusive(webhooksKey(tenant), () =>
         refusing(() =>
-          endpoints.create(
+          webhooksService.createEndpoint(
             tenant._id.toHexString(),
             {
               url: input.url,
@@ -155,7 +159,7 @@ export const webhooks: Resolvers = {
     updateWebhookEndpoint: async (_, { tenantId, id, input }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       const updated = await refusing(() =>
-        endpoints.update(tenant._id.toHexString(), id, {
+        webhooksService.updateEndpoint(tenant._id.toHexString(), id, {
           url: input.url ?? undefined,
           description: input.description ?? undefined,
           types: input.types ?? undefined,
@@ -169,8 +173,8 @@ export const webhooks: Resolvers = {
       const tenant = await catalogTenant(ctx, tenantId);
       let removed = true;
       try {
-        await endpoints.delete(tenant._id.toHexString(), id);
-        await webhookDeliveries.deleteForEndpoint(tenant._id.toHexString(), id);
+        await webhooksService.deleteEndpoint(tenant._id.toHexString(), id);
+        await webhooksService.deleteAttempts(tenant._id.toHexString(), id);
       } catch (error) {
         if (!(error instanceof WebhookError) || error.code !== "NOT_FOUND") {
           throw refusal(error);
@@ -191,7 +195,11 @@ export const webhooks: Resolvers = {
       // Under the tenant's lock: two rolls would otherwise overwrite each other's secret.
       const rolled = await ctx.exclusive(webhooksKey(tenant), () =>
         refusing(() =>
-          endpoints.roll(tenant._id.toHexString(), id, keepPrevious),
+          webhooksService.rollSecret(
+            tenant._id.toHexString(),
+            id,
+            keepPrevious,
+          ),
         ),
       );
       await ctx.audit("webhook.rollSecret", target(tenant._id, id));
@@ -201,7 +209,7 @@ export const webhooks: Resolvers = {
       const tenant = await catalogTenant(ctx, tenantId);
       const hex = tenant._id.toHexString();
       const endpoint = await refusing(async () => {
-        const found = await endpoints.find(hex, id);
+        const found = await webhooksService.findEndpoint(hex, id);
         if (found === undefined) {
           throw new WebhookError("NOT_FOUND", "No such webhook endpoint");
         }
@@ -216,7 +224,7 @@ export const webhooks: Resolvers = {
         await ctx.budgets?.testWebhook({ tenantId: hex, endpointId: id });
         // The address is checked again on send, by the delivery's fetch; the
         // console says so now rather than a silent give-up later.
-        await endpoints.checkAddress(found.url);
+        await webhooksService.checkAddress(found.url);
         return found;
       });
       const eventId = await webhookDelivery.sendTest(

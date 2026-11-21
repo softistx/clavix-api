@@ -9,11 +9,13 @@ import {
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { createSecretBox } from "@/modules/sign-in-methods/secrets";
-import { createWebhookDelivery, type DisabledEndpoint } from "./delivery";
-import { userWebhookEvent } from "./events";
-import { guardedFetch, type UrlPolicy } from "./url-policy";
-import { WebhookDeliveriesService } from "./webhook-deliveries.service";
-import { WebhookEndpointsService } from "./webhook-endpoints.service";
+import {
+  createWebhookDelivery,
+  type DisabledEndpoint,
+} from "./webhooks.delivery";
+import { userWebhookEvent } from "./webhooks.events";
+import { WebhooksService } from "./webhooks.service";
+import { guardedFetch, type UrlPolicy } from "./webhooks.url-policy";
 
 // The "receiver" is a fetch that records each request and answers with the
 // next status; the address policy is the real one with an injected resolver.
@@ -38,15 +40,15 @@ const policy: UrlPolicy = {
   resolve: async () => ["93.184.216.34"],
 };
 let clock = new Date();
-const endpoints = new WebhookEndpointsService(
+const endpoints = new WebhooksService(
   mongo.db.webhookEndpoints,
+  mongo.db.webhookDeliveries,
   createSecretBox(
     crypto.getRandomValues(new Uint8Array(32)),
     "webhook-secrets",
   ),
   { policy, now: () => clock, mint: mintWebhookSecret, log: () => {} },
 );
-const attempts = new WebhookDeliveriesService(mongo.db.webhookDeliveries);
 const A = new ObjectId().toHexString();
 const B = new ObjectId().toHexString();
 const disabled: DisabledEndpoint[] = [];
@@ -54,8 +56,7 @@ const deliveries: ReturnType<typeof createWebhookDelivery>[] = [];
 
 const makeDelivery = (retries: readonly string[] = ["10ms"]) => {
   const delivery = createWebhookDelivery({
-    endpoints,
-    deliveries: attempts,
+    webhooks: endpoints,
     fetch: guardedFetch(policy, receiver),
     queue: createMemoryWebhookQueue(),
     retries: retries as never,
@@ -114,7 +115,7 @@ const signedBy = (request: Received, secret: string) => {
 
 describe("signed delivery", () => {
   test("a tenant receives user.created, signed, verified by verifyWebhook", async () => {
-    const { secret } = await endpoints.create(
+    const { secret } = await endpoints.createEndpoint(
       A,
       { url: "https://hooks.example.com/in" },
       2,
@@ -143,7 +144,11 @@ describe("signed delivery", () => {
   });
 
   test("another tenant's events never reach the endpoint", async () => {
-    await endpoints.create(A, { url: "https://hooks.example.com/in" }, 2);
+    await endpoints.createEndpoint(
+      A,
+      { url: "https://hooks.example.com/in" },
+      2,
+    );
     const delivery = makeDelivery();
     await delivery.relay(created(B));
     await Bun.sleep(150);
@@ -151,7 +156,7 @@ describe("signed delivery", () => {
   });
 
   test("an endpoint listing types gets only those", async () => {
-    await endpoints.create(
+    await endpoints.createEndpoint(
       A,
       { url: "https://hooks.example.com/in", types: ["user.deleted"] },
       2,
@@ -163,12 +168,12 @@ describe("signed delivery", () => {
   });
 
   test("a test event goes to its endpoint only, whatever its types", async () => {
-    const one = await endpoints.create(
+    const one = await endpoints.createEndpoint(
       A,
       { url: "https://one.example.com/in", types: ["user.deleted"] },
       5,
     );
-    await endpoints.create(A, { url: "https://two.example.com/in" }, 5);
+    await endpoints.createEndpoint(A, { url: "https://two.example.com/in" }, 5);
     const delivery = makeDelivery();
     await delivery.sendTest(A, one.endpoint._id.toHexString());
     await until(() => received.length === 1);
@@ -181,13 +186,13 @@ describe("signed delivery", () => {
 
 describe("secret roll", () => {
   test("both signatures verify during a roll, only the new one after 24 h", async () => {
-    const first = await endpoints.create(
+    const first = await endpoints.createEndpoint(
       A,
       { url: "https://hooks.example.com/in" },
       2,
     );
     const id = first.endpoint._id.toHexString();
-    const rolled = await endpoints.roll(A, id, true);
+    const rolled = await endpoints.rollSecret(A, id, true);
     const delivery = makeDelivery();
     await delivery.relay(created(A));
     await until(() => received.length === 1);
@@ -204,7 +209,7 @@ describe("secret roll", () => {
 
 describe("failures", () => {
   test("a 500 is retried, then given up; five in a row disable the endpoint", async () => {
-    const { endpoint } = await endpoints.create(
+    const { endpoint } = await endpoints.createEndpoint(
       A,
       { url: "https://hooks.example.com/in" },
       2,
@@ -213,9 +218,11 @@ describe("failures", () => {
     statuses = Array(50).fill(500);
     const delivery = makeDelivery(["10ms"]);
     for (let i = 0; i < 5; i++) await delivery.relay(created(A));
-    await until(async () => (await endpoints.find(A, id))?.enabled === false);
+    await until(
+      async () => (await endpoints.findEndpoint(A, id))?.enabled === false,
+    );
     expect(received.length).toBeGreaterThanOrEqual(10);
-    const stored = await endpoints.find(A, id);
+    const stored = await endpoints.findEndpoint(A, id);
     expect(stored?.disabledReason).toBe("givenUp");
     await until(() => disabled.length === 1);
     expect(disabled).toEqual([{ tenantId: A, endpointId: id }]);
@@ -227,7 +234,7 @@ describe("failures", () => {
   });
 
   test("each attempt is logged: a 500 then a 200, with its status, rank and no body", async () => {
-    const { endpoint } = await endpoints.create(
+    const { endpoint } = await endpoints.createEndpoint(
       A,
       { url: "https://hooks.example.com/in" },
       2,
@@ -237,8 +244,8 @@ describe("failures", () => {
     const delivery = makeDelivery(["10ms"]);
     const event = created(A);
     await delivery.relay(event);
-    await until(async () => (await attempts.list(A, id)).length === 2);
-    const [second, first] = await attempts.list(A, id);
+    await until(async () => (await endpoints.listAttempts(A, id)).length === 2);
+    const [second, first] = await endpoints.listAttempts(A, id);
     expect(first).toMatchObject({
       attempt: 1,
       status: 500,
@@ -258,19 +265,21 @@ describe("failures", () => {
       await mongo.db.webhookDeliveries.raw.find({}).toArray(),
     );
     expect(stored).not.toContain("hooks.example.com");
-    expect(await attempts.list(B, id)).toEqual([]);
+    expect(await endpoints.listAttempts(B, id)).toEqual([]);
   });
 
   test("a failed log write never stops the delivery", async () => {
-    await endpoints.create(A, { url: "https://hooks.example.com/in" }, 2);
-    const broken = {
-      record: async () => {
-        throw new Error("down");
-      },
-    } as unknown as WebhookDeliveriesService;
+    await endpoints.createEndpoint(
+      A,
+      { url: "https://hooks.example.com/in" },
+      2,
+    );
+    const broken = Object.create(endpoints) as WebhooksService;
+    broken.recordAttempt = async () => {
+      throw new Error("down");
+    };
     const delivery = createWebhookDelivery({
-      endpoints,
-      deliveries: broken,
+      webhooks: broken,
       fetch: guardedFetch(policy, receiver),
       queue: createMemoryWebhookQueue(),
       retries: [],
@@ -284,7 +293,7 @@ describe("failures", () => {
   });
 
   test("a delivered attempt ends the run of given-up deliveries", async () => {
-    const { endpoint } = await endpoints.create(
+    const { endpoint } = await endpoints.createEndpoint(
       A,
       { url: "https://hooks.example.com/in" },
       2,
@@ -295,13 +304,15 @@ describe("failures", () => {
     await delivery.relay(created(A));
     await delivery.relay(created(A));
     await until(
-      async () => (await endpoints.find(A, id))?.consecutiveGiveUps === 2,
+      async () =>
+        (await endpoints.findEndpoint(A, id))?.consecutiveGiveUps === 2,
     );
     await delivery.relay(created(A));
     await until(
-      async () => (await endpoints.find(A, id))?.consecutiveGiveUps === 0,
+      async () =>
+        (await endpoints.findEndpoint(A, id))?.consecutiveGiveUps === 0,
     );
-    expect((await endpoints.find(A, id))?.enabled).toBe(true);
+    expect((await endpoints.findEndpoint(A, id))?.enabled).toBe(true);
   });
 
   test("a private address is refused at send time (DNS rebinding)", async () => {
@@ -309,9 +320,13 @@ describe("failures", () => {
       allowPrivate: false,
       resolve: async () => ["10.0.0.7"],
     };
-    await endpoints.create(A, { url: "https://hooks.example.com/in" }, 2);
+    await endpoints.createEndpoint(
+      A,
+      { url: "https://hooks.example.com/in" },
+      2,
+    );
     const delivery = createWebhookDelivery({
-      endpoints,
+      webhooks: endpoints,
       fetch: guardedFetch(rebinding, receiver),
       queue: createMemoryWebhookQueue(),
       retries: [],

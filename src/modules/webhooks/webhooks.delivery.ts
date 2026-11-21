@@ -1,6 +1,9 @@
 import type { Duration } from "@softistx/janus";
 import {
+  type Attempt,
+  type Delivery,
   type EndpointResolver,
+  type GivingUp,
   type RefusedDelivery,
   type WebhookQueue,
   type WebhookQueueLimits,
@@ -11,9 +14,8 @@ import {
   type ClavixWebhookEvent,
   signedInWebhookEvent,
   type WebhookData,
-} from "./events";
-import type { WebhookDeliveriesService } from "./webhook-deliveries.service";
-import type { WebhookEndpointsService } from "./webhook-endpoints.service";
+} from "./webhooks.events";
+import type { WebhooksService } from "./webhooks.service";
 
 /** The type of the event `sendTestWebhook` sends: not in the catalogue, never subscribed to. */
 export const TEST_EVENT_TYPE = "webhook.test";
@@ -64,9 +66,8 @@ export interface DisabledEndpoint {
 }
 
 export interface DeliveryDeps {
-  endpoints: WebhookEndpointsService;
-  /** Where each attempt is logged (W2); absent, none is. */
-  deliveries?: WebhookDeliveriesService;
+  /** The endpoints, and where each attempt is logged (W2). */
+  webhooks: WebhooksService;
   /** The guarded `fetch` (D21): checks the address on every send. */
   fetch: typeof fetch;
   /** The shared queue (Redis); in memory when absent. */
@@ -81,17 +82,14 @@ export interface DeliveryDeps {
   log?: (message: string) => void;
 }
 
-/**
- * The process-wide delivery (D20): one `webhooks()` for every tenant, whose
- * endpoints are read at send time and at each attempt from the tenant the
- * event names, so a rolled secret or a switched-off endpoint is honoured by a
- * retry. It is fed by the event bus (`relay`) and by `sendTest`.
- */
-export function createWebhookDelivery(deps: DeliveryDeps) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+type Log = (message: string) => void;
 
-  const endpoints: EndpointResolver<ClavixWebhookEvent> = async (event) => {
-    const all = await deps.endpoints.deliveryEndpoints(event.data.tenantId);
+/** The tenant's endpoints for one event, queue-named; a test event reaches its one endpoint, whatever its types. */
+function endpointResolver(
+  deps: DeliveryDeps,
+): EndpointResolver<ClavixWebhookEvent> {
+  return async (event) => {
+    const all = await deps.webhooks.deliveryEndpoints(event.data.tenantId);
     const tenantId = event.data.tenantId;
     const named = (list: typeof all) =>
       list.map((endpoint) => ({
@@ -107,65 +105,83 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
     }
     return named(all);
   };
+}
 
+/**
+ * The attempt log keeps what the receiver answered, never the URL or a body; a
+ * failure to write it must not touch the delivery.
+ */
+function attemptHandler(
+  deps: DeliveryDeps,
+  log: Log,
+): (attempt: Attempt<ClavixWebhookEvent>) => Promise<void> {
+  return async (attempt) => {
+    const tenantId = attempt.event.data.tenantId;
+    try {
+      await deps.webhooks.recordAttempt(tenantId, {
+        endpointId: endpointIdOf(attempt.endpoint),
+        eventId: attempt.event.id,
+        type: attempt.event.type,
+        attempt: attempt.attempt,
+        status: attempt.status,
+        error: attempt.error,
+        durationMs: attempt.durationMs,
+        delivered: attempt.delivered,
+        willRetry: attempt.willRetry,
+      });
+    } catch (error) {
+      log(`webhooks: could not log an attempt: ${String(error)}`);
+    }
+    if (!attempt.delivered) return;
+    try {
+      await deps.webhooks.recordDelivered(
+        tenantId,
+        endpointIdOf(attempt.endpoint),
+      );
+    } catch (error) {
+      log(`webhooks: could not record a delivery: ${String(error)}`);
+    }
+  };
+}
+
+/** A delivery given up counts against its endpoint; the one that switches it off tells `onDisabled`. */
+function giveUpHandler(
+  deps: DeliveryDeps,
+  log: Log,
+): (delivery: Delivery<ClavixWebhookEvent>, reason: GivingUp) => Promise<void> {
+  return async (delivery, reason) => {
+    // `closed` and `endpointRemoved` say nothing about the receiver.
+    if (reason.why !== "retriesRanOut") return;
+    if (delivery.event.type === TEST_EVENT_TYPE) return;
+    const tenantId = delivery.event.data.tenantId;
+    const endpointId = endpointIdOf(delivery.endpoint);
+    try {
+      if (await deps.webhooks.recordGiveUp(tenantId, endpointId)) {
+        await deps.onDisabled({ tenantId, endpointId });
+      }
+    } catch (error) {
+      log(`webhooks: could not record a given-up delivery: ${String(error)}`);
+    }
+  };
+}
+
+/**
+ * The process-wide delivery (D20): one `webhooks()` for every tenant, whose
+ * endpoints are read at send time and at each attempt from the tenant the
+ * event names, so a rolled secret or a switched-off endpoint is honoured by a
+ * retry. It is fed by the event bus (`relay`) and by `sendTest`.
+ */
+export function createWebhookDelivery(deps: DeliveryDeps) {
+  const log = deps.log ?? ((message: string) => console.warn(message));
   const listener = webhooks<ClavixWebhookEvent>({
-    endpoints,
+    endpoints: endpointResolver(deps),
     fetch: deps.fetch,
     ...(deps.queue === undefined ? {} : { queue: deps.queue }),
     ...(deps.retries === undefined ? {} : { retries: deps.retries }),
     ...(deps.timeout === undefined ? {} : { timeout: deps.timeout }),
     ...(deps.poll === undefined ? {} : { poll: deps.poll }),
-    onAttempt: async (attempt) => {
-      const tenantId = attempt.event.data.tenantId;
-      // The log keeps what the receiver answered, never the URL or a body; a
-      // failure to write it must not touch the delivery.
-      if (deps.deliveries !== undefined) {
-        try {
-          await deps.deliveries.record(tenantId, {
-            endpointId: endpointIdOf(attempt.endpoint),
-            eventId: attempt.event.id,
-            type: attempt.event.type,
-            attempt: attempt.attempt,
-            status: attempt.status,
-            error: attempt.error,
-            durationMs: attempt.durationMs,
-            delivered: attempt.delivered,
-            willRetry: attempt.willRetry,
-          });
-        } catch (error) {
-          log(`webhooks: could not log an attempt: ${String(error)}`);
-        }
-      }
-      if (!attempt.delivered) return;
-      try {
-        await deps.endpoints.recordDelivered(
-          tenantId,
-          endpointIdOf(attempt.endpoint),
-        );
-      } catch (error) {
-        log(`webhooks: could not record a delivery: ${String(error)}`);
-      }
-    },
-    onGivingUp: async (delivery, reason) => {
-      // `closed` and `endpointRemoved` say nothing about the receiver.
-      if (reason.why !== "retriesRanOut") return;
-      if (delivery.event.type === TEST_EVENT_TYPE) return;
-      const tenantId = delivery.event.data.tenantId;
-      try {
-        const disabled = await deps.endpoints.recordGiveUp(
-          tenantId,
-          endpointIdOf(delivery.endpoint),
-        );
-        if (disabled) {
-          await deps.onDisabled({
-            tenantId,
-            endpointId: endpointIdOf(delivery.endpoint),
-          });
-        }
-      } catch (error) {
-        log(`webhooks: could not record a given-up delivery: ${String(error)}`);
-      }
-    },
+    onAttempt: attemptHandler(deps, log),
+    onGivingUp: giveUpHandler(deps, log),
   });
 
   return {

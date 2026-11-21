@@ -3,7 +3,7 @@ import { mongo } from "@/config/db";
 import { masterKeys } from "@/config/keys";
 import { redis } from "@/config/redis";
 import { tenantsService } from "@/config/tenancy";
-import { webhookEndpoints } from "@/config/webhook-endpoints";
+import { webhooksService } from "@/config/webhooks-service";
 import { signInPolicyService } from "@/console/modules/sign-in-methods/wiring";
 import { resealAllTenants, resealExitCode } from "@/modules/keys";
 import { RESEAL_USAGE } from "@/modules/keys/cli";
@@ -28,7 +28,7 @@ try {
     masterKeys,
     tenantIds: () => tenantsService.allIds(),
     secretStores: {
-      webhookSecrets: (tenantId) => webhookEndpoints.resealSecrets(tenantId),
+      webhookSecrets: (tenantId) => webhooksService.resealSecrets(tenantId),
       connectionSecrets: (tenantId) =>
         connectionsService.resealSecrets(tenantId),
       socialSecrets: (tenantId) => signInPolicyService.resealSecrets(tenantId),
