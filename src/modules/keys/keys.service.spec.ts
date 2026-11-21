@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
+import { defined } from "~/narrow";
 import { quietKeys } from "~/ports";
 import { createKeyGenerations } from "./keys.generations";
 import { retireAfterMs, rotationPolicy } from "./keys.rules";
@@ -19,7 +20,10 @@ describe("rotation", () => {
   const kids = async (tenant: string, now: Date) =>
     (await keys.jwksFor(tenant, now)).keys.map((k) => k.kid);
   const signing = async (tenant: string, now: Date) =>
-    (await keys.signingKeysFor(tenant).findCurrentKey(now))?.kid;
+    defined(
+      (await keys.signingKeysFor(tenant).findCurrentKey(now))?.kid,
+      "a signing key",
+    );
 
   afterEach(clearDatabase);
 
@@ -31,7 +35,7 @@ describe("rotation", () => {
       await pass(t0);
       const first = await signing(T, t0);
       expect(first).toBeDefined();
-      expect(await kids(T, t0)).toEqual([first as string]);
+      expect(await kids(T, t0)).toEqual([first]);
 
       // Idempotent: a second pass does nothing.
       expect(await pass(at(HOUR))).toEqual({ inserted: [], promoted: [] });
@@ -45,7 +49,7 @@ describe("rotation", () => {
       await pass(publishAt);
       const published = await kids(T, publishAt);
       expect(published).toHaveLength(2);
-      const second = published.find((kid) => kid !== first) as string;
+      const second = defined(published.find((kid) => kid !== first));
       expect(await signing(T, publishAt)).toBe(first);
 
       // 47 h later it is still waiting; at 90 d it takes over, the old one retires.
@@ -56,12 +60,12 @@ describe("rotation", () => {
       expect(done.promoted).toEqual([second]);
       expect(await signing(T, activation)).toBe(second);
       expect(await kids(T, activation)).toEqual(
-        expect.arrayContaining([first as string, second]),
+        expect.arrayContaining([first, second]),
       );
 
       // The retired key is published 24 h more, then gone.
       const justBefore = at(90 * 24 * HOUR + 23 * HOUR);
-      expect(await kids(T, justBefore)).toContain(first as string);
+      expect(await kids(T, justBefore)).toContain(first);
       const gone = at(90 * 24 * HOUR + 25 * HOUR);
       expect(await kids(T, gone)).toEqual([second]);
     });
@@ -103,7 +107,10 @@ describe("emergency rotation", () => {
   const kids = async (tenant: string, at: Date) =>
     (await keys.jwksFor(tenant, at)).keys.map((k) => k.kid);
   const signing = async (tenant: string, at: Date) =>
-    (await keys.signingKeysFor(tenant).findCurrentKey(at))?.kid;
+    defined(
+      (await keys.signingKeysFor(tenant).findCurrentKey(at))?.kid,
+      "a signing key",
+    );
 
   afterEach(clearDatabase);
 
@@ -125,19 +132,17 @@ describe("emergency rotation", () => {
       const newA = await signing(A, at);
       expect(newA).toBeDefined();
       expect(newA).not.toBe(oldA);
-      expect(rotated[0]?.current).toBe(newA as string);
-      expect(await kids(A, at)).toEqual(
-        expect.arrayContaining([oldA as string, newA as string]),
-      );
+      expect(rotated[0]?.current).toBe(newA);
+      expect(await kids(A, at)).toEqual(expect.arrayContaining([oldA, newA]));
 
       // The old key leaves the JWKS after the window, not before.
       const justBefore = new Date(at.getTime() + retireAfterMs - 1);
-      expect(await kids(A, justBefore)).toContain(oldA as string);
+      expect(await kids(A, justBefore)).toContain(oldA);
       const after = new Date(at.getTime() + retireAfterMs + 1);
-      expect(await kids(A, after)).not.toContain(oldA as string);
+      expect(await kids(A, after)).not.toContain(oldA);
 
       // The other tenant is untouched.
-      expect(await signing(B, at)).toBe(oldB as string);
+      expect(await signing(B, at)).toBe(oldB);
     });
 
     test("--drop-old unpublishes the retired key at once", async () => {
@@ -146,9 +151,9 @@ describe("emergency rotation", () => {
       const at = new Date(t0.getTime() + 1000);
       await quietKeys(keys, () => at).rotateNow([A], { dropOld: true });
       const published = await kids(A, new Date(at.getTime() + 1));
-      expect(published).not.toContain(oldA as string);
+      expect(published).not.toContain(oldA);
       expect(published).toHaveLength(1);
-      expect(published[0]).toBe((await signing(A, at)) as string);
+      expect(published[0]).toBe(await signing(A, at));
     });
 
     test("a published next key takes over at once", async () => {
@@ -160,8 +165,8 @@ describe("emergency rotation", () => {
       const [, next] = await kids(A, pre);
       expect(next).toBeDefined();
       await quietKeys(keys, () => pre).rotateNow([A]);
-      expect(await signing(A, pre)).toBe(next as string);
-      expect(await kids(A, pre)).toContain(oldA as string);
+      expect(await signing(A, pre)).toBe(defined(next, "the next key"));
+      expect(await kids(A, pre)).toContain(oldA);
     });
 
     test("a tenant with no key gets one; a failing tenant is counted and the others go on", async () => {
@@ -182,7 +187,7 @@ describe("emergency rotation", () => {
       expect(logs[0]).toContain(A);
       expect(rotated).toHaveLength(1);
       expect(rotated[0]).toMatchObject({ tenantId: B, retired: null });
-      expect(rotated[0]?.current).toBe((await signing(B, t0)) as string);
+      expect(rotated[0]?.current).toBe(await signing(B, t0));
     });
   });
 

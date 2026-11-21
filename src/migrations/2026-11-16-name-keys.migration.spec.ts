@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { migrate } from "@softistx/mongo/migrations";
-import type { Db } from "mongodb";
+import type { Db, Document } from "mongodb";
 import { freshMigrationDb } from "~/migrations";
 import {
   backfillNameKeys,
@@ -9,10 +9,11 @@ import {
   nameKeysMigration,
 } from "./2026-11-16-name-keys.migration";
 
+type Keyed = Document & { _id: string };
 let db: Db;
 const put = (key: string, fields: Record<string, unknown>, extra = {}) =>
-  db.collection("partitionedUsers").insertOne({
-    _id: key as never,
+  db.collection<Keyed>("partitionedUsers").insertOne({
+    _id: key,
     partition: "p",
     type: "user",
     fields,
@@ -21,7 +22,7 @@ const put = (key: string, fields: Record<string, unknown>, extra = {}) =>
     ...extra,
   });
 const keyOf = async (key: string) =>
-  (await db.collection("partitionedUsers").findOne({ _id: key as never }))?.[
+  (await db.collection<Keyed>("partitionedUsers").findOne({ _id: key }))?.[
     "nameKey"
   ];
 
@@ -46,8 +47,8 @@ describe(id, () => {
     expect(await keyOf("c")).toBeUndefined();
     expect(await keyOf("d")).toBeUndefined();
     const doc = await db
-      .collection("partitionedUsers")
-      .findOne({ _id: "a" as never });
+      .collection<Keyed>("partitionedUsers")
+      .findOne({ _id: "a" });
     expect(doc?.["version"]).toBe(1);
     expect(await backfillNameKeys(db)).toBe(0);
   });

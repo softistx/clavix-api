@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ObjectId } from "mongodb";
+import { endpointDoc, sealedUnder } from "~/webhook-docs";
 import { WebhookError } from "./webhooks.errors";
 import type { EndpointSecret } from "./webhooks.model";
 import {
@@ -11,12 +11,11 @@ import {
   rolledSecrets,
   typesOf,
 } from "./webhooks.rules";
-import type { WebhookEndpointDoc } from "./webhooks.types";
 
 const NOW = new Date("2026-11-18T12:00:00Z");
 const secret = (sid: string, expiresAt: Date | null): EndpointSecret => ({
   sid,
-  sealed: { kid: "k", iv: "i", ct: sid, tag: "t" } as never,
+  sealed: sealedUnder("k", sid),
   createdAt: NOW,
   expiresAt,
 });
@@ -28,13 +27,7 @@ const refusal = (run: () => unknown) => {
   }
   return "none";
 };
-const endpoint = (patch: Partial<WebhookEndpointDoc> = {}) =>
-  ({
-    _id: new ObjectId(),
-    url: "https://hooks.example.com/in",
-    enabled: true,
-    ...patch,
-  }) as WebhookEndpointDoc;
+const endpoint = endpointDoc;
 
 describe("typesOf", () => {
   test("keeps each type once and nothing when none is given", () => {

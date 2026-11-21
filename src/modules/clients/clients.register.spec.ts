@@ -25,6 +25,7 @@ import {
 } from "@/shared/cli";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { defined } from "~/narrow";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { parseClientArgs } from "./clients.cli";
@@ -166,13 +167,12 @@ describe("registerClient", () => {
       type: "confidential",
     });
     expect(first.clientSecret).toBeString();
+    const firstSecret = defined(first.clientSecret, "the first secret");
     const store = await storeOf("regalpha");
     const stored = await store.findClient("back-office");
     expect(stored?.tokenEndpointAuthMethod).toBe("client_secret_basic");
-    expect(stored?.secretHash).toBe(
-      hashOAuthSecret(first.clientSecret as string),
-    );
-    expect(JSON.stringify(stored)).not.toContain(first.clientSecret as string);
+    expect(stored?.secretHash).toBe(hashOAuthSecret(firstSecret));
+    expect(JSON.stringify(stored)).not.toContain(firstSecret);
 
     const again = await registerClient(options, {
       tenant: "regalpha",
@@ -182,7 +182,7 @@ describe("registerClient", () => {
     });
     expect(again).toMatchObject({ created: false, clientSecret: null });
     expect((await store.findClient("back-office"))?.secretHash).toBe(
-      stored?.secretHash as string,
+      defined(stored, "the stored client").secretHash,
     );
 
     const rotated = await registerClient(options, {
@@ -193,9 +193,10 @@ describe("registerClient", () => {
       rotateSecret: true,
     });
     expect(rotated.clientSecret).toBeString();
-    expect(rotated.clientSecret).not.toBe(first.clientSecret);
+    const rotatedSecret = defined(rotated.clientSecret, "the rotated secret");
+    expect(rotatedSecret).not.toBe(first.clientSecret);
     expect((await store.findClient("back-office"))?.secretHash).toBe(
-      hashOAuthSecret(rotated.clientSecret as string),
+      hashOAuthSecret(rotatedSecret),
     );
   });
 

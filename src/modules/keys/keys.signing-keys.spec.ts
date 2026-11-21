@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { StoreFailure } from "@softistx/janus";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
+import { defined } from "~/narrow";
 import { quietKeys } from "~/ports";
 import { createKeyGenerations } from "./keys.generations";
 import { createTenantKeys } from "./keys.signing-keys";
@@ -31,7 +32,7 @@ describe("tenant signing keys", () => {
     await quietKeys(keys).ensureSigningKey(A, now);
     await quietKeys(keys).ensureSigningKey(B, now);
     const kidA = (await keys.jwksFor(A, now)).keys[0]?.kid;
-    const kidB = (await keys.jwksFor(B, now)).keys[0]?.kid;
+    const kidB = defined((await keys.jwksFor(B, now)).keys[0]?.kid, "B's key");
     expect(kidA).toBeDefined();
     expect(kidA).not.toBe(kidB);
     expect((await keys.jwksFor(B, now)).keys.map((k) => k.kid)).not.toContain(
@@ -44,7 +45,7 @@ describe("tenant signing keys", () => {
     expect(currentB?.kid).toBe(kidB);
     expect(
       (await keys.signingKeysFor(B).findKeys(now)).map((k) => k.kid),
-    ).toEqual([kidB as string]);
+    ).toEqual([kidB]);
     // Neither does a tenant with no key see another's.
     expect((await keys.jwksFor("c".repeat(24), now)).keys).toEqual([]);
   });

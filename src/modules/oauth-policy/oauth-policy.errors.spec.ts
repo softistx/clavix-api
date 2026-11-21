@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
+import { at } from "~/body";
 import {
   badAgentsInput,
   policyConflict,
@@ -8,7 +10,7 @@ import {
 const shape = (error: ReturnType<typeof tenantNotFound>) => ({
   message: error.message,
   code: error.extensions["code"],
-  status: (error.extensions["http"] as { status?: number }).status,
+  status: at(error.extensions, "http.status", z.number()),
 });
 
 describe("oauth policy errors", () => {

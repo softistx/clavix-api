@@ -11,6 +11,7 @@ import { defineRedis, openRedis } from "@softistx/redis";
 import { startTestRedis, type TestRedis } from "@softistx/redis/testing";
 import { RedisClient } from "bun";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -19,7 +20,9 @@ import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
 import { webhookDelivery } from "@/config/webhooks";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { type ConsoleResult, consoleRequestAs } from "~/console";
+import { at } from "~/body";
+import { consoleRequestAs } from "~/console";
+import { gqlOf } from "~/gql";
 import {
   type ConsoleLimitConfig,
   consoleLimits,
@@ -65,10 +68,7 @@ async function consoleWith(
   });
 }
 
-const bodyOf = async (response: Response) =>
-  (await response.json()) as ConsoleResult & {
-    errors?: { extensions?: { code?: string; retryAfter?: number } }[];
-  };
+const bodyOf = gqlOf;
 
 // Past a budget: the console's throttled error, with the wait in seconds.
 async function expectRateLimited(response: Response) {
@@ -77,7 +77,7 @@ async function expectRateLimited(response: Response) {
   expect(wait).toBeGreaterThanOrEqual(1);
   const body = await bodyOf(response);
   expect(body.errors?.[0]?.extensions?.code).toBe("RATE_LIMITED");
-  expect(body.errors?.[0]?.extensions?.retryAfter).toBe(wait);
+  expect(body.errors?.[0]?.extensions?.["retryAfter"]).toBe(wait);
   return body;
 }
 
@@ -140,10 +140,7 @@ describe("sendTestWebhook", () => {
   ) {
     const body = await bodyOf(await call(CREATE, { tenantId }));
     expect(body.errors).toBeUndefined();
-    const created = body.data?.["createWebhookEndpoint"] as
-      | { endpoint: { id: string } }
-      | undefined;
-    return (created as { endpoint: { id: string } }).endpoint.id;
+    return at(body.data, "createWebhookEndpoint.endpoint.id", z.string());
   }
 
   test("a loop on one endpoint stops at the endpoint's budget, and queues nothing past it", async () => {
@@ -284,7 +281,9 @@ describe("inviteUser and inviteAdmin", () => {
     // The tenant's three are spent: a fourth is refused, whoever asks and whichever mutation.
     const user = await bodyOf(await second(aliased(1, "t-fourth")));
     expect(user.errors?.[0]?.extensions?.code).toBe("RATE_LIMITED");
-    expect(user.errors?.[0]?.extensions?.retryAfter).toBeGreaterThanOrEqual(1);
+    expect(user.errors?.[0]?.extensions?.["retryAfter"]).toBeGreaterThanOrEqual(
+      1,
+    );
     const again = await bodyOf(
       await first(
         `mutation { inviteAdmin(tenantId: "${tenantA}", email: "t-adm2@bud.test", role: VIEWER) { id } }`,

@@ -9,6 +9,8 @@ import { registerStoredResource, resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createConsoleAuthenticator } from "@/console/auth";
 import { registerClient } from "@/modules/clients";
+import { jsonOf } from "~/json";
+import { answerBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 import { withTenantState } from "./tenant-state";
 
@@ -17,16 +19,6 @@ const CLOSED = "https://closed.cc.example/api";
 const SLUG = "cc-a";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-
-interface Answer {
-  access_token?: string;
-  token_type?: string;
-  scope?: string;
-  expires_in?: number;
-  refresh_token?: string | null;
-  id_token?: string | null;
-  error?: string;
-}
 
 const secrets: Record<string, string> = {};
 let tenantId = new ObjectId();
@@ -76,8 +68,7 @@ const token = (
     flow.basic(clientId, secrets[clientId] ?? ""),
   );
 
-const answerOf = async (response: Response) =>
-  (await response.json()) as Answer;
+const answerOf = async (response: Response) => jsonOf(response, answerBody);
 
 beforeAll(async () => {
   const { tenantId: id } = await flow.setUp(SLUG);

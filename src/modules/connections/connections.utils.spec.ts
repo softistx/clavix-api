@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { ConnectionDoc } from "./connections.model";
+import { sealedUnder } from "~/webhook-docs";
+import { type ConnectionDoc, connections } from "./connections.model";
 import {
   claimsOf,
   contextOf,
@@ -9,17 +10,28 @@ import {
   txtNameOf,
 } from "./connections.utils";
 
-const current = {
-  _id: new ObjectId(),
-  issuer: "https://idp.test",
-  clientId: "client",
-  clientAuthentication: "basic",
-  idTokenSignedResponseAlg: null,
-  scopes: null,
-  emailTrust: "domain",
-  claims: { email: "mail" },
-  upstreamMfa: { acr: "mfa" },
-} as unknown as ConnectionDoc;
+const _id = new ObjectId();
+const stamp = new Date("2026-01-01T00:00:00Z");
+const current: ConnectionDoc = {
+  ...connections.schema.parse({
+    _id,
+    tenantId: new ObjectId(),
+    connectionId: "acme",
+    name: "Acme",
+    issuer: "https://idp.test",
+    clientId: "client",
+    secret: sealedUnder("k"),
+    clientAuthentication: "basic",
+    idTokenSignedResponseAlg: null,
+    scopes: null,
+    emailTrust: "domain",
+    claims: { email: "mail" },
+    upstreamMfa: { acr: "mfa" },
+    createdAt: stamp,
+    updatedAt: stamp,
+  }),
+  id: _id.toHexString(),
+};
 
 describe("connections utils", () => {
   test("the TXT record sits under _clavix-sso", () => {

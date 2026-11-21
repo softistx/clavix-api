@@ -54,7 +54,7 @@ describe("createTenantJanusIssuers", () => {
   });
 
   test("a new version of the tenant rebuilds it", async () => {
-    const current = { tenant: base as ResolvedTenant | null };
+    const current: { tenant: ResolvedTenant | null } = { tenant: base };
     const issuers = issuersOver(current);
     const first = await issuers.forRequest(request);
     current.tenant = { ...base, version: 2 };
@@ -62,7 +62,7 @@ describe("createTenantJanusIssuers", () => {
   });
 
   test("a verified or removed custom domain rebuilds it", async () => {
-    const current = { tenant: base as ResolvedTenant | null };
+    const current: { tenant: ResolvedTenant | null } = { tenant: base };
     const issuers = issuersOver(current);
     const first = await issuers.forRequest(request);
     current.tenant = { ...base, relatedOrigins: ["https://auth.acme.com"] };
@@ -70,7 +70,7 @@ describe("createTenantJanusIssuers", () => {
   });
 
   test("a new tenant under a purged tenant's slug does not get the old instance", async () => {
-    const current = { tenant: base as ResolvedTenant | null };
+    const current: { tenant: ResolvedTenant | null } = { tenant: base };
     const issuers = issuersOver(current);
     const first = await issuers.forRequest(request);
     current.tenant = { ...base, tenantId: "65f0000000000000000000bb" };

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
-import type { UserEvent } from "@softistx/janus";
+import type { Duration } from "@softistx/janus";
 import {
   createMemoryWebhookQueue,
   mintWebhookSecret,
@@ -9,6 +9,8 @@ import {
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { createSecretBox } from "@/modules/sign-in-methods";
+import { fetchDouble } from "~/fetch-double";
+import { defined } from "~/narrow";
 import {
   createWebhookDelivery,
   type DisabledEndpoint,
@@ -26,42 +28,53 @@ interface Received {
 }
 let received: Received[] = [];
 let statuses: number[] = [];
-const receiver = (async (input: RequestInfo | URL, init?: RequestInit) => {
+const receiver = fetchDouble(async (input, init) => {
   received.push({
     url: String(input),
     headers: new Headers(init?.headers),
     body: String(init?.body),
   });
   return new Response("", { status: statuses.shift() ?? 200 });
-}) as unknown as typeof fetch;
+});
 
 const policy: UrlPolicy = {
   allowPrivate: false,
   resolve: async () => ["93.184.216.34"],
 };
 let clock = new Date();
-const endpoints = new WebhooksService(
-  mongo.db.webhookEndpoints,
-  mongo.db.webhookDeliveries,
-  createSecretBox(
-    crypto.getRandomValues(new Uint8Array(32)),
-    "webhook-secrets",
-  ),
-  { policy, now: () => clock, mint: mintWebhookSecret, log: () => {} },
+// One box for every service of the spec: the broken one reads what the other sealed.
+const box = createSecretBox(
+  crypto.getRandomValues(new Uint8Array(32)),
+  "webhook-secrets",
 );
+const serviceOf = (Service: typeof WebhooksService) =>
+  new Service(mongo.db.webhookEndpoints, mongo.db.webhookDeliveries, box, {
+    policy,
+    now: () => clock,
+    mint: mintWebhookSecret,
+    log: () => {},
+  });
+const endpoints = serviceOf(WebhooksService);
+
+/** The service whose attempt log is down: the delivery must carry on. */
+class BrokenLog extends WebhooksService {
+  override async recordAttempt(): Promise<void> {
+    throw new Error("down");
+  }
+}
 const A = new ObjectId().toHexString();
 const B = new ObjectId().toHexString();
 const disabled: DisabledEndpoint[] = [];
 const deliveries: ReturnType<typeof createWebhookDelivery>[] = [];
 
-const makeDelivery = (retries: readonly string[] = ["10ms"]) => {
+const makeDelivery = (retries: readonly Duration[] = ["10ms"]) => {
   const delivery = createWebhookDelivery({
     now: () => new Date(),
     webhooks: endpoints,
     fetch: guardedFetch(policy, receiver),
     queue: createMemoryWebhookQueue(),
-    retries: retries as never,
-    poll: "10ms" as never,
+    retries,
+    poll: "10ms",
     onDisabled: async (endpoint) => {
       disabled.push(endpoint);
     },
@@ -99,7 +112,7 @@ const created = (tenantId: string, id = crypto.randomUUID()) =>
       userId: "u1",
       userType: "customer",
       occurredAt: new Date(),
-    } as unknown as UserEvent),
+    }),
   }) as const;
 
 /** Standard Webhooks, by hand: base64(HMAC-SHA256(secret bytes, "id.timestamp.body")). */
@@ -125,16 +138,16 @@ describe("signed delivery", () => {
     const event = created(A);
     await delivery.relay(event);
     await until(() => received.length === 1);
-    const [request] = received;
-    expect(request?.url).toBe("https://hooks.example.com/in");
-    expect(request && signedBy(request, secret)).toBe(true);
+    const request = defined(received[0], "the request");
+    expect(request.url).toBe("https://hooks.example.com/in");
+    expect(signedBy(request, secret)).toBe(true);
     const verified = verifyWebhook({
       secrets: [secret],
-      headers: request?.headers as Headers,
-      body: request?.body ?? "",
+      headers: request.headers,
+      body: request.body,
     });
     expect(verified?.type).toBe("user.created");
-    const body = JSON.parse(request?.body ?? "{}");
+    const body = JSON.parse(request.body);
     expect(body.type).toBe("user.created");
     expect(body.data).toEqual({
       tenantId: A,
@@ -197,14 +210,22 @@ describe("secret roll", () => {
     const delivery = makeDelivery();
     await delivery.relay(created(A));
     await until(() => received.length === 1);
-    expect(signedBy(received[0] as Received, rolled.secret)).toBe(true);
-    expect(signedBy(received[0] as Received, first.secret)).toBe(true);
+    expect(signedBy(defined(received[0], "the request"), rolled.secret)).toBe(
+      true,
+    );
+    expect(signedBy(defined(received[0], "the request"), first.secret)).toBe(
+      true,
+    );
 
     clock = new Date(Date.now() + 25 * 60 * 60 * 1000);
     await delivery.relay(created(A));
     await until(() => received.length === 2);
-    expect(signedBy(received[1] as Received, rolled.secret)).toBe(true);
-    expect(signedBy(received[1] as Received, first.secret)).toBe(false);
+    expect(signedBy(defined(received[1], "the request"), rolled.secret)).toBe(
+      true,
+    );
+    expect(signedBy(defined(received[1], "the request"), first.secret)).toBe(
+      false,
+    );
   });
 });
 
@@ -275,17 +296,14 @@ describe("failures", () => {
       { url: "https://hooks.example.com/in" },
       2,
     );
-    const broken = Object.create(endpoints) as WebhooksService;
-    broken.recordAttempt = async () => {
-      throw new Error("down");
-    };
+    const broken = serviceOf(BrokenLog);
     const delivery = createWebhookDelivery({
       now: () => new Date(),
       webhooks: broken,
       fetch: guardedFetch(policy, receiver),
       queue: createMemoryWebhookQueue(),
       retries: [],
-      poll: "10ms" as never,
+      poll: "10ms",
       onDisabled: async () => {},
       log: () => {},
     });
@@ -333,7 +351,7 @@ describe("failures", () => {
       fetch: guardedFetch(rebinding, receiver),
       queue: createMemoryWebhookQueue(),
       retries: [],
-      poll: "10ms" as never,
+      poll: "10ms",
       onDisabled: async () => {},
       log: () => {},
     });

@@ -106,7 +106,7 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
     const kidA = (await before.signingKeysFor(A).findCurrentKey(now))?.kid;
 
     // Deploy [new, old]: both tenants still open.
-    const ring = [newKey, oldKey];
+    const ring: Ring = [newKey, oldKey];
     expect(
       await under(ring).signingKeysFor(A).findCurrentKey(now),
     ).toMatchObject({
@@ -115,8 +115,8 @@ describe("master-key rotation: [old] -> [new, old] -> reseal -> [new]", () => {
 
     const deps = {
       db: mongo.db,
-      masterKeys: ring as Ring,
-      resealSecondFactor: sealUnder(ring as Ring),
+      masterKeys: ring,
+      resealSecondFactor: sealUnder(ring),
       tenantIds: async () => [A, B],
       log: quiet,
       secretStores: noStores,
@@ -290,10 +290,11 @@ describe("every sealed store follows the rotation (clavix-api#329)", () => {
       true,
     );
     await connections.create(liveId, connection, null);
+    const webhookSecrets: [string, string] = [rolled.secret, created.secret];
     return {
       liveId,
       trashedId,
-      webhookSecrets: [rolled.secret, created.secret] as [string, string],
+      webhookSecrets,
     };
   };
 

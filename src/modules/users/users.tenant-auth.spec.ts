@@ -13,6 +13,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { defined, instance } from "~/narrow";
 import {
   noCustomDomains,
   quietJanus,
@@ -196,7 +197,7 @@ describe("sessions", () => {
     const mine = stored.filter((row) => String(row["userId"]) === user.id);
     expect(mine).toHaveLength(1);
     await sessions.updateOne(
-      { _id: mine[0]?.["_id"] as never },
+      { _id: defined(mine[0], "the session row")._id },
       { $set: { createdAt: opened, expiresAt: ahead } },
     );
     expect(await authFor(acme).authenticate(request())).toBeNull();
@@ -208,7 +209,9 @@ describe("sessions", () => {
     const current = await authFor(acme).authenticate(
       requestWith("acme", cookie),
     );
-    expect(current?.user.id).toBe(sessions["acme"]?.user.id as string);
+    expect(current?.user.id).toBe(
+      defined(sessions["acme"], "the acme session").user.id,
+    );
   });
 
   test("authFor is anonymous without a session", async () => {
@@ -352,7 +355,7 @@ describe("OAuth with the real authFor", () => {
   test("/authorize reaches consent, where the session of the tenant is the signed-in user", async () => {
     const consent = await consentAs("acme", sessions["acme"]?.cookie ?? "");
     expect(consent?.signedIn?.user.id).toBe(
-      sessions["acme"]?.user.id as string,
+      defined(sessions["acme"], "the acme session").user.id,
     );
   });
 
@@ -372,8 +375,9 @@ describe("magic link policy", () => {
       .request(EMAIL)
       .catch((e: unknown) => e);
     expect(refusal).toBeInstanceOf(JanusError);
-    expect((refusal as JanusError).code).toBe("MAGIC_LINK_DISABLED");
-    expect(statusOf((refusal as JanusError).code)).toBe(404);
+    const refused = instance(refusal, JanusError);
+    expect(refused.code).toBe("MAGIC_LINK_DISABLED");
+    expect(statusOf(refused.code)).toBe(404);
   });
 
   test("the tenant's choice reaches janus", async () => {

@@ -6,6 +6,7 @@ import {
   s256Challenge,
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
+import { z } from "zod";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -23,7 +24,11 @@ import {
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
+import { jsonOf } from "~/json";
+import { defined, parsed } from "~/narrow";
 import { quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 
@@ -67,10 +72,6 @@ const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 const basic = (id: string, secret: string) =>
   `Basic ${btoa(`${id}:${secret}`)}`;
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 const gql = async (
   slug: string,
   query: string,
@@ -88,20 +89,21 @@ const gql = async (
     },
     body: JSON.stringify({ query, variables }),
   });
-  return (await response.json()) as GqlResult;
+  return gqlOf(response);
 };
-const codeOf = (result: GqlResult) => result.errors?.[0]?.extensions?.code;
+const codeOf = (result: GqlResult) => result.errors?.[0]?.extensions?.["code"];
 
 const REQUEST = `query($id: ID!) { oauthRequest(id: $id) { id client { id name } redirectHost resource scopes { name label } } }`;
 const APPROVE = `mutation($id: ID!, $scopes: [String!]) { approveOAuthRequest(id: $id, scopes: $scopes) { redirectTo grantId } }`;
 const DENY = `mutation($id: ID!) { denyOAuthRequest(id: $id) { redirectTo grantId } }`;
 
 const clients: Record<string, { id: string; secret: string }> = {};
+const clientOf = (slug: string) => defined(clients[slug], `the ${slug} client`);
 const sessions: Record<string, { cookie: string; authenticatedAt: Date }> = {};
 
 // authorize on the tenant's issuer: the pending request's id.
 async function authorize(slug: string, scope = "openid email") {
-  const client = clients[slug] as { id: string; secret: string };
+  const client = clientOf(slug);
   const response = await issuers.handle(
     new Request(
       url(
@@ -126,7 +128,7 @@ async function authorize(slug: string, scope = "openid email") {
 }
 
 async function exchange(slug: string, redirectTo: string) {
-  const client = clients[slug] as { id: string; secret: string };
+  const client = clientOf(slug);
   return issuers.handle(
     new Request(url(slug, "/token"), {
       method: "POST",
@@ -217,9 +219,13 @@ describe("the consent screen's data", () => {
       const id = await authorize(slug);
       const result = await gql(slug, REQUEST, { id }, cookieOf(slug), language);
       expect(result.errors).toBeUndefined();
-      const { scopes } = (result.data?.["oauthRequest"] ?? { scopes: [] }) as {
-        scopes: { name: string; label: string }[];
-      };
+      const { scopes } = at(
+        result.data,
+        "oauthRequest",
+        z.looseObject({
+          scopes: z.array(z.object({ name: z.string(), label: z.string() })),
+        }),
+      );
       return Object.fromEntries(scopes.map((s) => [s.name, s.label]));
     };
     expect((await labelsOf("acme", "fr-CA,en;q=0.8"))["email"]).toBe(
@@ -241,10 +247,11 @@ describe("the consent screen's data", () => {
       const id = await authorize(slug);
       const result = await gql(slug, query, { id }, cookieOf(slug));
       expect(result.errors).toBeUndefined();
-      const request = result.data?.["oauthRequest"] as
-        | { client: unknown }
-        | undefined;
-      return request?.client;
+      return at(
+        result.data,
+        "oauthRequest",
+        z.looseObject({ client: z.unknown() }),
+      ).client;
     };
     // A console-registered client is no agent.
     expect(await markOf("acme")).toEqual({
@@ -259,10 +266,10 @@ describe("the consent screen's data", () => {
         clientId: "backend",
         kind: "dynamic",
       });
-      const marked = (await markOf("acme")) as {
-        agent: boolean;
-        registeredAt: string;
-      };
+      const marked = parsed(
+        z.looseObject({ agent: z.boolean(), registeredAt: z.string() }),
+        await markOf("acme"),
+      );
       expect(marked.agent).toBe(true);
       expect(new Date(marked.registeredAt).getTime()).toBeGreaterThan(0);
       // The same client id in another tenant is not acme's agent.
@@ -298,12 +305,17 @@ describe("approve", () => {
     const id = await authorize("acme");
     const approved = await gql("acme", APPROVE, { id }, cookieOf("acme"));
     expect(approved.errors).toBeUndefined();
-    const decision = approved.data?.["approveOAuthRequest"] as {
-      redirectTo: string;
-    };
+    const decision = at(
+      approved.data,
+      "approveOAuthRequest",
+      z.looseObject({ redirectTo: z.string() }),
+    );
     const response = await exchange("acme", decision.redirectTo);
     expect(response.status).toBe(200);
-    const { id_token } = (await response.json()) as { id_token: string };
+    const { id_token } = await jsonOf(
+      response,
+      z.looseObject({ id_token: z.string() }),
+    );
     const claims = decodeJwt(id_token);
     const signedInAt = sessions["acme"]?.authenticatedAt ?? new Date(0);
     expect(claims["auth_time"]).toBe(Math.floor(signedInAt.getTime() / 1000));
@@ -340,10 +352,11 @@ describe("deny", () => {
     const id = await authorize("acme");
     const denied = await gql("acme", DENY, { id }, cookieOf("acme"));
     expect(denied.errors).toBeUndefined();
-    const decision = denied.data?.["denyOAuthRequest"] as {
-      redirectTo: string;
-      grantId: string | null;
-    };
+    const decision = at(
+      denied.data,
+      "denyOAuthRequest",
+      z.looseObject({ redirectTo: z.string(), grantId: z.string().nullable() }),
+    );
     const { redirectTo, grantId } = decision;
     const target = new URL(redirectTo);
     expect(`${target.origin}${target.pathname}`).toBe(REDIRECT);
@@ -397,7 +410,7 @@ describe("a foreign page cannot decide", () => {
       },
       JSON.stringify({ query: DENY, variables: { id } }),
     );
-    const body = (await response.json()) as GqlResult;
+    const body = await gqlOf(response);
     expect(codeOf(body)).toBe("NOT_FOUND");
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
     const still = await gql("acme", REQUEST, { id }, cookieOf("acme"));
@@ -410,7 +423,7 @@ describe("a foreign page cannot decide", () => {
       { "content-type": "application/json", origin: "null" },
       JSON.stringify({ query: REQUEST, variables: { id } }),
     );
-    expect(codeOf((await response.json()) as GqlResult)).toBe("NOT_FOUND");
+    expect(codeOf(await gqlOf(response))).toBe("NOT_FOUND");
   });
 
   test("a form post decides nothing", async () => {
@@ -421,7 +434,7 @@ describe("a foreign page cannot decide", () => {
         query: `mutation { denyOAuthRequest(id: "${id}") { redirectTo } }`,
       }).toString(),
     );
-    const body = (await response.json()) as GqlResult;
+    const body = await gqlOf(response);
     expect(body.data?.["denyOAuthRequest"] ?? null).toBeNull();
     const still = await gql("acme", REQUEST, { id }, cookieOf("acme"));
     expect(still.errors).toBeUndefined();
@@ -436,12 +449,12 @@ describe("a foreign page cannot decide", () => {
       },
       JSON.stringify({ query: 'mutation { revokeConnectedApp(id: "x") }' }),
     );
-    expect(codeOf((await foreign.json()) as GqlResult)).toBe("NOT_FOUND");
+    expect(codeOf(await gqlOf(foreign))).toBe("NOT_FOUND");
     const form = await post(
       { "content-type": "application/x-www-form-urlencoded" },
       new URLSearchParams({ query: "{ connectedApps { id } }" }).toString(),
     );
-    const body = (await form.json()) as GqlResult;
+    const body = await gqlOf(form);
     expect(body.data?.["connectedApps"] ?? null).toBeNull();
   });
 
@@ -451,7 +464,7 @@ describe("a foreign page cannot decide", () => {
       { "content-type": "application/json", origin: issuerOf("acme", origin) },
       JSON.stringify({ query: REQUEST, variables: { id } }),
     );
-    const body = (await response.json()) as GqlResult;
+    const body = await gqlOf(response);
     expect(body.errors).toBeUndefined();
   });
 });
@@ -480,10 +493,11 @@ describe("a tenant that is not live", () => {
     }
     const resumed = await gql("initech", APPROVE, { id }, cookieOf("initech"));
     expect(resumed.errors).toBeUndefined();
-    const approved = resumed.data?.["approveOAuthRequest"] as
-      | { redirectTo: string }
-      | undefined;
-    const redirectTo = approved?.redirectTo ?? "";
+    const redirectTo = at(
+      resumed.data,
+      "approveOAuthRequest",
+      z.looseObject({ redirectTo: z.string() }),
+    ).redirectTo;
     expect(redirectTo).toContain("code=");
     const token = await exchange("initech", redirectTo);
     expect(token.status).toBe(200);

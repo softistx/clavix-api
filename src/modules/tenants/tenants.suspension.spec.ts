@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -9,12 +9,15 @@ import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
 import { quietDomains } from "~/ports";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { issuerOf } from "./tenants.utils";
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
   domain: env.CLAVIX_DOMAIN,
@@ -23,19 +26,13 @@ const origin = {
 const app = createTestApp();
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { extensions?: { code?: string } }[];
-}
 async function gql(slug: string, query: string): Promise<Answer> {
   const response = await app.request(url(slug), {
     method: "POST",
     headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ query }),
   });
-  const body = (await response.json()) as Omit<Answer, "status">;
-  return { ...body, status: response.status, data: body.data ?? null };
+  return answerOf(response);
 }
 const REQUEST =
   'mutation { requestSignInCode(email: "ada@example.test") { challenge } }';
@@ -66,10 +63,11 @@ describe("a suspended or deleted tenant's hosted pages", () => {
     await settled();
     expect(ok.errors).toBeUndefined();
     expect(memory.sent.length).toBeGreaterThan(before);
-    const requested = ok.data?.["requestSignInCode"] as
-      | { challenge: string }
-      | undefined;
-    const challenge = requested?.challenge ?? "";
+    const challenge = at(
+      ok.data,
+      "requestSignInCode",
+      z.looseObject({ challenge: z.string() }),
+    ).challenge;
 
     await tenantsService.suspend(id);
     for (const query of [REQUEST, verify(challenge)]) {

@@ -4,6 +4,7 @@ import { keysService } from "@/config/keys";
 import { tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { clearDatabase } from "~/db";
+import { defined } from "~/narrow";
 
 afterEach(async () => {
   await mongo.db.tenants.raw.deleteMany({
@@ -21,7 +22,9 @@ describe("signing keys wiring", () => {
       .findCurrentKey(new Date());
     expect(current).not.toBeNull();
     const { keys } = await keysService.jwksFor(id, new Date());
-    expect(keys.map((k) => k.kid)).toEqual([current?.kid as string]);
+    expect(keys.map((k) => k.kid)).toEqual([
+      defined(current, "the current key").kid,
+    ]);
   });
 
   test("activeIds lists active tenants only", async () => {

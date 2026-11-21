@@ -7,12 +7,12 @@ const NOW = new Date("2026-11-17T12:00:00Z");
 const DAY = 86_400_000;
 
 function deps(over: Partial<PruneDeps> = {}) {
-  const state = {
-    asked: [] as Date[],
-    removed: [] as string[],
-    events: [] as string[],
-    logs: [] as string[],
-  };
+  const state: {
+    asked: Date[];
+    removed: string[];
+    events: string[];
+    logs: string[];
+  } = { asked: [], removed: [], events: [], logs: [] };
   const full: PruneDeps = {
     tenantIds: async () => ["t1"],
     candidates: async (_t, before) => {

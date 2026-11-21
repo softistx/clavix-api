@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -16,12 +16,15 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
+import { memoryMailerOf } from "~/memory-mailer-of";
 import { quietTenants } from "~/ports";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a
 // recorder that is down never fails the sign-in (D13).
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -54,10 +57,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as {
-    data?: Record<string, unknown> | null;
-    errors?: { extensions?: { code?: string } }[];
-  };
+  const body = await gqlOf(response);
   return { body, cookies: response.headers.getSetCookie() };
 }
 
@@ -77,11 +77,11 @@ async function codeFor(slug: string, email: string) {
     .at(-1);
   return {
     challenge:
-      (
-        (asked.body.data?.["requestSignInCode"] ?? {}) as {
-          challenge?: string;
-        }
-      ).challenge ?? "",
+      at(
+        asked.body.data,
+        "requestSignInCode.challenge",
+        z.string().optional(),
+      ) ?? "",
     code: /\b(\d{6})\b/.exec(mail?.text ?? "")?.[1] ?? "",
   };
 }
@@ -120,11 +120,11 @@ describe("the e-mail code", () => {
         .find((c) => c.startsWith(`${SESSION_COOKIE}=`))
         ?.split(";")[0] ?? "";
     const userId =
-      (
-        (signedIn.body.data?.["verifySignInCode"] ?? {}) as {
-          user?: { id: string };
-        }
-      ).user?.id ?? "";
+      at(
+        signedIn.body.data,
+        "verifySignInCode.user.id",
+        z.string().optional(),
+      ) ?? "";
 
     const [signIn] = await events();
     expect(await events()).toHaveLength(1);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { Tenant } from "@/modules/tenants";
+import { tenantDoc } from "~/tenant-doc";
 import { MODE, MODE_NAME, policyOf } from "./oauth-policy.utils";
 
 describe("oauth policy utils", () => {
@@ -12,7 +12,7 @@ describe("oauth policy utils", () => {
 
   it("shows a tenant's policy with the enum's name", () => {
     const _id = new ObjectId();
-    const tenant = {
+    const tenant = tenantDoc({
       _id,
       version: 3,
       oauth: {
@@ -25,7 +25,7 @@ describe("oauth policy utils", () => {
           allowHosts: [],
         },
       },
-    } as unknown as Tenant;
+    });
     const policy = policyOf(tenant);
     expect(policy.tenantId).toBe(_id.toHexString());
     expect(policy.par).toEqual({ required: true });

@@ -9,9 +9,15 @@ import {
   registerLimits,
 } from "./register-throttle";
 
-const ok = { allowed: true, retryAfter: 0 } as unknown as LimitResult;
-const refused = (ms: number) =>
-  ({ allowed: false, retryAfter: ms }) as unknown as LimitResult;
+const result = (allowed: boolean, retryAfter: number): LimitResult => ({
+  allowed,
+  limit: 10,
+  remaining: allowed ? 9 : 0,
+  resetAfter: retryAfter,
+  retryAfter,
+});
+const ok = result(true, 0);
+const refused = (ms: number) => result(false, ms);
 
 function fakeLimits(ip: LimitResult | Error, tenant: LimitResult | Error) {
   const calls: string[] = [];

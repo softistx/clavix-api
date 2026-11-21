@@ -1,6 +1,8 @@
 import { expect } from "bun:test";
 import { s256Challenge } from "@softistx/janus-oauth";
 import type { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
 
 type Issuers = ReturnType<typeof createClavixOAuthIssuers>;
 /** The client of a tenant's flow. */
@@ -86,7 +88,8 @@ export function stepsOf(
     scope: string,
     options: FlowOptions = {},
   ) {
-    const client = options.client ?? (clients[slug] as FlowClient);
+    const client =
+      options.client ?? defined(clients[slug], `the client of ${slug}`);
     const { resource, userId = `user-${slug}` } = options;
     const query = await authorizeQuery(client, redirect, scope, resource);
     const authorize = await get(slug, `/authorize?${query}`);
@@ -128,11 +131,7 @@ export function stepsOf(
   ) => {
     const response = await login(slug, scope, options);
     expect(response.status).toBe(200);
-    return (await response.json()) as {
-      access_token: string;
-      id_token?: string;
-      refresh_token?: string | null;
-    };
+    return jsonOf(response, tokenBody);
   };
 
   return { authorizeCode, login, tokensOf };

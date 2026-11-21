@@ -17,6 +17,8 @@ import {
 import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { mongoDetailTypeClients } from "./resources.client-lists";
@@ -148,7 +150,7 @@ async function accessTokenFor(slug: string, resource: string) {
     basic(CLIENT, secrets[slug] ?? ""),
   );
   expect(response.status).toBe(200);
-  return ((await response.json()) as { access_token: string }).access_token;
+  return (await jsonOf(response, tokenBody)).access_token;
 }
 
 const introspect = (slug: string, token: string, as = slug) =>
@@ -237,7 +239,7 @@ describe("/introspect with registered resources", () => {
     const token = await accessTokenFor("introalpha", gone);
     const alpha = await findTenant("introalpha");
     await mongo.db.resources.raw.deleteOne({
-      tenantId: alpha?._id as never,
+      tenantId: defined(alpha, "alpha")._id,
       uri: gone,
     });
     const response = await introspect("introalpha", token);

@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
 
 const admin = consoleAs("cn-admin-a");
@@ -178,18 +180,20 @@ describe("update, secret, domains and delete", () => {
       id: "acme",
       domain: "Acme.TEST",
     });
-    const domain = (
-      added.data?.["addConnectionDomain"] as unknown as
-        | {
-            domains: {
-              domain: string;
-              txtName: string;
-              txtToken: string;
-              verified: boolean;
-            }[];
-          }
-        | undefined
-    )?.domains[0];
+    const domain = at(
+      added.data,
+      "addConnectionDomain",
+      z.object({
+        domains: z.array(
+          z.object({
+            domain: z.string(),
+            txtName: z.string(),
+            txtToken: z.string(),
+            verified: z.boolean(),
+          }),
+        ),
+      }),
+    ).domains[0];
     expect(domain).toMatchObject({
       domain: "acme.test",
       txtName: "_clavix-sso.acme.test",
@@ -211,13 +215,11 @@ describe("update, secret, domains and delete", () => {
       domain: "acme.test",
     });
     expect(
-      (
-        removed.data?.["removeConnectionDomain"] as unknown as
-          | {
-              domains: unknown[];
-            }
-          | undefined
-      )?.domains,
+      at(
+        removed.data,
+        "removeConnectionDomain",
+        z.object({ domains: z.array(z.unknown()) }),
+      ).domains,
     ).toEqual([]);
     expect(
       (await admin(DELETE, { tenantId: tenantA, id: "acme" })).data,

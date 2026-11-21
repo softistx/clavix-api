@@ -6,7 +6,7 @@ import {
   setSystemTime,
   test,
 } from "bun:test";
-import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -20,11 +20,14 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE, SIGN_IN_CODE_LIFESPAN } from "@/modules/users";
 import { createTestApp } from "~/app";
+import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
 import { quietTenants } from "~/ports";
 import { afterAnswer, settled } from "./auth.outbox";
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 const app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -45,13 +48,6 @@ const janusOf = async (slug: string) => {
   return auth;
 };
 
-interface Answer {
-  status: number;
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
-
 async function gql(
   slug: string,
   query: string,
@@ -69,13 +65,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "status" | "cookies">;
-  return {
-    status: response.status,
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const REQUEST = `mutation ($email: EmailAddress!) {
@@ -94,9 +84,11 @@ async function ask(slug: string, email: string) {
   const before = memory.sent.length;
   const answer = await gql(slug, REQUEST, { email });
   await settled();
-  const challenge = (
-    answer.data?.["requestSignInCode"] as { challenge: string } | undefined
-  )?.challenge;
+  const challenge = at(
+    answer.data,
+    "requestSignInCode.challenge",
+    z.string().optional(),
+  );
   const mails = memory.sent.slice(before).filter((m) => hasTo(m, email));
   const code = /\b(\d{6})\b/.exec(mails.at(-1)?.text ?? "")?.[1];
   return { answer, challenge: challenge ?? "", code, mails };
@@ -109,7 +101,7 @@ const cookieOf = (answer: Answer) => {
   return header === undefined ? undefined : (header.split(";")[0] ?? "");
 };
 const userCount = (partition: string) =>
-  oauthDb.collection("partitionedUsers").countDocuments({ partition } as never);
+  oauthDb.collection("partitionedUsers").countDocuments({ partition });
 
 const ADA = "ada@example.test";
 let acme = "";
@@ -281,11 +273,7 @@ describe("tenant isolation", () => {
       code: b.code ?? "",
     });
     const idOf = (answer: Answer) => {
-      const signed = answer.data?.["verifySignInCode"] as
-        | { user: { id: string } }
-        | undefined;
-      if (signed === undefined) throw new Error("not signed in");
-      return signed.user.id;
+      return at(answer.data, "verifySignInCode.user.id", z.string());
     };
     const idA = idOf(signedA);
     const idB = idOf(signedB);
@@ -306,10 +294,7 @@ describe("tenant isolation", () => {
     );
     expect(signed.errors).toBeUndefined();
     const auth = await janusOf("acme");
-    const verified = signed.data?.["verifySignInCode"] as {
-      user: { id: string };
-    };
-    const id = verified.user.id;
+    const id = at(signed.data, "verifySignInCode.user.id", z.string());
     expect((await auth.sessions.list({ id })).map((s) => s.device)).toEqual([
       agent,
     ]);
@@ -442,12 +427,12 @@ describe("the outbox", () => {
   test("the code lifespan janus gets is the 10 minutes the answer states", async () => {
     expect(SIGN_IN_CODE_LIFESPAN).toBe("10m");
     const { answer } = await ask("acme", "clock@example.test");
-    const issued = answer.data?.["requestSignInCode"] as
-      | { expiresAt: string }
-      | undefined;
-    if (issued === undefined) throw new Error("no challenge");
-    const at = issued.expiresAt;
-    const left = new Date(at).getTime() - Date.now();
+    const expiresAt = at(
+      answer.data,
+      "requestSignInCode.expiresAt",
+      z.string(),
+    );
+    const left = new Date(expiresAt).getTime() - Date.now();
     expect(left).toBeGreaterThan(9 * 60_000);
     expect(left).toBeLessThanOrEqual(10 * 60_000);
   });

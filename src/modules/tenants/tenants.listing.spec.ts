@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { tenantsService } from "@/config/tenancy";
+import { defined } from "~/narrow";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { purgeAtOf } from "./tenants.trash";
 import { stateOf } from "./tenants.utils";
@@ -97,7 +98,7 @@ describe("TenantsService", () => {
     const t = await make("acme");
     const id = t._id.toHexString();
     const trashed = await tenantsService.trash(id);
-    const due = purgeAtOf(trashed.deletedAt as Date);
+    const due = purgeAtOf(defined(trashed.deletedAt, "the deletion date"));
     const before = new Date(due.getTime() - 1000);
     expect((await tenantsService.purgeDue(before)).map((x) => x.slug)).toEqual(
       [],

@@ -49,9 +49,13 @@ afterEach(async () => {
   listing = [];
   dropped.length = 0;
   for (const tenantId of [A, B]) {
-    await mongo.db.detailTypes.raw.deleteMany({ tenantId: tenantId as never });
-    await mongo.db.scopes.raw.deleteMany({ tenantId: tenantId as never });
-    await mongo.db.resources.raw.deleteMany({ tenantId: tenantId as never });
+    await mongo.db.detailTypes.raw.deleteMany({
+      tenantId: new ObjectId(tenantId),
+    });
+    await mongo.db.scopes.raw.deleteMany({ tenantId: new ObjectId(tenantId) });
+    await mongo.db.resources.raw.deleteMany({
+      tenantId: new ObjectId(tenantId),
+    });
   }
 });
 

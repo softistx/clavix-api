@@ -18,6 +18,8 @@ import { createTestApp } from "~/app";
 import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { type GqlResult, gqlOf } from "~/gql";
+import { defined } from "~/narrow";
 
 const deps = createConsoleDeps({ serverFor: async () => null });
 const OPERATOR = "switch-operator";
@@ -27,10 +29,6 @@ const MULTI = "switch-multi";
 const OUTSIDER = "switch-outsider";
 const HYBRID = "switch-hybrid";
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 const request = (userId: string | null, query: string) =>
   createTestApp({
     console: {
@@ -59,7 +57,7 @@ const request = (userId: string | null, query: string) =>
     body: JSON.stringify({ query }),
   });
 const as = async (userId: string, query: string) =>
-  (await (await request(userId, query)).json()) as GqlResult;
+  gqlOf(await request(userId, query));
 
 const LIST = (args = "") =>
   `{ me { switchableTenants${args} { items { role tenant { slug name status } } nextCursor totalCount } } }`;
@@ -78,13 +76,16 @@ const PageSchema = z.looseObject({
   totalCount: z.number(),
 });
 const pageOf = (r: GqlResult) => at(r.data, "me.switchableTenants", PageSchema);
+const cursorOf = (r: GqlResult) =>
+  defined(pageOf(r).nextCursor, "a next cursor");
 const slugs = (r: GqlResult) => pageOf(r).items.map((i) => i.tenant.slug);
 
 const ids: Record<string, string> = {};
 async function make(slug: string, name = `${slug} Inc`) {
   const tenant = await tenantsService.create({ slug, name, plan: "free" });
-  ids[slug] = tenant._id.toHexString();
-  return ids[slug] as string;
+  const id = tenant._id.toHexString();
+  ids[slug] = id;
+  return id;
 }
 
 const clean = async () => {
@@ -179,8 +180,8 @@ describe("Me.switchableTenants", () => {
   });
 
   test("a suspended tenant stays listed with its status, a deleted one is left out", async () => {
-    await tenantsService.suspend(ids["sw-alpha"] as string);
-    await tenantsService.trash(ids["sw-beta"] as string);
+    await tenantsService.suspend(defined(ids["sw-alpha"], "sw-alpha"));
+    await tenantsService.trash(defined(ids["sw-beta"], "sw-beta"));
     const member = await as(MULTI, LIST());
     expect(pageOf(member).items).toMatchObject([
       { tenant: { slug: "sw-alpha", status: "SUSPENDED" } },
@@ -221,7 +222,7 @@ describe("Me.switchableTenants", () => {
     const total = await count(OPERATOR, '(q: "sw-")');
     expect(total).toBe(3);
     const one = await as(OPERATOR, LIST('(q: "sw-", first: 2)'));
-    const cursor = pageOf(one).nextCursor as string;
+    const cursor = cursorOf(one);
     expect(pageOf(one).totalCount).toBe(3);
     expect(
       await count(OPERATOR, `(q: "sw-", first: 2, after: "${cursor}")`),
@@ -231,7 +232,7 @@ describe("Me.switchableTenants", () => {
   test("an operator's page is cursor-paged", async () => {
     const one = await as(OPERATOR, LIST('(q: "sw-", first: 2)'));
     expect(slugs(one)).toEqual(["sw-alpha", "sw-beta"]);
-    const cursor = pageOf(one).nextCursor as string;
+    const cursor = cursorOf(one);
     expect(cursor).toBeString();
     const two = await as(
       OPERATOR,
@@ -248,7 +249,7 @@ describe("Me.switchableTenants", () => {
     }
     const one = await as(MEMBER, LIST("(first: 2)"));
     expect(slugs(one)).toEqual(["sw-alpha", "sw-m-a"]);
-    const cursor = pageOf(one).nextCursor as string;
+    const cursor = cursorOf(one);
     const two = await as(MEMBER, LIST(`(first: 2, after: "${cursor}")`));
     expect(slugs(two)).toEqual(["sw-m-b", "sw-m-c"]);
     expect(pageOf(two).nextCursor).toBeNull();
@@ -256,7 +257,7 @@ describe("Me.switchableTenants", () => {
 
   test("a member's cursor is opaque, as an operator's is", async () => {
     const one = await as(MULTI, LIST("(first: 1)"));
-    const cursor = pageOf(one).nextCursor as string;
+    const cursor = cursorOf(one);
     expect(cursor).toBeString();
     expect(cursor).not.toBe("sw-alpha");
     expect(
@@ -289,7 +290,7 @@ describe("Me.switchableTenants", () => {
 
   test("a cursor of one search is refused on another", async () => {
     const one = await as(MULTI, LIST("(first: 1)"));
-    const cursor = pageOf(one).nextCursor as string;
+    const cursor = cursorOf(one);
     const r = await as(MULTI, LIST(`(q: "beta", after: "${cursor}")`));
     expect(r.errors?.[0]?.extensions?.code).toBe("BAD_USER_INPUT");
   });

@@ -1,27 +1,31 @@
 import { describe, expect, test } from "bun:test";
-import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import { clientPoliciesService } from "@/config/client-policies";
 import { noDetailTypes } from "@/config/no-ops";
-import type { ClientPoliciesService } from "@/modules/client-policies";
+import { oauthDb } from "@/config/oauth-db";
 import type { CliTenant } from "@/shared/cli";
 import { ClientsService } from "./clients.service";
 import type { AgentsReader } from "./clients.types";
 
 // The checks that run before any store read: the full service paths are
 // covered by `clients.console.spec.ts` and `clients.agents.console.spec.ts`.
-const tenant = { _id: new ObjectId(), slug: "acme" } as CliTenant;
+const tenant: CliTenant = {
+  _id: new ObjectId(),
+  slug: "acme",
+  status: "active",
+};
 const agents: AgentsReader = {
   kinds: async (_tenantId, ids) =>
     new Map(
       (ids ?? []).filter((id) => id === "agent").map((id) => [id, "dynamic"]),
     ),
   remove: async () => undefined,
-} as AgentsReader;
+};
 
 const service = () =>
   new ClientsService({
-    db: {} as Db,
-    policies: {} as ClientPoliciesService,
+    db: oauthDb,
+    policies: clientPoliciesService,
     agents,
     detailTypes: noDetailTypes,
     now: () => new Date(0),

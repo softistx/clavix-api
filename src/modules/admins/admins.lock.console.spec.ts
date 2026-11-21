@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { JanusError } from "@softistx/janus";
 import { RedisError } from "@softistx/redis";
+import { GraphQLError } from "graphql";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -10,6 +12,7 @@ import { createExclusive } from "@/console/exclusive";
 import { userKey } from "@/console/modules/user-key";
 import { adminScope, operatorScope } from "@/modules/invitations";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { instance } from "~/narrow";
 import { quietJanus } from "~/ports";
 import { adminInvitationHooks } from "./admins.hooks";
 import { AdminsService } from "./admins.service";
@@ -50,9 +53,7 @@ afterAll(async () => {
   }
 });
 
-const code503 = (error: unknown) =>
-  (error as { extensions?: { code?: string; http?: { status?: number } } })
-    .extensions;
+const code503 = (error: unknown) => instance(error, GraphQLError).extensions;
 
 describe("the tenant's membership lock cannot be taken", () => {
   test("a membership write is a retryable 503 and changes nothing", async () => {
@@ -203,7 +204,7 @@ describe("an owner invitation for an account that is gone", () => {
     const failed = await auth.invitations
       .accept({ code })
       .catch((e: unknown) => e);
-    expect((failed as { code?: string }).code).toBe("INVITATION_INVALID");
+    expect(instance(failed, JanusError).code).toBe("INVITATION_INVALID");
     const user = await auth.findByEmail("ghost@owner.test");
     expect(
       user === null ? null : await access.platformRole(user.id),

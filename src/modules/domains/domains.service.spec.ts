@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { QuotaExceededError } from "@/modules/usage";
+import { instance } from "~/narrow";
 import { quietDomains } from "~/ports";
 import type { TxtAnswer, TxtResolver } from "./domains.dns";
 import { DomainError } from "./domains.errors";
@@ -153,11 +154,9 @@ describe("verify", () => {
     clock = new Date(clock.getTime() + 20_000);
     publish("auth.acme.com", claim.txtToken);
     const refused = await store.verify(A, id).catch((error: unknown) => error);
-    expect(refused).toBeInstanceOf(DomainError);
-    expect((refused as DomainError).code).toBe("VERIFY_COOLDOWN");
-    expect((refused as DomainError).retryAfter).toBe(
-      VERIFY_COOLDOWN_SECONDS - 20,
-    );
+    const cooldown = instance(refused, DomainError);
+    expect(cooldown.code).toBe("VERIFY_COOLDOWN");
+    expect(cooldown.retryAfter).toBe(VERIFY_COOLDOWN_SECONDS - 20);
     // The refused call neither looked up DNS nor moved the claim's checkedAt.
     expect((await store.find(A, id))?.status).toBe("pending");
     clock = new Date(clock.getTime() + (VERIFY_COOLDOWN_SECONDS - 20) * 1_000);

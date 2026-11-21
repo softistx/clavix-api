@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
-import type { MemoryMailer } from "@softistx/mail";
 import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -16,12 +15,17 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { at } from "~/body";
+import { challengeOfOptions } from "~/challenge-of";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
+import { type Answer, answerOf } from "~/gql-answer";
+import { memoryMailerOf } from "~/memory-mailer-of";
+import { testSecrets } from "~/ports";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the
 // challenge reads the passkey options again, with no attempt counted.
 
-const memory = mailer as MemoryMailer;
+const memory = memoryMailerOf(mailer);
 let app = createTestApp();
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -30,10 +34,7 @@ const origin = {
 } as const;
 const policies = new SignInPolicyService(
   tenantsService,
-  {
-    seal: () => "",
-    open: () => "",
-  } as never,
+  testSecrets(),
   () => {},
 );
 
@@ -45,12 +46,6 @@ const tenantOf = async (slug: string) => {
   if (tenant === null) throw new Error(`no tenant ${slug}`);
   return tenant;
 };
-
-interface Answer {
-  data: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: Record<string, unknown> }[];
-  cookies: string[];
-}
 
 async function gql(
   slug: string,
@@ -68,12 +63,7 @@ async function gql(
     },
     body: JSON.stringify({ query, variables }),
   });
-  const body = (await response.json()) as Omit<Answer, "cookies">;
-  return {
-    data: body.data ?? null,
-    ...(body.errors === undefined ? {} : { errors: body.errors }),
-    cookies: response.headers.getSetCookie(),
-  };
+  return answerOf(response);
 }
 
 const REQUEST = `mutation ($email: EmailAddress!) {
@@ -105,8 +95,7 @@ const cookieOf = (answer: Answer) => {
   const header = answer.cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`));
   return header === undefined ? "" : (header.split(";")[0] ?? "");
 };
-const challengeOf = (options: string) =>
-  String((JSON.parse(options) as { challenge: unknown }).challenge);
+const challengeOf = challengeOfOptions;
 const handleOf = (id: string) => Buffer.from(id).toString("base64url");
 
 const A = "pkacme";
@@ -183,7 +172,7 @@ async function challengeFor(slug: string, email: string) {
   );
   expect(out.__typename).toBe("SecondFactorChallenge");
   expect(out.methods).toContain("passkey");
-  return out as { challenge: string; passkeyOptions: string };
+  return out;
 }
 
 /** The browser's answer to the challenge's `passkeyOptions`. */
@@ -396,11 +385,9 @@ describe("requestSecondFactorPasskeyOptions", () => {
           variables: { challenge: challenge.challenge },
         }),
       });
-      const body = (await response.json()) as {
-        errors?: { extensions: Record<string, unknown> }[];
-      };
+      const body = await gqlOf(response);
       expect(response.status).toBe(429);
-      expect(body.errors?.[0]?.extensions["code"]).toBe("PASSKEY_THROTTLED");
+      expect(body.errors?.[0]?.extensions?.["code"]).toBe("PASSKEY_THROTTLED");
       expect(response.headers.get("retry-after")).toBe("9");
     } finally {
       app = saved;
@@ -426,10 +413,8 @@ describe("requestSecondFactorPasskeyOptions", () => {
       },
       body: JSON.stringify({ query: OPTIONS, variables: { challenge: "x" } }),
     });
-    const body = (await response.json()) as {
-      errors?: { extensions: Record<string, unknown> }[];
-    };
-    expect(body.errors?.[0]?.extensions["code"]).toBe("NOT_FOUND");
+    const body = await gqlOf(response);
+    expect(body.errors?.[0]?.extensions?.["code"]).toBe("NOT_FOUND");
     expect(calls).toBe(0);
   });
 });

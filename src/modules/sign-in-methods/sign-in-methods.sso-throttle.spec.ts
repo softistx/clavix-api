@@ -20,6 +20,7 @@ import {
 } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
 import { quietTenants } from "~/ports";
 import {
   createHomeRealmThrottle,
@@ -104,9 +105,7 @@ async function setup(code: SsoLimitConfig, sso: SsoLimitConfig) {
       },
       body: JSON.stringify({ query, variables }),
     });
-    const body = (await response.json()) as {
-      errors?: { message: string; extensions: Record<string, unknown> }[];
-    };
+    const body = await gqlOf(response);
     return { response, error: body.errors?.[0] };
   };
   return {
@@ -144,7 +143,7 @@ describe("an anonymous flood of home-realm lookups (G2-10)", () => {
     await home("sso-lima", "203.0.113.1");
     const { response, error } = await home("sso-lima", "203.0.113.1");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("MAIL_THROTTLED");
+    expect(error?.extensions?.["code"]).toBe("MAIL_THROTTLED");
     expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     expect((await home("sso-lima", "203.0.113.2")).error).toBeUndefined();
     expect((await home("sso-mike", "203.0.113.1")).error).toBeUndefined();
@@ -169,7 +168,7 @@ describe("an anonymous flood of home-realm lookups (G2-10)", () => {
     // The start has its own buckets: an unknown provider is refused by the
     // policy (404), not by a spent budget.
     const start = await ask("sso-lima", "203.0.113.3", START);
-    expect(start.error?.extensions["code"]).toBe("SIGN_IN_METHOD_DISABLED");
+    expect(start.error?.extensions?.["code"]).toBe("SIGN_IN_METHOD_DISABLED");
     await close();
   });
 });

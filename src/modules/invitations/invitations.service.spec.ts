@@ -5,15 +5,22 @@ import { InvitationsService } from "./invitations.service";
 import type {
   InvitationSource,
   InvitationsOptions,
+  InvitationsPorts,
   TenantInvitations,
 } from "./invitations.types";
 
 // The hosted-page ports are not read by the per-tenant methods under test.
+const unusedPorts: InvitationsPorts = {
+  issuers: { forRequest: async () => null },
+  tenants: { activeByIds: async () => [] },
+  usage: { recordActive: async () => {} },
+};
+
 const createTenantInvitations = (
   source: () => Promise<InvitationSource | null>,
   options: Partial<InvitationsOptions> = {},
 ): TenantInvitations =>
-  new InvitationsService({} as never, { now: Date.now, ...options }).bind(
+  new InvitationsService(unusedPorts, { now: Date.now, ...options }).bind(
     source,
   );
 

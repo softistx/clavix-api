@@ -1,12 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
+import { parsed } from "~/narrow";
 
 const owner = consoleAs("aud-owner-a");
 const admin = consoleAs("aud-admin-a");
@@ -36,11 +39,15 @@ const PLATFORM = `query($filter: AdminEventFilter, $first: Int) {
   }
 }`;
 
-const pageOf = (result: Awaited<ReturnType<typeof admin>>, key: string) =>
-  (result.data?.[key] ?? {}) as Record<string, unknown>;
+const pageOf = <S extends z.ZodType>(
+  result: Awaited<ReturnType<typeof admin>>,
+  key: string,
+  schema: S,
+) => at(result.data, key, schema);
+const totalSchema = z.object({ totalCount: z.number() });
 const totalOf = (result: Awaited<ReturnType<typeof admin>>) =>
   Object.values(result.data ?? {}).map(
-    (page) => (page as { totalCount: number }).totalCount,
+    (page) => parsed(totalSchema, page).totalCount,
   )[0];
 
 const T0 = new Date("2026-11-10T10:00:00Z");
@@ -59,7 +66,7 @@ const adminEvent = (
     target: { type: "tenant", id: tenantId ?? "platform" },
     at,
     requestId: "req",
-  } as never);
+  });
 const authEvent = (
   tenantId: string,
   over: Partial<Parameters<typeof authEventsService.record>[0]>,
@@ -169,10 +176,14 @@ describe("guards", () => {
 describe("adminEvents", () => {
   test("a tenant sees only its own events, newest first", async () => {
     const result = await admin(ADMIN_EVENTS, { tenantId: tenantA });
-    const page = result.data?.["adminEvents"] as {
-      totalCount: number;
-      items: { tenantId: string; at: string }[];
-    };
+    const page = at(
+      result.data,
+      "adminEvents",
+      z.object({
+        totalCount: z.number(),
+        items: z.array(z.object({ tenantId: z.string(), at: z.string() })),
+      }),
+    );
     expect(page.totalCount).toBe(5);
     expect(page.items.every((item) => item.tenantId === tenantA)).toBe(true);
     expect(page.items.map((item) => item.at)).toEqual(
@@ -181,21 +192,28 @@ describe("adminEvents", () => {
   });
 
   test("pages with a cursor, and `totalCount` is the whole filtered count", async () => {
-    const first = (await admin(ADMIN_EVENTS, { tenantId: tenantA, first: 2 }))
-      .data?.["adminEvents"] as {
-      totalCount: number;
-      nextCursor: string;
-      items: unknown[];
-    };
+    const first = at(
+      (await admin(ADMIN_EVENTS, { tenantId: tenantA, first: 2 })).data,
+      "adminEvents",
+      z.object({
+        totalCount: z.number(),
+        nextCursor: z.string(),
+        items: z.array(z.unknown()),
+      }),
+    );
     expect(first.items).toHaveLength(2);
     expect(first.totalCount).toBe(5);
-    const next = (
-      await admin(ADMIN_EVENTS, {
-        tenantId: tenantA,
-        first: 2,
-        after: first.nextCursor,
-      })
-    ).data?.["adminEvents"] as { items: { at: string }[] };
+    const next = at(
+      (
+        await admin(ADMIN_EVENTS, {
+          tenantId: tenantA,
+          first: 2,
+          after: first.nextCursor,
+        })
+      ).data,
+      "adminEvents",
+      z.object({ items: z.array(z.object({ at: z.string() })) }),
+    );
     expect(next.items.map((item) => item.at)).toEqual([
       minutes(2).toISOString(),
       minutes(1).toISOString(),
@@ -218,10 +236,20 @@ describe("adminEvents", () => {
 
   test("an actor is resolved to a name and an address when the user exists", async () => {
     const result = await admin(ADMIN_EVENTS, { tenantId: tenantA, first: 1 });
-    const [item] = (
-      pageOf(result, "adminEvents") as {
-        items: { actor: { kind: string; id: string; name: string | null } }[];
-      }
+    const [item] = pageOf(
+      result,
+      "adminEvents",
+      z.object({
+        items: z.array(
+          z.object({
+            actor: z.object({
+              kind: z.string(),
+              id: z.string(),
+              name: z.string().nullable(),
+            }),
+          }),
+        ),
+      }),
     ).items;
     expect(item?.actor).toMatchObject({ kind: "user", id: "aud-owner-a" });
     expect(item?.actor.name).toBeNull(); // no such user in the clavix tenant
@@ -243,8 +271,11 @@ describe("adminEvents", () => {
   });
 
   test("`first` is capped at 100 and floored at 1", async () => {
-    const page = (await admin(ADMIN_EVENTS, { tenantId: tenantA, first: 0 }))
-      .data?.["adminEvents"] as { items: unknown[] };
+    const page = at(
+      (await admin(ADMIN_EVENTS, { tenantId: tenantA, first: 0 })).data,
+      "adminEvents",
+      z.object({ items: z.array(z.unknown()) }),
+    );
     expect(page.items).toHaveLength(1);
     expect(
       (await admin(ADMIN_EVENTS, { tenantId: tenantA, first: 500 })).errors,
@@ -255,10 +286,20 @@ describe("adminEvents", () => {
 describe("authEvents", () => {
   test("a tenant sees only its own sign-in events, with the address (D15)", async () => {
     const result = await admin(AUTH_EVENTS, { tenantId: tenantA });
-    const page = result.data?.["authEvents"] as {
-      totalCount: number;
-      items: { userId: string; ip: string; userAgent: string }[];
-    };
+    const page = at(
+      result.data,
+      "authEvents",
+      z.object({
+        totalCount: z.number(),
+        items: z.array(
+          z.object({
+            userId: z.string(),
+            ip: z.string(),
+            userAgent: z.string(),
+          }),
+        ),
+      }),
+    );
     expect(page.totalCount).toBe(3);
     expect(page.items.map((item) => item.userId)).toEqual(["u1", "u2", "u1"]);
     expect(page.items[0]?.ip).toBe("198.51.100.4");
@@ -297,18 +338,25 @@ describe("authEvents", () => {
 
 describe("platformAdminEvents", () => {
   test("covers every tenant and the platform's own events", async () => {
-    const page = (await operator(PLATFORM, { first: 100 })).data?.[
-      "platformAdminEvents"
-    ] as { totalCount: number; items: { tenantId: string | null }[] };
+    const page = at(
+      (await operator(PLATFORM, { first: 100 })).data,
+      "platformAdminEvents",
+      z.object({
+        totalCount: z.number(),
+        items: z.array(z.object({ tenantId: z.string().nullable() })),
+      }),
+    );
     expect(page.totalCount).toBe(7);
     expect(page.items.some((item) => item.tenantId === null)).toBe(true);
     expect(page.items.some((item) => item.tenantId === tenantB)).toBe(true);
   });
 
   test("filters by action", async () => {
-    const page = (
-      await operator(PLATFORM, { filter: { action: "tenant.create" } })
-    ).data?.["platformAdminEvents"] as { totalCount: number };
+    const page = at(
+      (await operator(PLATFORM, { filter: { action: "tenant.create" } })).data,
+      "platformAdminEvents",
+      totalSchema,
+    );
     expect(page.totalCount).toBe(1);
   });
 });
@@ -336,15 +384,13 @@ describe("adminEvent and authEvent", () => {
       tenantId: tenantA,
       id: await idOf("adminEvents", tenantA),
     });
-    expect((pageOf(a, "adminEvent") as { tenantId: string }).tenantId).toBe(
-      tenantA,
-    );
+    expect(at(a.data, "adminEvent.tenantId", z.string())).toBe(tenantA);
     const b = await admin(ONE_AUTH, {
       tenantId: tenantA,
       id: await idOf("authEvents", tenantA),
     });
     expect(b.errors).toBeUndefined();
-    expect((pageOf(b, "authEvent") as { id: string }).id).toBeString();
+    expect(at(b.data, "authEvent.id", z.string())).toBeString();
   });
 
   test("another tenant's event, an unknown id and a malformed id are all null", async () => {
@@ -383,7 +429,7 @@ describe("adminEvent and authEvent", () => {
     const ONE = `query($id: ID!) { platformAdminEvent(id: $id) { id tenantId } }`;
     const id = await idOf("adminEvents", tenantB);
     const found = await operator(ONE, { id });
-    expect((pageOf(found, "platformAdminEvent") as { id: string }).id).toBe(id);
+    expect(at(found.data, "platformAdminEvent.id", z.string())).toBe(id);
     expect(
       (await operator(ONE, { id: "5f0000000000000000000000" })).data?.[
         "platformAdminEvent"

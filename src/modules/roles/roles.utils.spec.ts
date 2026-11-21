@@ -10,8 +10,24 @@ import {
   target,
 } from "./roles.utils";
 
+const stored = (over: Partial<RoleDoc>): RoleDoc => {
+  const _id = new ObjectId();
+  return {
+    id: _id.toHexString(),
+    _id,
+    tenantId: new ObjectId(),
+    name: "admin",
+    description: "",
+    resourceId: null,
+    managed: false,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    ...over,
+  };
+};
+
 const role = (name: string, resourceId: ObjectId | null = null) =>
-  ({ _id: new ObjectId(), name, resourceId }) as unknown as RoleDoc;
+  stored({ name, resourceId });
 
 describe("sortedByName", () => {
   test("sorts a copy by name", () => {
@@ -23,11 +39,9 @@ describe("sortedByName", () => {
 
 describe("heldRoles", () => {
   test("keeps the roles of the ids, sorted", () => {
-    const [b, a, c] = [role("b"), role("a"), role("c")] as [
-      RoleDoc,
-      RoleDoc,
-      RoleDoc,
-    ];
+    const b = role("b");
+    const a = role("a");
+    const c = role("c");
     const ids = new Set([b._id.toHexString(), a._id.toHexString()]);
     expect(heldRoles([b, a, c], ids).map((r) => r.name)).toEqual(["a", "b"]);
   });
@@ -56,7 +70,8 @@ describe("claimNames", () => {
 
 describe("countsByRole", () => {
   test("a role nobody holds counts 0", () => {
-    const [a, b] = [role("a"), role("b")] as [RoleDoc, RoleDoc];
+    const a = role("a");
+    const b = role("b");
     const counts = countsByRole([a, b], [{ _id: a._id, n: 3 }]);
     expect(counts.get(a._id.toHexString())).toBe(3);
     expect(counts.get(b._id.toHexString())).toBe(0);
@@ -64,17 +79,6 @@ describe("countsByRole", () => {
 });
 
 describe("shape", () => {
-  const stored = (over: Partial<RoleDoc>) =>
-    ({
-      _id: new ObjectId(),
-      name: "admin",
-      description: "",
-      resourceId: null,
-      managed: false,
-      createdAt: new Date(0),
-      ...over,
-    }) as RoleDoc;
-
   test("an empty description is null, a tenant-wide role has no resource", () => {
     const shown = shape(stored({}), 3);
     expect(shown.description).toBeNull();

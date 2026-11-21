@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
 
 const admin = consoleAs("wh-admin-a");
@@ -33,12 +35,16 @@ const LIST = `query($tenantId: ID!) { webhookEndpoints(tenantId: $tenantId) { ${
 const ONE = `query($tenantId: ID!, $id: ID!) { webhookEndpoint(tenantId: $tenantId, id: $id) { ${FIELDS} } }`;
 const TYPES = `query($tenantId: ID!) { webhookEventTypes(tenantId: $tenantId) }`;
 
-type Created = {
-  secret: string;
-  endpoint: { id: string; secrets: unknown[]; enabled: boolean };
-};
+const createdSchema = z.object({
+  secret: z.string(),
+  endpoint: z.object({
+    id: z.string(),
+    secrets: z.array(z.unknown()),
+    enabled: z.boolean(),
+  }),
+});
 const createdOf = (result: Awaited<ReturnType<typeof admin>>) =>
-  result.data?.["createWebhookEndpoint"] as Created;
+  at(result.data, "createWebhookEndpoint", createdSchema);
 
 beforeAll(async () => {
   tenantA = (await tenantsService.create({ slug: "wh-a", name: "A" })).id;
@@ -71,7 +77,7 @@ describe("createWebhookEndpoint", () => {
     const list = await admin(LIST, { tenantId: tenantA });
     expect(JSON.stringify(list.data)).not.toContain(created.secret);
     expect(
-      ((list.data?.["webhookEndpoints"] ?? []) as unknown[]).length,
+      at(list.data, "webhookEndpoints", z.array(z.unknown())).length,
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -126,9 +132,7 @@ describe("webhookEndpoint", () => {
     const id = created.endpoint.id;
     const one = await viewer(ONE, { tenantId: tenantA, id });
     expect(one.errors).toBeUndefined();
-    expect(
-      (one.data?.["webhookEndpoint"] as { id: string } | undefined)?.id,
-    ).toBe(id);
+    expect(at(one.data, "webhookEndpoint.id", z.string())).toBe(id);
     expect(JSON.stringify(one.data)).not.toContain(created.secret);
     const missing = await admin(ONE, {
       tenantId: tenantA,
@@ -190,7 +194,7 @@ describe("update, roll, test and delete", () => {
       id,
       keepPrevious: true,
     });
-    const next = rolled.data?.["rollWebhookSecret"] as Created;
+    const next = at(rolled.data, "rollWebhookSecret", createdSchema);
     expect(next.secret).not.toBe(made.secret);
     expect(next.endpoint.secrets).toHaveLength(2);
     const expired = await admin(ROLL, {
@@ -199,8 +203,7 @@ describe("update, roll, test and delete", () => {
       keepPrevious: false,
     });
     expect(
-      (expired.data?.["rollWebhookSecret"] as Created | undefined)?.endpoint
-        .secrets,
+      at(expired.data, "rollWebhookSecret", createdSchema).endpoint.secrets,
     ).toHaveLength(1);
 
     // Another tenant cannot reach it, even by id.
@@ -218,7 +221,7 @@ describe("update, roll, test and delete", () => {
 
   test("webhookEventTypes lists the catalogue", async () => {
     const result = await admin(TYPES, { tenantId: tenantA });
-    const types = result.data?.["webhookEventTypes"] as string[];
+    const types = at(result.data, "webhookEventTypes", z.array(z.string()));
     expect(types).toHaveLength(17);
     expect(types).toContain("session.signedIn");
   });
@@ -249,9 +252,17 @@ describe("deliveries", () => {
     for (const who of [admin, viewer]) {
       const result = await who(DELIVERIES, { tenantId: tenantA });
       expect(result.errors).toBeUndefined();
-      const [endpoint] = (result.data?.["webhookEndpoints"] ?? []) as {
-        deliveries: { attempt: number; error: string | null }[];
-      }[];
+      const [endpoint] = at(
+        result.data,
+        "webhookEndpoints",
+        z.array(
+          z.object({
+            deliveries: z.array(
+              z.object({ attempt: z.number(), error: z.string().nullable() }),
+            ),
+          }),
+        ),
+      );
       expect(endpoint?.deliveries.map((row) => row.attempt)).toEqual([3, 2]);
       expect(endpoint?.deliveries[0]?.error).toBe("TimeoutError");
     }

@@ -1,4 +1,5 @@
 import { afterAll } from "bun:test";
+import { rmSync } from "node:fs";
 import { MongoMemoryReplSet } from "mongodb-memory-server-core";
 
 // Preloaded by `bun test` (bunfig.toml), before any spec imports src/: one
@@ -51,8 +52,19 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   await relaxParAndDpopOnConsole(mongo.db);
 }
 
+// The shutdown does not wait on mongod: `replSet.stop()` waits for it to flush
+// and exit, which took longer than the 5 s hook timeout on a loaded machine
+// ("(unnamed) afterAll hook timed out" on whichever spec ran last). The data
+// is a throwaway temp folder, so the hook closes the driver, kills mongod and
+// removes its folder, all synchronous: no wait, no timeout, no leftover.
 afterAll(async () => {
   const { mongo } = await import("@/config/db");
   await mongo.close();
-  await replSet.stop();
+  for (const server of replSet.servers) {
+    server.instanceInfo?.instance.mongodProcess?.kill("SIGKILL");
+    const dbPath = server.instanceInfo?.dbPath;
+    if (dbPath) {
+      rmSync(dbPath, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }
 });

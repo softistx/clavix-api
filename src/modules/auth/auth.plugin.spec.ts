@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { GraphQLError } from "graphql";
+import { instance } from "~/narrow";
 import { janusMasking } from "./auth.plugin";
 
 // An unexpected resolver error must not reach the client in production mode
@@ -10,5 +11,5 @@ test("an unexpected error is masked in production mode", () => {
   });
   const masked = janusMasking.maskError(original, { correlationId: "c1" });
   expect(JSON.stringify(masked)).not.toContain("hunter2");
-  expect((masked as Error).message).toBe("Unexpected error.");
+  expect(instance(masked, Error).message).toBe("Unexpected error.");
 });
