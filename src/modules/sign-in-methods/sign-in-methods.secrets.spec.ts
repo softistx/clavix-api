@@ -94,7 +94,6 @@ test("a keyring: the first key seals, every key opens, a stranger does not", () 
     "Sealed under another key",
   );
   // An empty keyring is one the types forbid: it reaches the function untyped.
-  expect(() => Reflect.apply(createSecretBox, undefined, [[]])).toThrow(
-    TypeError,
-  );
+  // @ts-expect-error an empty keyring is not a `NonEmptyKeys`
+  expect(() => createSecretBox([])).toThrow(TypeError);
 });

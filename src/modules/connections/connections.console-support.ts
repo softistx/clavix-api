@@ -5,6 +5,7 @@ import type {
   UpdateConnectionInput,
 } from "@/generated/console/resolvers";
 import { fail } from "@/shared/errors";
+import { stringsOf } from "@/shared/values";
 import { ConnectionError } from "./connections.errors";
 import { AUTH_IN, TRUST_IN } from "./connections.utils";
 
@@ -48,15 +49,6 @@ export const claimsIn = (
     | null
     | undefined,
 ) => (claims === null || claims === undefined ? undefined : stringsOf(claims));
-
-/** The entries of an object that hold a string, as a record. */
-const stringsOf = (source: object): Record<string, string> => {
-  const strings: Record<string, string> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (typeof value === "string") strings[key] = value;
-  }
-  return strings;
-};
 
 /** What `checkConnection` asks the issuer checker, a record that is never stored. */
 export const checkOf = (input: CheckConnectionInput) => ({

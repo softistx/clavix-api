@@ -5,6 +5,7 @@ import {
   isRecord,
   propertyOf,
   stringListOf,
+  stringsOf,
   unique,
 } from "./values";
 
@@ -50,4 +51,12 @@ test("stringListOf keeps the strings of an array, nothing of anything else", () 
   expect(stringListOf("a")).toEqual([]);
   expect(stringListOf(undefined)).toEqual([]);
   expect(stringListOf({ 0: "a" })).toEqual([]);
+});
+
+test("stringsOf keeps the entries that hold a string", () => {
+  expect(stringsOf({ a: "x", b: 1, c: null, d: "", e: ["y"] })).toEqual({
+    a: "x",
+    d: "",
+  });
+  expect(stringsOf({})).toEqual({});
 });

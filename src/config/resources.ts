@@ -1,7 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { DetailTextsFor, ScopeTextsFor } from "@/modules/consent";
 import {
-  consentReadyOf,
   mongoClientDetailTypes,
   mongoDetailTypeClients,
   type RegisterResourceInput,
@@ -80,8 +79,5 @@ export const detailTextsFor: DetailTextsFor = async (request) => {
   }));
 };
 
-/** What a client's detail type opt-in reads: the tenant's stored types and its consent readiness. */
-export const clientDetailTypes = mongoClientDetailTypes(
-  mongo.db.detailTypes,
-  consentReadyOf(env.CLAVIX_RAR_CONSENT_READY),
-);
+/** What a client's detail type opt-in reads: the tenant's stored types. */
+export const clientDetailTypes = mongoClientDetailTypes(mongo.db.detailTypes);

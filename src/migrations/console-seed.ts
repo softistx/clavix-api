@@ -34,7 +34,6 @@ export const NAME = "Clavix console";
 // lists no detail types, and the clock is `new Date()`.
 const noDetailTypes: ClientDetailTypes = {
   namesOf: async () => new Set<string>(),
-  consentReady: () => false,
 };
 
 /**

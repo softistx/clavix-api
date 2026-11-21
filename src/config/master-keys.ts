@@ -1,5 +1,3 @@
-import { isNonEmpty } from "@/shared/values";
-
 /** One master key as written in the environment: 32 bytes in standard base64. */
 const ITEM = /^[A-Za-z0-9+/]{43}=$/;
 
@@ -31,6 +29,8 @@ export function parseMasterKeys(value: string): [Uint8Array, ...Uint8Array[]] {
   const keys = value
     .split(",")
     .map((item) => Buffer.from(item.trim(), "base64"));
-  if (!isNonEmpty(keys)) throw new TypeError("CLAVIX_KEYS_MASTER_KEY: no key");
-  return keys;
+  const [first, ...rest] = keys;
+  if (first === undefined)
+    throw new TypeError("CLAVIX_KEYS_MASTER_KEY: no key");
+  return [first, ...rest];
 }

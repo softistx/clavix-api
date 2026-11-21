@@ -12,7 +12,8 @@ import { consolePushedDpopMigration } from "./2026-11-17-console-par-dpop.migrat
 
 // The migrations `bun run db:migrate` applies, oldest first. Each is a file
 // `<date>-<name>.migration.ts` in this folder, added here.
-// The console seed takes what the context lacks (`config/migrations.ts` binds it).
+// The console seed takes what the context lacks (`config/migrations.ts`
+// binds it; the `db-migrate` script supplies the announce).
 export const migrationsOf = (
   options: ConsoleSeedOptions,
 ): readonly Migration[] => [

@@ -1,5 +1,4 @@
 import {
-  DEVICE_GRANT,
   hashOAuthSecret,
   mintOAuthSecret,
   type OAuthClientGrantType,
@@ -15,7 +14,7 @@ import {
   UnknownTenantError,
 } from "@/shared/cli";
 import { detailTypesOf } from "./clients.detail-types";
-import { DEFAULT_GRANTS, usesRedirect } from "./clients.rules";
+import { DEFAULT_GRANTS } from "./clients.rules";
 import type {
   RegisterClientInput,
   RegisterClientOptions,
@@ -147,10 +146,7 @@ export async function registerClient(
     tenant,
     input.detailTypes,
     existing?.authorizationDetailsTypes ?? [],
-    {
-      requirePar,
-      hasConsent: usesRedirect(grants) || grants.includes(DEVICE_GRANT),
-    },
+    { requirePar },
   );
   await store.upsertClient(
     recordOf(
