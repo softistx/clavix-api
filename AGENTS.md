@@ -500,7 +500,8 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   `ctx.exclusive(userKey(tenant, user))` (`console/modules/user-key.ts`), so no assignment outlives its
   user; `disableUser` (platform users) and the `clavix` invitation accept hooks (`userLock`) take it too. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
   **Managed roles** (#207): `roles.managed` (default `false`) marks a role Clavix provides; only `RolesService.create(…, { managed: true })` sets it (never the console input). `update` and `delete` refuse it with `RolesError("ROLE_MANAGED")` (403); the cascade of a deleted resource still removes it. `TenantRole.managed: Boolean!` exposes it.
-  `roles.input.ts` holds the input checks, `role-claims.ts` the claim join, `catalog-support.ts` the one `refusing` for `CatalogError` and
+  `RolesService` (`roles.service.ts`) holds every method, `roles.rules.ts` the input checks, `roles.utils.ts` the claim join and the
+  sorting, `roles.errors.ts` the refusal builders, `catalog-support.ts` the one `refusing` for `CatalogError` and
   `RolesError`.
 - **Shared helpers**: `console/modules/ids.ts` (`tenantArg`, `tenantIdOf`, `idArg`, and `liveTenant`: a suspended tenant is returned, a trashed or unknown one is `NOT_FOUND`).
   A tenant trashed mid-request is `NOT_FOUND` in the users module too (`TenantUnavailableError`).
@@ -653,6 +654,15 @@ comparison is `domains.check.ts`.
   `consent.detail-labels`, `consent.scope-labels` (`config/*.ts`, `app.ts`), `branding.logo-route` (`app.ts`, the
   console: `logoUrl` and `LOGO_PATH` stay a leaf whose route takes a structural service), and each `.errors` file
   (`i18n/codes.ts`). Behaviour, throttles, error codes and mail timing are unchanged.
+- Layout (A12, roles): `roles` is a flat `<name>.<role>.ts` module with one service, `RolesService` (every method of
+  the roles and their assignments: the CRUD, `assign`, `members`, `memberCounts`, the `roles` claim), built in
+  `src/config/roles.ts` and registered in `services()`. The four helper files that imported their types back from the
+  service (`role-assignments`, `role-claims`, `role-counts`, `role-crud`, the four roles import cycles) are folded into
+  it; the types are in `roles.types.ts`, the input checks in `roles.rules.ts`, the pure claim, sort and count helpers in
+  `roles.utils.ts`, the refusal builders and codes in `roles.errors.ts`, each with its spec, and `roles.service.spec.ts`
+  runs the service on the test database. No hosted resolver: the roles are console-only until A13 folds
+  `src/console/modules/roles` in. The barrel (`index.ts`) exports the service, the error and the types; `i18n/codes.ts`
+  keeps importing `roles.errors` as a leaf. Behaviour, error codes and throttles are unchanged.
 - `domains` is a **platform** collection (like `adminEvents`): a verified host is unique across
   tenants (partial unique index on `{ host }` where `status: "verified"`), which the
   tenant-owned "every index starts with `tenantId`" rule cannot express. Every query still

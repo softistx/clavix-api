@@ -3,7 +3,7 @@ import { InvalidCursorError } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { Resolvers } from "@/generated/console/resolvers";
-import type { RoleDoc } from "@/modules/roles/roles.service";
+import type { RoleDoc } from "@/modules/roles";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import type { ConsoleContext } from "../../context";
