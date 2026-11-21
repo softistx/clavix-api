@@ -1,11 +1,12 @@
 import type { Audits } from "../../audit";
-import { type Guards, onTenant } from "../../guard";
+import { type Guards, onPlatform, onTenant } from "../../guard";
 import { tenantArg } from "../ids";
 
 // Reading the admins is `view`; changing them is `manage` (the tenant's owner,
 // or a platform owner): an admin or a viewer cannot grant roles.
 export const adminsGuards: Guards = {
   "Query.memberships": onTenant("view", tenantArg),
+  "Query.platformOperators": onPlatform("view"),
   "Query.adminInvitations": onTenant("view", tenantArg),
   "Mutation.inviteAdmin": onTenant("manage", tenantArg),
   "Mutation.changeMembership": onTenant("manage", tenantArg),

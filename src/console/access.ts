@@ -85,6 +85,12 @@ export function createAccess(store: RelationStore) {
       return found.filter((e) => e.type === "user").map((e) => e.id);
     },
 
+    /** The users who hold `role` directly on the platform. */
+    async platformHolders(role: Role): Promise<string[]> {
+      const found = await store.findEntities(PLATFORM, role);
+      return found.filter(({ type }) => type === "user").map(({ id }) => id);
+    },
+
     /** The ids of the users holding the platform `owner` role. */
     async platformOwners(): Promise<string[]> {
       const found = await store.findEntities(PLATFORM, "owner");

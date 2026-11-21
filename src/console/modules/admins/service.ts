@@ -75,6 +75,27 @@ export async function members(
   return found;
 }
 
+/** The platform's operators, owners first, one entry per user (the strongest role). A user who is gone is left out. */
+export async function platformOperators(
+  access: Pick<Access, "platformHolders">,
+  directory: Pick<ConsoleDirectory, "findUser">,
+) {
+  const found: {
+    user: NonNullable<Awaited<ReturnType<ConsoleDirectory["findUser"]>>>;
+    role: Role;
+  }[] = [];
+  const seen = new Set<string>();
+  for (const role of ROLES) {
+    for (const userId of await access.platformHolders(role)) {
+      if (seen.has(userId)) continue;
+      seen.add(userId);
+      const user = await directory.findUser(userId);
+      if (user !== null) found.push({ user, role });
+    }
+  }
+  return found;
+}
+
 /**
  * Gives the user exactly `role` on the tenant (the others are revoked), or
  * none, unless that leaves the tenant with no owner. The relation store has

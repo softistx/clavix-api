@@ -1,4 +1,4 @@
-"An admin of a tenant: a user of the `clavix` tenant who holds a role there directly."
+"A user of the `clavix` tenant with the role they hold directly: on a tenant (`memberships`) or on the platform (`platformOperators`)."
 type TenantMember {
   user: ConsoleUser!
   role: Role!
@@ -24,6 +24,8 @@ type Inviter {
 extend type Query {
   "The admins of a tenant (tenant viewer). Owners first."
   memberships(tenantId: ID!): [TenantMember!]!
+  "The platform operators (platform viewer): the users holding a role on the platform itself. Owners first, one entry per user with their strongest role; an account that is gone is left out."
+  platformOperators: [TenantMember!]!
   "The pending invitations of a tenant (tenant viewer)."
   adminInvitations(tenantId: ID!): [AdminInvitation!]!
 }
