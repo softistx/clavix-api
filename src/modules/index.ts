@@ -2,7 +2,7 @@ import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/graphql/resolvers";
 import { auth } from "./auth";
 import { branding } from "./branding";
-import { connections } from "./connections";
+import { connections } from "./connections/connections.resolver";
 import { health } from "./health";
 import { invitations } from "./invitations";
 import { mfa } from "./mfa";

@@ -1,32 +1,21 @@
-import { denial } from "@softistx/janus-graphql";
-import { connectionsService } from "@/config/connections";
-import { janusIssuers } from "@/config/users";
-import type { Resolvers } from "@/generated/graphql/resolvers";
-import { homeRealmOf } from "@/modules/users/tenant-janus";
-import { requireLive } from "@/tenancy/live";
+// The module's import surface. The resolver is not here: `modules/index.ts`
+// imports it by file, so this barrel never loads the config wiring back.
 
-export const connections: Resolvers = {
-  Query: {
-    hostedHomeRealm: async (_, { email }, ctx) => {
-      const [auth, tenant] = await Promise.all([
-        janusIssuers.forRequest(ctx.request),
-        ctx.tenant(),
-      ]);
-      if (auth === null || tenant === null) {
-        throw denial("NOT_FOUND", "No such tenant");
-      }
-      requireLive(tenant);
-      ctx.set.headers.set("cache-control", "no-store");
-      await ctx.homeRealmThrottle?.check({
-        tenantId: tenant.tenantId,
-        ip: ctx.ip,
-      });
-      const connectionId = await homeRealmOf(auth, email);
-      if (connectionId === null) return null;
-      const doc = await connectionsService.find(tenant.tenantId, connectionId);
-      return doc === undefined || !doc.enabled
-        ? null
-        : { connectionId, name: doc.name };
-    },
-  },
-};
+export type { IssuerChecker, IssuerSummary } from "./connections.discovery";
+export { discoverIssuer } from "./connections.discovery";
+export { ConnectionError } from "./connections.errors";
+export type { ConnectionDoc } from "./connections.model";
+export {
+  type OpenedSession,
+  requireNoSso,
+  requireNoSsoForUser,
+  revokeIfSso,
+} from "./connections.sso-gate";
+export type {
+  ClaimsInput,
+  ConnectionInput,
+  ConnectionPatch,
+  LinkCounter,
+} from "./connections.types";
+export { txtNameOf } from "./connections.utils";
+export { ConnectionsService } from "./services";
