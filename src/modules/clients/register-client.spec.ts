@@ -32,19 +32,23 @@ const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const options = { db: oauthDb, findTenant };
+const options = { db: oauthDb, findTenant, now: () => new Date() };
 
 const resolver = createTenantResolver({
   lookup: findTenant,
   cache: noTenantCache,
   config,
+  log: () => {},
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,

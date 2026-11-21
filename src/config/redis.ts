@@ -44,6 +44,7 @@ import {
 } from "@/oauth/register-throttle";
 import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
+import { warn } from "./runtime";
 
 // The app's Redis, for the tenant cache, at `uri`. It never waits for Redis:
 // the client is handed to `openRedis` unconnected (`client`, which the package
@@ -53,7 +54,7 @@ import { env } from "./env";
 // `close` stops the retries, then closes the client and the wiring.
 export async function openAppRedis(
   uri: string,
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
   limits: SignInLimitConfig = {
     ipLimit: env.CLAVIX_CODE_IP_LIMIT,
     ipWindowSeconds: env.CLAVIX_CODE_IP_WINDOW_SECONDS,
@@ -180,4 +181,6 @@ export async function openAppRedis(
 // (required in production). Unset, outside production, there is none and
 // nothing is cached.
 export const redis =
-  env.REDIS_URL === undefined ? undefined : await openAppRedis(env.REDIS_URL);
+  env.REDIS_URL === undefined
+    ? undefined
+    : await openAppRedis(env.REDIS_URL, warn);

@@ -27,7 +27,7 @@ const register = (
   grants: readonly string[] | undefined,
 ) =>
   registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: slug,
       name: `Device ${clientId}`,

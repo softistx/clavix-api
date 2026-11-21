@@ -3,7 +3,7 @@ export interface SecretsPruneDeps {
   tenantIds(): Promise<string[]>;
   /** Drops the tenant's expired rolled secrets; how many endpoints changed. */
   prune(tenantId: string, now: Date): Promise<number>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 export interface SecretsPruneReport {
@@ -21,9 +21,9 @@ export interface SecretsPruneReport {
  */
 export async function pruneWebhookSecrets(
   deps: SecretsPruneDeps,
-  now: Date = new Date(),
+  now: Date,
 ): Promise<SecretsPruneReport> {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   const report: SecretsPruneReport = { pruned: 0, failed: 0 };
   for (const tenantId of await deps.tenantIds()) {
     try {

@@ -22,7 +22,7 @@ export const tlsAskLimit = (perMinute: number) =>
 export const tlsAskGate =
   (
     consume: () => Promise<{ allowed: boolean }>,
-    log: (message: string) => void = (message) => console.warn(message),
+    log: (message: string) => void,
   ) =>
   async (): Promise<boolean> => {
     try {

@@ -7,7 +7,9 @@ import { AuthService } from "./auth.service";
 const stubbed = (auth: object | null) => {
   const recorded: string[] = [];
   const service = new AuthService({
+    log: () => {},
     issuers: { forRequest: async () => auth as never },
+    now: () => new Date(),
     mailOf: () => ({}) as never,
     usage: { recordActive: async (_, userId) => void recorded.push(userId) },
   });

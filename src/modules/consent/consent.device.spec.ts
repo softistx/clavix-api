@@ -38,6 +38,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -163,6 +164,7 @@ beforeAll(async () => {
     });
     await registerClient(
       {
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },

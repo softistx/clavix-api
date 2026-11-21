@@ -4,6 +4,7 @@ import type { RecheckDeps } from "@/modules/domains/domains.recheck-worker";
 import { access } from "./access";
 import { env } from "./env";
 import { mailer } from "./mail";
+import { warn } from "./runtime";
 import { domainsService, tenantsService } from "./tenancy";
 
 /**
@@ -13,6 +14,7 @@ import { domainsService, tenantsService } from "./tenancy";
 export const domainRecheckDeps = (
   findUser: (id: string) => Promise<{ email: string } | null>,
 ): RecheckDeps => ({
+  log: warn,
   recheckAll: (onUnverified) => domainsService.recheckAll(onUnverified),
   notify: async (domain) => {
     const tenantId = domain.tenantId.toHexString();

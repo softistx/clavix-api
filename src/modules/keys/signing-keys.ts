@@ -54,7 +54,7 @@ export function createTenantKeys({
   }
 
   /** The public JWKS of the tenant's issuer at `now`: no private member, nothing decrypted. */
-  function jwksFor(tenantId: string, now: Date = new Date()): Promise<Jwks> {
+  function jwksFor(tenantId: string, now: Date): Promise<Jwks> {
     return publicJwks(signingKeysFor(tenantId), now);
   }
 

@@ -61,12 +61,18 @@ const IDP_ISSUER = `https://${IDP_HOST}`;
 const memory = mailer as MemoryMailer;
 
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
+  log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policies = new SignInPolicyService(tenants, {
-  seal: () => "",
-  open: () => "",
-} as never);
+const policies = new SignInPolicyService(
+  tenants,
+  {
+    seal: () => "",
+    open: () => "",
+  } as never,
+  () => {},
+);
 // One recording throttle per budget: which one an operation spends is the point (G2-10).
 type Who = { tenantId: string; ip: string };
 const checks: Who[] = [];
@@ -88,6 +94,7 @@ const app = createApp({
 
 // The upstream: its own OAuth issuers over the same database, like oidc.spec.
 const idpResolver = (await import("@/tenancy/resolver")).createTenantResolver({
+  log: () => {},
   lookup: (slug: string) => mongo.db.tenants.findFirst({ slug }),
   cache: (await import("@/tenancy/tenant-cache")).noTenantCache,
   config: { scheme: "https", domain: IDP_DOMAIN },
@@ -112,6 +119,7 @@ const claimsFor: ClaimsFor = () => async (subject) => ({
   email_verified: true,
 });
 const idp = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: idpResolver,
   db: oauthDb,
@@ -297,7 +305,11 @@ beforeAll(async () => {
     retireAfter: "2h",
   });
   const registered = await registerClient(
-    { db: oauthDb, findTenant: (slug) => mongo.db.tenants.findFirst({ slug }) },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+    },
     {
       tenant: "fedidp",
       name: "Clavix",

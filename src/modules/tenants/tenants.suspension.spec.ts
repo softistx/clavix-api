@@ -157,8 +157,9 @@ describe("a suspension and the cached custom hosts", () => {
     expect(await store.verifiedHostsOf(created._id)).toEqual([kept]);
 
     const tenancy = createTenancy({
+      log: () => {},
       tenants: mongo.db.tenants,
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config: origin,
       domains: {
         tenantOfHost: (host) => store.tenantOfHost(host),

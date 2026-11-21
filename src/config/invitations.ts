@@ -4,13 +4,14 @@ import type { TenantInvitations } from "@/modules/invitations/invitations.types"
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
 import { tenantMail } from "./mail";
+import { clockMs } from "./runtime";
 import { tenantsService } from "./tenancy";
 import { usageService } from "./usage";
 import { forTenant, janusIssuers } from "./users";
 
 export const invitationsService = new InvitationsService(
   { issuers: janusIssuers, tenants: tenantsService, usage: usageService },
-  { maxPending: env.CLAVIX_INVITE_PENDING_LIMIT },
+  { now: clockMs, maxPending: env.CLAVIX_INVITE_PENDING_LIMIT },
 );
 
 /**

@@ -41,7 +41,7 @@ async function machine(
   } = {},
 ) {
   const registered = await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: options.slug ?? SLUG,
       name: clientId,
@@ -182,7 +182,7 @@ describe("the client credentials grant", () => {
   test("a client with the grant needs allowed scopes, and defaults within them", async () => {
     await expect(
       registerClient(
-        { db: oauthDb, findTenant },
+        { now: () => new Date(), db: oauthDb, findTenant },
         {
           tenant: SLUG,
           name: "none",
@@ -201,7 +201,7 @@ describe("the client credentials grant", () => {
   test("scopes belong to the grant: they go with it", async () => {
     await expect(
       registerClient(
-        { db: oauthDb, findTenant },
+        { now: () => new Date(), db: oauthDb, findTenant },
         {
           tenant: SLUG,
           name: "code",

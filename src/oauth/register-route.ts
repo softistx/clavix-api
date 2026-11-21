@@ -34,7 +34,7 @@ export interface RegisterRouteDeps {
    * it, they run unserialized.
    */
   exclusive?: Exclusive | undefined;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 const oauthError = (error: OAuthError) =>
@@ -109,7 +109,7 @@ export function createRegisterRoute({
   agents,
   agentQuotaOf,
   exclusive = (_key, work) => work(),
-  log = (message) => console.warn(message),
+  log,
 }: RegisterRouteDeps) {
   return async (
     request: Request,

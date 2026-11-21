@@ -1,6 +1,7 @@
 import { createEventBus } from "@/events/bus";
 import { authRecorder } from "@/modules/audit/audit.recorder";
 import { authEventsService } from "./audit";
+import { reportError } from "./runtime";
 
 /** How many events a subscriber failed to handle since the process started (D13); read by telemetry when it is wired. */
 export const eventFailures = { count: 0 };
@@ -13,7 +14,7 @@ export const eventFailures = { count: 0 };
 export const eventBus = createEventBus({
   onFailure: (error, event) => {
     eventFailures.count += 1;
-    console.error(
+    reportError(
       `events: ${event.kind} event not recorded (${eventFailures.count} failed since start)`,
       error,
     );

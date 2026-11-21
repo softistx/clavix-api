@@ -21,6 +21,7 @@ import { dpopNonceSecret, keyGenerations, signingKeysFor } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor as storedResourcesFor } from "./resources";
 import { rolesFor as storedRolesFor } from "./roles";
+import { clockMs, janusClock } from "./runtime";
 import { tenantResolver } from "./tenancy";
 import { usageService } from "./usage";
 
@@ -47,6 +48,7 @@ export const createIssuers = (
           signingKeysFor,
           dpopNonceSecret,
           authFor,
+          clock: janusClock,
           claimsFor,
           resourcesFor,
           rolesFor,
@@ -57,7 +59,7 @@ export const createIssuers = (
             oauthListener(tenant.tenantId, tenant.issuer, eventBus),
         }),
       ),
-      { resolver: tenantResolver, generations: keyGenerations },
+      { resolver: tenantResolver, generations: keyGenerations, now: clockMs },
     ),
     {
       resolver: tenantResolver,

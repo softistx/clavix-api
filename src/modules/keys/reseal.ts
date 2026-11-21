@@ -18,7 +18,7 @@ export interface ResealDeps {
   masterKeys: readonly [Uint8Array, ...Uint8Array[]];
   /** Every tenant partition (hex ids), the suspended and the trashed included. */
   tenantIds: () => Promise<string[]>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
   /** Seals a partition's TOTP secrets again; janus's `secondFactor.reseal` under the keyring by default. */
   resealSecondFactor?: ResealSecondFactor;
   /**
@@ -165,7 +165,7 @@ export async function resealAllTenants({
   db,
   masterKeys,
   tenantIds,
-  log = (message) => console.warn(message),
+  log,
   resealSecondFactor,
   secretStores,
 }: ResealDeps): Promise<ResealReport> {

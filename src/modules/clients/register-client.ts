@@ -110,7 +110,7 @@ export interface RegisterClientOptions {
   /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
   db: Db;
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
-  now?: () => Date;
+  now: () => Date;
   /** The tenant's detail types; without it a client cannot list any. */
   detailTypes?: ClientDetailTypes;
 }
@@ -263,7 +263,7 @@ export async function registerClient(
     name,
     redirectUris,
     source: "registered",
-    createdAt: existing?.createdAt ?? (options.now ?? (() => new Date()))(),
+    createdAt: existing?.createdAt ?? options.now(),
     expiresAt: null,
     grantTypes: grants,
     ...(requirePar ? { requirePushedAuthorizationRequests: true } : {}),

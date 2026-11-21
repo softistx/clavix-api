@@ -32,6 +32,7 @@ describe("emergency rotation", () => {
       signingKeysFor: keys.signingKeysFor,
       tenantIds: [A],
       now: () => at,
+      log: () => {},
     });
     expect(failed).toBe(0);
     expect(rotated).toHaveLength(1);
@@ -64,6 +65,7 @@ describe("emergency rotation", () => {
       tenantIds: [A],
       dropOld: true,
       now: () => at,
+      log: () => {},
     });
     const published = await kids(A, new Date(at.getTime() + 1));
     expect(published).not.toContain(oldA as string);
@@ -83,6 +85,7 @@ describe("emergency rotation", () => {
       signingKeysFor: keys.signingKeysFor,
       tenantIds: [A],
       now: () => pre,
+      log: () => {},
     });
     expect(await signing(A, pre)).toBe(next as string);
     expect(await kids(A, pre)).toContain(oldA as string);

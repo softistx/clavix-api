@@ -61,7 +61,7 @@ async function consoleWith(
     }),
   );
   return consoleRequestAs(userId, {
-    budgets: createConsoleBudgets(redis.limits),
+    budgets: createConsoleBudgets(redis.limits, () => {}),
   });
 }
 

@@ -96,6 +96,7 @@ describe("the tenant's membership lock cannot be taken", () => {
     const auth = buildTenantJanus(
       oauthDb,
       clavix,
+      () => {},
       undefined,
       adminInvitationHooks({
         access,
@@ -149,6 +150,7 @@ describe("the operator invitation (operators:grant --create)", () => {
     const auth = buildTenantJanus(
       oauthDb,
       clavix,
+      () => {},
       undefined,
       adminInvitationHooks({
         access,
@@ -190,6 +192,7 @@ describe("an owner invitation for an account that is gone", () => {
     const auth = buildTenantJanus(
       oauthDb,
       clavix,
+      () => {},
       undefined,
       adminInvitationHooks({
         access,

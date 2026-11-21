@@ -37,6 +37,7 @@ export async function serveAuditExport(
   }
   const principal = await authenticated(
     deps.authenticate,
+    deps.reportError,
     request,
     CONSOLE_EXPORT_PATH,
   );
@@ -74,7 +75,7 @@ export async function serveAuditExport(
   }
 
   // The range stays inside the retention (D17): older rows are gone or about to be.
-  const now = (deps.auditExport?.now ?? (() => new Date()))();
+  const now = deps.now();
   const retention = planOf(tenant.plan).auditRetentionDays * DAY_MS;
   const floor = new Date(now.getTime() - retention);
   const start = from === null || from < floor ? floor : from;
@@ -96,7 +97,7 @@ export async function serveAuditExport(
       requestId: crypto.randomUUID(),
     });
   } catch (error) {
-    console.error("console: audit export not recorded", error);
+    deps.reportError("console: audit export not recorded", error);
     return refusal(503, "SERVICE_UNAVAILABLE", "Try again later");
   }
 

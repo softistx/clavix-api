@@ -6,8 +6,8 @@ export interface RotationDeps {
   signingKeysFor: TenantKeys["signingKeysFor"];
   /** The ids (hex) of the tenants that sign: the active ones. */
   activeTenantIds: () => Promise<string[]>;
-  now?: () => Date;
-  log?: (message: string) => void;
+  now: () => Date;
+  log: (message: string) => void;
 }
 
 /**
@@ -19,8 +19,8 @@ export interface RotationDeps {
 export async function rotateAllTenants({
   signingKeysFor,
   activeTenantIds,
-  now = () => new Date(),
-  log = (message) => console.warn(message),
+  now,
+  log,
 }: RotationDeps) {
   let rotated = 0;
   let failed = 0;
@@ -47,7 +47,7 @@ export async function rotateAllTenants({
 export function ensureSigningKey(
   signingKeysFor: TenantKeys["signingKeysFor"],
   tenantId: string,
-  now: Date = new Date(),
+  now: Date,
 ) {
   return rotateSigningKeys(signingKeysFor(tenantId), {
     ...rotationPolicy,

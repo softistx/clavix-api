@@ -12,8 +12,8 @@ export interface EmergencyRotationDeps {
    * window (`rotationPolicy.retireAfter`), so live tokens keep verifying.
    */
   dropOld?: boolean;
-  now?: () => Date;
-  log?: (message: string) => void;
+  now: () => Date;
+  log: (message: string) => void;
 }
 
 export interface EmergencyRotation {
@@ -35,8 +35,8 @@ export async function rotateNow({
   signingKeysFor,
   tenantIds,
   dropOld = false,
-  now = () => new Date(),
-  log = (message) => console.warn(message),
+  now,
+  log,
 }: EmergencyRotationDeps): Promise<{
   rotated: EmergencyRotation[];
   failed: number;

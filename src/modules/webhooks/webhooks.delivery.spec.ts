@@ -56,6 +56,7 @@ const deliveries: ReturnType<typeof createWebhookDelivery>[] = [];
 
 const makeDelivery = (retries: readonly string[] = ["10ms"]) => {
   const delivery = createWebhookDelivery({
+    now: () => new Date(),
     webhooks: endpoints,
     fetch: guardedFetch(policy, receiver),
     queue: createMemoryWebhookQueue(),
@@ -279,6 +280,7 @@ describe("failures", () => {
       throw new Error("down");
     };
     const delivery = createWebhookDelivery({
+      now: () => new Date(),
       webhooks: broken,
       fetch: guardedFetch(policy, receiver),
       queue: createMemoryWebhookQueue(),
@@ -326,6 +328,7 @@ describe("failures", () => {
       2,
     );
     const delivery = createWebhookDelivery({
+      now: () => new Date(),
       webhooks: endpoints,
       fetch: guardedFetch(rebinding, receiver),
       queue: createMemoryWebhookQueue(),

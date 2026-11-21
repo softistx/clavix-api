@@ -36,9 +36,11 @@ export class ConsentService {
   private readonly readDetailTexts = perRequest<DetailTexts>();
   private readonly readAgents = agentMarksReader();
   private readonly log: (message: string) => void;
+  private readonly now: () => Date;
 
-  constructor({ log = (m) => console.warn(m) }: ConsentOptions = {}) {
+  constructor({ log, now }: ConsentOptions) {
     this.log = log;
+    this.now = now;
   }
 
   /** The OAuth server of the request's host, for a live tenant (`NOT_FOUND` otherwise). */
@@ -84,7 +86,11 @@ export class ConsentService {
     ctx: unknown,
   ): Promise<void> {
     if (selection !== undefined) throw refuseIncomplete();
-    const authentication = await assessment(ctx as Context, request);
+    const authentication = await assessment(
+      ctx as Context,
+      request,
+      this.now(),
+    );
     if (!authentication.met) throw unmetAuthentication(authentication.missing);
     if (request.authorizationDetails === undefined) return;
     const json = JSON.stringify(request.authorizationDetails);
@@ -94,7 +100,11 @@ export class ConsentService {
 
   /** How the viewer authenticated (D9): the session's methods as `amr`, its level as `acr`, the time of its last proof as `auth_time`. */
   async approveOptions({ request }: ApproveArgs, ctx: unknown) {
-    const { amr, acr, authTime } = await assessment(ctx as Context, request);
+    const { amr, acr, authTime } = await assessment(
+      ctx as Context,
+      request,
+      this.now(),
+    );
     return { amr, acr, authTime };
   }
 
@@ -153,7 +163,7 @@ export class ConsentService {
 
   /** The `authentication` field of a pending request: what it asks, what the session reached, what is missing. */
   async authentication(parent: RequestDemands, ctx: Context) {
-    const out = await assessment(ctx, parent);
+    const out = await assessment(ctx, parent, this.now());
     return {
       acr: out.required,
       current: out.reached,

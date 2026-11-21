@@ -53,6 +53,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -254,7 +255,7 @@ beforeAll(async () => {
     input: Partial<Parameters<typeof registerClient>[1]>,
   ) => {
     const done = await registerClient(
-      { db: oauthDb, findTenant, detailTypes: ready },
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
       {
         tenant: SLUG,
         name: clientId,
@@ -386,7 +387,7 @@ describe("authorization details through consent", () => {
       },
     );
     await registerClient(
-      { db: oauthDb, findTenant, detailTypes: ready },
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
       {
         tenant: SLUG,
         name: "payer",
@@ -580,7 +581,7 @@ describe("details the page cannot fully describe", () => {
     );
     giftId = created._id.toHexString();
     await registerClient(
-      { db: oauthDb, findTenant, detailTypes: ready },
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
       {
         tenant: SLUG,
         name: "gifter",

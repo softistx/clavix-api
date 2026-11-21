@@ -54,16 +54,18 @@ export class TenantsService {
   ) => string[] | Promise<string[]>;
   private readonly onCreated: (tenantId: string) => void | Promise<void>;
   private readonly log: (message: string) => void;
+  private readonly now: () => Date;
 
   constructor(
     private readonly collection: TypedCollection<typeof tenants>,
-    options: TenantsServiceOptions = {},
+    options: TenantsServiceOptions,
   ) {
     this.domain = options.domain ?? env.CLAVIX_DOMAIN;
     this.onHostsChanged = options.onHostsChanged ?? (() => {});
     this.hostsOf = options.hostsOf ?? (() => []);
     this.onCreated = options.onCreated ?? (() => {});
-    this.log = options.log ?? ((message) => console.warn(message));
+    this.log = options.log;
+    this.now = options.now;
   }
 
   async create(input: {
@@ -352,7 +354,7 @@ export class TenantsService {
         purgeStartedAt: { $exists: false },
       },
       {
-        $set: { deletedAt: null, updatedAt: new Date() },
+        $set: { deletedAt: null, updatedAt: this.now() },
         $inc: { version: 1 },
       },
     );
@@ -376,7 +378,7 @@ export class TenantsService {
     const result = await this.collection.raw.updateOne(
       { _id: tenant._id, version: tenant.version },
       {
-        $set: { "signIn.social": social, updatedAt: new Date() },
+        $set: { "signIn.social": social, updatedAt: this.now() },
         $inc: { version: 1 },
       },
     );
@@ -438,8 +440,8 @@ export class TenantsService {
    * tenant that fails is left claimed and resumed by the next run; the others
    * go on. Refuses a tenant before its `purgeAt` (`claimPurge` says no).
    */
-  async purge(deps: PurgeDeps, now: Date = new Date()): Promise<PurgeReport> {
-    const log = deps.log ?? ((message) => console.info(message));
+  async purge(deps: PurgeDeps, now: Date): Promise<PurgeReport> {
+    const log = deps.log;
     const report: PurgeReport = { purged: [], failed: [] };
     for (const tenant of await this.purgeDue(now)) {
       const id = tenant._id.toHexString();

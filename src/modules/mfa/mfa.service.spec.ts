@@ -7,6 +7,7 @@ import { MfaService } from "./mfa.service";
 const serviceOver = (auth: object | null) =>
   new MfaService({
     issuers: { forRequest: async () => auth as never },
+    now: () => new Date(),
     mailOf: () => ({}) as never,
     usage: { recordActive: async () => {} },
   });

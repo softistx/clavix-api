@@ -7,6 +7,7 @@ import { connectionsService } from "./connections";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { redis } from "./redis";
+import { clock, warn } from "./runtime";
 import { domainsService } from "./tenancy";
 import { webhooksService } from "./webhooks-service";
 
@@ -47,6 +48,6 @@ export const usageService = new UsageService(
     domains: (tenantId) => domainsService.count(new ObjectId(tenantId)),
   },
   redis?.mau,
-  (message) => console.warn(message),
-  () => new Date(),
+  warn,
+  clock,
 );

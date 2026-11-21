@@ -24,11 +24,14 @@ const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
 const resolver = createTenantResolver({
+  log: () => {},
   lookup: findTenant,
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
@@ -63,6 +66,7 @@ const claimsFor: ClaimsFor = (tenant) => async (subject) => ({
 });
 
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
@@ -113,7 +117,7 @@ async function setUp(slug: string, withKey = true) {
     });
   }
   const registered = await registerClient(
-    { db: oauthDb, findTenant },
+    { now: () => new Date(), db: oauthDb, findTenant },
     {
       tenant: slug,
       name: "Back end",

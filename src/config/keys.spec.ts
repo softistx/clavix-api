@@ -18,7 +18,7 @@ describe("signing keys wiring", () => {
     const id = tenant._id.toHexString();
     const current = await signingKeysFor(id).findCurrentKey(new Date());
     expect(current).not.toBeNull();
-    const { keys } = await jwksFor(id);
+    const { keys } = await jwksFor(id, new Date());
     expect(keys.map((k) => k.kid)).toEqual([current?.kid as string]);
   });
 

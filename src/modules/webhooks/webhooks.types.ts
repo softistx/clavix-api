@@ -39,10 +39,10 @@ export interface EndpointChanges {
 
 export interface WebhooksServiceOptions {
   policy: UrlPolicy;
-  now?: () => Date;
+  now: () => Date;
   /** Mints a `whsec_` secret; a spec fixes it. */
   mint?: () => string;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 /** What `onAttempt` reports, reduced to what is kept: no URL, no body. */

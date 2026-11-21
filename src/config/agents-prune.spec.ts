@@ -15,6 +15,7 @@ const DAY = 86_400_000;
 const options = {
   db: oauthDb,
   findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+  now: () => NOW,
 };
 let idA = "";
 let idB = "";

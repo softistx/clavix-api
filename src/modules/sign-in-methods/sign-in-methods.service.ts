@@ -39,8 +39,7 @@ export class SignInPolicyService {
   constructor(
     private readonly tenants: TenantsService,
     private readonly box: SecretBox,
-    private readonly log: (message: string) => void = (message) =>
-      console.warn(message),
+    private readonly log: (message: string) => void,
   ) {}
 
   /** The tenant (suspended included: its policy stays readable), or NOT_FOUND (404) for an unknown or trashed one. */

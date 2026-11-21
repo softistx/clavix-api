@@ -23,7 +23,7 @@ export interface TlsAskDeps {
    * answer (fails closed, see `tlsAskGate`).
    */
   limit?: (() => Promise<boolean>) | undefined;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 /**
@@ -109,7 +109,7 @@ export function tlsAsk(deps: TlsAskDeps) {
         : await deps.allowed(host);
       if (!ok) return answer(404);
     } catch (error) {
-      (deps.log ?? console.warn)(`tls-ask: lookup failed: ${String(error)}`);
+      deps.log(`tls-ask: lookup failed: ${String(error)}`);
       return answer(404);
     }
     if (deps.limit !== undefined && !(await deps.limit())) return answer(429);

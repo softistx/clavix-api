@@ -11,7 +11,7 @@ const event: AuthEvent = {
 
 describe("the event bus", () => {
   test("every subscriber gets the event, awaited", async () => {
-    const bus = createEventBus();
+    const bus = createEventBus({ onFailure: () => {} });
     const seen: string[] = [];
     bus.subscribe(async () => {
       await Promise.resolve();
@@ -52,7 +52,7 @@ describe("the event bus", () => {
   });
 
   test("an unsubscribed subscriber is not called", async () => {
-    const bus = createEventBus();
+    const bus = createEventBus({ onFailure: () => {} });
     let calls = 0;
     const off = bus.subscribe(() => {
       calls += 1;

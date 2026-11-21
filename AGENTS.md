@@ -37,7 +37,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   `<m>.resolver.ts` split `-queries` / `-mutations` / `-support` / `-guards` when they grow, `<m>.data-loader.ts`,
   and `index.ts`, the only entry other modules import. Other files stay under 250 lines, a function under 80. No helper function at the top of a
   service, resolver or data-loader (it goes to `<m>.utils.ts`). Ports and clocks are passed
-  explicitly, never defaulted. Known overruns of the 250 lines outside services, to split when touched:
+  explicitly, never defaulted (`src/config/runtime.ts` binds `clock`, `clockMs`, `janusClock`, `warn` and `reportError` once, at the composition root; only the CLI scripts and the server's startup banner print through `console` directly, and the frozen data migrations read `new Date()`). Known overruns of the 250 lines outside services, to split when touched:
   `users/tenant-janus.ts`, `clients/register-client.ts`, `keys/reseal.ts`, `config/env.ts`, `console/context.ts`.
   `src/modules/index.ts` merges the resolvers, `services.ts` holds the per-request services (D10: the
   process-lifetime objects, such as the janus issuers, keys, `oauthDb`, Redis and telemetry, stay in `src/config/`), `collections.ts` the collections.

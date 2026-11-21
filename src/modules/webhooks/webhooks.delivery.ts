@@ -47,7 +47,7 @@ export const endpointIdOf = (queueEndpoint: string) => {
  */
 export const webhookQueueLimits = (
   caps: { maxInFlight: number; maxPending: number },
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): WebhookQueueLimits => ({
   ...caps,
   groupOf: webhookGroupOf,
@@ -66,6 +66,8 @@ export interface DisabledEndpoint {
 }
 
 export interface DeliveryDeps {
+  /** The current time (stamps `occurredAt`). */
+  now: () => Date;
   /** The endpoints, and where each attempt is logged (W2). */
   webhooks: WebhooksService;
   /** The guarded `fetch` (D21): checks the address on every send. */
@@ -79,7 +81,7 @@ export interface DeliveryDeps {
   poll?: Duration;
   /** An endpoint was switched off after `GIVE_UP_LIMIT` given-up deliveries in a row. */
   onDisabled(endpoint: DisabledEndpoint): Promise<void>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 type Log = (message: string) => void;
@@ -172,7 +174,7 @@ function giveUpHandler(
  * retry. It is fed by the event bus (`relay`) and by `sendTest`.
  */
 export function createWebhookDelivery(deps: DeliveryDeps) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   const listener = webhooks<ClavixWebhookEvent>({
     endpoints: endpointResolver(deps),
     fetch: deps.fetch,
@@ -189,7 +191,7 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
     relay: async (event: ClavixEvent): Promise<void> => {
       if (event.kind === "webhook") await listener(event.event);
       else if (event.kind === "auth") {
-        const signedIn = signedInWebhookEvent(event);
+        const signedIn = signedInWebhookEvent(event, deps.now);
         if (signedIn !== undefined) await listener(signedIn);
       }
     },
@@ -199,7 +201,7 @@ export function createWebhookDelivery(deps: DeliveryDeps) {
       const event: ClavixWebhookEvent = {
         id: crypto.randomUUID(),
         type: TEST_EVENT_TYPE,
-        occurredAt: new Date(),
+        occurredAt: deps.now(),
         data,
       };
       await listener(event);

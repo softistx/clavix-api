@@ -68,10 +68,13 @@ export interface ConsoleDeps {
   adminEvents: AdminEventRecorder;
   /** The readers of the activity logs. */
   activity: ConsoleActivity;
-  /** The audit export's limits; the real ones (100 000 rows, the clock) by default. */
+  /** The clock (the audit export's range floor). */
+  now: () => Date;
+  /** Where a swallowed failure (token check, export record) is logged, with its cause. */
+  reportError: (message: string, cause: unknown) => void;
+  /** The audit export's limits; the real ones (100 000 rows) by default. */
   auditExport?: {
     maxRows?: number;
-    now?: () => Date;
     /** Per-tenant export budget; none without Redis. */
     throttle?: ExportThrottle;
   };
@@ -99,6 +102,7 @@ export const refusal = (
  */
 export async function authenticated(
   authenticate: ConsoleAuthenticate,
+  reportError: ConsoleDeps["reportError"],
   request: Request,
   path?: string,
 ): Promise<OAuthUserPrincipal | Response> {
@@ -106,7 +110,7 @@ export async function authenticated(
   try {
     principal = await authenticate(request, path);
   } catch (error) {
-    console.error("console: token verification failed", error);
+    reportError("console: token verification failed", error);
     return refusal(503, "SERVICE_UNAVAILABLE", "Try again later");
   }
   if (principal !== null && "refused" in principal) {
@@ -157,6 +161,7 @@ export function useConsole({
   budgets,
   adminEvents,
   activity,
+  reportError,
 }: ConsoleDeps) {
   // Ours, one per HTTP request: a client's `x-request-id` is never believed.
   const requestIds = new WeakMap<Request, string>();
@@ -173,7 +178,7 @@ export function useConsole({
     // Called server to server: no CORS, so a preflight (no credential) is refused too.
     // A bearer header is no ambient credential, so no same-origin guard applies.
     async onRequest({ request, respond, state }) {
-      const principal = await authenticated(authenticate, request);
+      const principal = await authenticated(authenticate, reportError, request);
       if (principal instanceof Response) {
         respond(principal);
         return;

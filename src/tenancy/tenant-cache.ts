@@ -57,7 +57,7 @@ export function redisTenantCache(bound: BoundTenantHostCache): TenantCache {
 
 /** In-process, with TTLs: for specs and a single instance without Redis. */
 export function memoryTenantCache(
-  now: () => number = Date.now,
+  now: () => number,
 ): TenantCache & { readonly size: number } {
   const entries = new Map<string, { value: CachedTenant; expires: number }>();
   return {

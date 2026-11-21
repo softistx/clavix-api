@@ -74,7 +74,7 @@ export interface ClavixOAuthOptions {
   eventsFor?: (tenant: ResolvedTenant) => OAuthEventListener;
   /** The hosted consent page, a path on the tenant's host. Default `/consent`. */
   consentUrl?: string;
-  clock?: Clock;
+  clock: Clock;
 }
 
 export { userinfoOf } from "./building";

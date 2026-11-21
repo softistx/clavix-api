@@ -10,6 +10,10 @@ export interface AuthPorts {
   mailOf(tenant: ResolvedTenant): JanusMail;
   /** Counts a user as active in the month (MAU). */
   usage: { recordActive(tenantId: string, userId: string): Promise<void> };
+  /** The current time. */
+  now: () => Date;
+  /** Where a mail that was not sent is logged (by its error name only). */
+  log: (message: string) => void;
 }
 
 /** The outcome of a sign-in step that may stop at a second factor. */

@@ -66,6 +66,7 @@ export function createFlow(
     email_verified: true,
   });
   const base = createClavixOAuthIssuers({
+    clock: { now: () => new Date() },
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,
     db: oauthDb,
@@ -142,7 +143,7 @@ export function createFlow(
       await registerStoredResource({ tenant: slug, uri, scopes: ["read"] });
     }
     const registered = await registerClient(
-      { db: oauthDb, findTenant },
+      { db: oauthDb, findTenant, now: () => new Date() },
       {
         tenant: slug,
         name: "Back end",

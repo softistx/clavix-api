@@ -26,10 +26,14 @@ const origin = {
   domain: env.CLAVIX_DOMAIN,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
-const policies = new SignInPolicyService(tenantsService, {
-  seal: () => "",
-  open: () => "",
-} as never);
+const policies = new SignInPolicyService(
+  tenantsService,
+  {
+    seal: () => "",
+    open: () => "",
+  } as never,
+  () => {},
+);
 
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 const tenantOf = async (slug: string) => {

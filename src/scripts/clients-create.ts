@@ -3,6 +3,7 @@ import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
 import { clientDetailTypes } from "@/config/resources";
+import { clock } from "@/config/runtime";
 import { tenantBySlug } from "@/config/tenancy";
 import { parseClientArgs, USAGE } from "@/modules/clients/cli";
 import { registerClient } from "@/modules/clients/register-client";
@@ -23,7 +24,12 @@ if (args.includes("--help") || args.includes("-h")) {
 }
 try {
   const result = await registerClient(
-    { db: oauthDb, findTenant: tenantBySlug, detailTypes: clientDetailTypes },
+    {
+      db: oauthDb,
+      findTenant: tenantBySlug,
+      detailTypes: clientDetailTypes,
+      now: clock,
+    },
     parseClientArgs(args),
   );
   console.log(

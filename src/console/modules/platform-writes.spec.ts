@@ -31,6 +31,7 @@ let OWNER = "";
 // The real wiring (issuers, grants): deleting a user needs the user's grants.
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,

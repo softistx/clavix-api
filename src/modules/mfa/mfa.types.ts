@@ -10,6 +10,8 @@ export interface MfaPorts {
   mailOf(tenant: ResolvedTenant): JanusMail;
   /** Counts a user as active in the month (MAU). */
   usage: { recordActive(tenantId: string, userId: string): Promise<void> };
+  /** The current time. */
+  now: () => Date;
 }
 
 /** What a second-factor sign-in of janus-graphql answers. */

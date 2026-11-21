@@ -15,8 +15,8 @@ export interface SecretsPruneQueue {
  */
 export function startWebhookSecretsPrune(
   run: () => Promise<SecretsPruneReport>,
-  queue?: SecretsPruneQueue,
-  log: (message: string) => void = (m) => console.warn(m),
+  queue: SecretsPruneQueue | undefined,
+  log: (message: string) => void,
 ) {
   queue
     ?.work(async () => {

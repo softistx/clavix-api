@@ -16,7 +16,11 @@ const service = new WebhooksService(
     crypto.getRandomValues(new Uint8Array(32)),
     "webhook-secrets",
   ),
-  { policy: { allowPrivate: false, resolve: async () => [] } },
+  {
+    policy: { allowPrivate: false, resolve: async () => [] },
+    now: () => new Date(),
+    log: () => {},
+  },
 );
 const A = new ObjectId().toHexString();
 const B = new ObjectId().toHexString();

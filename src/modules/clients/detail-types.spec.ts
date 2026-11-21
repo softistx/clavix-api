@@ -31,6 +31,7 @@ const register = (
 ) =>
   registerClient(
     {
+      now: () => new Date(),
       db: oauthDb,
       findTenant,
       ...(port === null ? {} : { detailTypes: port }),

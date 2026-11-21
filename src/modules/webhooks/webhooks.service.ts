@@ -56,9 +56,9 @@ export class WebhooksService {
     private readonly box: SecretBox,
     private readonly options: WebhooksServiceOptions,
   ) {
-    this.now = options.now ?? (() => new Date());
+    this.now = options.now;
     this.mint = options.mint ?? mintWebhookSecret;
-    this.log = options.log ?? ((message) => console.warn(message));
+    this.log = options.log;
   }
 
   private scoped(tenantId: string) {

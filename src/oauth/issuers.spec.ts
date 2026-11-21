@@ -23,11 +23,14 @@ const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 
 const resolver = createTenantResolver({
+  log: () => {},
   lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  now: () => new Date(),
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
@@ -64,6 +67,7 @@ const resourcesFor = () => ({
   [NO_SCOPE_RESOURCE]: { scopes: [] },
 });
 const issuers = createClavixOAuthIssuers({
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,

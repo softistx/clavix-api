@@ -175,7 +175,7 @@ describe("key generations", () => {
     const tenantId = new ObjectId().toHexString();
     await store(keys, tenantId).retire("missing", new Date(), new Date());
     expect(generations.of(tenantId)).toBe(0);
-    await ensureSigningKey(keys.signingKeysFor, tenantId);
+    await ensureSigningKey(keys.signingKeysFor, tenantId, new Date());
     expect(generations.of(tenantId)).toBeGreaterThan(0);
     expect(generations.of(new ObjectId().toHexString())).toBe(0);
   });

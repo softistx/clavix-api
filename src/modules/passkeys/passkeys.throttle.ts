@@ -25,7 +25,7 @@ export const createPasskeyThrottle = (
     passkeyIp: BoundLimits["ip"];
     passkeyTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): PasskeyThrottle =>
   createThrottle(
     { ip: limits.passkeyIp, tenant: limits.passkeyTenant },

@@ -13,7 +13,7 @@ export interface RecheckDeps {
   ): Promise<{ checked: number; unverified: number }>;
   /** Tells the tenant's owners their domain lapsed. */
   notify(domain: DomainDoc): Promise<void>;
-  log?: (message: string) => void;
+  log: (message: string) => void;
 }
 
 /**
@@ -22,7 +22,7 @@ export interface RecheckDeps {
  * a recheck is slow and not needed to serve.
  */
 export function startDomainRecheck(deps: RecheckDeps, queue?: RecheckQueue) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const log = deps.log;
   queue
     ?.work(async () => {
       await deps.recheckAll(deps.notify);

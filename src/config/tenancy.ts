@@ -14,6 +14,7 @@ import { createDomainsService } from "./domains";
 import { env } from "./env";
 import { ensureSigningKeyOf } from "./keys";
 import { redis } from "./redis";
+import { clock, warn } from "./runtime";
 
 export interface TenancyOptions {
   tenants: TypedCollection<typeof tenants>;
@@ -25,6 +26,8 @@ export interface TenancyOptions {
   hostsOf?: (tenantId: ObjectId) => Promise<string[]>;
   /** Gives a new tenant its first signing key. Default: none. */
   onCreated?: (tenantId: string) => void | Promise<void>;
+  /** Where a hook failure is logged. */
+  log: (message: string) => void;
 }
 
 /**
@@ -38,12 +41,14 @@ export function createTenancy({
   domains,
   hostsOf,
   onCreated,
+  log,
 }: TenancyOptions) {
   const tenantResolver = createTenantResolver({
     // The trash included: a deleted tenant answers as a suspended one does.
     lookup: (slug) => tenants.findFirst({ slug }, { withDeleted: true }),
     cache,
     config,
+    log,
     ...(domains === undefined
       ? {}
       : {
@@ -53,6 +58,8 @@ export function createTenancy({
   });
   const tenantsService = new TenantsService(tenants, {
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+    log,
+    now: clock,
     ...(hostsOf === undefined ? {} : { hostsOf }),
     ...(onCreated === undefined ? {} : { onCreated }),
   });
@@ -98,6 +105,7 @@ export const { tenantResolver, tenantsService } = createTenancy({
   },
   hostsOf: (tenantId) => domainsService.resolvingHostsOf(tenantId),
   config: origin,
+  log: warn,
 });
 
 /** A stored tenant by slug (suspended ones included), for the operator scripts. */

@@ -34,7 +34,7 @@ export function createDeviceThrottle(
     deviceIp: BoundLimits["ip"];
     deviceTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): DeviceThrottle {
   return createUserThrottle(
     {

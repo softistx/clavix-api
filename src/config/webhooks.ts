@@ -16,6 +16,7 @@ import { env } from "./env";
 import { eventBus } from "./events";
 import { mailer } from "./mail";
 import { redis } from "./redis";
+import { clock, warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 import { urlPolicy, webhooksService } from "./webhooks-service";
@@ -31,10 +32,13 @@ const findOwner = async (id: string) => {
 };
 
 // The queue's caps (G2-03): per tenant, from the environment.
-const queueLimits = webhookQueueLimits({
-  maxInFlight: env.CLAVIX_WEBHOOKS_MAX_IN_FLIGHT,
-  maxPending: env.CLAVIX_WEBHOOKS_MAX_PENDING,
-});
+const queueLimits = webhookQueueLimits(
+  {
+    maxInFlight: env.CLAVIX_WEBHOOKS_MAX_IN_FLIGHT,
+    maxPending: env.CLAVIX_WEBHOOKS_MAX_PENDING,
+  },
+  warn,
+);
 
 /**
  * The process-wide delivery (D20) over the real stores: the Redis queue when
@@ -46,6 +50,8 @@ const queueLimits = webhookQueueLimits({
 export const webhookDelivery = createWebhookDelivery({
   webhooks: webhooksService,
   fetch: guardedFetch(urlPolicy),
+  log: warn,
+  now: clock,
   queue:
     redis === undefined
       ? createMemoryWebhookQueue(queueLimits)
@@ -87,14 +93,13 @@ export const webhookDelivery = createWebhookDelivery({
 eventBus.subscribe(webhookDelivery.relay);
 
 /** The daily clean-up of the expired rolled secrets over the real stores. */
-export const createWebhookSecretsPrune =
-  (now: () => Date = () => new Date()) =>
-  () =>
-    pruneWebhookSecrets(
-      {
-        tenantIds: () => tenantsService.activeIds(),
-        prune: (tenantId, at) =>
-          webhooksService.pruneExpiredSecrets(tenantId, at),
-      },
-      now(),
-    );
+export const createWebhookSecretsPrune = (now: () => Date) => () =>
+  pruneWebhookSecrets(
+    {
+      tenantIds: () => tenantsService.activeIds(),
+      prune: (tenantId, at) =>
+        webhooksService.pruneExpiredSecrets(tenantId, at),
+      log: warn,
+    },
+    now(),
+  );

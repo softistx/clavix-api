@@ -14,6 +14,7 @@ const collection = mongo.db.tenants;
 const hosts: string[][] = [];
 const logged: string[] = [];
 const service = new TenantsService(collection, {
+  now: () => new Date(),
   domain: "clavix.test",
   onHostsChanged: (changed) => {
     hosts.push(changed);
@@ -33,6 +34,8 @@ describe("TenantsService onCreated", () => {
     const created: string[] = [];
     const quiet: string[] = [];
     const ok = new TenantsService(collection, {
+      now: () => new Date(),
+      log: () => {},
       domain: "clavix.test",
       onCreated: (id) => {
         created.push(id);
@@ -42,6 +45,7 @@ describe("TenantsService onCreated", () => {
     expect(created).toEqual([tenant._id.toHexString()]);
 
     const failing = new TenantsService(collection, {
+      now: () => new Date(),
       domain: "clavix.test",
       onCreated: () => {
         throw new Error("keys down");
@@ -155,6 +159,7 @@ describe("TenantsService", () => {
 
   test("a hook that throws is logged and the write stands", async () => {
     const failing = new TenantsService(collection, {
+      now: () => new Date(),
       domain: "clavix.test",
       onHostsChanged: () => {
         throw new Error("redis down");
@@ -182,7 +187,11 @@ describe("TenantsService", () => {
       },
       update: collection.update.bind(collection),
     } as unknown as typeof collection;
-    const once = new TenantsService(racing, { domain: "clavix.test" });
+    const once = new TenantsService(racing, {
+      now: () => new Date(),
+      domain: "clavix.test",
+      log: () => {},
+    });
     expect((await once.suspend(tenant._id)).status).toBe("suspended");
     // Two racing writes: the second conflict reaches the caller.
     raced = -1;
@@ -195,9 +204,11 @@ describe("TenantsService", () => {
       update: collection.update.bind(collection),
     } as unknown as typeof collection;
     await expect(
-      new TenantsService(always, { domain: "clavix.test" }).reactivate(
-        tenant._id,
-      ),
+      new TenantsService(always, {
+        now: () => new Date(),
+        domain: "clavix.test",
+        log: () => {},
+      }).reactivate(tenant._id),
     ).rejects.toThrow(OptimisticLockError);
   });
 
@@ -215,15 +226,20 @@ describe("TenantsService", () => {
         },
         update: collection.update.bind(collection),
       }) as unknown as typeof collection;
-    const twice = new TenantsService(racing(2), { domain: "clavix.test" });
+    const twice = new TenantsService(racing(2), {
+      now: () => new Date(),
+      domain: "clavix.test",
+      log: () => {},
+    });
     await twice.updateSignIn(tenant._id, (t) => t.signIn);
     expect(reads).toBe(3);
     reads = 0;
     await expect(
-      new TenantsService(racing(3), { domain: "clavix.test" }).updateSignIn(
-        tenant._id,
-        (t) => t.signIn,
-      ),
+      new TenantsService(racing(3), {
+        now: () => new Date(),
+        domain: "clavix.test",
+        log: () => {},
+      }).updateSignIn(tenant._id, (t) => t.signIn),
     ).rejects.toThrow(OptimisticLockError);
   });
 

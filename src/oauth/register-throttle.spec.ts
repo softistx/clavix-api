@@ -26,7 +26,10 @@ function fakeLimits(ip: LimitResult | Error, tenant: LimitResult | Error) {
 }
 
 describe("createMetadataThrottle", () => {
-  const build = (f: ReturnType<typeof fakeLimits>, log?: (m: string) => void) =>
+  const build = (
+    f: ReturnType<typeof fakeLimits>,
+    log: (m: string) => void = () => {},
+  ) =>
     createMetadataThrottle({ metadataIp: f.ip, metadataTenant: f.tenant }, log);
 
   test("counts the address, then the tenant", async () => {
@@ -76,10 +79,13 @@ describe("createMetadataThrottle", () => {
 describe("createRegisterThrottle", () => {
   test("refuses with its own error", async () => {
     const f = fakeLimits(ok, refused(5000));
-    const throttle = createRegisterThrottle({
-      registerIp: f.ip,
-      registerTenant: f.tenant,
-    });
+    const throttle = createRegisterThrottle(
+      {
+        registerIp: f.ip,
+        registerTenant: f.tenant,
+      },
+      () => {},
+    );
     const error = await throttle
       .check({ tenantId: "t1", ip: "x" })
       .catch((e) => e);

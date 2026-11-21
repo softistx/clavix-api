@@ -60,6 +60,8 @@ export interface TenantJanusOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
   /** The database of the janus collections (`syncMongoStoresPartitioned`). */
   db: Db;
+  /** Where a tenant that loses a social app or its connections is logged. */
+  log: (message: string) => void;
   /**
    * The sealing keys of the TOTP secrets and recovery codes
    * (`secondFactorKeysOf(masterKeys)`): the first seals, every one opens.
@@ -223,6 +225,7 @@ function nameOf(name: string | undefined): { name?: string } {
 function connectionsOfTenant(
   tenant: ResolvedTenant,
   connections: ConnectionsOf | undefined,
+  log: (message: string) => void,
 ): OidcConnections | undefined {
   if (connections === undefined) return undefined;
   try {
@@ -235,7 +238,7 @@ function connectionsOfTenant(
       redirectUri: (connection) => callbackUrlOf(tenant.issuer, connection.id),
     });
   } catch (error) {
-    console.warn(
+    log(
       `connections: tenant ${tenant.tenantId} has none (${error instanceof Error ? error.name : "unknown error"})`,
     );
     return undefined;
@@ -342,17 +345,18 @@ export const unverifiedHolderOf =
 function socialConfigOf(
   tenant: ResolvedTenant,
   secrets: SecretBox | undefined,
+  log: (message: string) => void,
   connections?: ConnectionsOf,
 ): { config: SocialConfig | undefined; realms?: OidcConnections } {
   const providers =
     secrets === undefined
       ? {}
       : socialProvidersOf(tenant, secrets, (provider, reason) =>
-          console.warn(
+          log(
             `social: ${provider} of tenant ${tenant.tenantId} is off (${reason})`,
           ),
         );
-  const realms = connectionsOfTenant(tenant, connections);
+  const realms = connectionsOfTenant(tenant, connections, log);
   const hasStatic = Object.keys(providers).length > 0;
   if (!hasStatic && realms === undefined) return { config: undefined };
   return {
@@ -385,6 +389,7 @@ function socialConfigOf(
 export function buildTenantJanus(
   db: Db,
   tenant: ResolvedTenant,
+  log: (message: string) => void,
   secrets?: SecretBox,
   hooks?: InvitationHooks,
   events?: UserEventListener,
@@ -392,7 +397,7 @@ export function buildTenantJanus(
   secondFactorKeys: [SealingKey, ...SealingKey[]] = ephemeralSecondFactorKeys(),
   connections?: ConnectionsOf,
 ): TenantJanus {
-  const { config, realms } = socialConfigOf(tenant, secrets, connections);
+  const { config, realms } = socialConfigOf(tenant, secrets, log, connections);
   // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.
   const instance = instrumentJanus(
     buildJanus(db, tenant, secondFactorKeys, config, hooks, events),
@@ -442,6 +447,7 @@ const fingerprintOf = (origins: readonly string[]): string =>
 export function createTenantJanusIssuers({
   resolver,
   db,
+  log,
   secondFactorKeys = ephemeralSecondFactorKeys(),
   secrets,
   connections,
@@ -469,6 +475,7 @@ export function createTenantJanusIssuers({
       buildTenantJanus(
         db,
         tenant,
+        log,
         secrets,
         invitationHooks?.(tenant),
         events?.(tenant),

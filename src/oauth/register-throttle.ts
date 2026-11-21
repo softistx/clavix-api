@@ -35,7 +35,7 @@ export function createRegisterThrottle(
     registerIp: BoundLimits["ip"];
     registerTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): RegisterThrottle {
   return createThrottle(
     { ip: limits.registerIp, tenant: limits.registerTenant },
@@ -69,7 +69,7 @@ export function createMetadataThrottle(
     metadataIp: BoundLimits["ip"];
     metadataTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): MetadataThrottle {
   return createThrottle(
     { ip: limits.metadataIp, tenant: limits.metadataTenant },

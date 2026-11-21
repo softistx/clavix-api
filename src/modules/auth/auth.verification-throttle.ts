@@ -30,7 +30,7 @@ export function createVerificationThrottle(
     verifyIp: BoundLimits["ip"];
     verifyTenant: BoundLimits["tenant"];
   },
-  log?: (message: string) => void,
+  log: (message: string) => void,
 ): VerificationThrottle {
   return createUserThrottle(
     {

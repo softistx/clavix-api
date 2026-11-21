@@ -61,6 +61,8 @@ const as = async (
 ): Promise<Result> => {
   const response = await createApp({
     console: {
+      now: () => new Date(),
+      reportError: () => {},
       authenticate: async () => ({
         userId,
         clientId: CONSOLE_CLIENT_ID,
@@ -695,6 +697,7 @@ describe("concurrent changes", () => {
         },
       } as unknown as typeof tenantsService,
       secretBox,
+      () => {},
     );
     const refusal = await lost
       .updateMethods(b, [{ type: "magicLink", enabled: true }])
