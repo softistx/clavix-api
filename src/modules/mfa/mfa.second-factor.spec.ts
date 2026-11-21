@@ -9,7 +9,7 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { settled } from "@/modules/auth/outbox";
+import { settled } from "@/modules/auth";
 import { resealAllTenants, resealExitCode } from "@/modules/keys/reseal";
 import {
   emptySecretResealCounts,

@@ -1,4 +1,7 @@
+import { authService } from "@/config/auth";
 import { connectionsService } from "@/config/connections";
+import { mfaService } from "@/config/mfa";
+import { passkeysService } from "@/config/passkeys";
 import { resourcesService } from "@/config/resources";
 import { signInPolicyService } from "@/config/sign-in-policy";
 import { domainsService, tenantsService } from "@/config/tenancy";
@@ -12,8 +15,11 @@ import { webhooksService } from "@/config/webhooks-service";
  * needs a per-request one (D10 follow-up).
  */
 export const services = () => ({
+  auth: authService,
   connections: connectionsService,
   domains: domainsService,
+  mfa: mfaService,
+  passkeys: passkeysService,
   resources: resourcesService,
   signInPolicy: signInPolicyService,
   tenants: tenantsService,

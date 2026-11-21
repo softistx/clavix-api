@@ -12,11 +12,14 @@ import {
 import { consoleLimits } from "@/console/budgets";
 import { agentsPrune } from "@/modules/agents/prune.queue";
 import { auditRetention } from "@/modules/audit/retention.queue";
-import { type SignInLimitConfig, signInLimits } from "@/modules/auth/throttle";
+import {
+  type SignInLimitConfig,
+  signInLimits,
+} from "@/modules/auth/auth.throttle";
 import {
   type VerificationLimitConfig,
   verificationLimits,
-} from "@/modules/auth/verification-throttle";
+} from "@/modules/auth/auth.verification-throttle";
 import {
   type DeviceLimitConfig,
   deviceLimits,
@@ -28,7 +31,7 @@ import { keyRotation } from "@/modules/keys/queue";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,
-} from "@/modules/passkeys/throttle";
+} from "@/modules/passkeys/passkeys.throttle";
 import { ssoLimits } from "@/modules/sign-in-methods";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage/mau";

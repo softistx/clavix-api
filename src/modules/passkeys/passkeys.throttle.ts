@@ -6,7 +6,7 @@ import {
   retryAfterSeconds,
   type Throttle,
 } from "@/http/throttle/core";
-import { fail } from "@/shared/errors";
+import { passkeyThrottled } from "./passkeys.errors";
 
 export type PasskeyLimitConfig = LimitConfig;
 export type PasskeyThrottle = Throttle;
@@ -18,13 +18,6 @@ export const passkeyLimits = (config: PasskeyLimitConfig) => {
   const { ip, tenant } = ipAndTenantLimits("passkey", config);
   return { passkeyIp: ip, passkeyTenant: tenant };
 };
-
-/** `PASSKEY_THROTTLED`, 429 with `Retry-After` (seconds). */
-export const passkeyThrottled = (retryAfter: number) =>
-  fail("PASSKEY_THROTTLED", "Too many passkey sign-ins requested", {
-    status: 429,
-    headers: { "retry-after": String(retryAfter) },
-  });
 
 /** Address first, then tenant; Redis down: the request goes through, logged. */
 export const createPasskeyThrottle = (

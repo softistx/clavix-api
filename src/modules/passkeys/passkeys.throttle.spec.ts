@@ -12,13 +12,16 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { openAppRedis } from "@/config/redis";
 import { tenantResolver } from "@/config/tenancy";
+import { createSignInThrottle } from "@/modules/auth";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { settled } from "./outbox";
-import { createSignInThrottle, type SignInLimitConfig } from "./throttle";
+import {
+  createPasskeyThrottle,
+  type PasskeyLimitConfig,
+} from "./passkeys.throttle";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -32,11 +35,10 @@ const service = new TenantsService(mongo.db.tenants, {
 let server: TestRedis;
 beforeAll(async () => {
   server = await startTestRedis();
-  await service.create({ slug: "lima", name: "Lima", signUp: true });
-  await service.create({ slug: "mike", name: "Mike", signUp: true });
+  await service.create({ slug: "lima", name: "Lima" });
+  await service.create({ slug: "mike", name: "Mike" });
 }, 300_000);
 afterAll(async () => {
-  await settled();
   await mongo.db.tenants.raw.deleteMany({
     slug: { $ne: PLATFORM_TENANT_SLUG },
   });
@@ -44,23 +46,39 @@ afterAll(async () => {
 });
 beforeEach(() => server.reset());
 
-const REQUEST = `mutation ($email: EmailAddress!) {
-  requestSignInCode(email: $email) { challenge }
-}`;
-let counter = 0;
-const nextEmail = () => {
-  counter += 1;
-  return `user${counter}@example.test`;
+const OPTIONS = `mutation { passkeySignInOptions { challenge } }`;
+
+type Answer = {
+  response: Response;
+  error: { extensions: Record<string, unknown> } | undefined;
 };
 
-// An app over a Redis with the given limits; `ask` is a sign-in code request
-// for a tenant, from a client address (the one proxy in front writes it).
-async function setup(limits: SignInLimitConfig) {
-  const redis = await openAppRedis(server.uri, () => {}, limits);
-  // The client connects in the background: wait until it answers, or the
-  // first requests would fail open.
+async function post(
+  app: ReturnType<typeof createApp>,
+  slug: string,
+  ip: string,
+  query: string,
+): Promise<Answer> {
+  const issuer = issuerOf(slug, origin);
+  const response = await app.request(`${issuer}/graphql`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: issuer.replace(/\/$/, ""),
+      "x-forwarded-for": ip,
+    },
+    body: JSON.stringify({ query }),
+  });
+  const body = (await response.json()) as {
+    errors?: { extensions: Record<string, unknown> }[];
+  };
+  return { response, error: body.errors?.[0] };
+}
+
+async function setup(limits: PasskeyLimitConfig) {
+  const redis = await openAppRedis(server.uri, () => {}, undefined, limits);
   for (let i = 0; i < 100; i += 1) {
-    const ready = await redis.limits.signInIp
+    const ready = await redis.limits.passkeyIp
       .peek({ tenantId: "ready", ip: "0.0.0.0" }, 0)
       .then(
         () => true,
@@ -70,66 +88,74 @@ async function setup(limits: SignInLimitConfig) {
     await Bun.sleep(20);
   }
   const app = createApp({
-    signInThrottle: createSignInThrottle(redis.limits, (message) => {
+    passkeyThrottle: createPasskeyThrottle(redis.limits, (message) => {
       throw new Error(message); // a spec never runs with Redis down
     }),
   });
-  const ask = async (slug: string, ip: string, email = nextEmail()) => {
-    const response = await app.request(`${issuerOf(slug, origin)}/graphql`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-forwarded-for": ip },
-      body: JSON.stringify({ query: REQUEST, variables: { email } }),
-    });
-    const body = (await response.json()) as {
-      errors?: { message: string; extensions: Record<string, unknown> }[];
-    };
-    return { response, error: body.errors?.[0] };
+  return {
+    ask: (slug: string, ip: string) => post(app, slug, ip, OPTIONS),
+    close: () => redis.close(),
+    redis,
   };
-  return { ask, close: () => redis.close() };
 }
 
 const roomy = 1_000;
-const base: SignInLimitConfig = {
+const base: PasskeyLimitConfig = {
   ipLimit: roomy,
   ipWindowSeconds: 600,
   tenantLimit: roomy,
   tenantWindowSeconds: 3600,
 };
 
+describe("unknown host", () => {
+  test("is NOT_FOUND and spends no throttle budget", async () => {
+    let checks = 0;
+    const app = createApp({
+      passkeyThrottle: {
+        check: async () => {
+          checks += 1;
+        },
+      },
+    });
+    const host = `http://nobody-here.${env.CLAVIX_DOMAIN}`;
+    const response = await app.request(`${host}/graphql`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: host },
+      body: JSON.stringify({ query: OPTIONS }),
+    });
+    const body = (await response.json()) as {
+      errors?: { extensions: Record<string, unknown> }[];
+    };
+    expect(body.errors?.[0]?.extensions["code"]).toBe("NOT_FOUND");
+    expect(checks).toBe(0);
+  });
+});
+
 describe("per client address", () => {
-  test("the request past the limit is MAIL_THROTTLED, 429, with Retry-After", async () => {
+  test("the request past the limit is PASSKEY_THROTTLED, 429, with Retry-After", async () => {
     const { ask, close } = await setup({ ...base, ipLimit: 3 });
     for (let i = 0; i < 3; i += 1) {
       expect((await ask("lima", "203.0.113.1")).error).toBeUndefined();
     }
     const { response, error } = await ask("lima", "203.0.113.1");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("MAIL_THROTTLED");
+    expect(error?.extensions["code"]).toBe("PASSKEY_THROTTLED");
     expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     await close();
   });
 
-  test("another address has its own budget", async () => {
+  test("another address, and the same address on another tenant, have their own budget", async () => {
     const { ask, close } = await setup({ ...base, ipLimit: 2 });
     await ask("lima", "203.0.113.1");
     await ask("lima", "203.0.113.1");
     expect((await ask("lima", "203.0.113.1")).response.status).toBe(429);
     expect((await ask("lima", "203.0.113.2")).error).toBeUndefined();
-    await close();
-  });
-
-  test("the same address on another tenant has its own budget", async () => {
-    const { ask, close } = await setup({ ...base, ipLimit: 2 });
-    await ask("lima", "203.0.113.1");
-    await ask("lima", "203.0.113.1");
-    expect((await ask("lima", "203.0.113.1")).response.status).toBe(429);
     expect((await ask("mike", "203.0.113.1")).error).toBeUndefined();
     await close();
   });
 
   test("a denied address does not spend the tenant's budget", async () => {
     const { ask, close } = await setup({ ...base, ipLimit: 1, tenantLimit: 2 });
-    await ask("lima", "203.0.113.1");
     for (let i = 0; i < 5; i += 1) await ask("lima", "203.0.113.1");
     expect((await ask("lima", "203.0.113.2")).error).toBeUndefined();
     expect((await ask("lima", "203.0.113.3")).response.status).toBe(429);
@@ -138,14 +164,15 @@ describe("per client address", () => {
 });
 
 describe("per tenant", () => {
-  test("the request past the limit is MAIL_THROTTLED, 429, from any address", async () => {
+  test("the request past the limit is PASSKEY_THROTTLED, 429, from any address", async () => {
     const { ask, close } = await setup({ ...base, tenantLimit: 3 });
     for (let i = 0; i < 3; i += 1) {
       expect((await ask("lima", `198.51.100.${i}`)).error).toBeUndefined();
     }
     const { response, error } = await ask("lima", "198.51.100.99");
     expect(response.status).toBe(429);
-    expect(error?.extensions["code"]).toBe("MAIL_THROTTLED");
+    expect(error?.extensions["code"]).toBe("PASSKEY_THROTTLED");
+    expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     await close();
   });
 
@@ -161,39 +188,25 @@ describe("per tenant", () => {
   });
 });
 
-describe("the answer", () => {
-  test("has the shape of the per-address throttle", async () => {
-    const { ask, close } = await setup({ ...base, ipLimit: 1 });
-    // janus: 5 mails per address per 10 min; the sixth is MAIL_THROTTLED.
-    const email = "same@example.test";
-    let perAddress: Awaited<ReturnType<typeof ask>> | undefined;
-    for (let i = 0; i < 6; i += 1)
-      perAddress = await ask("mike", `192.0.2.${i}`, email);
-    await settled();
-    const perIp = await ask("lima", "192.0.2.200");
-    const refused = await ask("lima", "192.0.2.200");
-    expect(perIp.error).toBeUndefined();
-    expect(perAddress?.response.status).toBe(429);
-    expect(refused.response.status).toBe(429);
-    expect(refused.error?.message).toBe(perAddress?.error?.message ?? "");
-    expect(Object.keys(refused.error?.extensions ?? {}).sort()).toEqual(
-      Object.keys(perAddress?.error?.extensions ?? {}).sort(),
-    );
-    expect(refused.error?.extensions["code"]).toBe("MAIL_THROTTLED");
-    expect(refused.response.headers.has("retry-after")).toBe(
-      perAddress?.response.headers.has("retry-after") ?? false,
-    );
+describe("separate from the sign-in code limits", () => {
+  test("spending the passkey budget leaves requestSignInCode's alone", async () => {
+    const { ask, close, redis } = await setup({ ...base, ipLimit: 1 });
+    await ask("lima", "203.0.113.1");
+    expect((await ask("lima", "203.0.113.1")).response.status).toBe(429);
+    const signIn = createSignInThrottle(redis.limits, () => {});
+    await signIn.check({ tenantId: "t", ip: "203.0.113.1" });
     await close();
   });
 });
 
 describe("Redis down", () => {
   test("the request goes through, logged", async () => {
-    const redis = await openAppRedis(server.uri, () => {}, base);
+    const redis = await openAppRedis(server.uri, () => {}, undefined, base);
     const logs: string[] = [];
-    const throttle = createSignInThrottle(redis.limits, (m) => logs.push(m));
+    const throttle = createPasskeyThrottle(redis.limits, (m) => logs.push(m));
     await redis.close();
     await throttle.check({ tenantId: "t", ip: "203.0.113.9" });
     expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("passkey sign-in limits");
   });
 });

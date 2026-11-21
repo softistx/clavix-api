@@ -5,7 +5,7 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
 import { createTenancy, tenantsService } from "@/config/tenancy";
-import { settled } from "@/modules/auth/outbox";
+import { settled } from "@/modules/auth";
 import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";

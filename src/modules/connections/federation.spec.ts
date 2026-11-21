@@ -19,7 +19,7 @@ import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { janusIssuers } from "@/config/users";
-import { settled } from "@/modules/auth/outbox";
+import { settled } from "@/modules/auth";
 import { registerClient } from "@/modules/clients/register-client";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import {

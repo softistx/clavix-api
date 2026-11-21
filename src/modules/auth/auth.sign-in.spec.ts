@@ -23,7 +23,7 @@ import {
   SESSION_COOKIE,
   SIGN_IN_CODE_LIFESPAN,
 } from "@/modules/users/tenant-janus";
-import { afterAnswer, settled } from "./outbox";
+import { afterAnswer, settled } from "./auth.outbox";
 
 const memory = mailer as MemoryMailer;
 const app = createApp();

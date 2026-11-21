@@ -7,7 +7,7 @@ import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
-import { settled } from "@/modules/auth/outbox";
+import { settled } from "@/modules/auth";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,

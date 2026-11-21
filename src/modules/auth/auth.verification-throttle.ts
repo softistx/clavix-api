@@ -7,7 +7,7 @@ import {
   type UserThrottle,
   userAndTenantLimits,
 } from "@/http/throttle/core";
-import { fail } from "@/shared/errors";
+import { emailVerificationThrottled } from "./auth.errors";
 
 export type VerificationLimitConfig = UserLimitConfig;
 export type VerificationThrottle = UserThrottle;
@@ -19,14 +19,6 @@ export const verificationLimits = (config: VerificationLimitConfig) => {
   const { ip, tenant, user } = userAndTenantLimits("verify", config);
   return { verifyIp: ip, verifyTenant: tenant, verifyUser: user };
 };
-
-/** `EMAIL_VERIFICATION_THROTTLED`, 429, `retryAfter` in the error and `Retry-After` (seconds). */
-export const emailVerificationThrottled = (retryAfter: number) =>
-  fail(
-    "EMAIL_VERIFICATION_THROTTLED",
-    "Too many verification e-mails requested",
-    { status: 429, retryAfter },
-  );
 
 /**
  * The user first, then the address and the tenant. Redis down or slow: the
