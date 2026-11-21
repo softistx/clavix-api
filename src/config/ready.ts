@@ -13,6 +13,6 @@ export const readyz = () =>
     },
     redis:
       appRedis === undefined
-        ? undefined
+        ? null
         : async () => (await appRedis.ping({ timeoutMs: 1_500 })).default.ok,
   });

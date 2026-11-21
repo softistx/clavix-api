@@ -14,6 +14,7 @@ import { secondFactorKeysOf } from "@/modules/users";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
 import { quietKeys, quietTenants } from "~/ports";
+import { createKeyGenerations } from "./keys.generations";
 import { resealAllTenants } from "./keys.reseal";
 import { resealSecondFactorOf } from "./keys.second-factor-reseal";
 import { createTenantKeys } from "./keys.signing-keys";
@@ -26,7 +27,11 @@ const A = "a".repeat(24);
 const B = "b".repeat(24);
 const now = new Date("2026-11-12T12:00:00Z");
 const under = (keys: Uint8Array[]) =>
-  createTenantKeys({ db: mongo.db, masterKey: keys });
+  createTenantKeys({
+    db: mongo.db,
+    masterKey: keys,
+    generations: createKeyGenerations(),
+  });
 const quiet = () => {};
 type Ring = [Uint8Array, ...Uint8Array[]];
 

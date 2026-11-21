@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { totpCode } from "@softistx/janus/testing";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import type { MemoryMailer } from "@softistx/mail";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -125,16 +126,18 @@ async function holder(slug: string, email: string) {
   );
   if (result.status !== "signedIn") throw new Error("no session");
   const cookie = `${SESSION_COOKIE}=${result.token}`;
-  const secret = at<string>(
+  const secret = at(
     (await gql(slug, ENROLL, {}, cookie)).data,
     "enrollSecondFactor.secret",
+    z.string(),
   );
   await gql(slug, ACTIVATE, { code: totpCode(secret) }, cookie);
   const tenant = await tenantOf(slug);
   const authenticator = await softwareAuthenticator();
-  const options = at<{ options: string; challenge: string }>(
+  const options = at(
     (await gql(slug, REG_OPTIONS, {}, cookie)).data,
     "passkeyRegistrationOptions",
+    z.looseObject({ options: z.string(), challenge: z.string() }),
   );
   const response = await authenticator.register({
     challenge: challengeOf(options.options),
@@ -162,7 +165,7 @@ async function challengeFor(slug: string, email: string) {
   const before = memory.sent.length;
   const asked = await gql(slug, REQUEST, { email });
   await settled();
-  const token = at<string>(asked.data, "requestSignInCode.challenge");
+  const token = at(asked.data, "requestSignInCode.challenge", z.string());
   const code =
     /\b(\d{6})\b/.exec(
       memory.sent
@@ -171,12 +174,16 @@ async function challengeFor(slug: string, email: string) {
         .at(-1)?.text ?? "",
     )?.[1] ?? "";
   const stopped = await gql(slug, VERIFY, { challenge: token, code });
-  const out = at<{
-    __typename: string;
-    methods: string[];
-    challenge: string;
-    passkeyOptions: string;
-  }>(stopped.data, "verifySignInCode");
+  const out = at(
+    stopped.data,
+    "verifySignInCode",
+    z.looseObject({
+      __typename: z.string(),
+      methods: z.array(z.string()),
+      challenge: z.string(),
+      passkeyOptions: z.string(),
+    }),
+  );
   expect(out.__typename).toBe("SecondFactorChallenge");
   expect(out.methods).toContain("passkey");
   return out as { challenge: string; passkeyOptions: string };
@@ -241,10 +248,14 @@ describe("confirmSecondFactorWithPasskey", () => {
       assertion: response,
     });
     expect(done.errors).toBeUndefined();
-    const out = at<{
-      user: { email: string };
-      recoveryCodesLeft: number | null;
-    }>(done.data, "confirmSecondFactorWithPasskey");
+    const out = at(
+      done.data,
+      "confirmSecondFactorWithPasskey",
+      z.looseObject({
+        user: z.looseObject({ email: z.string() }),
+        recoveryCodesLeft: z.number().or(z.null()),
+      }),
+    );
     expect(out.user.email).toBe(ADA);
     expect(out.recoveryCodesLeft).toBeNull();
     const session = cookieOf(done);

@@ -17,7 +17,7 @@ export interface TenantKeysOptions {
    */
   masterKey: Uint8Array | readonly Uint8Array[];
   /** Bumped for a tenant each time one of its keys is inserted, promoted or retired. */
-  generations?: KeyGenerations;
+  generations: KeyGenerations;
 }
 
 /**
@@ -44,8 +44,7 @@ export function createTenantKeys({
         partition: tenantId,
       });
       assertSigningKeyStore(store, `signing keys of tenant ${tenantId}`);
-      if (generations !== undefined)
-        store = observed(store, tenantId, generations);
+      store = observed(store, tenantId, generations);
       stores.set(tenantId, store);
     }
     return store;

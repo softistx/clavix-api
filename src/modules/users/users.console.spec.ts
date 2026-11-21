@@ -7,6 +7,7 @@ import {
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { MemoryMailer } from "@softistx/mail";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -258,18 +259,26 @@ describe("listing", () => {
       `{ users(tenantId: "${tenantA}", first: 1) { items { id email name emailVerified active } nextCursor } }`,
     );
     expect(at(first.data, "users.items")).toHaveLength(1);
-    expect(at<unknown[]>(first.data, "users.items")[0]).toMatchObject({
+    expect(
+      at(first.data, "users.items", z.array(z.unknown()))[0],
+    ).toMatchObject({
       id: uA1,
       email: "one@end.test",
       name: "One",
       active: true,
     });
-    const cursor = at<string>(first.data, "users.nextCursor");
+    const cursor = at(first.data, "users.nextCursor", z.string());
     const second = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", first: 1, after: "${cursor}") { items { id } nextCursor } }`,
     );
-    expect(at<{ id: string }[]>(second.data, "users.items")[0]?.id).toBe(uA2);
+    expect(
+      at(
+        second.data,
+        "users.items",
+        z.array(z.looseObject({ id: z.string() })),
+      )[0]?.id,
+    ).toBe(uA2);
     expect(at(second.data, "users.nextCursor")).toBeNull();
     const byEmail = await asConsole(
       ownA,
@@ -305,7 +314,10 @@ describe("search by e-mail prefix", () => {
     expect(all.errors).toBeUndefined();
     expect(at(all.data, "users.totalCount")).toBe(2);
     expect(at(all.data, "users.items")).toHaveLength(2);
-    expect(at<{ id: string }[]>(all.data, "users.items")[0]?.id).toBe(pre);
+    expect(
+      at(all.data, "users.items", z.array(z.looseObject({ id: z.string() })))[0]
+        ?.id,
+    ).toBe(pre);
     const paged = await asConsole(
       ownA,
       `{ users(tenantId: "${tenantA}", emailPrefix: "prefix.", first: 1) { items { id } nextCursor totalCount } }`,
@@ -424,7 +436,11 @@ describe("user lookup for the role member picker", () => {
     ).id;
     const found = await lookupOf(admA, tenantA, "MARTA");
     expect(found.errors).toBeUndefined();
-    const rows = (at(found.data, "userLookup") ?? []) as { id: string }[];
+    const rows = at(
+      found.data,
+      "userLookup",
+      z.array(z.looseObject({ id: z.string() })),
+    );
     const ids = rows.map((u) => u.id);
     expect(ids).toEqual([byMail, both, byName]);
     expect(
@@ -449,7 +465,7 @@ describe("user lookup for the role member picker", () => {
     }
     const count = async (first: string) => {
       const answer = await lookupOf(admA, tenantA, "cap", first);
-      return ((at(answer.data, "userLookup") ?? []) as unknown[]).length;
+      return at(answer.data, "userLookup", z.array(z.unknown())).length;
     };
     expect(await count("")).toBe(10);
     expect(await count(", first: 3")).toBe(3);
@@ -497,12 +513,18 @@ describe("user sessions", () => {
       `{ userSessions(tenantId: "${tenantA}", userId: "${id}") { id device createdAt lastUsedAt expiresAt authenticatedAt } }`,
     );
     expect(listed.errors).toBeUndefined();
-    const rows = at(listed.data, "userSessions") as {
-      id: string;
-      device: string | null;
-      createdAt: string;
-      expiresAt: string;
-    }[];
+    const rows = at(
+      listed.data,
+      "userSessions",
+      z.array(
+        z.looseObject({
+          id: z.string(),
+          device: z.string().or(z.null()),
+          createdAt: z.string(),
+          expiresAt: z.string(),
+        }),
+      ),
+    );
     expect(rows).toHaveLength(3);
     expect(rows.map((r) => r.device)).toEqual([
       null,
@@ -522,7 +544,8 @@ describe("user sessions", () => {
         )
       ).data,
       "userSessions",
-    ) as { id: string }[];
+      z.array(z.looseObject({ id: z.string() })),
+    );
     const foreign = foreignRows[0]?.id as string;
     expect(
       (
@@ -598,7 +621,8 @@ describe("user sessions", () => {
         )
       ).data,
       "userSessions",
-    ) as { id: string; device: string }[];
+      z.array(z.looseObject({ id: z.string(), device: z.string() })),
+    );
     const own = ownRows.find((s) => s.device === "B device");
     expect(own).toBeDefined();
     expect(
@@ -724,9 +748,10 @@ describe("second factor of a page of users", () => {
       );
       expect(page.errors).toBeUndefined();
       const factor = (id: string) =>
-        at<{ id: string; secondFactor: unknown }[]>(
+        at(
           page.data,
           "users.items",
+          z.array(z.looseObject({ id: z.string(), secondFactor: z.unknown() })),
         ).find((row) => row.id === id)?.secondFactor;
       expect(factor(on)).toEqual({ enabled: true, recoveryCodesLeft: 10 });
       expect(factor(off)).toEqual({ enabled: false, recoveryCodesLeft: null });
@@ -854,7 +879,7 @@ describe("tenant A / B isolation", () => {
       ownA,
       `mutation { inviteUser(tenantId: "${tenantA}", email: "iso@end.test") { id } }`,
     );
-    const id = at<string>(issued.data, "inviteUser.id");
+    const id = at(issued.data, "inviteUser.id", z.string());
     await asConsole(
       ownB,
       `mutation { revokeInvitation(tenantId: "${tenantB}", invitationId: "${id}") }`,
@@ -872,7 +897,11 @@ describe("tenant A / B isolation", () => {
       `{ userInvitations(tenantId: "${tenantA}") { id email } }`,
     );
     expect(
-      at<{ id: string }[]>(listed.data, "userInvitations").map((i) => i.id),
+      at(
+        listed.data,
+        "userInvitations",
+        z.array(z.looseObject({ id: z.string() })),
+      ).map((i) => i.id),
     ).toContain(id);
   });
 });
@@ -902,7 +931,7 @@ describe("invitations", () => {
         `mutation { acceptInvitation(code: "${secret}") { signedIn user { id } } }`,
       );
       expect(accepted.errors).toBeUndefined();
-      const id = at<string>(accepted.data, "acceptInvitation.user.id");
+      const id = at(accepted.data, "acceptInvitation.user.id", z.string());
       expect(spy.mock.calls).toEqual([[tenantA, id]]);
     } finally {
       spy.mockRestore();
@@ -952,7 +981,7 @@ describe("invitations", () => {
         ownA,
         `mutation { inviteUser(tenantId: "${tenantA}", email: "${email}") { id } }`,
       );
-    const first = at<string>((await invite()).data, "inviteUser.id");
+    const first = at((await invite()).data, "inviteUser.id", z.string());
     const oldCode = codeMailedTo(email);
     // Inside the cooldown a second invite is refused and mails nothing.
     const early = await invite();
@@ -964,7 +993,7 @@ describe("invitations", () => {
         { email },
         { $set: { updatedAt: new Date(Date.now() - 120_000) } },
       );
-    const second = at<string>((await invite()).data, "inviteUser.id");
+    const second = at((await invite()).data, "inviteUser.id", z.string());
     expect(second).not.toBe(first);
     const newCode = codeMailedTo(email);
     expect(newCode).not.toBe(oldCode);
@@ -973,9 +1002,11 @@ describe("invitations", () => {
       `{ userInvitations(tenantId: "${tenantA}") { id email } }`,
     );
     expect(
-      at<{ email: string }[]>(listed.data, "userInvitations").filter(
-        (i) => i.email === email,
-      ),
+      at(
+        listed.data,
+        "userInvitations",
+        z.array(z.looseObject({ email: z.string() })),
+      ).filter((i) => i.email === email),
     ).toHaveLength(1);
     for (let i = 0; i < 2; i++) {
       expect(

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -9,6 +10,7 @@ import { rolesService } from "@/config/roles";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { forTenant } from "@/config/users";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { at } from "~/body";
 import { codeOf, consoleAs } from "~/console";
 
 const owner = consoleAs("rl-owner-a");
@@ -48,7 +50,7 @@ const make = async (
 ) => {
   const result = await who(CREATE, { t: tenant, input: { name, ...extra } });
   expect(result.errors).toBeUndefined();
-  return ((result.data?.["createRole"] ?? {}) as { id: string }).id;
+  return at(result.data, "createRole", z.looseObject({ id: z.string() })).id;
 };
 const poolUser = async (slug: string, email: string) => {
   const resolved = await tenantResolver.resolveHost(
@@ -310,14 +312,25 @@ describe("assignments", () => {
     expect(
       (await viewer(GET, { t: tenantA, id })).data?.["role"],
     ).toMatchObject({ memberCount: 2 });
-    const members = (await viewer(MEMBERS, { t: tenantA, r: id })).data?.[
-      "roleMembers"
-    ] as { items: { user: { id: string; email: string } }[]; nextCursor: null };
+    const members = at(
+      (await viewer(MEMBERS, { t: tenantA, r: id })).data,
+      "roleMembers",
+      z.looseObject({
+        items: z.array(
+          z.looseObject({
+            user: z.looseObject({ id: z.string(), email: z.string() }),
+          }),
+        ),
+        nextCursor: z.null(),
+      }),
+    );
     expect(members.items.map((m) => m.user.id)).toEqual([userA1, userA2]);
     expect(members.nextCursor).toBeNull();
-    const roles = (await viewer(OF_USER, { t: tenantA, u: userA1 })).data?.[
-      "userRoles"
-    ] as { id: string }[];
+    const roles = at(
+      (await viewer(OF_USER, { t: tenantA, u: userA1 })).data,
+      "userRoles",
+      z.array(z.looseObject({ id: z.string() })),
+    );
     expect(roles.map((r) => r.id)).toContain(id);
     expect(
       (await admin(UNASSIGN, { t: tenantA, r: id, u: userA1 })).data,
@@ -439,9 +452,11 @@ describe("assignments", () => {
         tenantId: new ObjectId(tenantA),
       }),
     ).toBeGreaterThanOrEqual(0);
-    const roles = (await viewer(OF_USER, { t: tenantA, u: userA1 })).data?.[
-      "userRoles"
-    ] as { id: string }[];
+    const roles = at(
+      (await viewer(OF_USER, { t: tenantA, u: userA1 })).data,
+      "userRoles",
+      z.array(z.looseObject({ id: z.string() })),
+    );
     expect(roles.map((r) => r.id)).not.toContain(id);
   });
 
