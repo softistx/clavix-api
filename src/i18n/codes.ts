@@ -7,7 +7,7 @@ import { codes as domains } from "@/modules/domains/domains.errors";
 import { codes as invitations } from "@/modules/invitations/invitations.errors";
 import { codes as mfa } from "@/modules/mfa/mfa.errors";
 import { codes as passkeys } from "@/modules/passkeys/passkeys.errors";
-import { codes as resources } from "@/modules/resources/catalog.errors";
+import { codes as resources } from "@/modules/resources/resources.errors";
 import { codes as roles } from "@/modules/roles/roles.errors";
 import { codes as signInMethods } from "@/modules/sign-in-methods/sign-in-methods.errors";
 import { codes as tenants } from "@/modules/tenants";

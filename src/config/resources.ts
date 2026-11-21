@@ -1,17 +1,13 @@
 import { ObjectId } from "mongodb";
 import type { DetailTextsFor } from "@/modules/consent/detail-labels";
 import type { ScopeTextsFor } from "@/modules/consent/scope-labels";
-import { Catalog } from "@/modules/resources/catalog";
 import {
   consentReadyOf,
   mongoClientDetailTypes,
   mongoDetailTypeClients,
-} from "@/modules/resources/detail-types";
-import {
   type RegisterResourceInput,
-  registerResource,
-  storedResourcesFor,
-} from "@/modules/resources/register-resource";
+  ResourcesService,
+} from "@/modules/resources";
 import { issuerOf } from "@/modules/tenants";
 import { userinfoOf } from "@/oauth/building";
 import { mongo } from "./db";
@@ -25,38 +21,26 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 
-/** The real `ResourcesFor`: the tenants' stored resources and their scopes (console, `resources:create`). */
-export const resourcesFor = storedResourcesFor(
-  mongo.db.resources,
-  mongo.db.scopes,
-  mongo.db.detailTypes,
-);
-
 /**
- * `registerResource` bound to the real store, for the `resources:create`
- * script. The `resources` collection itself is not exported: it is
- * tenant-owned and reached only through the tenant's scope, which this
- * function and `resourcesFor` apply.
+ * A tenant's resources, scopes and detail types (console, `resources:create`,
+ * the token server). The collections are tenant-owned and not exported: only
+ * this service reaches them, through the tenant's scope.
  */
-export const registerStoredResource = (input: RegisterResourceInput) =>
-  registerResource(
-    {
-      collection: mongo.db.resources,
-      scopes: mongo.db.scopes,
-      findTenant: tenantBySlug,
-      issuerOf: (slug) => issuerOf(slug, origin),
-    },
-    input,
-  );
-
-/** A tenant's resources and scopes, for the console. */
-export const catalog = new Catalog({
+export const resourcesService = new ResourcesService({
   resources: mongo.db.resources,
   scopes: mongo.db.scopes,
   detailTypes: mongo.db.detailTypes,
   clients: mongoDetailTypeClients(oauthDb),
   userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
+  findTenant: tenantBySlug,
 });
+
+/** The real `ResourcesFor`: the tenants' stored resources and their scopes (console, `resources:create`). */
+export const resourcesFor = resourcesService.storedFor;
+
+/** `registerResource` bound to the real store, for the `resources:create` script. */
+export const registerStoredResource = (input: RegisterResourceInput) =>
+  resourcesService.registerResource(input);
 
 /** The tenant's scope texts the consent page shows, for the request's host. */
 export const scopeTextsFor: ScopeTextsFor = async (request) => {
@@ -64,8 +48,8 @@ export const scopeTextsFor: ScopeTextsFor = async (request) => {
   if (tenant === null) return [];
   const tenantId = new ObjectId(tenant.tenantId);
   const [scopes, resources] = await Promise.all([
-    catalog.listScopes(tenantId),
-    catalog.listResources(tenantId),
+    resourcesService.listScopes(tenantId),
+    resourcesService.listResources(tenantId),
   ]);
   const uris = new Map(
     resources.map((resource) => [resource._id.toHexString(), resource.uri]),
@@ -85,7 +69,9 @@ export const scopeTextsFor: ScopeTextsFor = async (request) => {
 export const detailTextsFor: DetailTextsFor = async (request) => {
   const tenant = await tenantResolver.resolveRequest(request);
   if (tenant === null) return [];
-  const types = await catalog.listDetailTypes(new ObjectId(tenant.tenantId));
+  const types = await resourcesService.listDetailTypes(
+    new ObjectId(tenant.tenantId),
+  );
   return types.map(({ type, name, description, fields, actions }) => ({
     type,
     name,

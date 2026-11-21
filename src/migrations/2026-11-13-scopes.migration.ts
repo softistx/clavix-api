@@ -1,7 +1,7 @@
 import { getCollection, scopeToTenant } from "@softistx/mongo";
 import { defineMigration } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
-import { scopes } from "@/modules/resources/scopes.model";
+import { scopes } from "@/modules/resources";
 
 export const id = "2026-11-13-scopes";
 

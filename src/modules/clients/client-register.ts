@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { registerClient } from "@/modules/clients/register-client";
-import { CatalogError } from "@/modules/resources/catalog.errors";
-import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import type { ClientDetailTypes } from "@/modules/resources";
+import { CatalogError } from "@/modules/resources";
 import { CliInputError, type CliTenant } from "@/shared/cli";
 
 /**

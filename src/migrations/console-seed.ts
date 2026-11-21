@@ -11,9 +11,13 @@ import {
   consoleRedirectUri,
 } from "@/console/identity";
 import { registerClient } from "@/modules/clients/register-client";
-import { registerResource } from "@/modules/resources/register-resource";
-import { resources } from "@/modules/resources/resources.model";
-import { scopes } from "@/modules/resources/scopes.model";
+import {
+  detailTypes,
+  mongoDetailTypeClients,
+  ResourcesService,
+  resources,
+  scopes,
+} from "@/modules/resources";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,
@@ -21,6 +25,7 @@ import {
   partitionOf,
   tenants,
 } from "@/modules/tenants";
+import { userinfoOf } from "@/oauth/building";
 
 export const NAME = "Clavix console";
 
@@ -37,20 +42,20 @@ export async function seedConsole(
 ): Promise<{ clientSecret: string | null }> {
   const collection = getCollection(db, tenants);
   const findTenant = (slug: string) => collection.findFirst({ slug });
-  await registerResource(
-    {
-      collection: getCollection(db, resources),
-      scopes: getCollection(db, scopes),
-      findTenant,
-      issuerOf: (slug) => issuerOf(slug, origin),
-    },
-    {
-      tenant: PLATFORM_TENANT_SLUG,
-      uri: consoleAudience(origin),
-      name: NAME,
-      scopes: CONSOLE_SCOPES,
-    },
-  );
+  const service = new ResourcesService({
+    resources: getCollection(db, resources),
+    scopes: getCollection(db, scopes),
+    detailTypes: getCollection(db, detailTypes),
+    clients: mongoDetailTypeClients(db),
+    userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
+    findTenant,
+  });
+  await service.registerResource({
+    tenant: PLATFORM_TENANT_SLUG,
+    uri: consoleAudience(origin),
+    name: NAME,
+    scopes: CONSOLE_SCOPES,
+  });
   const client = await registerClient(
     { db, findTenant },
     {

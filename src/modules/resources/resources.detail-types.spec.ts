@@ -9,14 +9,23 @@ import { resourcesFor } from "@/config/resources";
 import { tenantResolver } from "@/config/tenancy";
 import { fingerprintOf } from "@/oauth/resolution";
 import { createFlow, DOMAIN, REDIRECT } from "~/oauth-flow";
-import { CatalogError } from "../catalog.errors";
-import type { DetailTypeInput } from "./store";
-import { saveDetailType } from "./store";
+import { mongoDetailTypeClients } from "./resources.client-lists";
+import { CatalogError } from "./resources.errors";
+import { ResourcesService } from "./resources.service";
+import type { DetailTypeInput } from "./resources.types";
 
 const PAY = "https://pay.example/api";
 const OTHER = "https://other.example/api";
 const VERIFIER = "d".repeat(64);
 const flow = createFlow();
+const service = new ResourcesService({
+  resources: mongo.db.resources,
+  scopes: mongo.db.scopes,
+  detailTypes: mongo.db.detailTypes,
+  clients: mongoDetailTypeClients(oauthDb),
+  userinfoOf: (slug) => `https://${slug}.${DOMAIN}/userinfo`,
+  findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+});
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const text = (en: string) => ({ fr: en, en });
 
@@ -67,7 +76,7 @@ async function addType(slug: string, uri: string, input: DetailTypeInput) {
     uri,
   });
   if (resource === undefined) throw new Error("no resource");
-  return saveDetailType(mongo.db.detailTypes, tenantId, resource._id, input, {
+  return service.saveDetailType(tenantId, resource._id, input, {
     replace: true,
   });
 }
@@ -250,12 +259,7 @@ describe("saveDetailType", () => {
       "rar-a",
       "https://second.example/api",
     );
-    const clash = saveDetailType(
-      mongo.db.detailTypes,
-      tenantId,
-      resourceId,
-      payment(),
-    );
+    const clash = service.saveDetailType(tenantId, resourceId, payment());
     expect(clash).rejects.toMatchObject({ code: "CONFLICT" });
     // Another tenant may use the same name.
     expect(await addType("rar-b", OTHER, payment())).toMatchObject({
@@ -268,8 +272,7 @@ describe("saveDetailType", () => {
       "rar-none",
       "https://third.example/api",
     );
-    const attempt = saveDetailType(
-      mongo.db.detailTypes,
+    const attempt = service.saveDetailType(
       tenantId,
       resourceId,
       payment({ type: "" }),

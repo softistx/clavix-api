@@ -1,6 +1,6 @@
 import { ConflictError, type Scoped } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import type { resources } from "../resources/resources.model";
+import type { resources } from "@/modules/resources";
 import {
   cleanDescription,
   cleanName,

@@ -8,11 +8,8 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { scopeToTenant } from "@softistx/mongo";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { catalog } from "@/config/resources";
-import {
-  consentReadyOf,
-  mongoClientDetailTypes,
-} from "@/modules/resources/detail-types";
+import { resourcesService } from "@/config/resources";
+import { consentReadyOf, mongoClientDetailTypes } from "@/modules/resources";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { CliInputError } from "@/shared/cli";
 import { createFlow, REDIRECT } from "~/oauth-flow";
@@ -63,11 +60,15 @@ async function addType(slug: string, type: string) {
     tenant._id,
   ).findFirst({ uri: PAY });
   if (resource === undefined) throw new Error("no resource");
-  await catalog.createDetailType(tenant._id, resource._id.toHexString(), {
-    type,
-    name: text(type),
-    fields: [{ key: "amount", kind: "number", label: text("Amount") }],
-  });
+  await resourcesService.createDetailType(
+    tenant._id,
+    resource._id.toHexString(),
+    {
+      type,
+      name: text(type),
+      fields: [{ key: "amount", kind: "number", label: text("Amount") }],
+    },
+  );
 }
 
 const refusal = (promise: Promise<unknown>) =>

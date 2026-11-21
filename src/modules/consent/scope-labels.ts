@@ -1,4 +1,4 @@
-import type { Description } from "@/modules/resources/catalog";
+import type { Description } from "@/modules/resources";
 
 /** The texts of one scope of a tenant; `resource` is its resource's URI, `null` for a standard scope. */
 export interface ScopeText {

@@ -19,8 +19,10 @@ import { CliInputError } from "@/shared/cli";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import { parseResourceArgs } from "./cli";
-import { registerResource, storedResourcesFor } from "./register-resource";
+import { parseResourceArgs } from "./resources.cli";
+import { mongoDetailTypeClients } from "./resources.client-lists";
+import { ResourcesService } from "./resources.service";
+import type { RegisterResourceInput } from "./resources.types";
 
 const DOMAIN = "clavix.test";
 const REDIRECT = "https://app.example/callback";
@@ -29,12 +31,16 @@ const API_RACE = "https://api.race.example/v1";
 const API_B = "https://api.beta.example/v1";
 const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const options = {
-  collection: mongo.db.resources,
-  scopes: mongo.db.scopes,
-  findTenant,
-  issuerOf: (slug: string) => issuerOf(slug, config),
-};
+const build = (resources = mongo.db.resources) =>
+  new ResourcesService({
+    resources,
+    scopes: mongo.db.scopes,
+    detailTypes: mongo.db.detailTypes,
+    clients: mongoDetailTypeClients(oauthDb),
+    userinfoOf: (slug) => userinfoOf(issuerOf(slug, config)),
+    findTenant,
+  });
+const service = build();
 
 const resolver = createTenantResolver({
   lookup: findTenant,
@@ -64,11 +70,7 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(
-    mongo.db.resources,
-    mongo.db.scopes,
-    mongo.db.detailTypes,
-  ),
+  resourcesFor: service.storedFor,
 });
 
 const scopeNamesOf = async (resourceId: unknown) =>
@@ -172,7 +174,7 @@ afterAll(async () => {
 
 describe("resources:create", () => {
   test("stores a resource on the tenant, then updates it without duplicating", async () => {
-    const first = await registerResource(options, {
+    const first = await service.registerResource({
       tenant: "resalpha",
       uri: API_A,
       scopes: ["read", "write", "read"],
@@ -182,7 +184,7 @@ describe("resources:create", () => {
       name: "api.alpha.example",
       scopes: ["read", "write"],
     });
-    const second = await registerResource(options, {
+    const second = await service.registerResource({
       tenant: "resalpha",
       uri: API_A,
       name: "Alpha API",
@@ -201,8 +203,8 @@ describe("resources:create", () => {
   });
 
   test("refuses bad input, an unknown or suspended tenant and the userinfo URL", async () => {
-    const bad = (input: Partial<Parameters<typeof registerResource>[1]>) =>
-      registerResource(options, {
+    const bad = (input: Partial<RegisterResourceInput>) =>
+      service.registerResource({
         tenant: "resalpha",
         uri: API_A,
         scopes: ["read"],
@@ -237,7 +239,7 @@ describe("resources:create", () => {
   });
 
   test("a concurrent run that created the resource first is re-read and updated", async () => {
-    await registerResource(options, {
+    await service.registerResource({
       tenant: "resalpha",
       uri: API_RACE,
       scopes: ["read"],
@@ -257,10 +259,11 @@ describe("resources:create", () => {
         };
       },
     });
-    const result = await registerResource(
-      { ...options, collection: stale },
-      { tenant: "resalpha", uri: API_RACE, scopes: ["write"] },
-    );
+    const result = await build(stale).registerResource({
+      tenant: "resalpha",
+      uri: API_RACE,
+      scopes: ["write"],
+    });
     expect(result).toMatchObject({ created: false, scopes: ["write"] });
     const alpha = await findTenant("resalpha");
     const stored = await mongo.db.resources.raw
@@ -281,10 +284,11 @@ describe("resources:create", () => {
         return Reflect.get(target, key, receiver);
       },
     });
-    const attempt = registerResource(
-      { ...options, collection: failing },
-      { tenant: "resalpha", uri: API_B, scopes: ["read"] },
-    );
+    const attempt = build(failing).registerResource({
+      tenant: "resalpha",
+      uri: API_B,
+      scopes: ["read"],
+    });
     await expect(attempt).rejects.toBeInstanceOf(DataError);
     await expect(attempt).rejects.not.toBeInstanceOf(CliInputError);
   });
@@ -337,7 +341,7 @@ describe("a registered resource in the issuer", () => {
     );
     expect(before.status).toBe(302);
     expect(before.headers.get("location")).not.toContain("/consent");
-    await registerResource(options, {
+    await service.registerResource({
       tenant: "resalpha",
       uri: "https://late.example/v1",
       scopes: ["read"],
@@ -362,23 +366,19 @@ describe("a registered resource in the issuer", () => {
   });
 
   test("tenant isolation: A's resource never serves B, and B gets no token with A's audience", async () => {
-    await registerResource(options, {
+    await service.registerResource({
       tenant: "resbeta",
       uri: API_B,
       scopes: ["read"],
     });
     const alpha = await findTenant("resalpha");
     const beta = await findTenant("resbeta");
-    const forAlpha = await storedResourcesFor(
-      mongo.db.resources,
-      mongo.db.scopes,
-      mongo.db.detailTypes,
-    )((await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never);
-    const forBeta = await storedResourcesFor(
-      mongo.db.resources,
-      mongo.db.scopes,
-      mongo.db.detailTypes,
-    )((await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never);
+    const forAlpha = await service.storedFor(
+      (await resolver.resolveHost(`resalpha.${DOMAIN}`)) as never,
+    );
+    const forBeta = await service.storedFor(
+      (await resolver.resolveHost(`resbeta.${DOMAIN}`)) as never,
+    );
     expect(alpha?._id.equals(beta?._id as never)).toBe(false);
     expect(Object.keys(forAlpha)).not.toContain(API_B);
     expect(Object.keys(forBeta)).toEqual([API_B]);
@@ -397,7 +397,7 @@ describe("a registered resource in the issuer", () => {
   test("changing a resource's scopes or removing it rebuilds the issuer", async () => {
     const uri = "https://churn.example/v1";
     const register = (scopes: string[]) =>
-      registerResource(options, { tenant: "resalpha", uri, scopes });
+      service.registerResource({ tenant: "resalpha", uri, scopes });
     const consents = async () => {
       const response = await authorize("resalpha", "app", uri);
       return (response.headers.get("location") ?? "").includes("/consent");

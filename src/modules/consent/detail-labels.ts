@@ -1,4 +1,4 @@
-import type { FieldKind } from "@/modules/resources/detail-types/detail-types.model";
+import type { FieldKind } from "@/modules/resources";
 import type { ConsentLocale } from "./scope-labels";
 
 type Text = { fr: string; en: string };

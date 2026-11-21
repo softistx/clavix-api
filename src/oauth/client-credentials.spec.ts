@@ -4,7 +4,7 @@ import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { catalog, registerStoredResource } from "@/config/resources";
+import { registerStoredResource, resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createConsoleAuthenticator } from "@/console/auth";
 import { registerClient } from "@/modules/clients/register-client";
@@ -82,11 +82,11 @@ beforeAll(async () => {
     scopes: ["read", "write", "admin"],
   });
   await registerStoredResource({ tenant: SLUG, uri: CLOSED, scopes: ["read"] });
-  const [open] = (await catalog.listResources(tenantId)).filter(
+  const [open] = (await resourcesService.listResources(tenantId)).filter(
     (resource) => resource.uri === OPEN,
   );
   if (open === undefined) throw new Error("resource not stored");
-  await catalog.updateResource(tenantId, open._id.toHexString(), {
+  await resourcesService.updateResource(tenantId, open._id.toHexString(), {
     allowClientCredentials: true,
   });
   await machine("worker", { defaultScopes: ["read"] });
@@ -215,18 +215,18 @@ describe("the client credentials grant", () => {
   });
 
   test("turning the resource's opt-in off refuses new tokens at once", async () => {
-    const [closing] = (await catalog.listResources(tenantId)).filter(
+    const [closing] = (await resourcesService.listResources(tenantId)).filter(
       (resource) => resource.uri === OPEN,
     );
     if (closing === undefined) throw new Error("resource not stored");
-    await catalog.updateResource(tenantId, closing._id.toHexString(), {
+    await resourcesService.updateResource(tenantId, closing._id.toHexString(), {
       allowClientCredentials: false,
     });
     const off = await token("worker", { resource: OPEN, scope: "read" });
     expect(off.status).toBe(400);
     // With no resource left that opted in, the grant is off for the tenant.
     expect((await answerOf(off)).error).toBe("unsupported_grant_type");
-    await catalog.updateResource(tenantId, closing._id.toHexString(), {
+    await resourcesService.updateResource(tenantId, closing._id.toHexString(), {
       allowClientCredentials: true,
     });
     expect((await token("worker", { scope: "read" })).status).toBe(400);
@@ -267,10 +267,10 @@ describe("the client credentials grant", () => {
       scopes: ["read"],
     });
     const [stored] = (
-      await catalog.listResources(new ObjectId(String(other)))
+      await resourcesService.listResources(new ObjectId(String(other)))
     ).filter((resource) => resource.uri === OPEN);
     if (stored === undefined) throw new Error("resource not stored");
-    await catalog.updateResource(
+    await resourcesService.updateResource(
       new ObjectId(String(other)),
       stored._id.toHexString(),
       {

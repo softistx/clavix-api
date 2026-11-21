@@ -1,8 +1,8 @@
 import { denial } from "@softistx/janus-graphql";
 import { clientsService } from "@/config/clients";
-import { catalog } from "@/config/resources";
+import { resourcesService } from "@/config/resources";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { CatalogError } from "@/modules/resources/catalog.errors";
+import { CatalogError } from "@/modules/resources";
 import { catalogTenant, refusing } from "../catalog-support";
 import { keepConsoleClient } from "../reserved";
 import { clientsKey, shape, target } from "./shape";
@@ -29,7 +29,7 @@ export const setClientTokenExchange: NonNullable<
   const rules = await ctx.exclusive(clientsKey(tenant), () =>
     refusing(async () => {
       keepConsoleClient(tenant, id);
-      const resources = await catalog.listResources(tenant._id);
+      const resources = await resourcesService.listResources(tenant._id);
       return clientsService.setTokenExchange(
         tenant,
         id,

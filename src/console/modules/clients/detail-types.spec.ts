@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { catalog, registerStoredResource } from "@/config/resources";
+import { registerStoredResource, resourcesService } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
@@ -69,15 +69,19 @@ describe("detail types on a client (R3)", () => {
       uri: "https://pay.cdt-a.example/api",
       scopes: ["read"],
     });
-    const resource = (await catalog.listResources(tenantId)).find(
+    const resource = (await resourcesService.listResources(tenantId)).find(
       (item) => item.uri === "https://pay.cdt-a.example/api",
     );
     if (resource === undefined) throw new Error("no resource");
-    await catalog.createDetailType(tenantId, resource._id.toHexString(), {
-      type: "payment",
-      name: { en: "Payment", fr: "Paiement" },
-      fields: [{ key: "amount", kind: "number" }],
-    });
+    await resourcesService.createDetailType(
+      tenantId,
+      resource._id.toHexString(),
+      {
+        type: "payment",
+        name: { en: "Payment", fr: "Paiement" },
+        fields: [{ key: "amount", kind: "number" }],
+      },
+    );
   });
 
   test("a client lists a type of its tenant, an update replaces or clears it, a rename keeps it", async () => {

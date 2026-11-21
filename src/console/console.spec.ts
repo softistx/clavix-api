@@ -20,15 +20,20 @@ import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import type { AdminEventInput } from "@/console/admin-events/recorder";
 import { registerClient } from "@/modules/clients/register-client";
-import { registerResource } from "@/modules/resources/register-resource";
-import { resources } from "@/modules/resources/resources.model";
-import { scopes } from "@/modules/resources/scopes.model";
+import {
+  detailTypes,
+  mongoDetailTypeClients,
+  ResourcesService,
+  resources,
+  scopes,
+} from "@/modules/resources";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,
   partitionOf,
   tenants,
 } from "@/modules/tenants";
+import { userinfoOf } from "@/oauth/building";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { createConsoleAuthenticator } from "./auth";
@@ -244,20 +249,19 @@ beforeAll(async () => {
         },
       )
     ).clientSecret ?? "";
-  await registerResource(
-    {
-      collection: getCollection(oauthDb, resources),
-      scopes: getCollection(oauthDb, scopes),
-      findTenant,
-      issuerOf: (slug) => issuerOf(slug, origin),
-    },
-    {
-      tenant: PLATFORM_TENANT_SLUG,
-      uri: OTHER,
-      name: "Other",
-      scopes: ["read"],
-    },
-  );
+  await new ResourcesService({
+    resources: getCollection(oauthDb, resources),
+    scopes: getCollection(oauthDb, scopes),
+    detailTypes: getCollection(oauthDb, detailTypes),
+    clients: mongoDetailTypeClients(oauthDb),
+    userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
+    findTenant,
+  }).registerResource({
+    tenant: PLATFORM_TENANT_SLUG,
+    uri: OTHER,
+    name: "Other",
+    scopes: ["read"],
+  });
   const janus = await janusIssuers.forRequest(
     new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
   );

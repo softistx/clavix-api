@@ -8,7 +8,7 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
-import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
+import type { ClientDetailTypes } from "@/modules/resources";
 import { partitionOf } from "@/modules/tenants";
 import {
   CliInputError,

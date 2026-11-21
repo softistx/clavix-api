@@ -1,6 +1,6 @@
 import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
-import type { detailTypes } from "./detail-types.model";
+import type { detailTypes } from "./resources.model";
 
 /**
  * What a client's opt-in to detail types (R3, D3) needs to know of a tenant:

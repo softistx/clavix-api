@@ -13,11 +13,12 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { createTenantParOff } from "../../../test/tenant-par-off";
-import { registerResource, storedResourcesFor } from "./register-resource";
+import { mongoDetailTypeClients } from "./resources.client-lists";
+import { ResourcesService } from "./resources.service";
 
 // /introspect answers for tokens whose `aud` is a resource registered through
 // resources:create (the `endpoints.introspection.authorize` hook), and only
@@ -29,12 +30,16 @@ const API_A = "https://api.intro-alpha.example/v1";
 const API_B = "https://api.intro-beta.example/v1";
 const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const options = {
-  collection: mongo.db.resources,
-  scopes: mongo.db.scopes,
-  findTenant,
-  issuerOf: (slug: string) => issuerOf(slug, config),
-};
+const build = (resources = mongo.db.resources) =>
+  new ResourcesService({
+    resources,
+    scopes: mongo.db.scopes,
+    detailTypes: mongo.db.detailTypes,
+    clients: mongoDetailTypeClients(oauthDb),
+    userinfoOf: (slug) => userinfoOf(issuerOf(slug, config)),
+    findTenant,
+  });
+const service = build();
 
 const resolver = createTenantResolver({
   lookup: findTenant,
@@ -64,11 +69,7 @@ const issuers = createClavixOAuthIssuers({
       userId === `user-${tenant.slug}` ? { id: userId, active: true } : null,
   }),
   claimsFor: () => async () => ({}),
-  resourcesFor: storedResourcesFor(
-    mongo.db.resources,
-    mongo.db.scopes,
-    mongo.db.detailTypes,
-  ),
+  resourcesFor: service.storedFor,
 });
 
 const url = (slug: string, path: string) => `https://${slug}.${DOMAIN}${path}`;
@@ -167,12 +168,12 @@ beforeAll(async () => {
     );
     secrets[slug] = client.clientSecret ?? "";
   }
-  await registerResource(options, {
+  await service.registerResource({
     tenant: "introalpha",
     uri: API_A,
     scopes: ["read"],
   });
-  await registerResource(options, {
+  await service.registerResource({
     tenant: "introbeta",
     uri: API_B,
     scopes: ["read"],
@@ -202,7 +203,7 @@ describe("/introspect with registered resources", () => {
 
   test("a resource registered after the issuer was built is introspectable at once", async () => {
     const late = "https://late.intro-alpha.example/v1";
-    await registerResource(options, {
+    await service.registerResource({
       tenant: "introalpha",
       uri: late,
       scopes: ["read"],
@@ -214,7 +215,7 @@ describe("/introspect with registered resources", () => {
 
   test("a resource removed after the token was issued makes it inactive", async () => {
     const gone = "https://gone.intro-alpha.example/v1";
-    await registerResource(options, {
+    await service.registerResource({
       tenant: "introalpha",
       uri: gone,
       scopes: ["read"],
