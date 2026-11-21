@@ -6,22 +6,32 @@ import type { AuthEventFilter } from "./audit.types";
 export const RETENTION_BATCH = 1_000;
 
 /** The mongo filter of a sign-in log filter: the set fields, combined with AND. */
-export const filterOf = (filter: AuthEventFilter) => ({
-  ...(filter.from == null && filter.to == null
-    ? {}
-    : {
-        at: {
-          ...(filter.from == null ? {} : { $gte: filter.from }),
-          ...(filter.to == null ? {} : { $lte: filter.to }),
-        },
-      }),
-  ...(filter.types == null || filter.types.length === 0
-    ? {}
-    : { type: { $in: [...filter.types] } }),
-  ...(filter.userId == null ? {} : { userId: filter.userId }),
-  ...(filter.clientId == null ? {} : { clientId: filter.clientId }),
-  ...(filter.outcome == null ? {} : { outcome: filter.outcome }),
-});
+export const filterOf = (filter: AuthEventFilter) => {
+  const { from, to, types, userId, clientId, outcome } = {
+    from: filter.from ?? undefined,
+    to: filter.to ?? undefined,
+    types: filter.types ?? undefined,
+    userId: filter.userId ?? undefined,
+    clientId: filter.clientId ?? undefined,
+    outcome: filter.outcome ?? undefined,
+  };
+  return {
+    ...(from === undefined && to === undefined
+      ? {}
+      : {
+          at: {
+            ...(from === undefined ? {} : { $gte: from }),
+            ...(to === undefined ? {} : { $lte: to }),
+          },
+        }),
+    ...(types === undefined || types.length === 0
+      ? {}
+      : { type: { $in: [...types] } }),
+    ...(userId === undefined ? {} : { userId }),
+    ...(clientId === undefined ? {} : { clientId }),
+    ...(outcome === undefined ? {} : { outcome }),
+  };
+};
 
 /** The stored fields of an event, field by field: whatever else rides on the input is not stored. */
 export const storedEvent = (event: AuthEvent, now: Date) => ({
