@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { TenantInvitations } from "@/modules/invitations/tenant-invitations";
-import { TenantUnavailableError } from "@/modules/invitations/tenant-invitations";
+import { TenantUnavailableError } from "@/modules/invitations/invitations.errors";
+import type { TenantInvitations } from "@/modules/invitations/invitations.types";
 import { createJanusUsers } from "./janus-users";
 
 // A tenant suspended or deleted between the console's own check and the call

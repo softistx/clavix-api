@@ -1,5 +1,5 @@
-import { operatorScope } from "@/modules/invitations/scope";
-import type { TenantInvitations } from "@/modules/invitations/tenant-invitations";
+import { operatorScope } from "@/modules/invitations/invitations.rules";
+import type { TenantInvitations } from "@/modules/invitations/invitations.types";
 import { CliInputError } from "@/shared/cli";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";

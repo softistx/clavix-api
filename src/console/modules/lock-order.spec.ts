@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { rolesService } from "@/config/roles";
-import { adminScope } from "@/modules/invitations/scope";
+import { adminScope } from "@/modules/invitations/invitations.rules";
 import type { ConsoleContext } from "../context";
 import { createExclusive } from "../exclusive";
 import { adminInvitationHooks } from "./admins/accept";

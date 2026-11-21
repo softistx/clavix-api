@@ -2,13 +2,13 @@ import { denial } from "@softistx/janus-graphql";
 import { brandingService } from "@/config/branding";
 import { tenantsService } from "@/config/tenancy";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { BrandingConflictError } from "@/modules/branding/branding.service";
-import { logoUrl } from "@/modules/branding/logo-route";
+import { BrandingConflictError } from "@/modules/branding/branding.errors";
+import { logoUrl } from "@/modules/branding/branding.logo-route";
 import {
   BrandingContrastError,
   BrandingInputError,
   THEME_NAME,
-} from "@/modules/branding/theme";
+} from "@/modules/branding/branding.theme";
 import { fail } from "@/shared/errors";
 import type { Audits } from "../../audit";
 import { type Guards, onTenant } from "../../guard";

@@ -1,37 +1,30 @@
-import {
-  ConflictError,
-  OptimisticLockError,
-  scopeToTenant,
-  type TypedCollection,
-} from "@softistx/mongo";
+import { scopeToTenant, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
+import { BrandingConflictError } from "./branding.errors";
+import { checkLogo, type StoredLogo } from "./branding.logo";
+import { logoUrl } from "./branding.logo-route";
 import type { branding } from "./branding.model";
-import { checkLogo, type StoredLogo } from "./logo";
 import {
   buildTheme,
   type CompileTheme,
   compileTheme,
-  type ThemeInput,
+  THEME_NAME,
   type ValidThemeInput,
-} from "./theme";
+} from "./branding.theme";
+import type {
+  BrandFields,
+  PublicBranding,
+  StoredBrandingDoc,
+  UpdateBrandingInput,
+  UpdateBrandingResult,
+} from "./branding.types";
+import { ATTEMPTS, lostRace, sameBrand } from "./branding.utils";
 
-export type StoredBrandingDoc = Awaited<
-  ReturnType<TypedCollection<typeof branding>["create"]>
->;
-
-export interface UpdateBrandingInput extends ThemeInput {
-  /** Replace the logo. Omitted: keep it. */
-  logo?: { contentType: string; dataBase64: string } | undefined;
-  removeLogo?: boolean | undefined;
-}
-
-export interface UpdateBrandingResult {
-  branding: StoredBrandingDoc;
-  /** `false` when the stored brand already was exactly this (idempotent). */
-  changed: boolean;
-  /** What the generator adjusted to reach AA. */
-  warnings: string[];
-}
+export type {
+  StoredBrandingDoc,
+  UpdateBrandingInput,
+  UpdateBrandingResult,
+} from "./branding.types";
 
 /**
  * A tenant's brand. Every method takes the tenant id (hex) and reads or writes
@@ -49,6 +42,20 @@ export class BrandingService {
 
   async get(tenantId: string): Promise<StoredBrandingDoc | undefined> {
     return this.scoped(tenantId).findFirst({});
+  }
+
+  /** The brand the hosted pages show (`tenantBranding`); `null` while none is stored. */
+  async view(tenantId: string): Promise<PublicBranding | null> {
+    const found = await this.get(tenantId);
+    if (found === undefined) return null;
+    return {
+      displayName: found.displayName,
+      themeName: THEME_NAME,
+      css: found.css,
+      backgroundPreset: found.backgroundPreset,
+      motif: found.motif,
+      logoUrl: found.logo === null ? null : logoUrl(found.logo.hash),
+    };
   }
 
   /**
@@ -75,10 +82,7 @@ export class BrandingService {
           css: compiled.css,
         });
       } catch (error) {
-        const lost =
-          error instanceof OptimisticLockError ||
-          error instanceof ConflictError;
-        if (!lost) throw error;
+        if (!lostRace(error)) throw error;
         if (attempt >= ATTEMPTS) throw new BrandingConflictError();
       }
     }
@@ -98,7 +102,7 @@ export class BrandingService {
       removeLogo === true && newLogo === undefined
         ? null
         : (newLogo ?? existing?.logo ?? null);
-    const fields = {
+    const fields: BrandFields = {
       displayName: valid.displayName,
       seed: valid.seed,
       radius: valid.radius,
@@ -107,7 +111,7 @@ export class BrandingService {
       css: compiled.css,
       logo,
     };
-    if (existing !== undefined && same(existing, fields)) {
+    if (existing !== undefined && sameBrand(existing, fields)) {
       return { branding: existing, changed: false, warnings };
     }
     if (existing === undefined) {
@@ -120,38 +124,4 @@ export class BrandingService {
     });
     return { branding: updated, changed: true, warnings };
   }
-}
-
-/** How many times `update` decides before it gives up on concurrent writes. */
-const ATTEMPTS = 3;
-
-/** Other calls kept changing the brand while this one tried (`CONFLICT`): nothing of it was stored. */
-export class BrandingConflictError extends Error {
-  readonly code = "CONFLICT";
-  constructor() {
-    super("The brand was changed by another call; read it and try again");
-  }
-}
-
-function same(
-  stored: StoredBrandingDoc,
-  fields: {
-    displayName: string;
-    seed: string;
-    radius: string;
-    backgroundPreset: string | null;
-    motif: string | null;
-    css: string;
-    logo: StoredLogo | null;
-  },
-) {
-  return (
-    stored.displayName === fields.displayName &&
-    stored.seed === fields.seed &&
-    stored.radius === fields.radius &&
-    stored.backgroundPreset === fields.backgroundPreset &&
-    stored.motif === fields.motif &&
-    stored.css === fields.css &&
-    stored.logo?.hash === fields.logo?.hash
-  );
 }

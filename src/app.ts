@@ -32,7 +32,7 @@ import type { Throttle } from "./http/throttle/core";
 import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/auth.plugin";
 import type { VerificationThrottle } from "./modules/auth/auth.verification-throttle";
-import { LOGO_PATH } from "./modules/branding/logo-route";
+import { LOGO_PATH } from "./modules/branding/branding.logo-route";
 import { oauthContext } from "./modules/consent";
 import type { AgentsFor } from "./modules/consent/agent-marker";
 import type { DetailTextsFor } from "./modules/consent/detail-labels";
