@@ -3,9 +3,9 @@ import { ObjectId } from "mongodb";
 import { rolesService } from "@/config/roles";
 import type { ConsoleContext } from "@/console/context";
 import { liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
+import { userLoader } from "@/modules/users";
+import { shape as userShape } from "@/modules/users/users.utils";
 import { badInput } from "@/shared/errors";
-import { userLoader } from "../users/users.data-loader";
-import { shape as userShape } from "../users/users.utils";
 import type { RoleDoc } from "./roles.types";
 import { shape } from "./roles.utils";
 

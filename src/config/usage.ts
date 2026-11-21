@@ -1,7 +1,7 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { partitionOf } from "@/modules/tenants";
-import { UsageService } from "@/modules/usage/usage.service";
+import { UsageService } from "@/modules/usage";
 import { agentClientsService } from "./agent-clients";
 import { connectionsService } from "./connections";
 import { mongo } from "./db";

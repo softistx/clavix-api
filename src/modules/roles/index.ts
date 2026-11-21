@@ -1,17 +1,7 @@
 // The module's import surface (roles: a tenant's end-user roles and their
-// assignments). The console resolvers are `roles.console-resolver.ts`
-// (A14); the hosted API has no roles resolver.
-// `i18n/codes.ts` imports `roles.errors` by file (a leaf); `config/roles.ts`
-// builds the service (AGENTS.md "Layout (A12, roles)").
+// assignments). `roles.console-resolver` is loaded by file by
+// `console/modules/index.ts`; the hosted API has no roles resolver.
+// `config/roles.ts` builds the service.
 
-export type { RolesErrorCode } from "./roles.errors";
-export { RolesError } from "./roles.errors";
+export { codes, RolesError } from "./roles.errors";
 export { RolesService } from "./roles.service";
-export type {
-  AssignmentDoc,
-  CreateRoleInput,
-  MembersPage,
-  RoleDoc,
-  RolesOptions,
-  UpdateRoleInput,
-} from "./roles.types";

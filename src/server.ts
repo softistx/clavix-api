@@ -2,6 +2,14 @@
 // reflect-metadata, so @peculiar/x509 loads tsyringe first; importing the polyfill here, first,
 // fixes the order.
 import "reflect-metadata";
+import { startAgentsPrune } from "@/modules/agents/agents.prune-worker";
+import { startAuditRetention } from "@/modules/audit/audit.retention-worker";
+import { drain } from "@/modules/auth";
+import { startDomainRecheck } from "@/modules/domains/domains.recheck-worker";
+import { startKeyRotation } from "@/modules/keys/keys.worker";
+import { services } from "@/modules/services";
+import { startTenantPurge } from "@/modules/tenants/tenants.purge-worker";
+import { startWebhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-worker";
 import { createApp } from "./app";
 import { createAgentsPrune } from "./config/agents-prune";
 import { appPorts } from "./config/app-ports";
@@ -20,14 +28,6 @@ import { instrumentDatabase, telemetry } from "./config/telemetry";
 import { tenantsService } from "./config/tenancy";
 import { authFor, claimsFor } from "./config/users";
 import { createWebhookSecretsPrune, webhookDelivery } from "./config/webhooks";
-import { startAgentsPrune } from "./modules/agents/agents.prune-worker";
-import { startAuditRetention } from "./modules/audit/audit.retention-worker";
-import { drain } from "./modules/auth";
-import { startDomainRecheck } from "./modules/domains/domains.recheck-worker";
-import { startKeyRotation } from "./modules/keys";
-import { services } from "./modules/services";
-import { startTenantPurge } from "./modules/tenants/tenants.purge-worker";
-import { startWebhookSecretsPrune } from "./modules/webhooks/webhooks.secrets-prune-worker";
 
 // Longest wait for a sign-in code mail in flight when the server stops.
 const MAIL_DRAIN_MS = 10_000;

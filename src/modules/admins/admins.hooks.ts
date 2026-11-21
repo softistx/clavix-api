@@ -2,10 +2,7 @@ import { InvitationInvalidError } from "@softistx/janus";
 import type { Access } from "@/console/access";
 import type { Exclusive } from "@/console/exclusive";
 import { isRole } from "@/console/model";
-import {
-  adminTenantOf,
-  isOperatorScope,
-} from "@/modules/invitations/invitations.rules";
+import { adminTenantOf, isOperatorScope } from "@/modules/invitations";
 import { membersKey, roleOf } from "./admins.utils";
 
 interface Accepting {

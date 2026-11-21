@@ -1,8 +1,11 @@
-// The module's import surface. `oauth-policy.schema` is a leaf the tenants
-// model and the OAuth ports import by file (the barrel would close a cycle
-// through the tenants service); `oauth-policy.rules` is imported by file by
-// the console.
+// The module's import surface. `oauth-policy.schema` is imported by file by the
+// tenants model and service and by `tenancy/resolved-tenant.ts` (the barrel
+// would close a cycle through the tenants service), and
+// `oauth-policy.console-resolver` by `console/modules/index.ts`.
 
-export * from "./oauth-policy.errors";
+export {
+  type AgentsPolicy,
+  agentsOff,
+  oauthPolicySchema,
+} from "./oauth-policy.schema";
 export * from "./oauth-policy.service";
-export * from "./oauth-policy.types";

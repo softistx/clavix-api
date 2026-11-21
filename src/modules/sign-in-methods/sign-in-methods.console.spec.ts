@@ -20,15 +20,13 @@ import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
 import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
 import { consoleSchema } from "@/console/schema";
-import {
-  SignInPolicyService,
-  secretContext,
-  socialProvidersOf,
-} from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { socialOf } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { secretContext } from "./sign-in-methods.secrets";
+import { SignInPolicyService } from "./sign-in-methods.service";
+import { socialProvidersOf } from "./sign-in-methods.social";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,

@@ -10,10 +10,10 @@ import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
-import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
 import { createFlow } from "~/oauth-flow";
+import { registerClient } from "./clients.register";
 
 const REDIRECT = "https://app.example/callback";
 const admin = consoleAs("cli-admin-a");

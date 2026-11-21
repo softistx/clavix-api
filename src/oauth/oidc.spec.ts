@@ -14,7 +14,7 @@ import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
 import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { createClavixOAuthIssuers, userinfoOf } from "./issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "./ports";
 

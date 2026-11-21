@@ -1,15 +1,14 @@
-// The module's import surface. The secrets-prune queue and worker are not
-// here: `server.ts` and `config/redis.ts` import them by file, so this barrel
-// never loads the queue.
+// The module's import surface. The secrets-prune queue and worker are imported
+// by file (`config/redis.ts`, `server.ts`), so this barrel never loads the
+// queue; `webhooks.console-resolver` by `console/modules/index.ts`.
 
-export * from "./webhooks.delivery";
-export * from "./webhooks.errors";
-export * from "./webhooks.events";
-export * from "./webhooks.model";
+export {
+  createWebhookDelivery,
+  DISABLE_ACTOR,
+  webhookQueueLimits,
+} from "./webhooks.delivery";
+export { type ClavixWebhookEvent, userWebhookEvent } from "./webhooks.events";
 export * from "./webhooks.notice";
-export * from "./webhooks.rules";
-export * from "./webhooks.secrets-prune";
+export { pruneWebhookSecrets } from "./webhooks.secrets-prune";
 export * from "./webhooks.service";
-export * from "./webhooks.types";
-export * from "./webhooks.url-policy";
-export * from "./webhooks.utils";
+export { guardedFetch, type UrlPolicy } from "./webhooks.url-policy";

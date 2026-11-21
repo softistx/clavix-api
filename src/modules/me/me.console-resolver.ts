@@ -1,7 +1,7 @@
 import { denial } from "@softistx/janus-graphql";
 import { callerProved, verifiedCaller } from "@/console/guard";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { GRAPHQL_ROLE } from "@/modules/admins/admins.utils";
+import { GRAPHQL_ROLE } from "@/modules/admins";
 import {
   directRoles,
   memberTenants,

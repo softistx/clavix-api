@@ -5,7 +5,7 @@ import {
   tenantField,
 } from "@softistx/mongo";
 import { z } from "zod";
-import { sealedSecretSchema } from "@/modules/sign-in-methods/sign-in-methods.schema";
+import { sealedSecretSchema } from "@/modules/sign-in-methods";
 
 /** `claimAndDomain` (default) and `domain` only: `claim` lets the identity provider assert any address, so a tenant cannot pick it here (D2). */
 export const CONNECTION_EMAIL_TRUST = ["claimAndDomain", "domain"] as const;

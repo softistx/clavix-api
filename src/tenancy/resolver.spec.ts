@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
+import { oauthPolicySchema } from "@/modules/oauth-policy";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { noCustomDomains } from "~/ports";
 import { isLive } from "./resolved-tenant";

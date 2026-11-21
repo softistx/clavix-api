@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
+import { ClientPoliciesService } from "@/modules/client-policies";
 import type { AgentCheckFor, ExchangeRulesFor } from "@/oauth/ports";
 import { agentClientsService } from "./agent-clients";
 import { mongo } from "./db";

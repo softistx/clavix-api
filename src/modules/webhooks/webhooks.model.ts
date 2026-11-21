@@ -1,6 +1,6 @@
 import { defineCollection, id, tenantField } from "@softistx/mongo";
 import { z } from "zod";
-import { sealedSecretSchema } from "@/modules/sign-in-methods/sign-in-methods.schema";
+import { sealedSecretSchema } from "@/modules/sign-in-methods";
 
 /** Why an endpoint is off: `givenUp` is D20's auto-disable, `manual` the tenant's own switch. */
 export const DISABLED_REASONS = ["givenUp", "manual"] as const;

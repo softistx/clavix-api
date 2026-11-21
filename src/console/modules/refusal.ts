@@ -4,7 +4,7 @@ import {
   PlatformTenantProtectedError,
   SlugTakenError,
 } from "@/modules/tenants";
-import { QuotaExceededError } from "@/modules/usage/usage.errors";
+import { QuotaExceededError } from "@/modules/usage";
 import { badInput, fail } from "@/shared/errors";
 
 const refuse = (

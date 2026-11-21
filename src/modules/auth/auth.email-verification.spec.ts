@@ -31,7 +31,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { settled } from "./auth.outbox";
 import { AuthService } from "./auth.service";
 import {

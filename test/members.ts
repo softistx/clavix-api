@@ -1,5 +1,5 @@
 import type { ConsoleContext } from "@/console/context";
-import { AdminsService } from "@/modules/admins/admins.service";
+import { AdminsService } from "@/modules/admins";
 
 /** A fake console context (its access, directory and exclusive) with the memberships service over them. */
 export const withMembers = (fake: {

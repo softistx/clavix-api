@@ -1,7 +1,6 @@
 import { tenantBySlug, tenantsService } from "@/config/tenancy";
 import { refusal } from "@/console/modules/refusal";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { SlugTakenError } from "@/modules/tenants";
 import { badInput } from "@/shared/errors";
 import { parentOf } from "./tenants.console-parent";
 import {
@@ -11,6 +10,7 @@ import {
   planOrFail,
   writable,
 } from "./tenants.console-support";
+import { SlugTakenError } from "./tenants.errors";
 
 export const tenantMutations: NonNullable<Resolvers["Mutation"]> = {
   createTenant: async (_, { input }, ctx) => {

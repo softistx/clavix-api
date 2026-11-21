@@ -2,17 +2,17 @@ import { denial } from "@softistx/janus-graphql";
 import { NotFoundError } from "@softistx/mongo";
 import { tenantsService } from "@/config/tenancy";
 import { refusal } from "@/console/modules/refusal";
+import { badInput } from "@/shared/errors";
+import type { TenantParent } from "./tenants.console-parent";
+import type { Tenant } from "./tenants.model";
 import {
   type effectiveQuotas,
   isPlanId,
   type PlanId,
   QUOTA_KEYS,
   type QuotaOverrides,
-  type Tenant,
-  type TenantState,
-} from "@/modules/tenants";
-import { badInput } from "@/shared/errors";
-import type { TenantParent } from "./tenants.console-parent";
+} from "./tenants.plan";
+import type { TenantState } from "./tenants.types";
 
 export const notFound = () => denial("NOT_FOUND", "No such tenant");
 

@@ -20,7 +20,7 @@ import {
   quietTenants,
   quietUsers,
 } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { originOf, rpIdOf } from "./users.rp";
 import { SESSION_COOKIE } from "./users.session";
 import { createTenantAuth } from "./users.tenant-auth";

@@ -1,6 +1,6 @@
 import { userKey } from "@/console/modules/user-key";
 import { janusListener } from "@/events/janus-listener";
-import { adminInvitationHooks } from "@/modules/admins/admins.hooks";
+import { adminInvitationHooks } from "@/modules/admins";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTenantAuth, secondFactorKeysOf } from "@/modules/users";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";

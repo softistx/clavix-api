@@ -1,9 +1,8 @@
-// The module's import surface. The prune queue and worker are not here:
-// `server.ts` and `config/redis.ts` import them by file, so this barrel never
-// loads the queue. `agents.model` (`AgentKind`) is imported by file by
-// `modules/clients`, `agents.prune` and `agents.prune-events` by
-// `config/agents-prune.ts` (AGENTS.md "Layout (A12)").
+// The module's import surface. The prune queue and worker are imported by file
+// (`config/redis.ts`, `server.ts`), so this barrel never loads the queue.
 
-export * from "./agents.model";
+export type { AgentKind } from "./agents.model";
+export { type PruneReport, pruneAgents } from "./agents.prune";
+export { agentPruneEventInput } from "./agents.prune-events";
 export * from "./agents.service";
-export * from "./agents.types";
+export type { AgentClientsPort } from "./agents.types";

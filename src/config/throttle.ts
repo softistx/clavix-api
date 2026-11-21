@@ -1,7 +1,9 @@
-import { createSignInThrottle } from "@/modules/auth/auth.throttle";
-import { createVerificationThrottle } from "@/modules/auth/auth.verification-throttle";
-import { createDeviceThrottle } from "@/modules/consent/consent.device-throttle";
-import { createPasskeyThrottle } from "@/modules/passkeys/passkeys.throttle";
+import {
+  createSignInThrottle,
+  createVerificationThrottle,
+} from "@/modules/auth";
+import { createDeviceThrottle } from "@/modules/consent";
+import { createPasskeyThrottle } from "@/modules/passkeys";
 import {
   createHomeRealmThrottle,
   createSsoStartThrottle,

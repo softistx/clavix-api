@@ -2,8 +2,7 @@ import { denial } from "@softistx/janus-graphql";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { refusal } from "@/console/modules/refusal";
-import { QuotaExceededError } from "../usage/usage.errors";
-import { assertWithinQuota } from "../usage/usage.rules";
+import { assertWithinQuota, QuotaExceededError } from "@/modules/usage";
 
 /** Clients are a hard quota: one more past the plan's is `QUOTA_EXCEEDED` (409). */
 export async function assertClientQuota(tenant: {

@@ -1,7 +1,7 @@
 import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
-import { validateTokenExchange } from "@/modules/client-policies/client-policies.rules";
+import type { TokenExchangeRules } from "@/modules/client-policies";
+import { validateTokenExchange } from "@/modules/client-policies";
 import { CatalogError } from "@/modules/resources";
 import { partitionOf } from "@/modules/tenants";
 import type { CliTenant } from "@/shared/cli";

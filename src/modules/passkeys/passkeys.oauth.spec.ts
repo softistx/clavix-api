@@ -23,7 +23,7 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { quietOAuth, quietTenants } from "~/ports";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 
 // A passkey sign-in, then the OAuth flow of the same tenant: the id_token's
 // auth_time is the passkey session's sign-in time.

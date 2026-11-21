@@ -1,6 +1,6 @@
 import { eventBus } from "@/config/events";
 import type { Context } from "@/http/context";
-import type { AuthMethod } from "@/modules/audit/audit.model";
+import type { AuthMethod } from "@/modules/audit";
 import { reasonOf, sourceOf } from "@/modules/auth";
 
 /** The audit record of a step-up (D14), success or refusal. Never throws (D13). */

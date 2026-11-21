@@ -5,7 +5,7 @@ import {
   type OAuthRegistration,
   redirectUriProblem,
 } from "@softistx/janus-oauth";
-import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
+import type { AgentsPolicy } from "@/modules/oauth-policy";
 import { unique } from "@/shared/values";
 
 /**

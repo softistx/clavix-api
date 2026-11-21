@@ -8,10 +8,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createExclusive } from "@/console/exclusive";
 import { userKey } from "@/console/modules/user-key";
-import {
-  adminScope,
-  operatorScope,
-} from "@/modules/invitations/invitations.rules";
+import { adminScope, operatorScope } from "@/modules/invitations";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { quietJanus } from "~/ports";
 import { adminInvitationHooks } from "./admins.hooks";

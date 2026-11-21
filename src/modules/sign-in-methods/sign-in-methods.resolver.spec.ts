@@ -27,9 +27,9 @@ import {
 import { SESSION_COOKIE } from "@/modules/users";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
+import { createFlow } from "~/oauth-flow";
 import { quietTenants } from "~/ports";
-import { createFlow } from "../../../test/oauth-flow";
-import { createTenantParOff } from "../../../test/tenant-par-off";
+import { createTenantParOff } from "~/tenant-par-off";
 import { SignInPolicyService } from "./sign-in-methods.service";
 
 // The OAuth issuers are mounted: the replacement revokes the former holder's grants through them.

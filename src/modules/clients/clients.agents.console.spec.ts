@@ -9,9 +9,9 @@ import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
-import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
+import { registerClient } from "./clients.register";
 
 const REDIRECT = "https://app.example/callback";
 const DOC = "https://agent.example/client.json";

@@ -56,7 +56,11 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - **Import cycles**: `bunx madge --circular --extensions ts --ts-config tsconfig.json src` reports 6 today
   (`webhooks` events/delivery, two cycles; `i18n/codes` with `auth.errors` (through `shared/errors`), one; `i18n/codes` with `sign-in-methods.errors`, one; `console/budgets` with `console/context`,
   `config/connections` with `config/users`); a change adds none (not run by `verify`).
-- **Cross-module imports go through the owning module's `index.ts`** (A24). A deep import (`@/modules/<m>/<m>.<role>`) is allowed only for: a leaf kept out of the barrel on purpose (`.errors`, `.schema`, `.rules`, `.types`, `.model`, `.utils`, the throttles, queues, workers and label readers that `config/*`, `app.ts` and `i18n/codes.ts` wire), a console resolver (`modules/index.ts` and `console/modules/index.ts` load them by file), and an import the barrel would turn into a cycle (`auth.service`, `config/redis.ts`, `config/throttle.ts`, `config/connections.ts`, `admins.errors`, and the console context and plugin, which import `admins.service` by file). madge counts type imports, so a barrel import that adds a cycle is changed back to a file import; the allowed leaves are named in each module's layout entry below.
+- **Cross-module imports go through the owning module's `index.ts`** (A24, A29). Every import of another module is `@/modules/<m>`, and a module's own files import each other relatively, never through their own barrel; a barrel exports only names another module (or its spec) imports. A deep import (`@/modules/<m>/<m>.<role>`) is allowed only for these, each in the module's `index.ts` header:
+  - **the registries** load a role file by file so the barrel never loads it: `modules/index.ts` (the hosted `*.resolver.ts`), `console/modules/index.ts` (the `*.console-resolver.ts`), `app.ts` and `http/schema.ts` (`auth.plugin`, `consent.plugin`, `consent.resolver`), and `modules/collections.ts` (the models registry, keyed as `mongo.db` exposes them);
+  - **queues, workers and Redis throttles**, wired by `server.ts`, `config/redis.ts`, `config/redis-limits.ts` and `config/domains-job.ts` (a barrel would load Redis or the worker): `keys.queue`, `keys.worker`, `agents.prune-*`, `audit.retention-*`, `consent.queue`, `domains.recheck-*`, `tenants.purge-*`, `webhooks.secrets-prune-*`, `auth.throttle`, `auth.verification-throttle`, `consent.device-throttle`, `passkeys.throttle` (their limit configs, which the barrel cannot export without closing cycles through `config/redis.ts`);
+  - **an import the barrel would turn into a cycle** (madge counts type imports): `i18n/codes.ts` takes the `.errors` of `auth`, `connections`, `consent`, `invitations`, `mfa` and `passkeys`; `config/connections.ts` takes `connections.discovery` and `connections.service`; `config/console.ts` takes `users.service`; `console/context.ts` takes `admins.service`; `events/types.ts` takes `audit.model`; `tenancy/resolved-tenant.ts` and the tenants model takes `sign-in-methods.schema` and `oauth-policy.schema`, the tenants service `oauth-policy.schema`; `auth.service.ts` takes `mfa.challenge`; `admins.errors.ts` takes `invitations.errors`; `users.owners.ts` takes `admins.errors` and `admins.utils`; `roles.console-support.ts` takes `users.utils`; `lock-order.spec.ts` takes `users.console-mutations`.
+    `scripts/`, `load/` and `package.json` are not modules. Tests import fixtures as `~/<file>` (`test/`), never a relative path to `test/`.
 - **Named exceptions** (owner decisions D1, D2 and D8 of the alignment plan, not the RAR D1/D2 below; each is deliberate, not drift):
   - **D1, two schemas**: the hosted `/graphql` (cookie, tenant from the Host) and the console `/console/graphql` (bearer or DPoP JWT of the
     `clavix` tenant, its own cost limit, deny-by-default guard) stay two endpoints and two printed schemas, since one merged schema
@@ -176,9 +180,8 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   every business method of the domain (`get`, `updateMethods`, `updateMfa`, `setSocial`, `removeSocial`,
   `resealSecrets`), its spec beside it. `index.ts` is the import surface (the schema first); `modules/index.ts` imports
   `sign-in-methods.resolver.ts` by file (its support loads the config wiring). The service is built in
-  `src/config/sign-in-policy.ts` and registered as `services().signInPolicy`. Deep imports allowed: `sign-in-methods.schema.ts` by the tenants, webhooks and connections models and
-  `tenancy/resolved-tenant.ts` (the barrel would close an import cycle through the service), and `.errors.ts` into
-  `src/i18n/codes.ts`.
+  `src/config/sign-in-policy.ts` and registered as `services().signInPolicy`. Deep imports allowed: `sign-in-methods.schema.ts` by the tenants model and
+  `tenancy/resolved-tenant.ts` (the barrel would close an import cycle through the service).
 - **One field, one schema**: `signIn: signInPolicySchema` (`sign-in-methods.schema.ts`) on the tenant document and on `ResolvedTenant`: `methods` is a list of `{ type, enabled }` entries (`mfa: { mode: passkeySufficient|required, totp }` goes beside it, with zod defaults so a cached tenant without it still parses: `totp` off, mode `passkeySufficient`) and `social` a list of `{ provider, clientId, secret, enabled }`. A method absent from the list has its default (`passkey` and `emailCode` on, `magicLink` and `password` off). `password` is stored but not available (`isAvailable`): it is never on and cannot be enabled until janus's password flow is wired.
 - **Every write goes through `SignInPolicyService`** (`sign-in-methods.service.ts`, over `TenantsService.updateSignIn`): it refuses a policy with no enabled method and no enabled provider (`NO_SIGN_IN_METHOD`), writes nothing when nothing changes, and bumps the tenant's `version`, which rebuilds its janus (`createJanusIssuers`).
 - **Gates**: `requireMethod(tenant, method)` (`sign-in-methods.gate.ts`) is the first line of the e-mail code and passkey sign-in resolvers, before any throttle (404 `SIGN_IN_METHOD_DISABLED`). Magic link keeps janus's own gate: janus defaults it to on, so `users.tenant-janus.ts` always passes `magicLink: { enabled }` from the policy, and `requestMagicLink` / `confirmMagicLink` (`AuthService`, `src/modules/auth/auth.service.ts`) answer 404 `MAGIC_LINK_DISABLED`, checked first in the service, before the throttle. Registering a passkey while signed in is not gated.
@@ -217,8 +220,7 @@ enterprise connections of a tenant), `users.sso.ts` (home-realm discovery, the c
 `users.session.ts` (the cookie and session constants), `users.rp.ts` (rpId, origin), `users.schema.ts`
 (the user schema), `users.second-factor-keys.ts`, `users.verified-email.ts` and `users.tenant-auth.ts`
 (`authFor`, `claimsFor`). `index.ts` is the import surface (registered as `services().users`); the console resolvers,
-`users.service.ts` and `users.types.ts` are imported by file (they read the invitations types, which
-import the barrel: a cycle otherwise).
+`users.service.ts` (`config/console.ts` and the mfa second-factor spec), `users.utils.ts` and `users.console-mutations.ts` are imported by file (a cycle through the barrel otherwise).
 - **Cookie**: `__Host-clavix-session`, no `Domain`, Secure, SameSite=Lax. Session 14 days sliding,
   capped at 30 days after sign-in (`session.absolute`, janus 0.53).
 - **Assumed, not answered (2026-11-12), confirm before first production passkey**: the passkey rpId is
@@ -668,8 +670,8 @@ comparison is `domains.check.ts`.
   (owner, 2026-11-20), `DomainsService`, holding every business method (reads, `add`, `verify`, `setPrimary`,
   `remove`, `deleteOwnedBy`, `recheckAll`; the former `DomainRecheck` and `promoteClaim` are merged into it), its spec
   beside it. There is no resolver (the console module is the caller). `index.ts` is the import surface;
-  `domains.recheck-queue.ts` (Redis) and `domains.tls-limit.ts` (Redis) are imported by file from `src/config/redis.ts`
-  and `src/config/domains-routes.ts`, `domains.recheck-worker.ts` from `src/server.ts` (wiring, so the barrel never loads
+  `domains.recheck-queue.ts` (Redis) is imported by file from `src/config/redis.ts`, `domains.recheck-worker.ts` from
+  `src/server.ts` and `src/config/domains-job.ts` (wiring, so the barrel never loads
   Redis), and `domains.errors.ts` by `src/i18n/codes.ts` as every module's errors are. The service is built in
   `src/config/domains.ts` (`createDomainsService`, called by `src/config/tenancy.ts`, which gives it the resolver's
   invalidation) and registered as `services().domains`. `domains` stays a platform collection.
@@ -681,11 +683,8 @@ comparison is `domains.check.ts`.
   `<name>.resolver.ts`. Each module also has `.errors.ts` (codes and refusal builders), `.types.ts` (ports), `.utils.ts`
   and specs beside every file that holds code; auth adds `.events.ts`, `.outbox.ts`, `.throttle.ts`,
   `.verification-throttle.ts` and `.plugin.ts`, mfa `.challenge.ts`, passkeys `.throttle.ts`. The barrels (`index.ts`)
-  are the only cross-module entry and leave out the resolvers (`modules/index.ts` imports them by file). Deep imports,
-  each for a leaf: `auth.plugin`, `auth.verification-throttle` (`app.ts`), `auth.throttle`,
-  `auth.verification-throttle` and `passkeys.throttle` (`config/redis.ts`, `config/throttle.ts`: Redis wiring kept out
-  of the barrel), `auth.plugin` (`http/schema.ts`), the three `.errors` files (`i18n/codes.ts`), and
-  `@/modules/mfa/mfa.challenge` from `auth.service.ts` (a leaf that avoids an auth to mfa runtime cycle) and `@/modules/auth/auth.events` from `mfa.events.ts` (`reasonOf`, `sourceOf`: a pure leaf, so mfa never loads the auth barrel). Behaviour,
+  are the only cross-module entry and leave out the resolvers (`modules/index.ts` imports them by file). Deep imports are the
+  ones listed under "Cross-module imports" above (A29). Behaviour,
   throttles, error codes, timing and cookies are unchanged.
 - Layout (A11): `consent`, `invitations` and `branding` are flat `<name>.<role>.ts` modules, one service per domain
   (owner, 2026-11-20): `ConsentService` (the `/consent` and device hooks, the step-up refusal, the labels, the revocation
@@ -694,11 +693,9 @@ comparison is `domains.check.ts`.
   by a thin `<name>.resolver.ts` (consent's builds janus-oauth's `oauthResolvers`). Each has `.errors.ts` (codes and
   refusal builders), `.types.ts`, `.utils.ts` (invitations and consent), `.rules.ts` (invitations) and specs beside
   every file that holds code. The barrels (`index.ts`) leave out the resolvers (`modules/index.ts` and `http/schema.ts`
-  import them by file). Deep imports, each for a leaf: `invitations.rules` and `invitations.types` (console modules),
-  `consent.device-throttle`, `consent.queue`, `consent.plugin` and the leaf readers `consent.agent-marker`,
-  `consent.detail-labels`, `consent.scope-labels` (`config/*.ts`, `app.ts`), `branding.logo-route` (`app.ts`, the
-  console: `logoUrl` and `LOGO_PATH` stay a leaf whose route takes a structural service), and each `.errors` file
-  (`i18n/codes.ts`). Behaviour, throttles, error codes and mail timing are unchanged.
+  import them by file). Deep imports are the ones listed under "Cross-module imports" above (A29): `consent.device-throttle`, `consent.queue`,
+  `consent.plugin` (`app.ts`), and `.errors` files (`i18n/codes.ts`); the leaf readers, `invitations.rules`,
+  `invitations.types` and `branding.logo-route` are now exported by their barrels. Behaviour, throttles, error codes and mail timing are unchanged.
 - Layout (A12, roles): `roles` is a flat `<name>.<role>.ts` module with one service, `RolesService` (every method of
   the roles and their assignments: the CRUD, `assign`, `members`, `memberCounts`, the `roles` claim), built in
   `src/config/roles.ts` and registered in `services()`. The four helper files that imported their types back from the
@@ -708,7 +705,7 @@ comparison is `domains.check.ts`.
   runs the service on the test database. No hosted resolver: the roles are console-only (A14 folded
   `src/console/modules/roles` into the module: `roles.console.graphqls`, `roles.console-resolver.ts` with its `-support` and
   `-guards`, `roles.console.spec.ts`; the member and count shapes and the audit target are in `roles.utils.ts`). The barrel (`index.ts`) exports the service, the error and the types; `i18n/codes.ts`
-  keeps importing `roles.errors` as a leaf. Behaviour, error codes and throttles are unchanged.
+  imports `codes` through the barrel. Behaviour, error codes and throttles are unchanged.
 - Layout (A12, audit, agents, usage): the three modules are flat `<name>.<role>.ts`, each with one service built in
   its `src/config/<name>.ts` and registered in `services()` (`audit`, `agents`, `usage`). `AuditService`
   (`audit.service.ts`: `record`, `page`, `find`, `exceeds`, `stream`, `deleteBefore`; the config export is still
@@ -717,10 +714,9 @@ comparison is `domains.check.ts`.
   `*.types.ts`, the collections in `audit.model.ts` and `agents.model.ts`; usage keeps `usage.utils.ts` (month,
   meter, `messageOf`), `usage.rules.ts` (`assertWithinQuota`), `usage.errors.ts` (`QuotaExceededError`) and
   `usage.counter.ts` (the MAU counter). The jobs follow the webhooks precedent: `agents.prune*.ts` and
-  `audit.retention*.ts` (job, queue, worker) and `audit.recorder.ts` stay separate role files outside the barrels, as
-  does `usage.counter.ts`. Neither audit nor agents raises a coded error, so neither has an `.errors.ts`. Leaf deep
-  imports: modules that check quotas import `usage.errors`, `usage.rules` and `usage.utils` directly, so they do not
-  cycle through the usage barrel. No hosted resolver (console-only until A13/A14). Behaviour is unchanged.
+  `audit.retention*.ts` (job, queue, worker) stay separate role files, their queues and workers outside the barrels
+  (the barrels export `pruneAgents`, `enforceRetention`, `authRecorder`, `monthlyActiveUsers`). Neither audit nor agents raises a coded error, so neither has an `.errors.ts`. Modules
+  that check quotas import `usage.errors`, `usage.rules` and `usage.utils` through the usage barrel. No hosted resolver (console-only until A13/A14). Behaviour is unchanged.
 - Layout (A22, clients): `clients.service.ts` (one `ClientsService`: listing, writes, token exchange rules and deletion, `refuseAgent` and `require` private), `clients.types.ts`, `clients.rules.ts` (+ spec), `clients.validate.ts` (+ spec), `clients.register.ts` (`registerClient`, `registerForTenant`), `clients.detail-types.ts`, `clients.search.ts`, `clients.utils.ts`, `clients.cli.ts`, the console files, and `index.ts`, the entry other modules import (`registerClient`, `ClientsService`, `clientsKey`, the grants, the CLI parser; the console resolvers stay imported by file from `console/modules`). `services()` has a `clients` entry (`config/clients.ts`).
 - Layout (A12, client-policies, oauth-policy, health): `client-policies` and `oauth-policy` are flat
   `<name>.<role>.ts` modules with one service each (`ClientPoliciesService`, `OAuthPolicyService`), built in
@@ -728,7 +724,7 @@ comparison is `domains.check.ts`.
   `oauthPolicy`; the console's `wiring.ts` is gone). Rules: `client-policies.rules.ts` (`validateTokenExchange`),
   `oauth-policy.rules.ts` (`applyAgentsInput`, `sameAgents`, `agentsNeedPushOrProof`). `oauth-policy` also has
   `oauth-policy.types.ts` and `oauth-policy.errors.ts` (`tenantNotFound`, `badAgentsInput`, `policyConflict`: same codes
-  and messages as before). `oauth-policy.schema.ts`, the rules files and `health.resolver.ts` are imported by file, not
+  and messages as before). `oauth-policy.schema.ts` and `health.resolver.ts` are imported by file, not
   through the barrels (the tenants model, the OAuth ports and `config/telemetry` would close a cycle). `health` needs no
   service: it is a probe (`health.ready.ts`), a version (`health.version.ts`) and a resolver (`health.resolver.ts`).
   Behaviour is unchanged.

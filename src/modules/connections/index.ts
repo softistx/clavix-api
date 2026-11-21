@@ -1,21 +1,13 @@
-// The module's import surface. The resolver is not here: `modules/index.ts`
-// imports it by file, so this barrel never loads the config wiring back.
+// The module's import surface. Imported by file: `connections.resolver`
+// (`modules/index.ts`), `connections.console-resolver`
+// (`console/modules/index.ts`), `connections.discovery` and
+// `connections.service` (`config/connections.ts`, which closes a cycle with
+// `config/users.ts` through the barrel) and `connections.errors`
+// (`i18n/codes.ts`).
 
-export type { IssuerChecker, IssuerSummary } from "./connections.discovery";
-export { discoverIssuer } from "./connections.discovery";
-export { ConnectionError } from "./connections.errors";
-export type { ConnectionDoc } from "./connections.model";
 export { ConnectionsService } from "./connections.service";
 export {
-  type OpenedSession,
   requireNoSso,
   requireNoSsoForUser,
   revokeIfSso,
 } from "./connections.sso-gate";
-export type {
-  ClaimsInput,
-  ConnectionInput,
-  ConnectionPatch,
-  LinkCounter,
-} from "./connections.types";
-export { txtNameOf } from "./connections.utils";

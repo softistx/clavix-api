@@ -3,7 +3,7 @@ import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { ObjectId } from "mongodb";
 import { oauthDb } from "@/config/oauth-db";
 import { relatedOriginsOf } from "@/modules/domains";
-import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
+import { oauthPolicySchema } from "@/modules/oauth-policy";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { createTenantResolver, type TenantRecord } from "@/tenancy/resolver";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";

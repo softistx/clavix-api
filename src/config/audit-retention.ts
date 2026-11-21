@@ -1,7 +1,4 @@
-import {
-  enforceRetention,
-  type RetentionReport,
-} from "@/modules/audit/audit.retention";
+import { enforceRetention, type RetentionReport } from "@/modules/audit";
 import { adminEventReader } from "./admin-events";
 import { authEventsService } from "./audit";
 import { warn } from "./runtime";

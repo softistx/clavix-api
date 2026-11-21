@@ -4,7 +4,7 @@ import type {
   PendingInvitation,
   TenantInvitations,
 } from "@/modules/invitations";
-import { adminScope } from "@/modules/invitations/invitations.rules";
+import { adminScope } from "@/modules/invitations";
 
 const toAdminInvitation = (invitation: PendingInvitation): AdminInvitation => ({
   ...invitation,
