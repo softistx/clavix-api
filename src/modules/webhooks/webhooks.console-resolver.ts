@@ -2,92 +2,21 @@ import { ObjectId } from "mongodb";
 import { tenantsService } from "@/config/tenancy";
 import { webhookDelivery } from "@/config/webhooks";
 import { webhooksService } from "@/config/webhooks-service";
+import { catalogTenant } from "@/console/modules/catalog-support";
+import { refusal } from "@/console/modules/tenants/errors";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { effectiveQuotas } from "@/modules/tenants";
+import { refusing } from "./webhooks.console-support";
+import { WebhookError } from "./webhooks.errors";
+import { WEBHOOK_EVENT_TYPES } from "./webhooks.events";
 import {
-  WEBHOOK_EVENT_TYPES,
-  type WebhookEndpointDoc,
-  WebhookError,
-} from "@/modules/webhooks";
-import { fail } from "@/shared/errors";
-import type { Audits } from "../../audit";
-import { type Guards, onTenant } from "../../guard";
-import { catalogTenant } from "../catalog-support";
-import { tenantArg } from "../ids";
-import { refusal } from "../tenants/errors";
-import type { WebhookEndpointParent } from "./parent";
+  attemptShape,
+  endpointShape,
+  endpointTarget,
+  webhooksKey,
+} from "./webhooks.utils";
 
-const view = onTenant("view", tenantArg);
-const edit = onTenant("edit", tenantArg);
-
-export const webhooksGuards: Guards = {
-  "Query.webhookEndpoints": view,
-  "Query.webhookEndpoint": view,
-  "Query.webhookEventTypes": view,
-  "Mutation.createWebhookEndpoint": edit,
-  "Mutation.updateWebhookEndpoint": edit,
-  "Mutation.deleteWebhookEndpoint": edit,
-  "Mutation.rollWebhookSecret": edit,
-  "Mutation.sendTestWebhook": edit,
-};
-
-export const webhooksAudits: Audits = {
-  "Mutation.createWebhookEndpoint": "webhook.create",
-  "Mutation.updateWebhookEndpoint": "webhook.update",
-  "Mutation.deleteWebhookEndpoint": "webhook.delete",
-  "Mutation.rollWebhookSecret": "webhook.rollSecret",
-  "Mutation.sendTestWebhook": "webhook.test",
-};
-
-const STATUS = { BAD_USER_INPUT: 400, NOT_FOUND: 404 } as const;
-
-// The service's refusals as the contract's GraphQL errors (the quota one too).
-async function refusing<T>(call: () => Promise<T>): Promise<T> {
-  try {
-    return await call();
-  } catch (error) {
-    if (error instanceof WebhookError) {
-      throw fail(error.code, error.message, {
-        status: STATUS[error.code],
-        field: error.field,
-      });
-    }
-    throw refusal(error);
-  }
-}
-
-// What an admin event names: the endpoint and its tenant. Never the URL or a secret.
-const target = (tenantId: ObjectId, id: string) => ({
-  type: "webhookEndpoint",
-  id,
-  tenantId: tenantId.toHexString(),
-});
-
-/** The `Exclusive` key of a tenant's endpoints (the quota count and the insert are not atomic). */
-const webhooksKey = (tenant: { _id: ObjectId }) =>
-  `console:webhooks:${tenant._id.toHexString()}`;
-
-const shape = (doc: WebhookEndpointDoc): WebhookEndpointParent => ({
-  tenantId: doc.tenantId.toHexString(),
-  id: doc._id.toHexString(),
-  url: doc.url,
-  description: doc.description,
-  types: doc.types,
-  enabled: doc.enabled,
-  disabledReason:
-    doc.disabledReason === null
-      ? null
-      : ((doc.disabledReason === "givenUp" ? "GIVEN_UP" : "MANUAL") as
-          | "GIVEN_UP"
-          | "MANUAL"),
-  consecutiveGiveUps: doc.consecutiveGiveUps,
-  secrets: doc.secrets.map(({ createdAt, expiresAt }) => ({
-    createdAt,
-    expiresAt,
-  })),
-  createdAt: doc.createdAt,
-  updatedAt: doc.updatedAt,
-});
+export { webhooksAudits, webhooksGuards } from "./webhooks.console-guards";
 
 export const webhooks: Resolvers = {
   WebhookEndpoint: {
@@ -99,25 +28,14 @@ export const webhooks: Resolvers = {
           endpoint.id,
           first ?? undefined,
         )
-      ).map((doc) => ({
-        id: doc._id.toHexString(),
-        eventId: doc.eventId,
-        type: doc.type,
-        attempt: doc.attempt,
-        status: doc.status,
-        error: doc.error,
-        durationMs: doc.durationMs,
-        delivered: doc.delivered,
-        willRetry: doc.willRetry,
-        at: doc.at,
-      })),
+      ).map(attemptShape),
   },
   Query: {
     webhookEndpoints: async (_, { tenantId }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
       return (
         await webhooksService.listEndpoints(tenant._id.toHexString())
-      ).map(shape);
+      ).map(endpointShape);
     },
     webhookEndpoint: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -125,7 +43,7 @@ export const webhooks: Resolvers = {
         tenant._id.toHexString(),
         id,
       );
-      return found === undefined ? null : shape(found);
+      return found === undefined ? null : endpointShape(found);
     },
     webhookEventTypes: async (_, { tenantId }, ctx) => {
       await catalogTenant(ctx, tenantId);
@@ -152,9 +70,12 @@ export const webhooks: Resolvers = {
       );
       await ctx.audit(
         "webhook.create",
-        target(tenant._id, created.endpoint._id.toHexString()),
+        endpointTarget(tenant._id, created.endpoint._id.toHexString()),
       );
-      return { endpoint: shape(created.endpoint), secret: created.secret };
+      return {
+        endpoint: endpointShape(created.endpoint),
+        secret: created.secret,
+      };
     },
     updateWebhookEndpoint: async (_, { tenantId, id, input }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -166,8 +87,8 @@ export const webhooks: Resolvers = {
           enabled: input.enabled ?? undefined,
         }),
       );
-      await ctx.audit("webhook.update", target(tenant._id, id));
-      return shape(updated);
+      await ctx.audit("webhook.update", endpointTarget(tenant._id, id));
+      return endpointShape(updated);
     },
     deleteWebhookEndpoint: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -185,7 +106,7 @@ export const webhooks: Resolvers = {
       if (ObjectId.isValid(id)) {
         await ctx.audit(
           "webhook.delete",
-          target(tenant._id, new ObjectId(id).toHexString()),
+          endpointTarget(tenant._id, new ObjectId(id).toHexString()),
         );
       }
       return removed;
@@ -202,8 +123,11 @@ export const webhooks: Resolvers = {
           ),
         ),
       );
-      await ctx.audit("webhook.rollSecret", target(tenant._id, id));
-      return { endpoint: shape(rolled.endpoint), secret: rolled.secret };
+      await ctx.audit("webhook.rollSecret", endpointTarget(tenant._id, id));
+      return {
+        endpoint: endpointShape(rolled.endpoint),
+        secret: rolled.secret,
+      };
     },
     sendTestWebhook: async (_, { tenantId, id }, ctx) => {
       const tenant = await catalogTenant(ctx, tenantId);
@@ -231,7 +155,7 @@ export const webhooks: Resolvers = {
         hex,
         endpoint._id.toHexString(),
       );
-      await ctx.audit("webhook.test", target(tenant._id, id));
+      await ctx.audit("webhook.test", endpointTarget(tenant._id, id));
       return eventId;
     },
   },

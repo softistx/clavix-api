@@ -172,7 +172,7 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   server by its issuer URL and repeats the idempotent `revokeAll`. With no Redis, or when the job cannot be
   added, the original error fails the sign-in as before.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
-- **Console** (`src/console/modules/sign-in-methods/`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
+- **Console** (`src/modules/sign-in-methods/`, folded in by A15: `sign-in-methods.console.graphqls`, `sign-in-methods.console-resolver.ts` with its `-guards` and `-support` (`issuerFor`, `policyOf`), the enum maps and `policyShape` in `sign-in-methods.utils.ts`, `sign-in-methods.console.spec.ts`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
 - **Console users** (`src/modules/users/`, folded in by A13: `users.console.graphqls`, `users.console-resolver.ts` with its `-queries`, `-mutations`, `-support` and `-guards` (guards and audits maps), `users.data-loader.ts`, `users.owners.ts`, `users.errors.ts`, `users.utils.ts`, `users.types.ts`; the console schema loads `src/modules/**/*.console.graphqls` beside `src/console/**/*.graphqls`, the hosted one leaves both out): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port, implemented by `UsersService` (`users.service.ts`, one service per domain: users, sessions, second factor, invitations and grants; built in `src/config/console.ts` over a `UsersSource`, since it needs the OAuth handle), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `deviceOptions` in `src/modules/auth/auth.utils.ts` on the e-mail code and magic-link sign-ins). Each mutation records its admin event (`user.*`; ids only), repeats included.
 - **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; `keys:reseal` wraps them again under the first).
 
@@ -346,7 +346,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
   delete, `revokeUserSessions`, `setUserEmailVerified`, `resetUserSecondFactor`). A new user mutation goes through it with its `OwnerChange` kind.
 - **A slice adds a module** under `src/modules/<name>/` (`<name>.console.graphqls`, `<name>.console-resolver.ts`,
   `<name>.console-guards.ts` with the guards and the audit action of each mutation: "Admin events" below) and lists it in
-  `src/console/modules/index.ts`. The modules not yet folded (A15, A16) still sit in `src/console/modules/<name>/`.
+  `src/console/modules/index.ts`. The modules not yet folded (A16) still sit in `src/console/modules/<name>/`.
 - **`clients` and `resources`** (issue #9) are thin: their console resolvers (A14: `<name>.console-resolver.ts`, with
   `-guards`, `-support`, and for resources `-queries` and `-mutations`; the SDL is `<name>.console.graphqls`, the shapes
   and the input mapping `<name>.utils.ts`) call `ClientsService`
@@ -611,7 +611,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   Dynamic registration is per tenant (`oauth.agents.dynamic`); `tenant-state.ts` refuses `/register` for a suspended tenant (`REFUSED_PATHS`).
   `subjectAgents` (a client's token exchange rules) lets it exchange the tokens of the tenant's agents; `AgentCheckFor` (`src/oauth/ports.ts`) tells an agent apart, from the tenant's own scope.
 
-## Custom domains (`src/modules/domains`, `src/console/modules/domains`)
+## Custom domains (`src/modules/domains`, console side folded in by A15: `domains.console.graphqls`, `domains.console-resolver.ts`, `-guards`, `-support`)
 
 A tenant adds a host (`addDomain`), publishes `_clavix.<host> TXT clavix-verify=<token>`, then
 `verifyDomain` reads it through the `TxtResolver` port (`domains.dns.ts`; specs inject a fake, only
@@ -727,7 +727,7 @@ comparison is `domains.check.ts`.
 - `/.well-known/webauthn` on a live tenant's slug host lists its verified domains' origins
   (Related Origins). The passkey layer accepts the same origins (`relatedOriginsOf`, `src/modules/domains/domains.well-known.ts`).
 
-## Webhooks (`src/modules/webhooks`, `src/console/modules/webhooks`, `src/config/webhooks.ts`)
+## Webhooks (`src/modules/webhooks`, console side folded in by A15: `webhooks.console.graphqls`, `webhooks.console-resolver.ts`, `-guards`, `-support`, `-parent`; `src/config/webhooks.ts`)
 
 A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Layout (A6): `webhooks.model.ts` (both collections), `.errors.ts`, `.rules.ts` (input rules, the roll),
@@ -785,7 +785,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   reads them (parent `WebhookEndpointParent` carries the tenant id); deleting an endpoint deletes its attempts.
 - Admin events: `webhook.create|update|delete|rollSecret|test`; none carries a secret.
 
-## Enterprise OIDC connections (`src/modules/connections`, `src/console/modules/connections`, `src/config/connections.ts`)
+## Enterprise OIDC connections (`src/modules/connections`, console side folded in by A15: `connections.console.graphqls`, `connections.console-resolver.ts` with its `-queries`, `-mutations`, `-guards`, `-support`; `src/config/connections.ts`)
 
 - Layout (A4): `connections.resolver.ts` (+ `.resolver-support.ts`), `.errors.ts`, `.rules.ts`, `.utils.ts`,
   `.types.ts`, `.record.ts`, `.discovery.ts`, `.sso-gate.ts`, and `connections.service.ts`: one service per domain

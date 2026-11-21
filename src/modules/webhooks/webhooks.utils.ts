@@ -1,8 +1,11 @@
+import type { ObjectId } from "mongodb";
+import type { WebhookEndpointParent } from "./webhooks.console-parent";
 import type { EndpointSecret } from "./webhooks.model";
 import { DELIVERIES_PER_ENDPOINT } from "./webhooks.model";
 import type {
   AttemptRecord,
   DeliveryEndpoint,
+  WebhookDeliveryDoc,
   WebhookEndpointDoc,
 } from "./webhooks.types";
 
@@ -49,4 +52,54 @@ export const attemptDoc = (attempt: AttemptRecord, at: Date) => ({
   delivered: attempt.delivered,
   willRetry: attempt.willRetry,
   at,
+});
+
+/** What an admin event names: the endpoint and its tenant. Never the URL or a secret. */
+export const endpointTarget = (tenantId: ObjectId, id: string) => ({
+  type: "webhookEndpoint",
+  id,
+  tenantId: tenantId.toHexString(),
+});
+
+/** The `Exclusive` key of a tenant's endpoints (the quota count and the insert are not atomic). */
+export const webhooksKey = (tenant: { _id: ObjectId }) =>
+  `console:webhooks:${tenant._id.toHexString()}`;
+
+/** An endpoint as the console shows it (its tenant's id kept for `deliveries`). */
+export const endpointShape = (
+  doc: WebhookEndpointDoc,
+): WebhookEndpointParent => ({
+  tenantId: doc.tenantId.toHexString(),
+  id: doc._id.toHexString(),
+  url: doc.url,
+  description: doc.description,
+  types: doc.types,
+  enabled: doc.enabled,
+  disabledReason:
+    doc.disabledReason === null
+      ? null
+      : ((doc.disabledReason === "givenUp" ? "GIVEN_UP" : "MANUAL") as
+          | "GIVEN_UP"
+          | "MANUAL"),
+  consecutiveGiveUps: doc.consecutiveGiveUps,
+  secrets: doc.secrets.map(({ createdAt, expiresAt }) => ({
+    createdAt,
+    expiresAt,
+  })),
+  createdAt: doc.createdAt,
+  updatedAt: doc.updatedAt,
+});
+
+/** One delivery attempt as the console shows it. */
+export const attemptShape = (doc: WebhookDeliveryDoc) => ({
+  id: doc._id.toHexString(),
+  eventId: doc.eventId,
+  type: doc.type,
+  attempt: doc.attempt,
+  status: doc.status,
+  error: doc.error,
+  durationMs: doc.durationMs,
+  delivered: doc.delivered,
+  willRetry: doc.willRetry,
+  at: doc.at,
 });

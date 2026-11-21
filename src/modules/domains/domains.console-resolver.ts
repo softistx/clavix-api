@@ -1,82 +1,11 @@
-import type { ObjectId } from "mongodb";
 import { domainsService, tenantsService } from "@/config/tenancy";
+import { catalogTenant } from "@/console/modules/catalog-support";
 import type { Resolvers } from "@/generated/console/resolvers";
-import type { DomainDoc, DomainError } from "@/modules/domains";
-import { DomainError as DomainErrorClass, txtNameOf } from "@/modules/domains";
 import { effectiveQuotas } from "@/modules/tenants";
-import { fail } from "@/shared/errors";
-import type { Audits } from "../../audit";
-import { type Guards, onTenant } from "../../guard";
-import { catalogTenant } from "../catalog-support";
-import { tenantArg } from "../ids";
-import { refusal } from "../tenants/errors";
+import { refusing } from "./domains.console-support";
+import { domainsKey, shape, target } from "./domains.utils";
 
-const view = onTenant("view", tenantArg);
-const edit = onTenant("edit", tenantArg);
-
-export const domainsGuards: Guards = {
-  "Query.domains": view,
-  "Query.domain": view,
-  "Mutation.addDomain": edit,
-  "Mutation.verifyDomain": edit,
-  "Mutation.removeDomain": edit,
-  "Mutation.setPrimaryDomain": edit,
-};
-
-export const domainsAudits: Audits = {
-  "Mutation.addDomain": "domain.add",
-  "Mutation.verifyDomain": "domain.verify",
-  "Mutation.removeDomain": "domain.remove",
-  "Mutation.setPrimaryDomain": "domain.setPrimary",
-};
-
-const STATUS = {
-  BAD_USER_INPUT: 400,
-  NOT_FOUND: 404,
-  DOMAIN_TAKEN: 409,
-  DOMAIN_PRIMARY: 409,
-  DOMAIN_NOT_VERIFIED: 409,
-  VERIFY_COOLDOWN: 429,
-} as const;
-
-// The service's refusals as the contract's GraphQL errors (the quota one too).
-async function refusing<T>(call: () => Promise<T>): Promise<T> {
-  try {
-    return await call();
-  } catch (error) {
-    if (error instanceof DomainErrorClass) {
-      const failure: DomainError = error;
-      throw fail(failure.code, failure.message, {
-        status: STATUS[failure.code],
-        retryAfter: failure.retryAfter,
-        field: failure.code === "BAD_USER_INPUT" ? "host" : undefined,
-      });
-    }
-    throw refusal(error);
-  }
-}
-
-// What an admin event names: the claim's id and its tenant. Never the token.
-const target = (tenantId: ObjectId, id: string) => ({
-  type: "domain",
-  id,
-  tenantId: tenantId.toHexString(),
-});
-
-/** The `Exclusive` key of a tenant's domain claims. */
-const domainsKey = (tenant: { _id: ObjectId }) =>
-  `console:domains:${tenant._id.toHexString()}`;
-
-const shape = (doc: DomainDoc) => ({
-  id: doc._id.toHexString(),
-  host: doc.host,
-  status: doc.status.toUpperCase() as "PENDING" | "VERIFIED" | "UNVERIFIED",
-  txtRecord: { name: txtNameOf(doc.host), value: doc.txtToken },
-  primary: doc.primary,
-  verifiedAt: doc.verifiedAt,
-  checkedAt: doc.checkedAt,
-  createdAt: doc.createdAt,
-});
+export { domainsAudits, domainsGuards } from "./domains.console-guards";
 
 export const domains: Resolvers = {
   Query: {
