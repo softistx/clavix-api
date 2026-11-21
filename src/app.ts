@@ -123,7 +123,7 @@ export function createApp(
       });
     })
     .all(LOGO_PATH, ({ request }) => serveLogo(request))
-    // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/tls-ask.ts).
+    // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/domains.tls-ask.ts).
     .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
     .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
     .bodyLimit(BODY_LIMIT);
