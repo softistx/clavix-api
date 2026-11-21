@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { ConsoleContext } from "../../context";
-import { createExclusive } from "../../exclusive";
-import type { Role } from "../../model";
-import { keepOwners, type OwnerChange } from "./operators";
+import type { ConsoleContext } from "@/console/context";
+import { createExclusive } from "@/console/exclusive";
+import type { Role } from "@/console/model";
+import { keepOwners, type OwnerChange } from "./users.owners";
 
 const PLATFORM = { slug: "clavix" };
 

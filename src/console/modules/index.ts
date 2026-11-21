@@ -1,5 +1,10 @@
 import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/console/resolvers";
+import {
+  users,
+  usersAudits,
+  usersGuards,
+} from "@/modules/users/users.console-resolver";
 import type { Audits } from "../audit";
 import type { Guards } from "../guard";
 import { admins, adminsAudits, adminsGuards } from "./admins";
@@ -26,8 +31,6 @@ import {
   signInMethodsGuards,
 } from "./sign-in-methods";
 import { tenants, tenantsAudits, tenantsGuards } from "./tenants";
-import { users, usersAudits, usersGuards } from "./users";
-import { sessions, sessionsAudits, sessionsGuards } from "./users/sessions";
 import { webhooks, webhooksAudits, webhooksGuards } from "./webhooks";
 
 // One entry per module: its resolvers, the guard of each root field it adds
@@ -46,7 +49,6 @@ export const resolvers: Resolvers = mergeResolvers([
   roles,
   tenants,
   users,
-  sessions,
   webhooks,
   connections,
 ]);
@@ -63,7 +65,6 @@ export const guards: Guards = {
   ...signInMethodsGuards,
   ...oauthPolicyGuards,
   ...usersGuards,
-  ...sessionsGuards,
   ...webhooksGuards,
   ...connectionsGuards,
 };
@@ -79,7 +80,6 @@ export const audits: Audits = {
   ...signInMethodsAudits,
   ...oauthPolicyAudits,
   ...usersAudits,
-  ...sessionsAudits,
   ...webhooksAudits,
   ...connectionsAudits,
 };

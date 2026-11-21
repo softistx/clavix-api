@@ -7,9 +7,9 @@ import {
   consoleOrigin,
 } from "@/console/identity";
 import { createJanusAdmins } from "@/console/modules/admins/janus-admins";
-import { createJanusUsers } from "@/console/modules/users/janus-users";
 import type { ConsoleDeps } from "@/console/plugin";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { UsersService } from "@/modules/users/users.service";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
 import { adminEventReader, adminEventRecorder } from "./admin-events";
@@ -63,7 +63,7 @@ export function createConsoleDeps(
     }),
     access,
     admins: createJanusAdmins(invitationsOf(clavixTenant)),
-    users: createJanusUsers({
+    users: new UsersService({
       janusOf: async (id) => {
         const tenant = await resolveById(id);
         return tenant === null ? null : forTenant(tenant);

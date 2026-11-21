@@ -1,13 +1,13 @@
 import { denial } from "@softistx/janus-graphql";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { fail } from "@/shared/errors";
-import type { ConsoleContext } from "../../context";
+import type { ConsoleContext } from "@/console/context";
 import {
   lastOwnerError,
   membersKey,
   otherLiveOwners,
   PLATFORM_OWNERS_KEY,
-} from "../admins/service";
+} from "@/console/modules/admins/service";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { fail } from "@/shared/errors";
 
 /**
  * The tenants where the user holds any role, sorted: a fixed lock order, so
