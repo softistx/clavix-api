@@ -14,8 +14,12 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { originOf, rpIdOf } from "@/modules/users/rp";
-import { buildTenantJanus, SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import {
+  buildTenantJanus,
+  originOf,
+  rpIdOf,
+  SESSION_COOKIE,
+} from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 
 const app = createApp();

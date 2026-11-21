@@ -7,8 +7,8 @@ import type {
 } from "@/console/context";
 import { TenantUnavailableError } from "@/modules/invitations/invitations.errors";
 import { userScope } from "@/modules/invitations/invitations.rules";
-import type { TenantJanus } from "./tenant-janus";
 import { gone } from "./users.errors";
+import type { TenantJanus } from "./users.tenant-janus";
 import type { UsersSource } from "./users.types";
 import { view } from "./users.utils";
 

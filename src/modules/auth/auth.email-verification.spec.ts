@@ -26,7 +26,7 @@ import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import { VERIFY_EMAIL_PATH } from "@/mail/tenant-mail";
 import { registerClient } from "@/modules/clients";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";

@@ -3,7 +3,7 @@ import { denial } from "@softistx/janus-graphql";
 import type { GraphQLSchema } from "graphql";
 import { ObjectId } from "mongodb";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { requireVerifiedEmail } from "@/modules/users/verified-email";
+import { requireVerifiedEmail } from "@/modules/users";
 import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "./context";
 import type { Permission } from "./model";

@@ -26,7 +26,7 @@ import {
   socialProvidersOf,
 } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { socialOf } from "@/modules/users/tenant-janus";
+import { socialOf } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 
 const origin = {

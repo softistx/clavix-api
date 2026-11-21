@@ -21,7 +21,7 @@ import { usageService } from "@/config/usage";
 import { settled } from "@/modules/auth";
 import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 
 // The second-factor challenge on the sign-in paths mfa.spec does not walk

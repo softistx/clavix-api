@@ -14,10 +14,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import {
-  MAGIC_LINK_LIFESPAN,
-  SESSION_COOKIE,
-} from "@/modules/users/tenant-janus";
+import { MAGIC_LINK_LIFESPAN, SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
 import { settled } from "./auth.outbox";
 

@@ -27,7 +27,7 @@ import {
 import { grantsRevoke } from "@/modules/consent/consent.queue";
 import { domainRecheck } from "@/modules/domains/domains.recheck-queue";
 import { tlsAskLimit } from "@/modules/domains/domains.tls-limit";
-import { keyRotation } from "@/modules/keys/queue";
+import { keyRotation } from "@/modules/keys";
 import {
   type PasskeyLimitConfig,
   passkeyLimits,

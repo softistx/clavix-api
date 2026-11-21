@@ -6,8 +6,7 @@ import { warn } from "@/config/runtime";
 import { signInPolicyService } from "@/config/sign-in-policy";
 import { tenantsService } from "@/config/tenancy";
 import { webhooksService } from "@/config/webhooks-service";
-import { resealAllTenants, resealExitCode } from "@/modules/keys";
-import { RESEAL_USAGE } from "@/modules/keys/cli";
+import { RESEAL_USAGE, resealAllTenants, resealExitCode } from "@/modules/keys";
 
 // Step 3 of a master-key rotation (docs/operations.md, "Rotating the master
 // key"): seals again, under the first key of CLAVIX_KEYS_MASTER_KEY (a

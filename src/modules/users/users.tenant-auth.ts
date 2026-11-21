@@ -4,7 +4,7 @@ import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import {
   createTenantJanusIssuers,
   type TenantJanusOptions,
-} from "./tenant-janus";
+} from "./users.issuers";
 
 /**
  * The real `AuthFor` and `ClaimsFor` ports (slice 1.5): both look a user up in

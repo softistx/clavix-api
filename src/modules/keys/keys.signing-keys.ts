@@ -6,10 +6,8 @@ import {
 } from "@softistx/janus-oauth";
 import { createMongoSigningKeys } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
-import type { KeyGenerations } from "./generations";
-
-const masterKeys = (key: Uint8Array | readonly Uint8Array[]) =>
-  key instanceof Uint8Array ? key : ([...key] as [Uint8Array, ...Uint8Array[]]);
+import type { KeyGenerations } from "./keys.generations";
+import { encryptionKeyOf, observed } from "./keys.utils";
 
 export interface TenantKeysOptions {
   db: Db;
@@ -42,7 +40,7 @@ export function createTenantKeys({
     let store = stores.get(tenantId);
     if (store === undefined) {
       store = createMongoSigningKeys(db, {
-        encryptionKey: masterKeys(masterKey),
+        encryptionKey: encryptionKeyOf(masterKey),
         partition: tenantId,
       });
       assertSigningKeyStore(store, `signing keys of tenant ${tenantId}`);
@@ -59,29 +57,6 @@ export function createTenantKeys({
   }
 
   return { signingKeysFor, jwksFor };
-}
-
-// The store with every write that changes the published set counted.
-function observed(
-  store: SigningKeyStore,
-  tenantId: string,
-  generations: KeyGenerations,
-): SigningKeyStore {
-  const counted =
-    <A extends unknown[]>(write: (...args: A) => Promise<boolean>) =>
-    async (...args: A) => {
-      const changed = await write(...args);
-      if (changed) generations.bump(tenantId);
-      return changed;
-    };
-  return {
-    findKeys: (now) => store.findKeys(now),
-    findCurrentKey: (now) => store.findCurrentKey(now),
-    findPublicKeys: (now) => store.findPublicKeys(now),
-    insertKey: counted((key) => store.insertKey(key)),
-    promote: counted((kid, at, until) => store.promote(kid, at, until)),
-    retire: counted((kid, at, until) => store.retire(kid, at, until)),
-  };
 }
 
 export type TenantKeys = ReturnType<typeof createTenantKeys>;

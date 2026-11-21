@@ -1,5 +1,5 @@
 import type { Resolvers } from "@/generated/graphql/resolvers";
-import { homeRealmOf } from "@/modules/users/tenant-janus";
+import { homeRealmOf } from "@/modules/users";
 import {
   homeRealmScope,
   offeredConnection,

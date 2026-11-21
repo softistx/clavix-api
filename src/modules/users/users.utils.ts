@@ -1,5 +1,5 @@
 import type { TenantUserView, UserGrantView } from "@/console/context";
-import type { TenantJanus } from "./tenant-janus";
+import type { TenantJanus } from "./users.tenant-janus";
 import type { TenantUserParent } from "./users.types";
 
 type PoolUser = NonNullable<Awaited<ReturnType<TenantJanus["findUser"]>>>;

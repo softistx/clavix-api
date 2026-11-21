@@ -12,3 +12,10 @@ export const rpIdOf = (tenant: Pick<ResolvedTenant, "slugIssuer">): string =>
 /** The origin a WebAuthn response of a tenant comes from: `https://<slug>.<CLAVIX_DOMAIN>` (`http://<slug>.clavix.localhost` in development). */
 export const originOf = (tenant: Pick<ResolvedTenant, "slugIssuer">): string =>
   new URL(tenant.slugIssuer).origin;
+
+/** A short stable digest of the related origins, for the instance cache's version. */
+export const fingerprintOf = (origins: readonly string[]): string =>
+  new Bun.CryptoHasher("sha256")
+    .update([...origins].sort().join("\n"))
+    .digest("hex")
+    .slice(0, 12);

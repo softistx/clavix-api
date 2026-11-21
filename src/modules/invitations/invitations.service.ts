@@ -2,7 +2,7 @@ import { denial } from "@softistx/janus-graphql";
 import { GraphQLError } from "graphql";
 import type { Context } from "@/http/context";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import type { TenantJanus } from "@/modules/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users";
 import { requireLive } from "@/tenancy/live";
 import {
   goneCode,

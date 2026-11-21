@@ -7,6 +7,7 @@ import { clientsService } from "@/config/clients";
 import { connectionsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { invitationsService } from "@/config/invitations";
+import { keysService } from "@/config/keys";
 import { mfaService } from "@/config/mfa";
 import { oauthPolicyService } from "@/config/oauth-policy";
 import { passkeysService } from "@/config/passkeys";
@@ -15,6 +16,7 @@ import { rolesService } from "@/config/roles";
 import { signInPolicyService } from "@/config/sign-in-policy";
 import { domainsService, tenantsService } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
+import { usersService } from "@/config/users";
 import { webhooksService } from "@/config/webhooks-service";
 
 /**
@@ -35,6 +37,7 @@ export const services = () => ({
   consent: consentService,
   domains: domainsService,
   invitations: invitationsService,
+  keys: keysService,
   mfa: mfaService,
   oauthPolicy: oauthPolicyService,
   passkeys: passkeysService,
@@ -43,5 +46,6 @@ export const services = () => ({
   signInPolicy: signInPolicyService,
   tenants: tenantsService,
   usage: usageService,
+  users: usersService,
   webhooks: webhooksService,
 });

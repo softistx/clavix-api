@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Passkey } from "@softistx/janus";
-import type { TenantJanus } from "@/modules/users/tenant-janus";
+import type { TenantJanus } from "@/modules/users";
 import {
   ceremonyOut,
   currentOf,

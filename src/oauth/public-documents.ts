@@ -1,4 +1,4 @@
-import type { KeyGenerations } from "@/modules/keys/generations";
+import type { KeyGenerations } from "@/modules/keys";
 import type { TenantResolver } from "@/tenancy/resolver";
 
 /** The documents a relying party fetches all the time and that change rarely. */

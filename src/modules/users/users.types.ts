@@ -1,6 +1,6 @@
 import type { OAuthGrants } from "@softistx/janus-oauth";
 import type { TenantInvitations } from "@/modules/invitations/invitations.types";
-import type { TenantJanus } from "./tenant-janus";
+import type { TenantJanus } from "./users.tenant-janus";
 
 /** Where `UsersService` reaches a tenant's pool; `null` for a tenant that is gone or suspended. */
 export interface UsersSource {

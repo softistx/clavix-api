@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { StoreFailure } from "@softistx/janus";
 import { mongo } from "@/config/db";
 import { clearDatabase } from "~/db";
-import { ensureSigningKey } from "./rotation";
-import { createTenantKeys } from "./signing-keys";
+import { ensureSigningKey } from "./keys.service";
+import { createTenantKeys } from "./keys.signing-keys";
 
 const masterKey = new Uint8Array(32).fill(1);
 const keys = createTenantKeys({ db: mongo.db, masterKey });

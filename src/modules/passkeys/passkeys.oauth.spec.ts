@@ -18,8 +18,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import { originOf, rpIdOf } from "@/modules/users/rp";
-import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";

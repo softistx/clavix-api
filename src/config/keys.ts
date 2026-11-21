@@ -45,6 +45,14 @@ export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {
   await ensureSigningKey(signingKeysFor, tenantId, clock());
 };
 
+/** The keys module as the services registry hands it out: the tenants' signing keys and JWKS, the generation counter and the first-key step. */
+export const keysService = {
+  signingKeysFor,
+  jwksFor,
+  generations: keyGenerations,
+  ensureSigningKey: ensureSigningKeyOf,
+};
+
 /**
  * The secret of the DPoP server nonces (RFC 9449 §8): HKDF-SHA256 of the first
  * master key, no salt, info `dpop-nonce`, 32 bytes, base64url. The nonces are

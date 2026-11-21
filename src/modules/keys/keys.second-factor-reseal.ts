@@ -1,32 +1,9 @@
 import { janus, type SealingKey } from "@softistx/janus";
 import { createMongoStores } from "@softistx/janus-mongo";
 import type { Db } from "mongodb";
-import { SESSION, SESSION_COOKIE } from "@/modules/users/tenant-janus";
-import { userSchema } from "@/modules/users/user";
-
-/** What one tenant's pass over the TOTP secrets did (janus's `secondFactor.reseal`, summed over its batches). */
-export interface SecondFactorResealCounts {
-  scanned: number;
-  resealed: number;
-  current: number;
-  /** Changed meanwhile: run again. */
-  skipped: number;
-  /** No key of the keyring opens them: left as they are. */
-  unreadable: number;
-}
-
-export const emptySecondFactorCounts = (): SecondFactorResealCounts => ({
-  scanned: 0,
-  resealed: 0,
-  current: 0,
-  skipped: 0,
-  unreadable: 0,
-});
-
-/** Seals one partition's TOTP secrets again; the whole pass, batch after batch. */
-export type ResealSecondFactor = (
-  partition: string,
-) => Promise<SecondFactorResealCounts>;
+import { SESSION, SESSION_COOKIE, userSchema } from "@/modules/users";
+import type { ResealSecondFactor } from "./keys.types";
+import { emptySecondFactorCounts, sealKeyId } from "./keys.utils";
 
 /** Batch size of the pass (janus's maximum). */
 const BATCH = 100;
@@ -60,3 +37,37 @@ export const resealSecondFactorOf =
     } while (after !== null);
     return total;
   };
+
+/** Counts, after the pass, what the users of one partition still hold under an older key (verification of `secondFactor.reseal`). */
+export async function countSecondFactorSeals(
+  db: Db,
+  partition: string,
+  firstKeyId: string,
+) {
+  const out = { sealed: 0, behind: 0, recoveryCodesBehind: 0 };
+  const users = db
+    .collection<{
+      secondFactor?: { secret?: string; recoveryCodes?: string[] } | null;
+    }>("partitionedUsers")
+    .find(
+      { partition, "secondFactor.secret": { $exists: true } },
+      {
+        projection: {
+          "secondFactor.secret": 1,
+          "secondFactor.recoveryCodes": 1,
+        },
+      },
+    );
+  for await (const user of users) {
+    const secretKeyId = sealKeyId(user.secondFactor?.secret);
+    if (secretKeyId !== null) {
+      out.sealed += 1;
+      if (secretKeyId !== firstKeyId) out.behind += 1;
+    }
+    for (const code of user.secondFactor?.recoveryCodes ?? []) {
+      const keyId = sealKeyId(code);
+      if (keyId !== null && keyId !== firstKeyId) out.recoveryCodesBehind += 1;
+    }
+  }
+  return out;
+}

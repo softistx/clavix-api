@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { callbackUrlOf } from "@/modules/sign-in-methods";
-import { connectionIdOfCallbackUrl } from "./tenant-janus";
+import { connectionIdOfCallbackUrl } from "./users.sso";
 
 describe("the callback URL of a connection (nxgt-janus#975)", () => {
   test("each connection has its own URL, and its id reads back from the path", () => {
