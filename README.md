@@ -228,7 +228,7 @@ curl -s https://api.clavix.example/console/graphql \
 ### Admins of a tenant
 
 A tenant's admins are users of the `clavix` tenant holding `owner`, `admin` or `viewer` on it.
-`memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `inviteAdmin(tenantId,
+`memberships(tenantId)` and `adminInvitations(tenantId)` need `view` on the tenant; `platformOperators` lists the users holding a role on the platform itself (owners first, strongest role per user, gone accounts left out) and needs `view` on the platform (a tenant-only admin is refused); `inviteAdmin(tenantId,
 email, role)`, `changeMembership`, `removeMembership`, `resendAdminInvitation` and `revokeAdminInvitation` need `manage` (the
 tenant's owner or a platform owner). An invitation is a janus invitation of the `clavix` tenant (scope =
 `admin:<the managed tenant's id>`, role = the console role; any other scope grants no console role) and the e-mail links to `<clavix issuer>/invitation?code=`.

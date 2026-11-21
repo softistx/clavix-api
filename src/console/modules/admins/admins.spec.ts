@@ -964,3 +964,45 @@ describe("resending an invitation", () => {
     expect(found.map((e) => e.actor)).toContain(ownA2);
   });
 });
+
+describe("platformOperators", () => {
+  const query = "{ platformOperators { user { id } role } }";
+  let opOwner = "";
+  let opAdmin = "";
+  let opViewer = "";
+  const gone = "0123456789abcdef01234567";
+
+  beforeAll(async () => {
+    const janus = await janusIssuers.forRequest(new Request(hosted));
+    if (janus === null) throw new Error("no clavix janus");
+    const user = async (n: string) =>
+      (await janus.create({ email: `${n}@op.test`, name: n })).id;
+    [opOwner, opAdmin, opViewer] = (await Promise.all(
+      ["op-owner", "op-admin", "op-viewer"].map(user),
+    )) as [string, string, string];
+    // The viewer is listed once, under their strongest role.
+    await access.grantPlatform(opViewer, "viewer");
+    await access.grantPlatform(opAdmin, "admin");
+    await access.grantPlatform(opAdmin, "viewer");
+    await access.grantPlatform(opOwner, "owner");
+    await access.grantPlatform(gone, "owner");
+  });
+
+  test("an operator of any role reads the list, owners first, strongest role once, gone users left out", async () => {
+    for (const who of [opViewer, opAdmin, opOwner]) {
+      const result = await asConsole(who, query);
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.["platformOperators"]).toEqual([
+        { user: { id: opOwner }, role: "OWNER" },
+        { user: { id: opAdmin }, role: "ADMIN" },
+        { user: { id: opViewer }, role: "VIEWER" },
+      ]);
+    }
+  });
+
+  test("a user with only a tenant role is refused", async () => {
+    for (const who of [ownA, admA, vwA]) {
+      expect(code(await asConsole(who, query))).toBe("FORBIDDEN");
+    }
+  });
+});

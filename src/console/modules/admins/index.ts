@@ -7,7 +7,13 @@ import { refusing } from "./errors";
 
 export { adminsAudits, adminsGuards } from "./guards";
 
-import { assertNotMember, changeRole, members, removeMember } from "./service";
+import {
+  assertNotMember,
+  changeRole,
+  members,
+  platformOperators,
+  removeMember,
+} from "./service";
 
 const GRAPHQL_ROLE = {
   owner: "OWNER",
@@ -72,6 +78,10 @@ export const admins: Resolvers = {
         ({ user, role }) => memberOf(user, role),
       );
     },
+    platformOperators: async (_, __, ctx) =>
+      (await platformOperators(ctx.access, ctx.directory)).map(
+        ({ user, role }) => memberOf(user, role),
+      ),
     adminInvitations: async (_, { tenantId: given }, ctx) => {
       const tenantId = tenantIdOf(given);
       await liveTenant(ctx.directory, tenantId);
