@@ -3,7 +3,6 @@ import type { ConsentCtx, WithServers } from "./consent.types";
 import {
   appCtxOf,
   consentCtxOf,
-  decisionOf,
   isConsentCtx,
   isServerCtx,
   localeOfCtx,
@@ -97,18 +96,5 @@ describe("localeOfCtx", () => {
         ctx(new Request("http://x", { headers: { "accept-language": "fr" } })),
       ),
     ).toBe("fr");
-  });
-});
-
-describe("decisionOf", () => {
-  test("keeps the decision janus answered, grantId included", () => {
-    const answer = { redirectTo: "https://a/cb", grantId: "g1" };
-    expect(decisionOf(answer)).toEqual(answer);
-  });
-
-  test("refuses an answer with no redirectTo as a plain error", () => {
-    for (const answer of [null, undefined, "x", {}, { redirectTo: 1 }]) {
-      expect(() => decisionOf(answer)).toThrow("answered no redirectTo");
-    }
   });
 });

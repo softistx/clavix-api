@@ -273,7 +273,7 @@ describe("resources:create", () => {
         if (key !== "findFirst" || typeof value !== "function") return value;
         return async (...args: unknown[]) => {
           reads += 1;
-          return reads === 1 ? undefined : Reflect.apply(value, target, args);
+          return reads === 1 ? undefined : value.apply(target, args);
         };
       },
     });

@@ -4,7 +4,6 @@ import type { Context } from "@/http/context";
 import { services } from "@/modules/services";
 import type { RequestDemands } from "./consent.authentication";
 import type { ConsentCtx, Detailed, LabelledScope } from "./consent.types";
-import { decisionOf } from "./consent.utils";
 
 /** janus-oauth's consent SDL: `oauthRequest`, `approveOAuthRequest`, `denyOAuthRequest`, the device fields `oauthDeviceRequest`, `approveOAuthDeviceRequest`, `denyOAuthDeviceRequest`, `connectedApps`, `revokeConnectedApp`. */
 export const consentTypeDefs = oauthTypeDefs;
@@ -15,14 +14,6 @@ const janusResolvers = oauthResolvers({
   approveOptions: (args, ctx) => services().consent.approveOptions(args, ctx),
   oauth: (ctx) => services().consent.serverOf(ctx),
 });
-
-// Temporary, until @softistx/janus-oauth#1028 (softistx/nxgt-janus#1028).
-// janus-oauth types its resolvers `(...args: never[]) => Promise<unknown>`: the
-// call goes through `Reflect.apply` and its answer is checked (`decisionOf`).
-const approveJanus = janusResolvers.Mutation["approveOAuthRequest"];
-if (approveJanus === undefined) {
-  throw new Error("janus-oauth has no approveOAuthRequest resolver");
-}
 
 type Scoped = { resource: string; scopes: LabelledScope[] };
 
@@ -51,26 +42,13 @@ export const consentResolvers: IResolvers = {
   ...janusResolvers,
   Mutation: {
     ...janusResolvers.Mutation,
-    approveOAuthRequest: (
-      parent: unknown,
-      args: { id: string },
-      ctx: unknown,
-      info: unknown,
-    ) => {
-      return services().consent.approveOrDenyUnmet(
-        async () =>
-          decisionOf(
-            await Reflect.apply(approveJanus, undefined, [
-              parent,
-              args,
-              ctx,
-              info,
-            ]),
-          ),
+    approveOAuthRequest: (parent, args, ctx, info) =>
+      services().consent.approveOrDenyUnmet(
+        () =>
+          janusResolvers.Mutation.approveOAuthRequest(parent, args, ctx, info),
         args.id,
         ctx,
-      );
-    },
+      ),
   },
   OAuthRequest: requestFields,
   OAuthDeviceRequest: requestFields,
