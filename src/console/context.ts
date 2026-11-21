@@ -158,6 +158,14 @@ export interface ConsoleUsers {
     limit: number,
   ): Promise<TenantUserView[]>;
   find(tenantId: string, id: string): Promise<TenantUserView | null>;
+  /**
+   * `find` for several users of one tenant, in the order of `ids`, `null` for
+   * an unknown one: one read of the records (the role members loader).
+   */
+  findMany(
+    tenantId: string,
+    ids: readonly string[],
+  ): Promise<(TenantUserView | null)[]>;
   findByEmail(tenantId: string, email: string): Promise<TenantUserView | null>;
   /** The user as written, or `null` when unknown. Disabling ends the user's sessions. */
   setActive(
