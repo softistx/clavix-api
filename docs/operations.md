@@ -517,6 +517,7 @@ it. Custom domains stay on demand.
    type behaves as before.
    Clients opt in (R3): any client that requires PAR can list the tenant's stored types, whatever its grants. No migration; `db:sync` first, as above (the clients validator
    accepts `authorizationDetailsTypes`).
+   Deploy clavix-ui with the consent details (clavix-ui#10) before this API; `CLAVIX_RAR_CONSENT_READY` is now ignored.
    Pushed authorization requests (clavix-api #13): run `db:sync` **before** `db:migrate` and before the
    deploy (the PAR validators, the replay collection and the clients validator that accepts
    `requirePushedAuthorizationRequests`). `db:migrate` then runs `2026-11-16-oauth-policy`, which writes
