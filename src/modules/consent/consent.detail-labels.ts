@@ -1,10 +1,7 @@
 import type { FieldKind } from "@/modules/resources";
-import {
-  acceptedLocales,
-  pickTranslation,
-  type Translation,
-} from "@/shared/translations";
+import type { Translation } from "@/shared/translations";
 import { isRecord } from "@/shared/values";
+import { COMMON, formatted, pick } from "./consent.detail-format";
 
 type Text = readonly Translation[];
 
@@ -51,80 +48,6 @@ export interface ConsentDetails {
    * it no longer lists), or it is not a typed object. Approval is refused then.
    */
   complete: boolean;
-}
-
-// The page's own words, with the first language the fallback of a viewer
-// whose languages none of them covers.
-const COMMON: Record<
-  "actions" | "identifier" | "datatypes" | "locations" | "yes" | "no",
-  Text
-> = {
-  actions: [
-    { locale: "en", text: "Actions" },
-    { locale: "fr", text: "Actions" },
-  ],
-  locations: [
-    { locale: "en", text: "Location" },
-    { locale: "fr", text: "Emplacement" },
-  ],
-  identifier: [
-    { locale: "en", text: "Identifier" },
-    { locale: "fr", text: "Identifiant" },
-  ],
-  datatypes: [
-    { locale: "en", text: "Data" },
-    { locale: "fr", text: "Données" },
-  ],
-  yes: [
-    { locale: "en", text: "Yes" },
-    { locale: "fr", text: "Oui" },
-  ],
-  no: [
-    { locale: "en", text: "No" },
-    { locale: "fr", text: "Non" },
-  ],
-};
-
-// The viewer's language (see `pickTranslation`), else `fallback`.
-const pick = (
-  text: Text | undefined,
-  acceptLanguage: string | null,
-  fallback = "",
-) => pickTranslation(text ?? [], acceptLanguage) ?? fallback;
-
-function scalar(value: unknown, acceptLanguage: string | null): string {
-  if (typeof value === "boolean") {
-    return pick(value ? COMMON.yes : COMMON.no, acceptLanguage);
-  }
-  if (typeof value === "number") {
-    return new Intl.NumberFormat(acceptedLocales(acceptLanguage)).format(value);
-  }
-  return typeof value === "string" ? value : "";
-}
-
-function formatted(
-  value: unknown,
-  field: DetailText["fields"][number],
-  acceptLanguage: string | null,
-): string {
-  const labelOf = (raw: string) =>
-    pick(
-      field.values?.find((v) => v.value === raw)?.label,
-      acceptLanguage,
-      raw,
-    );
-  if (Array.isArray(value)) {
-    return value
-      .map((item) =>
-        field.kind === "enum"
-          ? labelOf(String(item))
-          : scalar(item, acceptLanguage),
-      )
-      .join(", ");
-  }
-  return field.kind === "enum" && typeof value === "string"
-    ? labelOf(value)
-    : scalar(value, acceptLanguage);
 }
 
 // RFC 9396 members the rows always show, whatever the type.

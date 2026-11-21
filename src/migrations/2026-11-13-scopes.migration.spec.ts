@@ -70,7 +70,7 @@ describe(id, () => {
     );
     for (const scope of await scopeDocs()) {
       expect(scope).toMatchObject({
-        description: [],
+        description: { fr: "", en: "" },
         claims: [],
       });
     }
@@ -88,16 +88,16 @@ describe(id, () => {
   test("a second run creates nothing and keeps the texts written since", async () => {
     await legacy(tenantId, API, ["read"]);
     await migrate(db, [clavixTenant, scopesMigration]);
-    await db
-      .collection("scopes")
-      .updateOne(
-        { name: "read" },
-        { $set: { description: [{ locale: "en", text: "Read" }] } },
-      );
+    await db.collection("scopes").updateOne(
+      { name: "read" },
+      { $set: { "description.en": "Read" } },
+      // The validator holds lists now; this migration wrote the frozen { fr, en } shape.
+      { bypassDocumentValidation: true },
+    );
     await again();
     const found = await scopeDocs();
     expect(found).toHaveLength(1);
-    expect(found[0]?.["description"]).toEqual([{ locale: "en", text: "Read" }]);
+    expect(found[0]?.["description"]).toEqual({ fr: "", en: "Read" });
   });
 
   test("down puts the strings back and empties the scopes", async () => {

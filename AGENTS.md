@@ -124,7 +124,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
 - **`ResourcesService`** (one service for resources, scopes and detail types: they are one domain, the cascade of a resource's delete and the scope and type lookups all cross them) is the one writer of scopes and the console's writer of resources
   (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
   (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are
-  bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
+  bounded there (names 100 characters, descriptions 300, 50 claims, 30 locales per text; a client 20 redirect URIs). Texts are lists of `{ locale, text }`: migration `2026-11-21-translations` converts the stored `{ fr, en }` (the earlier `2026-11-13-scopes` still writes the frozen shape, past the validator).
 - **The fingerprint** comes from what `storedFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
 - **Detail types** (`resources.compile*.ts`, `resources.detail-rules.ts`, README "Authorization details", RAR D1/D2, softistx/clavix-api#17 and #18):
@@ -324,7 +324,7 @@ is wrapped (`ConsentService.approveOrDenyUnmet`; `consent/consent.unmet.ts`) and
 A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176), not `otp`: janus stores it on the session itself (@softistx/janus 0.77), and `src/modules/mfa/mfa.second-factor.spec.ts` asserts it. A passkey step-up needs no
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
 resource's scope, else the standard one; `Accept-Language`, then its base language, then the first stored
-translation, then janus's label; no language is fixed in `src/`, `src/shared/translations.ts`), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+translation, then janus's label; `src/shared/translations.ts`: per asked language the exact locale, then its base language, then a sibling region (`fr` finds `fr-CA`)). No language is fixed for a tenant's texts; the one exception is the consent page's own row words (Actions, Location, Identifier, Data, Yes, No), kept in `en` and `fr` in `consent.detail-format.ts` (English first, the fallback) until clavix-ui words them from its catalogue, set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
 resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
 
 ## Same-origin guard and shutdown

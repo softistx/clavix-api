@@ -22,12 +22,21 @@ export async function moveScopesToDocuments(db: Db): Promise<number> {
     const owned = scopeToTenant(scopeDocs, resource["tenantId"]);
     for (const name of new Set(names)) {
       if (await owned.exists({ name, resourceId: resource._id })) continue;
-      await owned.create({
+      const scope = await owned.create({
         name,
         description: [],
         resourceId: resource._id,
         claims: [],
       });
+      // Frozen: it wrote `{ fr: "", en: "" }`. The model holds lists now, so the old
+      // shape goes in past the validator; `2026-11-21-translations` turns it into `[]`.
+      await db
+        .collection("scopes")
+        .updateOne(
+          { _id: scope._id },
+          { $set: { description: { fr: "", en: "" } } },
+          { bypassDocumentValidation: true },
+        );
       created += 1;
     }
     await resourceDocs.updateOne(

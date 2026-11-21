@@ -3,14 +3,10 @@ import {
   localeKey,
   type Translation,
 } from "@/shared/translations";
-import { CatalogError } from "./resources.errors";
+import { refuse } from "./resources.errors";
 
 /** The most locales one text holds. */
 export const MAX_TRANSLATIONS = 30;
-
-function refuse(message: string): never {
-  throw new CatalogError("BAD_USER_INPUT", message);
-}
 
 /** What a caller sends for a text: a list of `{ locale, text }`, in any order. */
 export type TranslationsInput = readonly Translation[] | null | undefined;
@@ -25,7 +21,7 @@ function entriesOf(
   for (const item of input) {
     const locale = canonicalLocale(item.locale.trim());
     if (locale === undefined) {
-      return refuse(`"${item.locale}" is not a language tag (BCP 47)`);
+      return refuse("a locale is not a language tag (BCP 47)");
     }
     if (entries.has(localeKey(locale))) {
       refuse(`${what} is given twice in ${locale}`);

@@ -1,7 +1,7 @@
 import { CliInputError } from "@/shared/cli";
 import type { Translation } from "@/shared/translations";
 import { isOneOf, unique } from "@/shared/values";
-import { CatalogError } from "./resources.errors";
+import { refuse } from "./resources.errors";
 import { canonTranslations } from "./resources.translation-rules";
 import type { RegisterResourceInput, StoredScopeDoc } from "./resources.types";
 
@@ -67,10 +67,6 @@ export function scopeNameProblem(name: string): string | null {
  */
 export const sameUri = (a: string, b: string): boolean =>
   new URL(a).href === new URL(b).href;
-
-function refuse(message: string): never {
-  throw new CatalogError("BAD_USER_INPUT", message);
-}
 
 export function cleanClaims(claims: readonly string[] | undefined): string[] {
   const clean = unique((claims ?? []).map((claim) => claim.trim()));
