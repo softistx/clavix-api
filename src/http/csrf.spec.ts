@@ -67,6 +67,24 @@ test("on: a refused request runs no resolver", async () => {
   expect(body.data).toBeUndefined();
 });
 
+test("on: a consent operation without the header is 403, never NOT_FOUND", async () => {
+  // The client header runs before the same-origin guard, whose refusal of a
+  // consent operation is NOT_FOUND (same-origin.spec.ts): a foreign Origin
+  // would be 404 with the header present, and is 403 without it.
+  const response = await createApp({ requireClientHeader: true }).request(
+    paths[0] as string,
+    {
+      method: "POST",
+      headers: { ...json, origin: "https://evil.clavix.test" },
+      body: JSON.stringify({
+        query: 'mutation { denyOAuthRequest(id: "x") { redirectTo } }',
+      }),
+    },
+  );
+  expect(response.status).toBe(403);
+  expect(await codeOf(response)).toBe("CLIENT_HEADER_REQUIRED");
+});
+
 test("on: the IDE page (an HTML GET with no query) needs no header", async () => {
   const response = await createApp({
     requireClientHeader: true,
