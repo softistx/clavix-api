@@ -9,4 +9,4 @@ export { DEV_KEYS_MASTER_KEY } from "./shared";
 // listens. `.env.example` lists them; Bun loads `.env` on every command.
 // One file per area: core.ts, limits.ts, webhooks.ts; shared.ts holds the
 // helpers and schemas they use.
-export const env = defineEnv({ ...coreEnv, ...limitsEnv, ...webhooksEnv });
+export const env = defineEnv({ ...coreEnv(), ...limitsEnv, ...webhooksEnv() });

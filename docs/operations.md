@@ -267,7 +267,7 @@ evenly over its window, so a burst up to the limit is allowed at once, then the 
 | `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 30 / 600   | client address and tenant |
 | `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS` | 300 / 3600 | tenant                    |
 
-Each value is an integer of at least 1 (`src/config/env.ts`). A lookup counts whether or not the code exists: the
+Each value is an integer of at least 1 (`src/config/env/limits.ts`). A lookup counts whether or not the code exists: the
 throttle runs before the store is read. Past a limit, the lookup fails with `DEVICE_CODE_THROTTLED` (HTTP 429,
 `Retry-After`).
 

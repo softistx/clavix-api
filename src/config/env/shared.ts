@@ -1,17 +1,18 @@
 import { z } from "zod";
 import { masterKeysProblem } from "../master-keys";
 
-export const production = Bun.env.NODE_ENV === "production";
+// Read at call time: the env spec reloads `index.ts` under other values.
+export const isProduction = () => Bun.env.NODE_ENV === "production";
 
 // Required in production; elsewhere `fallback` stands in.
 export const inProduction = <T extends z.ZodType>(
   schema: T,
   fallback: string,
-) => (production ? schema : schema.prefault(fallback as never));
+) => (isProduction() ? schema : schema.prefault(fallback as never));
 
 // Optional outside production, required in it: an empty value is unset.
 export const optionalOutsideProduction = <T>(schema: z.ZodType<T, string>) =>
-  production
+  isProduction()
     ? schema
     : z
         .string()
