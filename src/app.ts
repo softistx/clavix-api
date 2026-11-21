@@ -1,4 +1,4 @@
-import { graphql } from "@alxia/graphql";
+import { graphql } from "@softistx/alxia-graphql";
 import type { Telemetry } from "@softistx/telemetry";
 import { agentsFor } from "./config/agent-clients";
 import { serveLogo } from "./config/branding";

@@ -123,13 +123,13 @@ session, the logout and the user mapping itself.
 
 ## 4. Verify access tokens on the API
 
-Use `@alxia/clavix` 0.1.0 (npm) on an alxia API. It verifies an RFC 9068 access token with the
+Use `@softistx/alxia-clavix` 0.2.0 (npm) on an alxia API. It verifies an RFC 9068 access token with the
 keys of the token's own issuer, allowing only issuers you list or that match
 `https://<one label>.<domain>`:
 
 ```ts
-import { alxia, health } from "@alxia/core";
-import { clavix, requireScope } from "@alxia/clavix";
+import { alxia, health } from "@softistx/alxia";
+import { clavix, requireScope } from "@softistx/alxia-clavix";
 
 const auth = clavix({
   domain: "clavix.example.com", // dedicated to Clavix tenants
@@ -164,7 +164,7 @@ Constraints to know before relying on it:
   (ES256 default), published at `/jwks.json`; or it calls `/introspect` as a confidential
   client of the same tenant.
 - Keys rotate every 90 days, the next key published 48 h ahead, a retired key kept 24 h: an
-  API must refetch the JWKS (the `@alxia/clavix` verifier does), never pin a key.
+  API must refetch the JWKS (the `@softistx/alxia-clavix` verifier does), never pin a key.
 
 ## 5. Map old janus user ids to Clavix subjects
 

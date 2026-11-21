@@ -423,7 +423,7 @@ Traces and logs go to an OpenTelemetry collector over OTLP/HTTP, through `@softi
 | `OTEL_EXPORTER_OTLP_HEADERS`  | optional, `key=value` pairs separated by commas, sent on every export (an API key)                                             |
 
 Both are read from `deploy/.env` like the others (compose hands the file to `api`).
-- **What is traced.** One server span per request (`@alxia/telemetry`, named `POST /graphql` or `query <Name>`; `/healthz`, `/readyz`
+- **What is traced.** One server span per request (`@softistx/alxia-telemetry`, named `POST /graphql` or `query <Name>`; `/healthz`, `/readyz`
   and `/internal/*` are skipped), a span per sign-in, passkey, session and invitation flow with its security events as logs
   (`@softistx/janus-telemetry`, `janus.signIn`, `janus.signIn.refused`, `janus.signIn.throttled`, ...), and a client span per MongoDB
   command (`@softistx/telemetry-mongo`), and a span per OAuth endpoint of each issuer (`oauth.authorize`, `oauth.token`, `oauth.par`,

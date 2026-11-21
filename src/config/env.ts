@@ -1,4 +1,4 @@
-import { defineEnv } from "@alxia/env";
+import { defineEnv } from "@softistx/alxia-env";
 import { z } from "zod";
 import { masterKeysProblem } from "./master-keys";
 

@@ -1,4 +1,4 @@
-import { freshPerMutation } from "@alxia/graphql";
+import { freshPerMutation } from "@softistx/alxia-graphql";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { userMutations } from "./mutations";
 import { userQueries } from "./queries";

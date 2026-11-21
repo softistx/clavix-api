@@ -1,4 +1,4 @@
-import { definePlugin } from "@graxia/core";
+import { definePlugin } from "@softistx/graxia";
 import type { ExecutionResult } from "graphql";
 import { GraphQLError } from "graphql";
 import { isJsonAnswer } from "./media";

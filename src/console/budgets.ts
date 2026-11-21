@@ -1,4 +1,4 @@
-import { type FieldLimit, fieldRateLimit } from "@alxia/graphql";
+import { type FieldLimit, fieldRateLimit } from "@softistx/alxia-graphql";
 import { defineRateLimit, GuardError, type LimitResult } from "@softistx/redis";
 import { GraphQLError } from "graphql";
 import {
@@ -42,7 +42,7 @@ export const consoleLimits = (config: ConsoleLimitConfig) => ({
     limit: config.testTenantLimit,
     per: config.testWindowSeconds * 1000,
   }),
-  // The key is `@alxia/graphql`'s `<field>:<caller>`: one bucket per mutation and caller.
+  // The key is `@softistx/alxia-graphql`'s `<field>:<caller>`: one bucket per mutation and caller.
   inviteCaller: defineRateLimit({
     name: "invite-caller",
     key: (who: { caller: string }) => who.caller,
@@ -141,7 +141,7 @@ export function createConsoleBudgets(
 }
 
 /**
- * The per-caller invitation budget as `@alxia/graphql`'s `fieldRateLimit`: it
+ * The per-caller invitation budget as `@softistx/alxia-graphql`'s `fieldRateLimit`: it
  * counts every selection of `inviteUser` and `inviteAdmin` in the operation
  * about to run (aliases and fragments expanded) and consumes that many for the
  * token's user, so one POST of N aliased invitations costs N. Past the budget

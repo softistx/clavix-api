@@ -1,4 +1,4 @@
-import { definePlugin } from "@graxia/core";
+import { definePlugin } from "@softistx/graxia";
 import { parse } from "graphql";
 
 /** The root fields of the consent API: a refused request that asks only for these sees `NOT_FOUND`, as if no such request existed. */
