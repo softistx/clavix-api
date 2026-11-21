@@ -19,12 +19,11 @@ export class KeysService {
   constructor(private readonly options: KeysServiceOptions) {}
 
   /** A tenant's signing-key store (janus), keyed by its hex id. */
-  readonly signingKeysFor: KeysServiceOptions["keys"]["signingKeysFor"] = (
-    tenantId,
-  ) => this.options.keys.signingKeysFor(tenantId);
+  readonly signingKeysFor = (tenantId: string) =>
+    this.options.keys.signingKeysFor(tenantId);
 
   /** A tenant's public JWKS at an instant. */
-  readonly jwksFor: KeysServiceOptions["keys"]["jwksFor"] = (tenantId, at) =>
+  readonly jwksFor = (tenantId: string, at: Date) =>
     this.options.keys.jwksFor(tenantId, at);
 
   /** The counter of the changes to each tenant's published keys. */

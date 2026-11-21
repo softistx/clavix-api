@@ -1,11 +1,15 @@
+import type { Jwks, SigningKeyStore } from "@softistx/janus-oauth";
 import type { Db } from "mongodb";
 import type { SecretResealCounts } from "@/modules/sign-in-methods";
 import type { KeyGenerations } from "./keys.generations";
-import type { TenantKeys } from "./keys.signing-keys";
 
 /** What `KeysService` is built over: the per-tenant key stores, the generation counter, the clock and the log. */
 export interface KeysServiceOptions {
-  keys: TenantKeys;
+  /** `createTenantKeys`: a tenant's signing-key store and its public JWKS (hex tenant id). */
+  keys: {
+    signingKeysFor(tenantId: string): SigningKeyStore;
+    jwksFor(tenantId: string, at: Date): Promise<Jwks>;
+  };
   generations: KeyGenerations;
   now: () => Date;
   log: (message: string) => void;
