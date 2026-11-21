@@ -15,7 +15,7 @@ import {
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { buildTenantJanus } from "@/modules/users";
 import { adminInvitationHooks } from "./admins.hooks";
-import { changeRole, removeMember } from "./admins.service";
+import { AdminsService } from "./admins.service";
 
 // A Redis whose lock cannot be taken (held by another past `wait`) until `free`.
 let held = true;
@@ -60,7 +60,7 @@ const code503 = (error: unknown) =>
 describe("the tenant's membership lock cannot be taken", () => {
   test("a membership write is a retryable 503 and changes nothing", async () => {
     held = true;
-    const deps = {
+    const service = new AdminsService({
       access,
       exclusive,
       directory: {
@@ -70,10 +70,10 @@ describe("the tenant's membership lock cannot be taken", () => {
           active: true,
         }),
       },
-    };
+    });
     for (const write of [
-      () => changeRole(deps, tenantId, member, "admin"),
-      () => removeMember(deps, tenantId, member),
+      () => service.changeRole(tenantId, member, "admin"),
+      () => service.removeMember(tenantId, member),
     ]) {
       const error = await write().catch((e: unknown) => e);
       expect(code503(error)).toEqual({
@@ -84,7 +84,7 @@ describe("the tenant's membership lock cannot be taken", () => {
     expect(await access.holders(tenantId, "viewer")).toEqual([member]);
     // The lock frees: the same call goes through.
     held = false;
-    await changeRole(deps, tenantId, member, "admin");
+    await service.changeRole(tenantId, member, "admin");
     expect(await access.holders(tenantId, "admin")).toEqual([member]);
   });
 

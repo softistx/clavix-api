@@ -1,8 +1,8 @@
 import { connectionsService as connections } from "@/config/connections";
 import { tenantsService } from "@/config/tenancy";
 import { catalogTenant } from "@/console/modules/catalog-support";
+import { issuerFor } from "@/console/modules/issuer";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { issuerFor } from "@/modules/sign-in-methods/sign-in-methods.console-support";
 import { effectiveQuotas } from "@/modules/tenants";
 import { createOf, patchOf, refusing } from "./connections.console-support";
 import {

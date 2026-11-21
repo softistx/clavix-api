@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ResendRefusedError } from "@/modules/invitations/invitations.errors";
+import { ResendRefusedError } from "@/modules/invitations";
 import { alreadyMember, lastOwnerError, refusing } from "./admins.errors";
 
 describe("admins errors", () => {

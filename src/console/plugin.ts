@@ -1,6 +1,7 @@
 import { createStateKey, definePlugin } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
 import type { ErrorCode } from "@/i18n/codes";
+import { AdminsService } from "@/modules/admins/admins.service";
 import { errorBody } from "@/shared/errors";
 import type { Access } from "./access";
 import type { AdminEventRecorder } from "./admin-events/recorder";
@@ -163,6 +164,7 @@ export function useConsole({
   activity,
   reportError,
 }: ConsoleDeps) {
+  const members = new AdminsService({ access, directory, exclusive });
   // Ours, one per HTTP request: a client's `x-request-id` is never believed.
   const requestIds = new WeakMap<Request, string>();
   const requestIdOf = (request: Request) => {
@@ -193,6 +195,7 @@ export function useConsole({
         access,
         directory,
         admins,
+        members,
         users,
         exclusive,
         budgets,

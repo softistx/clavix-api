@@ -3,7 +3,6 @@ import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { one } from "./admins.console-support";
 import { refusing } from "./admins.errors";
-import { assertNotMember, changeRole, removeMember } from "./admins.service";
 import { memberOf, ROLE_OF, resendKey } from "./admins.utils";
 
 export const adminsMutations: NonNullable<Resolvers["Mutation"]> = {
@@ -11,7 +10,7 @@ export const adminsMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenantId = tenantIdOf(given);
     const tenant = await liveTenant(ctx.directory, tenantId);
     const known = await ctx.directory.findUserByEmail(email);
-    if (known !== null) await assertNotMember(ctx.access, tenantId, known.id);
+    if (known !== null) await ctx.members.assertNotMember(tenantId, known.id);
     await ctx.budgets?.invitation({ tenantId });
     const inviter = await ctx.directory.findUser(ctx.principal.userId);
     const invitation = await refusing(() =>
@@ -41,7 +40,11 @@ export const adminsMutations: NonNullable<Resolvers["Mutation"]> = {
     // Before any write: a refusal leaves no change and no event.
     const user = await ctx.directory.findUser(userId);
     if (user === null) throw denial("NOT_FOUND", "No such user");
-    const stored = await changeRole(ctx, tenantId, userId, ROLE_OF[role]);
+    const stored = await ctx.members.changeRole(
+      tenantId,
+      userId,
+      ROLE_OF[role],
+    );
     await ctx.audit("membership.change", {
       type: "user",
       id: userId,
@@ -54,7 +57,7 @@ export const adminsMutations: NonNullable<Resolvers["Mutation"]> = {
     idArg(userId, "userId");
     // Like the other writes: a tenant that is gone (or trashed) is not edited; a suspended one is refused by the guard.
     await liveTenant(ctx.directory, tenantId);
-    await removeMember(ctx, tenantId, userId);
+    await ctx.members.removeMember(tenantId, userId);
     await ctx.audit("membership.remove", {
       type: "user",
       id: userId,

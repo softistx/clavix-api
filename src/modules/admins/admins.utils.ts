@@ -1,4 +1,5 @@
-import type { Role } from "@/console/model";
+import type { Access } from "@/console/access";
+import { ROLES, type Role } from "@/console/model";
 
 /** The GraphQL spelling of each role. */
 export const GRAPHQL_ROLE = {
@@ -13,6 +14,18 @@ export const ROLE_OF = {
   ADMIN: "admin",
   VIEWER: "viewer",
 } as const;
+
+/** The role a user holds directly on the tenant (the strongest), or `null`. */
+export async function roleOf(
+  access: Pick<Access, "holders">,
+  tenantId: string,
+  userId: string,
+): Promise<Role | null> {
+  for (const role of ROLES) {
+    if ((await access.holders(tenantId, role)).includes(userId)) return role;
+  }
+  return null;
+}
 
 /** The `Exclusive` key of a tenant's memberships: every write of them runs under it. */
 export const membersKey = (tenantId: string) => `console:members:${tenantId}`;

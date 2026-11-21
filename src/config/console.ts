@@ -8,12 +8,12 @@ import {
 } from "@/console/identity";
 import type { ConsoleDeps } from "@/console/plugin";
 import { createJanusAdmins } from "@/modules/admins/admins.janus";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { UsersService } from "@/modules/users/users.service";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
 import { adminEventReader, adminEventRecorder } from "./admin-events";
 import { authEventsService } from "./audit";
+import { clavixTenant, consoleDirectory } from "./console-directory";
 import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
@@ -30,10 +30,6 @@ const origin = {
 
 /** The audience of the console's access tokens: `https://console.<CLAVIX_DOMAIN>/api`. */
 export const consoleResource = consoleAudience(origin);
-
-/** The `clavix` tenant (the console signs in through it); `null` while it is missing (it cannot be suspended). */
-const clavixTenant = () =>
-  tenantResolver.resolveHost(`${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`);
 
 /** The tenant with this id (suspended included: the console reads it), resolved through its own host; `null` when gone or trashed. */
 async function resolveById(id: string) {
@@ -92,40 +88,6 @@ export function createConsoleDeps(
         : { throttle: createExportThrottle(redis.limits.auditExport, warn) },
     adminEvents: adminEventRecorder,
     activity: { admin: adminEventReader, auth: authEventsService },
-    directory: {
-      findUser: async (id) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        const user = (await janus?.findUser(id)) ?? null;
-        return user === null
-          ? null
-          : {
-              id: user.id,
-              email: user.email,
-              name: user.name,
-              active: user.active,
-            };
-      },
-      emailVerified: async (id) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        if (janus === null) throw new Error("the clavix tenant is unavailable");
-        return (await janus.findUser(id))?.emailVerified === true;
-      },
-      findUserByEmail: async (email) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        if (janus === null) throw new Error("the clavix tenant is unavailable");
-        return janus.findByEmail(email);
-      },
-      tenantsByIds: async (ids) =>
-        (await tenantsService.liveByIds(ids)).map((tenant) => ({
-          id: tenant._id.toHexString(),
-          slug: tenant.slug,
-          name: tenant.name,
-          status: tenant.status,
-          plan: tenant.plan,
-        })),
-    },
+    directory: consoleDirectory,
   };
 }

@@ -3,8 +3,8 @@ import {
   issuerChecker,
 } from "@/config/connections";
 import { catalogTenant } from "@/console/modules/catalog-support";
+import { issuerFor } from "@/console/modules/issuer";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { issuerFor } from "@/modules/sign-in-methods/sign-in-methods.console-support";
 import { checkOf, refusing } from "./connections.console-support";
 import { connectionShape } from "./connections.utils";
 

@@ -1,10 +1,11 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { rolesService } from "@/config/roles";
+import { membersKey, PLATFORM_OWNERS_KEY } from "@/modules/admins";
 import { adminInvitationHooks } from "@/modules/admins/admins.hooks";
-import { membersKey, PLATFORM_OWNERS_KEY } from "@/modules/admins/admins.utils";
 import { adminScope } from "@/modules/invitations/invitations.rules";
 import { userMutations } from "@/modules/users/users.console-mutations";
 import { keepOwners } from "@/modules/users/users.owners";
+import { withMembers } from "~/members";
 import type { ConsoleContext } from "../context";
 import { createExclusive } from "../exclusive";
 import { userKey } from "./user-key";
@@ -56,7 +57,7 @@ const PLATFORM_ID = "aaaaaaaaaaaaaaaaaaaaaaaa";
 describe("the lock order", () => {
   test("deleteUser: platform owners, then members by id, then the user", async () => {
     const { exclusive, taken } = recording();
-    const ctx = {
+    const ctx = withMembers({
       exclusive,
       canPlatform: async () => true,
       directory: { findUser: async (id: string) => ({ id, active: true }) },
@@ -69,7 +70,7 @@ describe("the lock order", () => {
         owners: async () => ["u", "other"],
         platformOwners: async () => ["u", "other"],
       },
-    } as unknown as ConsoleContext;
+    });
     await keepOwners(
       ctx,
       { slug: "clavix" },
@@ -113,7 +114,7 @@ describe("the lock order", () => {
   });
 
   const consoleCtx = (exclusive: ConsoleContext["exclusive"]) =>
-    ({
+    withMembers({
       exclusive,
       canPlatform: async () => true,
       audit: async () => {},
@@ -135,7 +136,7 @@ describe("the lock order", () => {
         platformOwners: async () => [],
         removeUser: async () => {},
       },
-    }) as unknown as ConsoleContext;
+    });
   const call = (
     field: "disableUser" | "deleteUser",
     ctx: ConsoleContext,

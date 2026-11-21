@@ -1,7 +1,6 @@
 import { denial } from "@softistx/janus-graphql";
 import type { ConsoleContext } from "@/console/context";
 import { lastOwnerError } from "@/modules/admins/admins.errors";
-import { otherLiveOwners } from "@/modules/admins/admins.service";
 import { membersKey, PLATFORM_OWNERS_KEY } from "@/modules/admins/admins.utils";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { fail } from "@/shared/errors";
@@ -92,13 +91,13 @@ export async function keepOwners<T>(
     if (!already) {
       for (const { tenantId: owns } of owned) {
         const owners = await ctx.access.owners(owns);
-        if ((await otherLiveOwners(ctx.directory, owners, userId)) === 0) {
+        if ((await ctx.members.otherLiveOwners(owners, userId)) === 0) {
           throw lastOwnerError();
         }
       }
       if ((await ctx.access.platformRole(userId)) === "owner") {
         const owners = await ctx.access.platformOwners();
-        if ((await otherLiveOwners(ctx.directory, owners, userId)) === 0) {
+        if ((await ctx.members.otherLiveOwners(owners, userId)) === 0) {
           throw lastOwnerError("platform");
         }
       }

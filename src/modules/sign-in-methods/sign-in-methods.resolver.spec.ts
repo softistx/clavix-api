@@ -19,7 +19,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
-import type { RevokeJob } from "@/modules/consent/consent.types";
+import type { RevokeJob } from "@/modules/consent";
 import {
   issuerOf,
   PLATFORM_TENANT_SLUG,
