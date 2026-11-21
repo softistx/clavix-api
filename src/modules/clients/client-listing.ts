@@ -4,7 +4,7 @@ import type {
   OAuthPage,
   OAuthPageOptions,
 } from "@softistx/janus-oauth";
-import type { AgentKind } from "@/modules/agents/agent-clients.model";
+import type { AgentKind } from "@/modules/agents/agents.model";
 import { DEFAULT_GRANTS } from "@/modules/clients/register-client";
 
 /**

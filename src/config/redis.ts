@@ -10,8 +10,8 @@ import {
   exportLimits,
 } from "@/console/audit-export/throttle";
 import { consoleLimits } from "@/console/budgets";
-import { agentsPrune } from "@/modules/agents/prune.queue";
-import { auditRetention } from "@/modules/audit/retention.queue";
+import { agentsPrune } from "@/modules/agents/agents.prune-queue";
+import { auditRetention } from "@/modules/audit/audit.retention-queue";
 import {
   type SignInLimitConfig,
   signInLimits,
@@ -34,7 +34,7 @@ import {
 } from "@/modules/passkeys/passkeys.throttle";
 import { ssoLimits } from "@/modules/sign-in-methods";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
-import { monthlyActiveUsers } from "@/modules/usage/mau";
+import { monthlyActiveUsers } from "@/modules/usage/usage.counter";
 import { webhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-queue";
 import {
   type MetadataLimitConfig,

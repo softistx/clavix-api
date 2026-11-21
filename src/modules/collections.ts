@@ -4,8 +4,8 @@
 
 export { oauthSigningKeys } from "@softistx/janus-oauth-mongo";
 export { adminEvents } from "../console/admin-events/admin-events.model";
-export { agentClients } from "./agents/agent-clients.model";
-export { authEvents } from "./audit/auth-events.model";
+export { agentClients } from "./agents/agents.model";
+export { authEvents } from "./audit/audit.model";
 export { branding } from "./branding/branding.model";
 export { clientPolicies } from "./client-policies/client-policies.model";
 export { connections } from "./connections/connections.model";

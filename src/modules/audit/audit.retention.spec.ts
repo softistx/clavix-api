@@ -7,7 +7,7 @@ import { eventBus, eventFailures } from "@/config/events";
 import { tenantsService } from "@/config/tenancy";
 import { purgeAtOf } from "@/modules/tenants";
 import { DAY, run, seed, useTenantPurgeHooks } from "~/tenant-purge";
-import { enforceRetention } from "./retention";
+import { enforceRetention } from "./audit.retention";
 
 useTenantPurgeHooks();
 afterEach(async () => {

@@ -6,7 +6,7 @@ import {
   secondFactorResolvers,
 } from "@softistx/janus-graphql";
 import type { Context } from "@/http/context";
-import type { AuthMethod } from "@/modules/audit/auth-events.model";
+import type { AuthMethod } from "@/modules/audit/audit.model";
 import { recordingSignIn } from "@/modules/auth";
 import { revokeIfSso } from "@/modules/connections";
 import { asPasskeyInvalid, currentOf, responseOf } from "@/modules/passkeys";

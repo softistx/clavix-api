@@ -1,6 +1,6 @@
 import type { CoreContext } from "@softistx/graxia";
 import type { OAuthUserPrincipal } from "@softistx/janus-oauth";
-import type { AuthEventsService } from "@/modules/audit/auth-events.service";
+import type { AuditService } from "@/modules/audit/audit.service";
 import type { PlanId } from "@/modules/tenants";
 import type { Access } from "./access";
 import type { AdminEventReader } from "./admin-events/reader";
@@ -255,7 +255,7 @@ export interface ConsoleExtras {
 /** What the audit module reads: both logs, through their own services. */
 export interface ConsoleActivity {
   readonly admin: AdminEventReader;
-  readonly auth: AuthEventsService;
+  readonly auth: AuditService;
 }
 
 /** A console resolver's context. The generated `Resolvers` takes it (codegen.console.ts). */

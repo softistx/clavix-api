@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { QuotaExceededError } from "@/modules/usage/quota";
+import { QuotaExceededError } from "@/modules/usage/usage.errors";
 import type { TxtAnswer, TxtResolver } from "./domains.dns";
 import { DomainError } from "./domains.errors";
 import type { DomainSystemEvent } from "./domains.events";

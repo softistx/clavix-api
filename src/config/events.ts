@@ -1,5 +1,5 @@
 import { createEventBus } from "@/events/bus";
-import { authRecorder } from "@/modules/audit/auth-recorder";
+import { authRecorder } from "@/modules/audit/audit.recorder";
 import { authEventsService } from "./audit";
 
 /** How many events a subscriber failed to handle since the process started (D13); read by telemetry when it is wired. */

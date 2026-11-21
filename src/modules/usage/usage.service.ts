@@ -3,53 +3,12 @@ import {
   scopeToTenant,
   type TypedCollection,
 } from "@softistx/mongo";
-import type { BoundUniqueCounter } from "@softistx/redis";
 import { ObjectId } from "mongodb";
 import type { Tenant } from "@/modules/tenants";
 import { effectiveQuotas, type QuotaKey, type Quotas } from "@/modules/tenants";
-import { type monthlyActiveUsers, monthOf } from "./mau";
 import type { usageCounters } from "./usage.model";
-
-type MauCounter = BoundUniqueCounter<
-  Parameters<(typeof monthlyActiveUsers)["key"]>[0]
->;
-
-/** Where the counts that are not Redis's come from (the clients and domains stores). */
-export interface UsageSources {
-  /** The tenant's registered OAuth clients now. */
-  clients(tenantId: string): Promise<number>;
-  /** The tenant's custom domains now. */
-  domains(tenantId: string): Promise<number>;
-  /** The tenant's agents now (dynamically registered and metadata-document clients). */
-  agents(tenantId: string): Promise<number>;
-  /** The tenant's webhook endpoints now. */
-  webhooks(tenantId: string): Promise<number>;
-  /** The tenant's enterprise OIDC connections now. */
-  connections(tenantId: string): Promise<number>;
-}
-
-export interface UsageMeter {
-  used: number;
-  quota: number | null;
-  exceeded: boolean;
-}
-
-export interface UsageReport {
-  tenantId: string;
-  month: string;
-  mau: UsageMeter;
-  clients: UsageMeter;
-  domains: UsageMeter;
-  agents: UsageMeter;
-  webhooks: UsageMeter;
-  connections: UsageMeter;
-}
-
-const meter = (used: number, quota: number | null): UsageMeter => ({
-  used,
-  quota,
-  exceeded: quota !== null && used > quota,
-});
+import type { MauCounter, UsageReport, UsageSources } from "./usage.types";
+import { messageOf, meter, monthOf } from "./usage.utils";
 
 /**
  * A tenant's use against its quotas. Active users are counted when a session
@@ -61,9 +20,8 @@ export class UsageService {
     private readonly sources: UsageSources,
     /** `undefined` without Redis: nothing is counted, the last stored month is read. */
     private readonly mau: MauCounter | undefined,
-    private readonly log: (message: string) => void = (message) =>
-      console.warn(message),
-    private readonly now: () => Date = () => new Date(),
+    private readonly log: (message: string) => void,
+    private readonly now: () => Date,
   ) {}
 
   /**
@@ -76,9 +34,7 @@ export class UsageService {
       await this.mau.add({ tenantId, month: monthOf(this.now()) }, userId);
     } catch (error) {
       this.log(
-        `usage: could not count an active user of ${tenantId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `usage: could not count an active user of ${tenantId}: ${messageOf(error)}`,
       );
     }
   }
@@ -132,9 +88,7 @@ export class UsageService {
         counted = await this.mau.count({ tenantId, month });
       } catch (error) {
         this.log(
-          `usage: could not read the active users of ${tenantId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `usage: could not read the active users of ${tenantId}: ${messageOf(error)}`,
         );
       }
     }
