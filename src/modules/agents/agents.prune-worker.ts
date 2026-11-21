@@ -1,4 +1,4 @@
-import type { PruneReport } from "./prune";
+import type { PruneReport } from "./agents.prune";
 
 /** The queue surface the worker needs (`redis.queues.agentsPrune`). */
 export interface PruneQueue {

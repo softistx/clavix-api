@@ -1,4 +1,4 @@
-import type { AgentPruneEvent } from "./prune-events";
+import type { AgentPruneEvent } from "./agents.prune-events";
 
 /** An agent (registered or described by a metadata document) that has no standing grant after this long is deleted (D10). */
 export const AGENT_GRACE_DAYS = 7;

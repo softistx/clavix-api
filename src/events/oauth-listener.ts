@@ -1,5 +1,5 @@
 import type { OAuthEvent, OAuthEventListener } from "@softistx/janus-oauth";
-import type { AuthEventType } from "@/modules/audit/auth-events.model";
+import type { AuthEventType } from "@/modules/audit/audit.model";
 import type { EventBus } from "./bus";
 import type { AuthEvent } from "./types";
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { AGENT_GRACE_DAYS, type PruneDeps, pruneAgents } from "./prune";
-import { agentPruneEventInput, PRUNE_ACTOR } from "./prune-events";
-import { startAgentsPrune } from "./prune-worker";
+import { AGENT_GRACE_DAYS, type PruneDeps, pruneAgents } from "./agents.prune";
+import { agentPruneEventInput, PRUNE_ACTOR } from "./agents.prune-events";
+import { startAgentsPrune } from "./agents.prune-worker";
 
 const NOW = new Date("2026-11-17T12:00:00Z");
 const DAY = 86_400_000;

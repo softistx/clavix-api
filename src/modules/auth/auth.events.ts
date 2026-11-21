@@ -1,7 +1,7 @@
 import { JanusError } from "@softistx/janus";
 import { eventBus } from "@/config/events";
 import type { Context } from "@/http/context";
-import type { AuthMethod } from "@/modules/audit/auth-events.model";
+import type { AuthMethod } from "@/modules/audit/audit.model";
 
 // One id per HTTP request, ours: a client's `x-request-id` is never believed.
 const requestIds = new WeakMap<Request, string>();

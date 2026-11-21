@@ -1,8 +1,8 @@
 import { InvalidCursorError } from "@softistx/mongo";
 import type { StoredAdminEvent } from "@/console/admin-events/reader";
 import type { Resolvers } from "@/generated/console/resolvers";
-import { isAuthEventType } from "@/modules/audit/auth-events.model";
-import type { StoredAuthEvent } from "@/modules/audit/auth-events.service";
+import { isAuthEventType } from "@/modules/audit/audit.model";
+import type { StoredAuthEvent } from "@/modules/audit/audit.types";
 import type { ConsoleContext } from "../../context";
 import { liveTenant, tenantIdOf } from "../ids";
 import { badInput } from "../users/shapes";

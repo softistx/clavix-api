@@ -3,7 +3,7 @@ import { usageService } from "@/config/usage";
 import type { Resolvers } from "@/generated/console/resolvers";
 import type { TenantState } from "@/modules/tenants";
 import { type effectiveQuotas, PLANS } from "@/modules/tenants";
-import { isMonth } from "@/modules/usage/mau";
+import { isMonth } from "@/modules/usage/usage.utils";
 import { badInput } from "./errors";
 import { notFound } from "./lookup";
 import { parentOf } from "./parent";

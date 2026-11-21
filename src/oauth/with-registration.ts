@@ -1,6 +1,6 @@
 import { isMetadataClientId, type OAuthIssuers } from "@softistx/janus-oauth";
 import type { Exclusive } from "@/console/exclusive";
-import type { AgentClientsPort } from "@/modules/agents/agent-clients.service";
+import type { AgentClientsPort } from "@/modules/agents";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import {

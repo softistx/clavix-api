@@ -2,7 +2,7 @@ import type {
   AuthEventType,
   AuthMethod,
   AuthOutcome,
-} from "@/modules/audit/auth-events.model";
+} from "@/modules/audit/audit.model";
 import type { ClavixWebhookEvent } from "@/modules/webhooks";
 
 /** One thing a tenant's user did to their access, as a source reports it. */

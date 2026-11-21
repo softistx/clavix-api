@@ -1,10 +1,10 @@
-import type { AgentClientsService } from "@/modules/agents/agent-clients.service";
+import type { AgentsService } from "@/modules/agents";
 import { CatalogError } from "@/modules/resources";
 import type { CliTenant } from "@/shared/cli";
 import type { AgentKinds, AgentKindsOf } from "./client-listing";
 
 /** The part of the agents store the clients service reads. */
-export type AgentsReader = Pick<AgentClientsService, "kinds" | "remove">;
+export type AgentsReader = Pick<AgentsService, "kinds" | "remove">;
 
 /** Reads the tenant's agents among some client ids (bounded by them; none without the store). */
 export const agentKindsOf =

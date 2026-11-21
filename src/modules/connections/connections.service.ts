@@ -11,7 +11,7 @@ import {
   type SecretBox,
   type SecretResealCounts,
 } from "@/modules/sign-in-methods";
-import { assertWithinQuota } from "@/modules/usage/quota";
+import { assertWithinQuota } from "@/modules/usage/usage.rules";
 import { ConnectionError } from "./connections.errors";
 import type { ConnectionDoc, connections } from "./connections.model";
 import { checked, partsOf } from "./connections.record";

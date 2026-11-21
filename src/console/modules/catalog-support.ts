@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { CatalogError } from "@/modules/resources";
-import { RolesError } from "@/modules/roles";
+import { RolesError } from "@/modules/roles/roles.errors";
 import type { CliTenant } from "@/shared/cli";
 import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../context";

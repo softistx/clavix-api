@@ -1,4 +1,4 @@
-import type { RetentionReport } from "./retention";
+import type { RetentionReport } from "./audit.retention";
 
 /** The queue surface the worker needs (`redis.queues.auditRetention`). */
 export interface RetentionQueue {

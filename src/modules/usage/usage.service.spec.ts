@@ -7,7 +7,8 @@ import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
 import { registerClient } from "@/modules/clients/register-client";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
-import { assertWithinQuota, QuotaExceededError } from "./quota";
+import { QuotaExceededError } from "./usage.errors";
+import { assertWithinQuota } from "./usage.rules";
 import { UsageService } from "./usage.service";
 
 const tenant = (plan: "free" | "pro" | "enterprise" = "free") => ({

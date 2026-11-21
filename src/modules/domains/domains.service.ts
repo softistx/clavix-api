@@ -1,6 +1,6 @@
 import { ConflictError, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { assertWithinQuota } from "@/modules/usage/quota";
+import { assertWithinQuota } from "@/modules/usage/usage.rules";
 import { checkClaim } from "./domains.check";
 import type { TxtResolver } from "./domains.dns";
 import {
