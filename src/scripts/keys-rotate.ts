@@ -1,11 +1,10 @@
-import { CliInputError, UnknownTenantError } from "@/cli/errors";
 import { mongo } from "@/config/db";
-import { signingKeysFor } from "@/config/keys";
+import { keysService } from "@/config/keys";
 import { redis } from "@/config/redis";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
-import { rotateNow } from "@/keys";
-import { parseRotateArgs, ROTATE_USAGE } from "@/keys/cli";
-import { partitionOf } from "@/modules/tenants/identity";
+import { parseRotateArgs, ROTATE_USAGE } from "@/modules/keys";
+import { partitionOf } from "@/modules/tenants";
+import { CliInputError, UnknownTenantError } from "@/shared/cli";
 
 // Emergency rotation (a signing key leaked): retires the tenant's current key
 // now and makes a new one sign, through janus's own `retire` and rotation
@@ -32,9 +31,7 @@ try {
     }
     tenantIds = [partitionOf(tenant._id)];
   }
-  const { rotated, failed } = await rotateNow({
-    signingKeysFor,
-    tenantIds,
+  const { rotated, failed } = await keysService.rotateNow(tenantIds, {
     dropOld: target.dropOld,
   });
   console.log(JSON.stringify({ rotated, failed }, null, 2));

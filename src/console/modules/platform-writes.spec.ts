@@ -3,7 +3,6 @@ import {
   createMemorySigningKeys,
   type SigningKeyStore,
 } from "@softistx/janus-oauth";
-import { createApp } from "@/app";
 import { access, linkTenantToPlatform } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
@@ -17,9 +16,13 @@ import {
   CONSOLE_EXPORT_PATH,
   CONSOLE_PATH,
 } from "@/console/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
+import { gqlOf } from "~/gql";
+import { quietOAuth } from "~/ports";
 
 // A tenant-level role on the `clavix` tenant is not the platform's: every
 // console write that targets it needs the platform permission.
@@ -30,6 +33,8 @@ let OWNER = "";
 // The real wiring (issuers, grants): deleting a user needs the user's grants.
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -46,7 +51,7 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor,
 });
 // The bearer token is the user id: tokens are console.spec's business.
-const app = createApp({
+const app = createTestApp({
   oauth: issuers,
   console: {
     ...verifiedCallers(createConsoleDeps(issuers)),
@@ -75,14 +80,15 @@ const as =
     const response = await app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: `Bearer ${who()}`,
       },
       body: JSON.stringify({ query }),
     });
-    return (await response.json()) as ConsoleResult;
+    return gqlOf(response);
   };
-const tenantAdmin = as(() => ADMIN);
+const adminCaller = as(() => ADMIN);
 const tenantViewer = as(() => VIEWER);
 const platformOwner = as(() => OWNER);
 
@@ -151,7 +157,7 @@ afterAll(async () => {
 describe("writes on the clavix tenant", () => {
   test("a tenant-level owner of clavix is FORBIDDEN on every write", async () => {
     for (const [name, query] of Object.entries(writes(clavix, victim))) {
-      expect([name, codeOf(await tenantAdmin(query))]).toEqual([
+      expect([name, codeOf(await adminCaller(query))]).toEqual([
         name,
         "FORBIDDEN",
       ]);
@@ -162,7 +168,7 @@ describe("writes on the clavix tenant", () => {
     for (const [name, query] of Object.entries(
       writes(clavix.toUpperCase(), victim),
     )) {
-      expect([name, codeOf(await tenantAdmin(query))]).toEqual([
+      expect([name, codeOf(await adminCaller(query))]).toEqual([
         name,
         "FORBIDDEN",
       ]);
@@ -201,7 +207,7 @@ describe("writes on the clavix tenant", () => {
 
   test("another tenant's writes keep the tenant-level guard", async () => {
     // A tenant admin of an ordinary tenant still writes there.
-    expect(codeOf(await tenantAdmin(writes(other, "ghost").disableUser))).toBe(
+    expect(codeOf(await adminCaller(writes(other, "ghost").disableUser))).toBe(
       "NOT_FOUND",
     );
     expect(codeOf(await tenantViewer(writes(other, "ghost").disableUser))).toBe(
@@ -309,7 +315,7 @@ describe("the sign-in log export of the clavix tenant", () => {
     });
     expect(
       codeOf(
-        await tenantAdmin(
+        await adminCaller(
           `{ authEvents(tenantId: "${clavix}") { totalCount } }`,
         ),
       ),

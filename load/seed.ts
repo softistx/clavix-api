@@ -1,19 +1,19 @@
 import { s256Challenge } from "@softistx/janus-oauth";
-import { registerClient } from "@/clients/register-client";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createIssuers } from "@/config/oauth";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
-import { catalog, registerStoredResource } from "@/config/resources";
 import {
-  tenantBySlug,
-  tenantResolver,
-  tenantsCollection,
-  tenantsService,
-} from "@/config/tenancy";
+  clientDetailTypes,
+  registerStoredResource,
+  resourcesService,
+} from "@/config/resources";
+import { clock } from "@/config/runtime";
+import { tenantBySlug, tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, forTenant } from "@/config/users";
-import { registerTenant } from "@/modules/tenants/register-tenant";
+import { registerClient } from "@/modules/clients";
 
 // Seeds the load test (docs/operations.md, "Load test"): TENANTS
 // tenants, each with CHAINS public clients and one refresh-token chain per
@@ -31,6 +31,8 @@ const VERIFIER = "v".repeat(64);
 const clientOf = (chain: number) => `load-${chain}`;
 const RESOURCE = "https://api.load.test/v1";
 const MACHINE = "load-cc";
+const pushedOf = z.object({ request_uri: z.string().optional() });
+const grantedOf = z.object({ refresh_token: z.string().optional() });
 
 // The real end-user authentication of the tenants: the refresh grant checks the
 // user in the tenant's store, so each tenant gets one real user (a refresh of a
@@ -62,7 +64,7 @@ async function mintRefreshToken(slug: string): Promise<string> {
       body: query,
     }),
   );
-  const pushed = (await par.json()) as { request_uri?: string };
+  const pushed = pushedOf.parse(await par.json());
   if (par.status !== 201 || pushed.request_uri === undefined) {
     throw new Error(
       `${slug}: par answered ${par.status} ${JSON.stringify(pushed)}`,
@@ -88,11 +90,11 @@ async function mintRefreshToken(slug: string): Promise<string> {
   }
   const server = await issuers.serverFor(new Request(url(slug, "/")));
   if (server === null) throw new Error(`${slug}: no server`);
-  const { redirectTo } = await server.approve(
-    { id: userIds.get(slug) as string },
-    requestId,
-    { scopes: ["read"] },
-  );
+  const userId = userIds.get(slug);
+  if (userId === undefined) throw new Error(`${slug}: no user`);
+  const { redirectTo } = await server.approve({ id: userId }, requestId, {
+    scopes: ["read"],
+  });
   const code = new URL(redirectTo).searchParams.get("code") ?? "";
   const token = await issuers.handle(
     new Request(url(slug, "/token"), {
@@ -108,7 +110,7 @@ async function mintRefreshToken(slug: string): Promise<string> {
       }),
     }),
   );
-  const body = (await token.json()) as { refresh_token?: string };
+  const body = grantedOf.parse(await token.json());
   if (token.status !== 200 || body.refresh_token === undefined) {
     throw new Error(
       `${slug}: code exchange answered ${token.status} ${JSON.stringify(body)}`,
@@ -128,10 +130,7 @@ const out: {
 try {
   for (let i = 0; i < TENANTS; i++) {
     const slug = `load${String(i).padStart(2, "0")}`;
-    await registerTenant(
-      { service: tenantsService, collection: tenantsCollection },
-      { slug, name: `Load ${i}` },
-    );
+    await tenantsService.register({ slug, name: `Load ${i}` });
     await registerStoredResource({
       tenant: slug,
       uri: RESOURCE,
@@ -139,15 +138,20 @@ try {
     });
     const owner = await tenantBySlug(slug);
     if (owner === undefined) throw new Error(`${slug}: tenant not found`);
-    const stored = (await catalog.listResources(owner._id)).find(
+    const stored = (await resourcesService.listResources(owner._id)).find(
       (resource) => resource.uri === RESOURCE,
     );
     if (stored === undefined) throw new Error(`${slug}: resource not stored`);
-    await catalog.updateResource(owner._id, stored._id.toHexString(), {
+    await resourcesService.updateResource(owner._id, stored._id.toHexString(), {
       allowClientCredentials: true,
     });
     const machine = await registerClient(
-      { db: oauthDb, findTenant: tenantBySlug },
+      {
+        db: oauthDb,
+        findTenant: tenantBySlug,
+        detailTypes: clientDetailTypes,
+        now: clock,
+      },
       {
         tenant: slug,
         name: "Load machine",
@@ -174,7 +178,12 @@ try {
     for (let j = 0; j < CHAINS; j++) {
       chain = j;
       await registerClient(
-        { db: oauthDb, findTenant: tenantBySlug },
+        {
+          db: oauthDb,
+          findTenant: tenantBySlug,
+          detailTypes: clientDetailTypes,
+          now: clock,
+        },
         {
           tenant: slug,
           name: `Load ${j}`,

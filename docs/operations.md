@@ -267,7 +267,7 @@ evenly over its window, so a burst up to the limit is allowed at once, then the 
 | `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 30 / 600   | client address and tenant |
 | `TENANT_LIMIT` / `TENANT_WINDOW_SECONDS` | 300 / 3600 | tenant                    |
 
-Each value is an integer of at least 1 (`src/config/env.ts`). A lookup counts whether or not the code exists: the
+Each value is an integer of at least 1 (`src/config/env/limits.ts`). A lookup counts whether or not the code exists: the
 throttle runs before the store is read. Past a limit, the lookup fails with `DEVICE_CODE_THROTTLED` (HTTP 429,
 `Retry-After`).
 
@@ -515,10 +515,9 @@ it. Custom domains stay on demand.
    and requests. Skipped, a request that carries details is refused by the validators (code 121,
    `STORE_FAILED`) and the first type a tenant defines fails to save. No migration: a tenant with no
    type behaves as before.
-   Clients opt in (R3): `CLAVIX_RAR_CONSENT_READY` (slugs, or `*`; default none) lets a client that uses `/authorize`
-   or the device grant list detail types on those tenants; set it only once the hosted consent pages show details.
-   Without it only a token-exchange-only client can list a type. No migration; `db:sync` first, as above (the clients validator
+   Clients opt in (R3): any client that requires PAR can list the tenant's stored types, whatever its grants. No migration; `db:sync` first, as above (the clients validator
    accepts `authorizationDetailsTypes`).
+   Deploy clavix-ui with the consent details (clavix-ui#10) before this API; `CLAVIX_RAR_CONSENT_READY` is now ignored.
    Pushed authorization requests (clavix-api #13): run `db:sync` **before** `db:migrate` and before the
    deploy (the PAR validators, the replay collection and the clients validator that accepts
    `requirePushedAuthorizationRequests`). `db:migrate` then runs `2026-11-16-oauth-policy`, which writes

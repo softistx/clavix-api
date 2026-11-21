@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
-import { partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { noDetailTypes } from "@/config/no-ops";
+import { registerClient } from "@/modules/clients";
+import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { agentClientsService } from "./agent-clients";
 import { createAgentsPrune } from "./agents-prune";
 import { mongo } from "./db";
@@ -16,6 +16,8 @@ const DAY = 86_400_000;
 const options = {
   db: oauthDb,
   findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+  now: () => NOW,
+  detailTypes: noDetailTypes,
 };
 let idA = "";
 let idB = "";

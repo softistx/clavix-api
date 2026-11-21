@@ -1,3 +1,4 @@
+import { propertyOf } from "@/shared/values";
 import { isLive, TENANT_SUSPENDED } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 
@@ -24,7 +25,7 @@ export const suspendedResponse = () =>
 export interface TenantStateOptions {
   resolver: Pick<TenantResolver, "resolveRequest">;
   /** Called after a token was issued or refreshed, with the tenant and the user (`sub`). Must not throw. */
-  onActive?: (tenantId: string, userId: string) => void | Promise<void>;
+  onActive: (tenantId: string, userId: string) => void | Promise<void>;
 }
 
 /**
@@ -39,10 +40,8 @@ export function subjectOf(token: unknown): string | undefined {
     const claims: unknown = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8"),
     );
-    const { sub, client_id: clientId } = (claims ?? {}) as {
-      sub?: unknown;
-      client_id?: unknown;
-    };
+    const sub = propertyOf(claims, "sub");
+    const clientId = propertyOf(claims, "client_id");
     if (typeof sub !== "string" || sub === "") return undefined;
     // A client_credentials token carries its client as `sub`: no user.
     return sub === clientId ? undefined : sub;
@@ -83,9 +82,7 @@ export function withTenantState<
           .clone()
           .json()
           .catch(() => null);
-        const user = subjectOf(
-          (body as { access_token?: unknown } | null)?.access_token,
-        );
+        const user = subjectOf(propertyOf(body, "access_token"));
         if (user !== undefined) await onActive(tenant.tenantId, user);
       }
       return response;

@@ -1,6 +1,6 @@
 import type { UserEvent, UserEventListener } from "@softistx/janus";
-import type { AuthEventType } from "@/modules/audit/auth-events.model";
-import { userWebhookEvent } from "@/modules/webhooks/events";
+import type { AuthEventType } from "@/modules/audit";
+import { userWebhookEvent } from "@/modules/webhooks";
 import type { EventBus } from "./bus";
 
 // The janus user events the sign-in log keeps (D14): second-factor and passkey

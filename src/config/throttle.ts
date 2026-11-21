@@ -1,32 +1,42 @@
-import { createSignInThrottle } from "@/modules/auth/throttle";
-import { createVerificationThrottle } from "@/modules/auth/verification-throttle";
-import { createDeviceThrottle } from "@/modules/consent/device-throttle";
-import { createPasskeyThrottle } from "@/modules/passkeys/throttle";
+import {
+  createSignInThrottle,
+  createVerificationThrottle,
+} from "@/modules/auth";
+import { createDeviceThrottle } from "@/modules/consent";
+import { createPasskeyThrottle } from "@/modules/passkeys";
 import {
   createHomeRealmThrottle,
   createSsoStartThrottle,
-} from "@/modules/sign-in-methods/sso-throttle";
+} from "@/modules/sign-in-methods";
 import {
   createMetadataThrottle,
   createRegisterThrottle,
 } from "@/oauth/register-throttle";
+import { noThrottle, noUserThrottle } from "./no-ops";
 import { redis } from "./redis";
+import { warn } from "./runtime";
 
-// The anonymous operations' limits on the app's Redis; none without REDIS_URL
-// (development), where only janus's own limits apply.
+// The anonymous operations' limits on the app's Redis; the named no-op without
+// REDIS_URL (development), where only janus's own limits apply.
 export const signInThrottle =
-  redis === undefined ? undefined : createSignInThrottle(redis.limits);
+  redis === undefined ? noThrottle : createSignInThrottle(redis.limits, warn);
 export const passkeyThrottle =
-  redis === undefined ? undefined : createPasskeyThrottle(redis.limits);
+  redis === undefined ? noThrottle : createPasskeyThrottle(redis.limits, warn);
 export const homeRealmThrottle =
-  redis === undefined ? undefined : createHomeRealmThrottle(redis.limits);
+  redis === undefined
+    ? noThrottle
+    : createHomeRealmThrottle(redis.limits, warn);
 export const ssoStartThrottle =
-  redis === undefined ? undefined : createSsoStartThrottle(redis.limits);
+  redis === undefined ? noThrottle : createSsoStartThrottle(redis.limits, warn);
 export const verifyThrottle =
-  redis === undefined ? undefined : createVerificationThrottle(redis.limits);
+  redis === undefined
+    ? noUserThrottle
+    : createVerificationThrottle(redis.limits, warn);
 export const deviceThrottle =
-  redis === undefined ? undefined : createDeviceThrottle(redis.limits);
+  redis === undefined
+    ? noUserThrottle
+    : createDeviceThrottle(redis.limits, warn);
 export const registerThrottle =
-  redis === undefined ? undefined : createRegisterThrottle(redis.limits);
+  redis === undefined ? noThrottle : createRegisterThrottle(redis.limits, warn);
 export const metadataThrottle =
-  redis === undefined ? undefined : createMetadataThrottle(redis.limits);
+  redis === undefined ? noThrottle : createMetadataThrottle(redis.limits, warn);

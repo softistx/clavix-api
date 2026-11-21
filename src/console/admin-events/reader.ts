@@ -1,6 +1,6 @@
 import type { ReadDocumentOf, TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { drain } from "@/modules/audit/stream";
+import { drain } from "@/modules/audit";
 import type { adminEvents } from "./admin-events.model";
 
 export type StoredAdminEvent = ReadDocumentOf<typeof adminEvents>;
@@ -28,16 +28,25 @@ const whereOf = (scope: AdminEventScope, filter: AdminEventFilter) => ({
     : "platformOnly" in scope
       ? { tenantId: null }
       : {}),
-  ...(filter.from == null && filter.to == null
+  ...((filter.from === null || filter.from === undefined) &&
+  (filter.to === null || filter.to === undefined)
     ? {}
     : {
         at: {
-          ...(filter.from == null ? {} : { $gte: filter.from }),
-          ...(filter.to == null ? {} : { $lte: filter.to }),
+          ...(filter.from === null || filter.from === undefined
+            ? {}
+            : { $gte: filter.from }),
+          ...(filter.to === null || filter.to === undefined
+            ? {}
+            : { $lte: filter.to }),
         },
       }),
-  ...(filter.action == null ? {} : { action: filter.action }),
-  ...(filter.actor == null ? {} : { actor: filter.actor }),
+  ...(filter.action === null || filter.action === undefined
+    ? {}
+    : { action: filter.action }),
+  ...(filter.actor === null || filter.actor === undefined
+    ? {}
+    : { actor: filter.actor }),
 });
 
 /**

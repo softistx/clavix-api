@@ -1,6 +1,6 @@
 import { isMetadataClientId, type OAuthIssuers } from "@softistx/janus-oauth";
 import type { Exclusive } from "@/console/exclusive";
-import type { AgentClientsPort } from "@/modules/agents/agent-clients.service";
+import type { AgentClientsPort } from "@/modules/agents";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import {
@@ -28,13 +28,13 @@ export interface RegistrationOptions {
     tenant: ResolvedTenant,
     clientId: string,
   ) => Promise<boolean>;
-  /** Limits the document fetch per address and tenant; none without Redis. */
-  throttle?: MetadataThrottle | undefined;
+  /** Limits the document fetch per address and tenant (`noThrottle` without Redis). */
+  throttle: MetadataThrottle;
   /** The `agents` quota that applies to the tenant (`null`: no limit). */
   agentQuotaOf: (tenantId: string) => Promise<number | null>;
   /** Serializes a tenant's new agents (count, fetch, record); see `agentsQuotaKey`. */
-  exclusive?: Exclusive | undefined;
-  log?: (message: string) => void;
+  exclusive: Exclusive;
+  log: (message: string) => void;
 }
 
 const NO_STORE = { "cache-control": "no-store" } as const;
@@ -53,6 +53,121 @@ async function clientIdOf(request: Request): Promise<string | null> {
   }
 }
 
+/** What the handlers share: the issuers' `handle` and the wired ports, no state of its own. */
+interface RegistrationContext
+  extends Omit<RegistrationOptions, "register" | "throttle"> {
+  handle: (request: Request) => Promise<Response>;
+  throttle: MetadataThrottle;
+}
+
+/** The fetch limits, before janus fetches a document: a refusal is the response. */
+async function throttleMetadata(
+  { throttle }: RegistrationContext,
+  tenant: ResolvedTenant,
+  ip: string | undefined,
+): Promise<Response | null> {
+  try {
+    await throttle.check({ tenantId: tenant.tenantId, ip });
+    return null;
+  } catch (error) {
+    if (!(error instanceof MetadataThrottledError)) throw error;
+    return Response.json(
+      {
+        error: "temporarily_unavailable",
+        error_description: "Too many client metadata fetches; retry later",
+      },
+      {
+        status: 429,
+        headers: { ...NO_STORE, "retry-after": String(error.retryAfter) },
+      },
+    );
+  }
+}
+
+async function recordMetadata(
+  { isMetadataClient, agents }: RegistrationContext,
+  tenant: ResolvedTenant,
+  clientId: string,
+) {
+  if (!(await isMetadataClient(tenant, clientId))) return;
+  await agents.record(tenant.tenantId, { clientId, kind: "metadata" });
+}
+
+/** Records the client; never fails the request: the client is stored, the record is a count. */
+const recordSafely = (
+  context: RegistrationContext,
+  tenant: ResolvedTenant,
+  clientId: string,
+) =>
+  recordMetadata(context, tenant, clientId).catch((error: unknown) =>
+    context.log(
+      `register: could not record metadata client ${clientId}: ${String(error)}`,
+    ),
+  );
+
+/** janus handles the request, then the client is recorded. */
+async function handleAndRecord(
+  context: RegistrationContext,
+  request: Request,
+  tenant: ResolvedTenant,
+  clientId: string,
+): Promise<Response> {
+  const response = await context.handle(request);
+  await recordSafely(context, tenant, clientId);
+  return response;
+}
+
+/**
+ * `/authorize` or `/par` of a metadata-document client. A client not yet
+ * recorded is a new agent: the quota check, janus's fetch and the record
+ * run under the tenant's agents lock, so concurrent first uses cannot all
+ * pass a quota of N.
+ */
+async function handleMetadata(
+  context: RegistrationContext,
+  request: Request,
+  clientId: string,
+  ip: string | undefined,
+): Promise<Response> {
+  const { resolver, agents, agentQuotaOf, exclusive } = context;
+  const tenant = await resolver.resolveRequest(request);
+  if (tenant === null || !tenant.oauth.agents.metadataDocuments) {
+    return context.handle(request);
+  }
+  const throttled = await throttleMetadata(context, tenant, ip);
+  if (throttled !== null) return throttled;
+  if (await agents.has(tenant.tenantId, clientId)) {
+    return handleAndRecord(context, request, tenant, clientId);
+  }
+  return exclusive(agentsQuotaKey(tenant.tenantId), async () => {
+    // Recorded by a request that held the lock before this one: not new.
+    const over = (await agents.has(tenant.tenantId, clientId))
+      ? null
+      : await agentsQuotaRefusal(
+          { count: (id) => agents.count(id), quotaOf: agentQuotaOf },
+          tenant.tenantId,
+        );
+    if (over !== null) return over;
+    return handleAndRecord(context, request, tenant, clientId);
+  });
+}
+
+/** `/authorize` or `/par` of a metadata-document client, with the quota lock's refusal answered. */
+async function handleMetadataSafely(
+  context: RegistrationContext,
+  request: Request,
+  clientId: string,
+  ip: string | undefined,
+): Promise<Response> {
+  try {
+    return await handleMetadata(context, request, clientId, ip);
+  } catch (error) {
+    const unavailable = lockUnavailable(error);
+    if (unavailable === null) throw error;
+    return unavailable;
+  }
+}
+
 /**
  * Wraps the issuers: `/register` is Clavix's own route, never janus's (it adds
  * the throttle, the `agents` quota and the agent record), as `handle` and as
@@ -66,88 +181,15 @@ export function withRegistration<
     Partial<Pick<OAuthIssuers, "serverFor">>,
 >(
   oauth: T,
-  {
-    resolver,
-    register,
-    agents,
-    isMetadataClient,
-    throttle,
-    agentQuotaOf,
-    exclusive = (_key, work) => work(),
-    log = console.warn,
-  }: RegistrationOptions,
+  { register, ...options }: RegistrationOptions,
 ): Omit<T, "handle"> & {
   register: RegisterHandler;
   handle: (request: Request, ip?: string | undefined) => Promise<Response>;
 } {
-  /** The fetch limits, before janus fetches a document: a refusal is the response. */
-  const throttleMetadata = async (
-    tenant: ResolvedTenant,
-    ip: string | undefined,
-  ): Promise<Response | null> => {
-    try {
-      await throttle?.check({ tenantId: tenant.tenantId, ip });
-      return null;
-    } catch (error) {
-      if (!(error instanceof MetadataThrottledError)) throw error;
-      return Response.json(
-        {
-          error: "temporarily_unavailable",
-          error_description: "Too many client metadata fetches; retry later",
-        },
-        {
-          status: 429,
-          headers: { ...NO_STORE, "retry-after": String(error.retryAfter) },
-        },
-      );
-    }
-  };
-  const recordMetadata = async (tenant: ResolvedTenant, clientId: string) => {
-    if (!(await isMetadataClient(tenant, clientId))) return;
-    await agents.record(tenant.tenantId, { clientId, kind: "metadata" });
-  };
-  /** Records the client; never fails the request: the client is stored, the record is a count. */
-  const recordSafely = (tenant: ResolvedTenant, clientId: string) =>
-    recordMetadata(tenant, clientId).catch((error: unknown) =>
-      log(
-        `register: could not record metadata client ${clientId}: ${String(error)}`,
-      ),
-    );
-  /**
-   * `/authorize` or `/par` of a metadata-document client. A client not yet
-   * recorded is a new agent: the quota check, janus's fetch and the record
-   * run under the tenant's agents lock, so concurrent first uses cannot all
-   * pass a quota of N.
-   */
-  const handleMetadata = async (
-    request: Request,
-    clientId: string,
-    ip: string | undefined,
-  ): Promise<Response> => {
-    const tenant = await resolver.resolveRequest(request);
-    if (tenant === null || !tenant.oauth.agents.metadataDocuments) {
-      return oauth.handle(request);
-    }
-    const throttled = await throttleMetadata(tenant, ip);
-    if (throttled !== null) return throttled;
-    if (await agents.has(tenant.tenantId, clientId)) {
-      const response = await oauth.handle(request);
-      await recordSafely(tenant, clientId);
-      return response;
-    }
-    return exclusive(agentsQuotaKey(tenant.tenantId), async () => {
-      // Recorded by a request that held the lock before this one: not new.
-      const over = (await agents.has(tenant.tenantId, clientId))
-        ? null
-        : await agentsQuotaRefusal(
-            { count: (id) => agents.count(id), quotaOf: agentQuotaOf },
-            tenant.tenantId,
-          );
-      if (over !== null) return over;
-      const response = await oauth.handle(request);
-      await recordSafely(tenant, clientId);
-      return response;
-    });
+  const context: RegistrationContext = {
+    ...options,
+    throttle: options.throttle,
+    handle: (request) => oauth.handle(request),
   };
   return {
     ...oauth,
@@ -161,13 +203,7 @@ export function withRegistration<
       if (clientId === null || !isMetadataClientId(clientId)) {
         return oauth.handle(request);
       }
-      try {
-        return await handleMetadata(request, clientId, ip);
-      } catch (error) {
-        const unavailable = lockUnavailable(error);
-        if (unavailable === null) throw error;
-        return unavailable;
-      }
+      return handleMetadataSafely(context, request, clientId, ip);
     },
   };
 }

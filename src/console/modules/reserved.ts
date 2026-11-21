@@ -1,6 +1,6 @@
 import { consoleResource } from "@/config/console";
-import { CatalogError } from "@/modules/resources/catalog.errors";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { CatalogError } from "@/modules/resources";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { CONSOLE_CLIENT_ID } from "../identity";
 
 // What the console itself signs in with (the `2026-11-12-console` migration):

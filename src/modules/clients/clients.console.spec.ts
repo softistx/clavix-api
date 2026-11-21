@@ -1,0 +1,1429 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
+import { access, linkTenantToPlatform } from "@/config/access";
+import { clientPoliciesService } from "@/config/client-policies";
+import { clientsService } from "@/config/clients";
+import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
+import { oauthDb } from "@/config/oauth-db";
+import { registerStoredResource } from "@/config/resources";
+import { tenantsService } from "@/config/tenancy";
+import { usageService } from "@/config/usage";
+import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
+import { at } from "~/body";
+import { codeOf, consoleAs } from "~/console";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
+import { createFlow } from "~/oauth-flow";
+import { registerClient } from "./clients.register";
+
+const REDIRECT = "https://app.example/callback";
+const admin = consoleAs("cli-admin-a");
+const viewer = consoleAs("cli-viewer-a");
+const adminB = consoleAs("cli-admin-b");
+const operator = consoleAs("cli-operator");
+
+let tenantA = "";
+let tenantB = "";
+
+const CLIENT =
+  "id name type redirectUris grantTypes allowedScopes defaultScopes createdAt requirePushedAuthorizationRequests dpopBoundAccessTokens";
+const CREATE = `mutation($tenantId: ID!, $input: CreateClientInput!) {
+  createClient(tenantId: $tenantId, input: $input) { client { ${CLIENT} } clientSecret }
+}`;
+const UPDATE = `mutation($tenantId: ID!, $id: ID!, $input: UpdateClientInput!) {
+  updateClient(tenantId: $tenantId, id: $id, input: $input) { ${CLIENT} }
+}`;
+const ROTATE = `mutation($tenantId: ID!, $id: ID!) {
+  rotateClientSecret(tenantId: $tenantId, id: $id) { client { id } clientSecret }
+}`;
+const DELETE = `mutation($tenantId: ID!, $id: ID!) { deleteClient(tenantId: $tenantId, id: $id) }`;
+const LIST = `query($tenantId: ID!, $q: String, $after: String, $first: Int) {
+  clients(tenantId: $tenantId, q: $q, after: $after, first: $first) { items { ${CLIENT} } nextCursor totalCount }
+}`;
+const clientsPage = z.looseObject({
+  items: z.array(z.looseObject({ id: z.string() })),
+  nextCursor: z.string().nullable(),
+  totalCount: z.number(),
+});
+const secretOf = z.looseObject({ clientSecret: z.string() });
+const pageOf = (result: Awaited<ReturnType<typeof admin>>) =>
+  at(result.data, "clients", clientsPage);
+const GET = `query($tenantId: ID!, $id: ID!) { client(tenantId: $tenantId, id: $id) { ${CLIENT} } }`;
+
+const storeOf = async (tenantId: string) => {
+  const tenant = await mongo.db.tenants.findById(tenantId);
+  if (tenant === undefined) throw new Error("no tenant");
+  return createMongoOAuth(oauthDb, { partition: partitionOf(tenant._id) });
+};
+const create = (
+  as: typeof admin,
+  tenantId: string,
+  input: Record<string, unknown>,
+) =>
+  as(CREATE, {
+    tenantId,
+    input: { type: "PUBLIC", redirectUris: [REDIRECT], ...input },
+  });
+const idsOf = (result: Awaited<ReturnType<typeof admin>>) =>
+  at(result.data, "clients", clientsPage.optional())?.items.map(
+    (item) => item.id,
+  );
+
+beforeAll(async () => {
+  tenantA = (await tenantsService.create({ slug: "cli-a", name: "A" })).id;
+  tenantB = (await tenantsService.create({ slug: "cli-b", name: "B" })).id;
+  await access.grantTenant(tenantA, "cli-admin-a", "admin");
+  await access.grantTenant(tenantA, "cli-viewer-a", "viewer");
+  await access.grantTenant(tenantB, "cli-admin-b", "admin");
+  await access.grantPlatform("cli-operator", "owner");
+  // The suite makes more clients than the free plan allows; the quota has its own tests below.
+  await mongo.db.tenants.raw.updateMany(
+    { slug: { $in: ["cli-a", "cli-b"] } },
+    { $set: { quotaOverrides: { clients: 1000 } } },
+  );
+});
+
+afterAll(async () => {
+  await mongo.db.tenants.raw.deleteMany({
+    slug: { $ne: PLATFORM_TENANT_SLUG },
+  });
+  await mongo.db.adminEvents.raw.deleteMany({});
+  await oauthDb.collection("relations").deleteMany({});
+});
+
+describe("createClient", () => {
+  test("a confidential client's secret is shown once, and only its hash is kept", async () => {
+    const result = await create(admin, tenantA, {
+      name: "Back end",
+      type: "CONFIDENTIAL",
+    });
+    expect(result.errors).toBeUndefined();
+    const created = at(
+      result.data,
+      "createClient",
+      z.looseObject({
+        client: z.record(z.string(), z.unknown()),
+        clientSecret: z.string(),
+      }),
+    );
+    expect(created.client).toMatchObject({
+      id: "back-end",
+      name: "Back end",
+      type: "CONFIDENTIAL",
+      redirectUris: [REDIRECT],
+      grantTypes: ["AUTHORIZATION_CODE", "REFRESH_TOKEN"],
+    });
+    expect(created.clientSecret.length).toBeGreaterThan(20);
+    const stored = await (await storeOf(tenantA)).findClient("back-end");
+    expect(stored?.secretHash).toBeDefined();
+    expect(stored?.secretHash).not.toBe(created.clientSecret);
+    // No field reads a secret back: the type has none.
+    const again = await admin(
+      `query($tenantId: ID!) { client(tenantId: $tenantId, id: "back-end") { clientSecret } }`,
+      { tenantId: tenantA },
+    );
+    expect(codeOf(again)).toBe("GRAPHQL_VALIDATION_FAILED");
+  });
+
+  test("a public client has no secret", async () => {
+    const result = await create(admin, tenantA, { name: "Mobile app" });
+    expect(result.data?.["createClient"]).toMatchObject({
+      client: { id: "mobile-app", type: "PUBLIC" },
+      clientSecret: null,
+    });
+  });
+
+  test("an id already taken is a CONFLICT and changes nothing", async () => {
+    const before = await (await storeOf(tenantA)).findClient("back-end");
+    const result = await create(admin, tenantA, {
+      name: "Another",
+      clientId: "back-end",
+      type: "CONFIDENTIAL",
+    });
+    expect(codeOf(result)).toBe("CONFLICT");
+    const after = await (await storeOf(tenantA)).findClient("back-end");
+    expect(after?.secretHash).toBe(before?.secretHash);
+    expect(after?.name).toBe("Back end");
+  });
+
+  test("bad input is refused", async () => {
+    for (const input of [
+      { name: " " },
+      { name: "X", redirectUris: [] },
+      { name: "X", redirectUris: ["not a uri"] },
+      { name: "X", clientId: "Not An Id" },
+    ]) {
+      expect(codeOf(await create(admin, tenantA, input))).toBe(
+        "BAD_USER_INPUT",
+      );
+    }
+  });
+});
+
+describe("clients and client", () => {
+  test("lists in id order in pages, and filters with q", async () => {
+    const first = await admin(LIST, { tenantId: tenantA, first: 1 });
+    expect(first.errors).toBeUndefined();
+    expect(idsOf(first)).toEqual(["back-end"]);
+    const cursor = at(first.data, "clients.nextCursor", z.string().nullable());
+    expect(cursor).not.toBeNull();
+    const second = await admin(LIST, {
+      tenantId: tenantA,
+      first: 1,
+      after: cursor,
+    });
+    expect(idsOf(second)).toEqual(["mobile-app"]);
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "MOB" }))).toEqual([
+      "mobile-app",
+    ]);
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: ".*" }))).toEqual(
+      [],
+    );
+  });
+
+  test("a search follows the cursor to every match, whatever the page size", async () => {
+    const found: string[] = [];
+    let after: string | null = null;
+    do {
+      const result = await admin(LIST, {
+        tenantId: tenantA,
+        q: "app",
+        first: 1,
+        after,
+      });
+      expect(result.errors).toBeUndefined();
+      found.push(...(idsOf(result) ?? []));
+      after = at(result.data, "clients.nextCursor", z.string().nullable());
+    } while (after !== null);
+    expect(found).toEqual(["mobile-app"]);
+  });
+
+  test("totalCount ignores the cursor and the page size, and follows q", async () => {
+    const all = pageOf(await admin(LIST, { tenantId: tenantA }));
+    expect(all.totalCount).toBe(all.items.length);
+    expect(all.totalCount).toBeGreaterThanOrEqual(2);
+    const first = pageOf(await admin(LIST, { tenantId: tenantA, first: 1 }));
+    expect(first.totalCount).toBe(all.totalCount);
+    // Page 2: the same total, whatever the cursor.
+    const second = pageOf(
+      await admin(LIST, {
+        tenantId: tenantA,
+        first: 1,
+        after: first.nextCursor,
+      }),
+    );
+    expect(second.totalCount).toBe(all.totalCount);
+    const search = (q: string, size?: number) =>
+      admin(LIST, { tenantId: tenantA, q, first: size });
+    expect(pageOf(await search("MOB")).totalCount).toBe(1);
+    expect(pageOf(await search("MOB", 1)).totalCount).toBe(1);
+    expect(pageOf(await search(".*")).totalCount).toBe(0);
+  });
+
+  test("totalCount counts only the tenant's own clients", async () => {
+    await create(adminB, tenantB, { name: "B only" });
+    const count = async (as: typeof admin, tenantId: string, q: string) =>
+      pageOf(await as(LIST, { tenantId, q })).totalCount;
+    expect(await count(adminB, tenantB, "b only")).toBe(1);
+    expect(await count(admin, tenantA, "b only")).toBe(0);
+    // Later tests list tenant B whole: leave it as it was.
+    await adminB(DELETE, { tenantId: tenantB, id: "b-only" });
+  });
+
+  test("the grant types a script recorded are shown", async () => {
+    await registerClient(
+      {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
+        db: oauthDb,
+        findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+      },
+      {
+        tenant: "cli-a",
+        name: "Code only",
+        redirectUris: [REDIRECT],
+        grants: ["authorization_code"],
+      },
+    );
+    const found = await admin(GET, { tenantId: tenantA, id: "code-only" });
+    expect(found.data?.["client"]).toMatchObject({
+      grantTypes: ["AUTHORIZATION_CODE"],
+    });
+    // An update keeps what was recorded.
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "code-only",
+      input: { name: "Code" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      name: "Code",
+      grantTypes: ["AUTHORIZATION_CODE"],
+    });
+  });
+
+  test("a device-code client is created without redirect URIs, and its grants are changed by an update", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Smart TV",
+      redirectUris: undefined,
+      grantTypes: ["DEVICE_CODE"],
+    });
+    expect(created.errors).toBeUndefined();
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: {
+        id: "smart-tv",
+        redirectUris: [],
+        grantTypes: ["DEVICE_CODE"],
+      },
+    });
+    const added = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "smart-tv",
+      input: { grantTypes: ["DEVICE_CODE", "REFRESH_TOKEN"] },
+    });
+    expect(added.data?.["updateClient"]).toMatchObject({
+      grantTypes: ["REFRESH_TOKEN", "DEVICE_CODE"],
+    });
+    // A rename keeps them.
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "smart-tv",
+      input: { name: "TV" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      grantTypes: ["REFRESH_TOKEN", "DEVICE_CODE"],
+    });
+    // A redirect-based client still needs a redirect URI.
+    const bare = await create(admin, tenantA, {
+      name: "No redirect",
+      redirectUris: [],
+    });
+    expect(bare.errors).toBeDefined();
+    await admin(DELETE, { tenantId: tenantA, id: "smart-tv" });
+  });
+
+  test("a client_credentials client needs a confidential type and allowed scopes, and keeps them on a rename", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Worker",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+      allowedScopes: ["read", "write"],
+      defaultScopes: ["read"],
+    });
+    expect(created.errors).toBeUndefined();
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: {
+        id: "worker",
+        redirectUris: [],
+        grantTypes: ["CLIENT_CREDENTIALS"],
+        allowedScopes: ["read", "write"],
+        defaultScopes: ["read"],
+      },
+    });
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "worker",
+      input: { name: "Billing worker" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      allowedScopes: ["read", "write"],
+      defaultScopes: ["read"],
+    });
+    const publicOne = await create(admin, tenantA, {
+      name: "Public machine",
+      type: "PUBLIC",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+      allowedScopes: ["read"],
+    });
+    expect(codeOf(publicOne)).toBe("BAD_USER_INPUT");
+    const noScope = await create(admin, tenantA, {
+      name: "No scope",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+    });
+    expect(codeOf(noScope)).toBe("BAD_USER_INPUT");
+    await admin(DELETE, { tenantId: tenantA, id: "worker" });
+  });
+
+  test("a client's PAR requirement is set at creation, changed by an update and kept by a rename", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Pushing app",
+      requirePushedAuthorizationRequests: true,
+    });
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: { id: "pushing-app", requirePushedAuthorizationRequests: true },
+    });
+    expect(
+      (await (await storeOf(tenantA)).findClient("pushing-app"))
+        ?.requirePushedAuthorizationRequests,
+    ).toBe(true);
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "pushing-app",
+      input: { name: "Pushing" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      requirePushedAuthorizationRequests: true,
+    });
+    const off = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "pushing-app",
+      input: { requirePushedAuthorizationRequests: false },
+    });
+    expect(off.data?.["updateClient"]).toMatchObject({
+      requirePushedAuthorizationRequests: false,
+    });
+    // A client created without it does not require it.
+    const plain = await create(admin, tenantA, { name: "Plain app" });
+    expect(plain.data?.["createClient"]).toMatchObject({
+      client: { requirePushedAuthorizationRequests: false },
+    });
+  });
+
+  test("a client's DPoP binding is set at creation, changed by an update and kept by a rename", async () => {
+    const created = await create(admin, tenantA, {
+      name: "Bound app",
+      dpopBoundAccessTokens: true,
+    });
+    expect(created.data?.["createClient"]).toMatchObject({
+      client: { id: "bound-app", dpopBoundAccessTokens: true },
+    });
+    expect(
+      (await (await storeOf(tenantA)).findClient("bound-app"))
+        ?.dpopBoundAccessTokens,
+    ).toBe(true);
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "bound-app",
+      input: { name: "Bound" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      dpopBoundAccessTokens: true,
+    });
+    const off = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "bound-app",
+      input: { dpopBoundAccessTokens: false },
+    });
+    expect(off.data?.["updateClient"]).toMatchObject({
+      dpopBoundAccessTokens: false,
+    });
+    expect(
+      (await (await storeOf(tenantA)).findClient("bound-app"))
+        ?.dpopBoundAccessTokens,
+    ).toBeUndefined();
+    const plain = await create(admin, tenantA, { name: "Unbound app" });
+    expect(plain.data?.["createClient"]).toMatchObject({
+      client: { dpopBoundAccessTokens: false },
+    });
+  });
+
+  test("a client made by the script is listed too", async () => {
+    await registerClient(
+      {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
+        db: oauthDb,
+        findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+      },
+      { tenant: "cli-a", name: "Scripted", redirectUris: [REDIRECT] },
+    );
+    expect(
+      idsOf(await admin(LIST, { tenantId: tenantA, q: "scripted" })),
+    ).toEqual(["scripted"]);
+  });
+
+  test("client reads one, null when unknown", async () => {
+    const found = await admin(GET, { tenantId: tenantA, id: "mobile-app" });
+    expect(found.data?.["client"]).toMatchObject({
+      id: "mobile-app",
+      name: "Mobile app",
+    });
+    const none = await admin(GET, { tenantId: tenantA, id: "nobody" });
+    expect(none.errors).toBeUndefined();
+    expect(none.data?.["client"]).toBeNull();
+  });
+});
+
+describe("updateClient", () => {
+  test("replaces what is given, keeps the type and the secret", async () => {
+    const before = await (await storeOf(tenantA)).findClient("back-end");
+    const renamed = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "back-end",
+      input: { name: "API server" },
+    });
+    expect(renamed.data?.["updateClient"]).toMatchObject({
+      id: "back-end",
+      name: "API server",
+      type: "CONFIDENTIAL",
+      redirectUris: [REDIRECT],
+    });
+    const moved = await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "back-end",
+      input: { redirectUris: ["https://app.example/cb2"] },
+    });
+    expect(moved.data?.["updateClient"]).toMatchObject({
+      name: "API server",
+      redirectUris: ["https://app.example/cb2"],
+    });
+    const after = await (await storeOf(tenantA)).findClient("back-end");
+    expect(after?.secretHash).toBe(before?.secretHash);
+    expect(after?.createdAt).toEqual(before?.createdAt);
+    // The list follows.
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "API" }))).toEqual([
+      "back-end",
+    ]);
+  });
+
+  test("an unknown client is NOT_FOUND, a bad redirect URI is refused", async () => {
+    expect(
+      codeOf(
+        await admin(UPDATE, {
+          tenantId: tenantA,
+          id: "nobody",
+          input: { name: "X" },
+        }),
+      ),
+    ).toBe("NOT_FOUND");
+    expect(
+      codeOf(
+        await admin(UPDATE, {
+          tenantId: tenantA,
+          id: "back-end",
+          input: { redirectUris: [] },
+        }),
+      ),
+    ).toBe("BAD_USER_INPUT");
+  });
+});
+
+describe("rotateClientSecret", () => {
+  test("mints a new secret, shown once; the old hash is gone", async () => {
+    const before = await (await storeOf(tenantA)).findClient("back-end");
+    const result = await admin(ROTATE, { tenantId: tenantA, id: "back-end" });
+    expect(result.errors).toBeUndefined();
+    const rotated = at(result.data, "rotateClientSecret", secretOf);
+    expect(rotated.clientSecret.length).toBeGreaterThan(20);
+    const after = await (await storeOf(tenantA)).findClient("back-end");
+    expect(after?.secretHash).toBeDefined();
+    expect(after?.secretHash).not.toBe(before?.secretHash);
+  });
+
+  test("a public client has none to rotate; an unknown one is NOT_FOUND", async () => {
+    expect(
+      codeOf(await admin(ROTATE, { tenantId: tenantA, id: "mobile-app" })),
+    ).toBe("BAD_USER_INPUT");
+    expect(
+      codeOf(await admin(ROTATE, { tenantId: tenantA, id: "nobody" })),
+    ).toBe("NOT_FOUND");
+  });
+});
+
+describe("permissions and isolation", () => {
+  test("a viewer reads but changes nothing", async () => {
+    expect(idsOf(await viewer(LIST, { tenantId: tenantA }))).toContain(
+      "back-end",
+    );
+    expect(
+      (await viewer(GET, { tenantId: tenantA, id: "back-end" })).data?.[
+        "client"
+      ],
+    ).toMatchObject({ id: "back-end" });
+    const refused = [
+      await create(viewer, tenantA, { name: "Nope" }),
+      await viewer(UPDATE, {
+        tenantId: tenantA,
+        id: "back-end",
+        input: { name: "Nope" },
+      }),
+      await viewer(ROTATE, { tenantId: tenantA, id: "back-end" }),
+      await viewer(DELETE, { tenantId: tenantA, id: "back-end" }),
+    ];
+    expect(refused.map(codeOf)).toEqual(Array(4).fill("FORBIDDEN"));
+    expect((await (await storeOf(tenantA)).findClient("back-end"))?.name).toBe(
+      "API server",
+    );
+  });
+
+  test("tenant A's admin cannot touch tenant B", async () => {
+    await create(adminB, tenantB, { name: "B app", type: "CONFIDENTIAL" });
+    const refused = [
+      await admin(LIST, { tenantId: tenantB }),
+      await admin(GET, { tenantId: tenantB, id: "b-app" }),
+      await create(admin, tenantB, { name: "Nope" }),
+      await admin(UPDATE, {
+        tenantId: tenantB,
+        id: "b-app",
+        input: { name: "Nope" },
+      }),
+      await admin(ROTATE, { tenantId: tenantB, id: "b-app" }),
+      await admin(DELETE, { tenantId: tenantB, id: "b-app" }),
+    ];
+    expect(refused.map(codeOf)).toEqual(Array(6).fill("FORBIDDEN"));
+  });
+
+  test("a client of B is unknown under A's id", async () => {
+    expect(idsOf(await admin(LIST, { tenantId: tenantA }))).not.toContain(
+      "b-app",
+    );
+    expect(idsOf(await adminB(LIST, { tenantId: tenantB }))).toEqual(["b-app"]);
+    expect(
+      (await admin(GET, { tenantId: tenantA, id: "b-app" })).data?.["client"],
+    ).toBeNull();
+    expect(
+      codeOf(await admin(ROTATE, { tenantId: tenantA, id: "b-app" })),
+    ).toBe("NOT_FOUND");
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "b-app" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(false);
+    expect(await (await storeOf(tenantB)).findClient("b-app")).not.toBeNull();
+    // The same id may exist in both tenants.
+    expect(
+      (await create(admin, tenantA, { name: "B app" })).errors,
+    ).toBeUndefined();
+    expect(
+      (await (await storeOf(tenantB)).findClient("b-app"))?.secretHash,
+    ).toBeDefined();
+  });
+
+  test("a platform owner reaches every tenant; an unknown id is refused", async () => {
+    expect(idsOf(await operator(LIST, { tenantId: tenantB }))).toEqual([
+      "b-app",
+    ]);
+    for (const tenantId of ["0123456789abcdef01234567", "nope"]) {
+      expect(codeOf(await operator(LIST, { tenantId }))).toBe("FORBIDDEN");
+    }
+  });
+});
+
+describe("deleteClient", () => {
+  test("deletes once, then answers false", async () => {
+    const first = await admin(DELETE, { tenantId: tenantA, id: "mobile-app" });
+    expect(first.data?.["deleteClient"]).toBe(true);
+    expect(await (await storeOf(tenantA)).findClient("mobile-app")).toBeNull();
+    expect(idsOf(await admin(LIST, { tenantId: tenantA }))).not.toContain(
+      "mobile-app",
+    );
+    const second = await admin(DELETE, {
+      tenantId: tenantA,
+      id: "mobile-app",
+    });
+    expect(second.errors).toBeUndefined();
+    expect(second.data?.["deleteClient"]).toBe(false);
+  });
+
+  test("revokes the client's grants, on a repeat too, and no other client's", async () => {
+    const store = await storeOf(tenantA);
+    const grant = (id: string, clientId: string) =>
+      store.upsertGrant({
+        id,
+        userId: "user-1",
+        clientId,
+        resource: "https://api.example/v1",
+        scopes: ["read"],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        revokedAt: null,
+      });
+    const gone = await grant("grant-code-only", "code-only");
+    const kept = await grant("grant-back-end", "back-end");
+    const result = await admin(DELETE, { tenantId: tenantA, id: "code-only" });
+    expect(result.data?.["deleteClient"]).toBe(true);
+    expect((await store.findGrant(gone.id))?.revokedAt).toBeInstanceOf(Date);
+    expect((await store.findGrant(kept.id))?.revokedAt).toBeNull();
+    // A repeat revokes again: it finishes a run that stopped half way.
+    const late = await grant("grant-code-only-late", "code-only");
+    const again = await admin(DELETE, { tenantId: tenantA, id: "code-only" });
+    expect(again.data?.["deleteClient"]).toBe(false);
+    expect((await store.findGrant(late.id))?.revokedAt).toBeInstanceOf(Date);
+  });
+
+  test("revokes the client's access and refresh tokens, and no other client's", async () => {
+    await create(admin, tenantA, { name: "Tokens", clientId: "tok-gone" });
+    const store = await storeOf(tenantA);
+    const now = new Date();
+    const later = new Date(now.getTime() + 3_600_000);
+    const tokens = async (grantId: string, clientId: string) => {
+      const base = {
+        grantId,
+        userId: "user-1",
+        clientId,
+        resource: "https://api.example/v1",
+        scopes: ["read"],
+        createdAt: now,
+        expiresAt: later,
+        revokedAt: null,
+      };
+      await store.insertAccessToken({ ...base, tokenHash: `a-${grantId}` });
+      await store.insertRefreshToken({
+        ...base,
+        tokenHash: `r-${grantId}`,
+        absoluteExpiresAt: later,
+        rotatedAt: null,
+      });
+    };
+    await tokens("grant-tok-gone", "tok-gone");
+    await tokens("grant-tok-kept", "back-end");
+    const result = await admin(DELETE, { tenantId: tenantA, id: "tok-gone" });
+    expect(result.data?.["deleteClient"]).toBe(true);
+    expect(
+      (await store.findAccessToken("a-grant-tok-gone"))?.revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      (await store.findRefreshToken("r-grant-tok-gone"))?.revokedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      (await store.findAccessToken("a-grant-tok-kept"))?.revokedAt,
+    ).toBeNull();
+    expect(
+      (await store.findRefreshToken("r-grant-tok-kept"))?.revokedAt,
+    ).toBeNull();
+  });
+});
+
+const EXCHANGE = `mutation($tenantId: ID!, $id: ID!, $input: ClientTokenExchangeInput!) {
+  setClientTokenExchange(tenantId: $tenantId, id: $id, input: $input) {
+    id grantTypes tokenExchange { targetResources subjectClients anySubjectClient subjectAgents mode }
+  }
+}`;
+const GET_EXCHANGE = `query($tenantId: ID!, $id: ID!) {
+  client(tenantId: $tenantId, id: $id) { tokenExchange { targetResources subjectClients anySubjectClient subjectAgents mode } }
+}`;
+const API_URI = "https://exchange-target.example/api";
+
+// The "Exchanger" client with a stored target resource and no rules yet.
+const createExchanger = async () => {
+  await registerStoredResource({
+    tenant: "cli-a",
+    uri: API_URI,
+    scopes: ["read"],
+  });
+  const created = await create(admin, tenantA, {
+    name: "Exchanger",
+    type: "CONFIDENTIAL",
+    redirectUris: undefined,
+    grantTypes: ["TOKEN_EXCHANGE"],
+  });
+  expect(created.errors).toBeUndefined();
+  expect(created.data?.["createClient"]).toMatchObject({
+    client: {
+      id: "exchanger",
+      grantTypes: ["TOKEN_EXCHANGE"],
+      redirectUris: [],
+    },
+  });
+  // No rules yet: the client cannot exchange.
+  const before = await admin(GET_EXCHANGE, {
+    tenantId: tenantA,
+    id: "exchanger",
+  });
+  expect(before.data?.["client"]).toEqual({ tokenExchange: null });
+};
+
+describe("setClientTokenExchange", () => {
+  test("sets the rules, reads them back, replaces them and records its event", async () => {
+    await createExchanger();
+
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const set = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], subjectClients: ["web", "web"] },
+    });
+    expect(set.errors).toBeUndefined();
+    expect(set.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: {
+        targetResources: [API_URI],
+        subjectClients: ["web"],
+        anySubjectClient: false,
+        mode: "DELEGATION",
+      },
+    });
+    const read = await admin(GET_EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+    });
+    expect(read.data?.["client"]).toMatchObject({
+      tokenExchange: { subjectClients: ["web"] },
+    });
+    const listed = await admin(LIST, { tenantId: tenantA, q: "exchanger" });
+    expect(idsOf(listed)).toEqual(["exchanger"]);
+
+    const replaced = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], anySubjectClient: true },
+    });
+    expect(replaced.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: { subjectClients: [], anySubjectClient: true },
+    });
+    const events = await mongo.db.adminEvents.raw
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    expect(events.map((event) => event.action)).toEqual([
+      "client.tokenExchange.set",
+      "client.tokenExchange.set",
+    ]);
+    expect(events[0]?.target).toEqual({ type: "client", id: "exchanger" });
+    // A rename keeps the rules.
+    await admin(UPDATE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { name: "X" },
+    });
+    expect(
+      (await admin(GET_EXCHANGE, { tenantId: tenantA, id: "exchanger" }))
+        .data?.["client"],
+    ).toMatchObject({ tokenExchange: { anySubjectClient: true } });
+  });
+
+  test("subjectAgents covers the agents, alone or beside listed clients, and is off by default", async () => {
+    const only = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], subjectAgents: true },
+    });
+    expect(only.errors).toBeUndefined();
+    expect(only.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: {
+        subjectClients: [],
+        anySubjectClient: false,
+        subjectAgents: true,
+      },
+    });
+    const both = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: {
+        targetResources: [API_URI],
+        subjectClients: ["web"],
+        subjectAgents: true,
+      },
+    });
+    expect(both.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: { subjectClients: ["web"], subjectAgents: true },
+    });
+    // The switch off by default; with no client and no switch, nothing is covered: refused.
+    const off = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], subjectClients: ["web"] },
+    });
+    expect(off.data?.["setClientTokenExchange"]).toMatchObject({
+      tokenExchange: { subjectAgents: false },
+    });
+    const none = await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI] },
+    });
+    expect(none.errors?.[0]?.extensions?.["code"]).toBe("BAD_USER_INPUT");
+    // `anySubjectClient` already covers agents: the switch is stored as given.
+    await admin(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input: { targetResources: [API_URI], anySubjectClient: true },
+    });
+  });
+
+  test("a target that is not the tenant's resource, a public client, bad subjects and an unknown client are refused", async () => {
+    const input = { targetResources: [API_URI], subjectClients: ["web"] };
+    const codes = async (result: ReturnType<typeof admin>) =>
+      (await result).errors?.map((error) => error.extensions?.["code"]);
+    expect(
+      await codes(
+        admin(EXCHANGE, {
+          tenantId: tenantA,
+          id: "exchanger",
+          input: {
+            ...input,
+            targetResources: ["https://not-mine.example/api"],
+          },
+        }),
+      ),
+    ).toEqual(["BAD_USER_INPUT"]);
+    await create(admin, tenantA, { name: "Pub ex" });
+    expect(
+      await codes(admin(EXCHANGE, { tenantId: tenantA, id: "pub-ex", input })),
+    ).toEqual(["BAD_USER_INPUT"]);
+    for (const bad of [
+      { targetResources: [API_URI] },
+      {
+        targetResources: [API_URI],
+        subjectClients: ["web"],
+        anySubjectClient: true,
+      },
+      { targetResources: [API_URI], subjectClients: ["Bad Id"] },
+    ]) {
+      expect(
+        await codes(
+          admin(EXCHANGE, { tenantId: tenantA, id: "exchanger", input: bad }),
+        ),
+      ).toEqual(["BAD_USER_INPUT"]);
+    }
+    expect(
+      await codes(admin(EXCHANGE, { tenantId: tenantA, id: "nope", input })),
+    ).toEqual(["NOT_FOUND"]);
+  });
+
+  test("needs edit, and a client of another tenant is unknown", async () => {
+    const input = { targetResources: [API_URI], subjectClients: ["web"] };
+    const viewed = await viewer(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input,
+    });
+    expect(viewed.errors?.[0]?.extensions?.["code"]).toBe("FORBIDDEN");
+    const across = await adminB(EXCHANGE, {
+      tenantId: tenantA,
+      id: "exchanger",
+      input,
+    });
+    expect(across.errors).toBeDefined();
+  });
+
+  test("deleting the client removes its rules", async () => {
+    const tenant = await mongo.db.tenants.findById(tenantA);
+    if (tenant === undefined) throw new Error("no tenant");
+    expect(
+      await clientPoliciesService.tokenExchange(tenant._id, "exchanger"),
+    ).not.toBeNull();
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "exchanger" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(true);
+    expect(
+      await clientPoliciesService.tokenExchange(tenant._id, "exchanger"),
+    ).toBeNull();
+  });
+});
+
+describe("limits", () => {
+  test("a refused creation leaves nothing listed, and the id stays free", async () => {
+    const bad = await create(admin, tenantA, {
+      name: "Ghost",
+      redirectUris: ["not a uri"],
+    });
+    expect(codeOf(bad)).toBe("BAD_USER_INPUT");
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "ghost" }))).toEqual(
+      [],
+    );
+    expect(
+      (await create(admin, tenantA, { name: "Ghost" })).errors,
+    ).toBeUndefined();
+  });
+
+  test("the list and the detail give the same creation date", async () => {
+    const listed = await admin(LIST, { tenantId: tenantA, q: "ghost" });
+    const [item] = at(listed.data, "clients", clientsPage).items;
+    const got = await admin(GET, { tenantId: tenantA, id: "ghost" });
+    expect(item).toEqual(
+      at(got.data, "client", z.looseObject({ id: z.string() })),
+    );
+  });
+
+  test("a cursor, a name or a list too long are BAD_USER_INPUT", async () => {
+    expect(
+      codeOf(await admin(LIST, { tenantId: tenantA, after: "c".repeat(201) })),
+    ).toBe("BAD_USER_INPUT");
+    expect(
+      codeOf(await create(admin, tenantA, { name: "n".repeat(101) })),
+    ).toBe("BAD_USER_INPUT");
+    const uris = Array.from({ length: 21 }, (_, i) => `${REDIRECT}/${i}`);
+    expect(
+      codeOf(
+        await create(admin, tenantA, { name: "Many", redirectUris: uris }),
+      ),
+    ).toBe("BAD_USER_INPUT");
+  });
+});
+
+describe("the console's own client", () => {
+  test("cannot be changed, rotated or deleted here, even by a platform owner", async () => {
+    const platform = await mongo.db.tenants.findFirst({
+      slug: PLATFORM_TENANT_SLUG,
+    });
+    const tenantId = platform?._id.toHexString() ?? "";
+    // The specs empty the relations: link the tenant again, as the migration does.
+    await linkTenantToPlatform(tenantId);
+    const id = "console";
+    expect(
+      codeOf(await operator(UPDATE, { tenantId, id, input: { name: "X" } })),
+    ).toBe("BAD_USER_INPUT");
+    expect(codeOf(await operator(ROTATE, { tenantId, id }))).toBe(
+      "BAD_USER_INPUT",
+    );
+    expect(codeOf(await operator(DELETE, { tenantId, id }))).toBe(
+      "BAD_USER_INPUT",
+    );
+    // Another tenant's client of that id is an ordinary client.
+    await create(admin, tenantA, { name: "Console", clientId: "console" });
+    const deleted = await admin(DELETE, { tenantId: tenantA, id });
+    expect(deleted.data?.["deleteClient"]).toBe(true);
+  });
+});
+
+describe("admin events", () => {
+  test("each mutation records its event on the client, and never the secret", async () => {
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const created = await create(admin, tenantA, {
+      name: "Audited",
+      type: "CONFIDENTIAL",
+    });
+    const clientSecret = at(
+      created.data,
+      "createClient.clientSecret",
+      z.string(),
+    );
+    expect(clientSecret.length).toBeGreaterThan(20);
+    const id = "audited";
+    await admin(UPDATE, {
+      tenantId: tenantA,
+      id,
+      input: { name: "Audited 2" },
+    });
+    const rotated = await admin(ROTATE, { tenantId: tenantA, id });
+    const second = at(
+      rotated.data,
+      "rotateClientSecret.clientSecret",
+      z.string(),
+    );
+    expect(second.length).toBeGreaterThan(20);
+    await admin(DELETE, { tenantId: tenantA, id });
+    await admin(DELETE, { tenantId: tenantA, id });
+    // A refused mutation records nothing.
+    await viewer(DELETE, { tenantId: tenantA, id });
+    await admin(UPDATE, { tenantId: tenantA, id, input: { name: "Gone" } });
+    const events = await mongo.db.adminEvents.raw
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    expect(events.map((event) => event.action)).toEqual([
+      "client.create",
+      "client.update",
+      "client.rotateSecret",
+      "client.delete",
+      "client.delete",
+    ]);
+    for (const event of events) {
+      expect(event.actor).toBe("cli-admin-a");
+      expect(event.target).toEqual({ type: "client", id });
+      expect(event.tenantId?.toHexString()).toBe(tenantA);
+    }
+    const dump = JSON.stringify(events);
+    expect(dump).not.toContain(clientSecret);
+    expect(dump).not.toContain(second);
+  });
+});
+
+describe("a suspended tenant", () => {
+  test("is readable, and its writes are TENANT_SUSPENDED for its admin", async () => {
+    await tenantsService.suspend(tenantB);
+    expect((await adminB(LIST, { tenantId: tenantB })).errors).toBeUndefined();
+    expect(
+      (await operator(LIST, { tenantId: tenantB })).errors,
+    ).toBeUndefined();
+    expect(codeOf(await create(adminB, tenantB, { name: "Nope" }))).toBe(
+      "TENANT_SUSPENDED",
+    );
+  });
+});
+
+const eventsOf = () =>
+  mongo.db.adminEvents.raw.find({}).sort({ _id: 1 }).toArray();
+
+describe("createClient of one id at the very same time", () => {
+  test("exactly one wins, the others are CONFLICT, and the winner's secret is the stored one", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        create(admin, tenantA, {
+          name: `Racer ${index}`,
+          clientId: "racer",
+          type: "CONFIDENTIAL",
+        }),
+      ),
+    );
+    const winners = results.filter((r) => r.errors === undefined);
+    expect(winners).toHaveLength(1);
+    expect(results.filter((r) => codeOf(r) === "CONFLICT")).toHaveLength(7);
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "racer" }))).toEqual(
+      ["racer"],
+    );
+    // The stored secret is the winner's: rotating is the only way to another.
+    const winner = at(winners[0]?.data, "createClient", secretOf);
+    const stored = await (await storeOf(tenantA)).findClient("racer");
+    expect(stored?.secretHash).toBeString();
+    expect(winner.clientSecret.length).toBeGreaterThan(20);
+  });
+});
+
+describe("the client quota", () => {
+  test("refuses past the limit, counts concurrent creations, frees a slot on delete", async () => {
+    const id = (await tenantsService.create({ slug: "cli-q", name: "Q" })).id;
+    await access.grantTenant(id, "cli-admin-a", "admin");
+    const used = await usageService.count(id, "clients");
+    await mongo.db.tenants.raw.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { quotaOverrides: { clients: used + 2 } } },
+    );
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, n) =>
+        create(admin, id, { name: `Q ${n}`, clientId: `quota-${n}` }),
+      ),
+    );
+    expect(results.filter((r) => r.errors === undefined)).toHaveLength(2);
+    expect(results.filter((r) => codeOf(r) === "QUOTA_EXCEEDED")).toHaveLength(
+      3,
+    );
+    const kept = results.findIndex((r) => r.errors === undefined);
+    expect(
+      codeOf(await create(admin, id, { name: "More", clientId: "more" })),
+    ).toBe("QUOTA_EXCEEDED");
+    expect(
+      (await admin(DELETE, { tenantId: id, id: `quota-${kept}` })).data,
+    ).toEqual({ deleteClient: true });
+    expect(
+      (await create(admin, id, { name: "Fits", clientId: "fits" })).errors,
+    ).toBeUndefined();
+  });
+});
+
+describe("the deleteClient trail", () => {
+  test("a client that is not a registered one is left alone and not recorded", async () => {
+    const store = await storeOf(tenantA);
+    await create(admin, tenantA, { name: "By script", clientId: "by-script" });
+    const record = await store.findClient("by-script");
+    // A record the console did not register (here from a client metadata document).
+    await store.upsertClient({
+      ...defined(record, "the stored client"),
+      source: "metadata",
+    });
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const result = await admin(DELETE, { tenantId: tenantA, id: "by-script" });
+    expect(result.data).toEqual({ deleteClient: false });
+    expect(
+      await (await storeOf(tenantA)).findClient("by-script"),
+    ).not.toBeNull();
+    expect(await eventsOf()).toHaveLength(0);
+  });
+
+  test("the service answers from one read: unmanaged, removed, then absent", async () => {
+    const store = await storeOf(tenantA);
+    const tenant = {
+      _id: new ObjectId(tenantA),
+      slug: "cli-a",
+      status: "active",
+    } as const;
+    await create(admin, tenantA, { name: "One read", clientId: "one-read" });
+    const record = await store.findClient("one-read");
+    await store.upsertClient({
+      ...defined(record, "the stored client"),
+      source: "metadata",
+    });
+    expect(await clientsService.delete(tenant, "one-read")).toEqual({
+      removed: false,
+      unmanaged: true,
+    });
+    await store.upsertClient({
+      ...defined(record, "the stored client"),
+      source: "registered",
+    });
+    expect(await clientsService.delete(tenant, "one-read")).toEqual({
+      removed: true,
+      unmanaged: false,
+    });
+    expect(await clientsService.delete(tenant, "one-read")).toEqual({
+      removed: false,
+      unmanaged: false,
+    });
+  });
+
+  test("a registered client, and a valid id that names nothing, are recorded", async () => {
+    await mongo.db.adminEvents.raw.deleteMany({});
+    await create(admin, tenantA, { name: "Trail", clientId: "trail" });
+    await admin(DELETE, { tenantId: tenantA, id: "trail" });
+    await admin(DELETE, { tenantId: tenantA, id: "trail" });
+    await admin(DELETE, { tenantId: tenantA, id: "never-existed" });
+    // An id no client can have names nothing.
+    await admin(DELETE, { tenantId: tenantA, id: "Not An Id!" });
+    expect((await eventsOf()).map((e) => [e.action, e.target.id])).toEqual([
+      ["client.create", "trail"],
+      ["client.delete", "trail"],
+      ["client.delete", "trail"],
+      ["client.delete", "never-existed"],
+    ]);
+  });
+});
+
+describe("the tokens of a deleted client", () => {
+  test("stop working: the access token, and the refresh token", async () => {
+    const flow = createFlow();
+    const { tenantId } = await flow.setUp("cli-tok", [
+      "https://api.cli-tok.example/v1",
+    ]);
+    await access.grantTenant(tenantId, "cli-admin-a", "admin");
+    const created = await create(admin, tenantId, {
+      name: "Token app",
+      clientId: "token-app",
+      type: "CONFIDENTIAL",
+    });
+    const secret = at(created.data, "createClient", secretOf).clientSecret;
+    const client = { id: "token-app", secret };
+    const tokens = await flow.tokensOf("cli-tok", "openid", {
+      client,
+    });
+    const userinfo = (token: string) =>
+      flow.get("cli-tok", "/userinfo", `Bearer ${token}`);
+    const refresh = (token: string) =>
+      flow.post(
+        "cli-tok",
+        "/token",
+        { grant_type: "refresh_token", refresh_token: token },
+        flow.basic(client.id, client.secret),
+      );
+    expect(tokens.refresh_token).toBeString();
+    const before = await refresh(tokens.refresh_token ?? "");
+    expect(before.status).toBe(200);
+    const live = await jsonOf(before, tokenBody);
+    expect((await userinfo(live.access_token)).status).toBe(200);
+
+    expect((await admin(DELETE, { tenantId, id: "token-app" })).data).toEqual({
+      deleteClient: true,
+    });
+
+    expect((await userinfo(live.access_token)).status).toBe(401);
+    const after = await refresh(defined(live.refresh_token, "a refresh token"));
+    expect(after.status).toBeGreaterThanOrEqual(400);
+    // The client itself no longer authenticates either.
+    const code = await flow
+      .login("cli-tok", "openid", { client })
+      .catch(() => null);
+    expect(code === null || code.status >= 400).toBe(true);
+  });
+});
+
+describe("update and rotate of a client that is being deleted", () => {
+  test("a missing client is NOT_FOUND, never created by the write", async () => {
+    const id = "never-registered";
+    expect(
+      codeOf(
+        await admin(UPDATE, { tenantId: tenantA, id, input: { name: "X" } }),
+      ),
+    ).toBe("NOT_FOUND");
+    expect(codeOf(await admin(ROTATE, { tenantId: tenantA, id }))).toBe(
+      "NOT_FOUND",
+    );
+    expect(await (await storeOf(tenantA)).findClient(id)).toBeNull();
+  });
+
+  test("a racing delete is never undone: the client stays deleted", async () => {
+    for (let round = 0; round < 10; round++) {
+      const id = `undead-${round}`;
+      await create(admin, tenantA, {
+        name: id,
+        clientId: id,
+        type: "CONFIDENTIAL",
+      });
+      const results = await Promise.all([
+        admin(UPDATE, { tenantId: tenantA, id, input: { name: "Renamed" } }),
+        admin(ROTATE, { tenantId: tenantA, id }),
+        admin(DELETE, { tenantId: tenantA, id }),
+        admin(UPDATE, { tenantId: tenantA, id, input: { name: "Again" } }),
+      ]);
+      // Serialized, a write either ran before the delete or found no client.
+      for (const result of results.slice(0, 2).concat(results.slice(3))) {
+        if (result.errors !== undefined) {
+          expect(codeOf(result)).toBe("NOT_FOUND");
+        }
+      }
+      expect(await (await storeOf(tenantA)).findClient(id)).toBeNull();
+    }
+  });
+});
+
+describe("the tenant id's spelling", () => {
+  test("an upper-case tenant id is the same tenant, as on every module", async () => {
+    const lower = await admin(LIST, { tenantId: tenantA });
+    const upper = await admin(LIST, { tenantId: tenantA.toUpperCase() });
+    expect(upper.errors).toBeUndefined();
+    expect(upper.data).toEqual(lower.data);
+  });
+});
+
+describe("a repeat after a failed record", () => {
+  test("createClient returns the stored client with no secret and records the event", async () => {
+    const input = {
+      name: "Replayed",
+      type: "CONFIDENTIAL",
+      redirectUris: [REDIRECT],
+    };
+    const first = await create(admin, tenantA, input);
+    expect(first.errors).toBeUndefined();
+    await mongo.db.adminEvents.raw.deleteMany({}); // the record that failed
+    const again = await create(admin, tenantA, input);
+    expect(again.errors).toBeUndefined();
+    const result = at(
+      again.data,
+      "createClient",
+      z.looseObject({
+        client: z.looseObject({ id: z.string() }),
+        clientSecret: z.string().nullable(),
+      }),
+    );
+    expect(result.client.id).toBe("replayed");
+    expect(result.clientSecret).toBeNull();
+    const events = await mongo.db.adminEvents.raw.find({}).toArray();
+    expect(events.map((event) => event["action"])).toEqual(["client.create"]);
+    // Another type under the same id is still a CONFLICT.
+    expect(
+      codeOf(await create(admin, tenantA, { ...input, type: "PUBLIC" })),
+    ).toBe("CONFLICT");
+    expect(
+      codeOf(
+        await create(admin, tenantA, {
+          ...input,
+          redirectUris: ["https://other.example/callback"],
+        }),
+      ),
+    ).toBe("CONFLICT");
+  });
+
+  test("a retried client_credentials createClient with padded scopes returns the stored client", async () => {
+    const input = {
+      name: "Padded",
+      type: "CONFIDENTIAL",
+      redirectUris: undefined,
+      grantTypes: ["CLIENT_CREDENTIALS"],
+      allowedScopes: ["read"],
+      defaultScopes: ["read"],
+    };
+    const first = await create(admin, tenantA, input);
+    expect(first.errors).toBeUndefined();
+    const again = await create(admin, tenantA, {
+      ...input,
+      allowedScopes: [" read"],
+      defaultScopes: ["read "],
+    });
+    expect(again.errors).toBeUndefined();
+    const result = at(
+      again.data,
+      "createClient",
+      z.looseObject({ clientSecret: z.string().nullable() }),
+    );
+    expect(result.clientSecret).toBeNull();
+  });
+
+  test("eight identical concurrent calls: one secret, seven null, one stored client", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        create(admin, tenantA, {
+          name: "Twin",
+          clientId: "twin",
+          type: "CONFIDENTIAL",
+        }),
+      ),
+    );
+    expect(results.every((r) => r.errors === undefined)).toBe(true);
+    const secrets = results.map((r) =>
+      at(r.data, "createClient.clientSecret", z.string().nullable()),
+    );
+    expect(secrets.filter((secret) => typeof secret === "string")).toHaveLength(
+      1,
+    );
+    expect(secrets.filter((secret) => secret === null)).toHaveLength(7);
+    expect(idsOf(await admin(LIST, { tenantId: tenantA, q: "twin" }))).toEqual([
+      "twin",
+    ]);
+  });
+
+  test("a replay at a full client quota succeeds; a new client does not", async () => {
+    const id = (await tenantsService.create({ slug: "cli-qr", name: "QR" })).id;
+    await access.grantTenant(id, "cli-admin-a", "admin");
+    const input = { name: "Full", clientId: "full" };
+    await mongo.db.tenants.raw.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { quotaOverrides: { clients: 1 } } },
+    );
+    expect((await create(admin, id, input)).errors).toBeUndefined();
+    expect((await create(admin, id, input)).errors).toBeUndefined();
+    expect(codeOf(await create(admin, id, { name: "Two" }))).toBe(
+      "QUOTA_EXCEEDED",
+    );
+  });
+});
+
+describe("deleting a subject client prunes the rules that name it", () => {
+  test("only in its own tenant; 'any' rules and other subjects stay", async () => {
+    const a = await mongo.db.tenants.findById(tenantA);
+    const b = await mongo.db.tenants.findById(tenantB);
+    if (a === undefined || b === undefined) throw new Error("no tenant");
+    expect(
+      (await create(admin, tenantA, { name: "Gone", clientId: "gone-subject" }))
+        .errors,
+    ).toBeUndefined();
+    const rule = (subjectClients: string[] | "any") => ({
+      targetResources: [API_URI],
+      subjectClients,
+      subjectAgents: false,
+      mode: "delegation" as const,
+    });
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "holder-one",
+      rule(["gone-subject", "kept-subject"]),
+    );
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "holder-any",
+      rule("any"),
+    );
+    await clientPoliciesService.setTokenExchange(
+      b._id,
+      "holder-one",
+      rule(["gone-subject"]),
+    );
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "gone-subject" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(true);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "holder-one"))
+        ?.subjectClients,
+    ).toEqual(["kept-subject"]);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "holder-any"))
+        ?.subjectClients,
+    ).toBe("any");
+    expect(
+      (await clientPoliciesService.tokenExchange(b._id, "holder-one"))
+        ?.subjectClients,
+    ).toEqual(["gone-subject"]);
+    // A repeat finishes a half run: a rule re-added meanwhile is pruned again.
+    await clientPoliciesService.setTokenExchange(
+      a._id,
+      "holder-one",
+      rule(["gone-subject"]),
+    );
+    expect(
+      (await admin(DELETE, { tenantId: tenantA, id: "gone-subject" })).data?.[
+        "deleteClient"
+      ],
+    ).toBe(false);
+    expect(
+      (await clientPoliciesService.tokenExchange(a._id, "holder-one"))
+        ?.subjectClients,
+    ).toEqual([]);
+  });
+});

@@ -1,9 +1,10 @@
 import { afterAll } from "bun:test";
+import { rmSync } from "node:fs";
 import { MongoMemoryReplSet } from "mongodb-memory-server-core";
 
 // Preloaded by `bun test` (bunfig.toml), before any spec imports src/: one
 // in-memory MongoDB, a one-node replica set so that transactions work, for the
-// whole run. src/config/env.ts then reads its URI as MONGO_URI.
+// whole run. src/config/env/index.ts then reads its URI as MONGO_URI.
 const replSet = await MongoMemoryReplSet.create({
   replSet: { count: 1, storageEngine: "wiredTiger" },
   // mongod sizes its cache at half the RAM and, on a loaded laptop, can take
@@ -40,8 +41,19 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   await syncMongoInvitationsPartitioned(oauthDb);
   // The seed, once for the run (`clearDatabase` keeps what it wrote).
   const { migrate } = await import("@softistx/mongo/migrations");
-  const { migrations } = await import("@/migrations");
-  await migrate(mongo.db, migrations);
+  const { env } = await import("@/config/env");
+  const { migrationsOf } = await import("@/migrations");
+  await migrate(
+    mongo.db,
+    migrationsOf({
+      origin: {
+        scheme: env.CLAVIX_PUBLIC_SCHEME,
+        domain: env.CLAVIX_DOMAIN,
+        port: env.CLAVIX_PUBLIC_PORT,
+      },
+      announce: () => undefined,
+    }),
+  );
   // The `console-par-dpop` migration makes the `clavix` tenant require PAR and
   // DPoP, as production does. The specs mint plain tokens for it: relax it for
   // the run (the specs of the requirement set it themselves, then restore it).
@@ -51,8 +63,19 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
   await relaxParAndDpopOnConsole(mongo.db);
 }
 
+// The shutdown does not wait on mongod: `replSet.stop()` waits for it to flush
+// and exit, which took longer than the 5 s hook timeout on a loaded machine
+// ("(unnamed) afterAll hook timed out" on whichever spec ran last). The data
+// is a throwaway temp folder, so the hook closes the driver, kills mongod and
+// removes its folder, all synchronous: no wait, no timeout, no leftover.
 afterAll(async () => {
   const { mongo } = await import("@/config/db");
   await mongo.close();
-  await replSet.stop();
+  for (const server of replSet.servers) {
+    server.instanceInfo?.instance.mongodProcess?.kill("SIGKILL");
+    const dbPath = server.instanceInfo?.dbPath;
+    if (dbPath) {
+      rmSync(dbPath, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }
 });

@@ -1,25 +1,31 @@
 import { ConflictError, type TypedCollection } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { assertWithinQuota } from "@/modules/usage/quota";
-import type { TxtResolver } from "./dns";
-import { normalizeDomainHost } from "./domain-host";
-import { type CheckFailure, checkClaim } from "./domains.check";
-import { DomainError } from "./domains.errors";
-import type { DomainDoc, domains } from "./domains.model";
-import { DomainRecheck, RECHECK_GRACE_DAYS } from "./domains.recheck";
+import { assertWithinQuota } from "@/modules/usage";
+import { checkClaim } from "./domains.check";
+import type { TxtResolver } from "./domains.dns";
 import {
-  assertOutsideCooldown,
+  badDomainInput,
+  domainIsPrimary,
+  domainNotFound,
+  domainNotVerified,
   domainTaken,
-  mintToken,
-  promoteClaim,
-  VERIFY_COOLDOWN_SECONDS,
-} from "./domains.verify";
-import type { DomainSystemEvent } from "./events";
+  verifyCooldown,
+} from "./domains.errors";
+import type { DomainSystemEvent } from "./domains.events";
+import type { DomainDoc, domains } from "./domains.model";
+import {
+  type CheckFailure,
+  cooldownSeconds,
+  hostsToForget,
+  normalizeDomainHost,
+  recheckOutcome,
+  resolvingHosts,
+} from "./domains.rules";
+import { mintToken } from "./domains.utils";
 
 export type { CheckFailure, DomainDoc };
-export { mintToken, RECHECK_GRACE_DAYS, VERIFY_COOLDOWN_SECONDS };
 
-export interface DomainStoreOptions {
+export interface DomainsServiceOptions {
   dns: TxtResolver;
   /** The platform apex (`CLAVIX_DOMAIN`): its hosts cannot be claimed. */
   platformDomain: string;
@@ -28,41 +34,40 @@ export interface DomainStoreOptions {
    * (the claimed host, and the tenant's other hosts when its issuer moved).
    * Errors are logged and swallowed.
    */
-  onHostsChanged?: (hosts: string[]) => void | Promise<void>;
+  onHostsChanged: (hosts: string[]) => void | Promise<void>;
   /** The slug host of a tenant, for the cache invalidation of its issuer. */
-  slugHostOf?: (tenantId: string) => Promise<string | undefined>;
+  slugHostOf: (tenantId: string) => Promise<string | undefined>;
   /**
    * Records what the platform did to a claim by itself (a lapse, an eviction)
    * as an admin event. A failure is logged and never fails the write.
    */
-  record?: (event: DomainSystemEvent) => Promise<void>;
-  now?: () => Date;
-  log?: (message: string) => void;
+  record: (event: DomainSystemEvent) => Promise<void>;
+  now: () => Date;
+  log: (message: string) => void;
+}
+
+/** What one recheck pass did: the claims looked at and the ones that lapsed. */
+export interface RecheckReport {
+  checked: number;
+  unverified: number;
 }
 
 /**
  * The one way into the `domains` collection. A host is claimed by tenants as
  * `pending`; DNS decides who verifies it first; only a `verified` domain
- * serves anything.
+ * serves anything. It also runs the periodic recheck of the verified domains
+ * (every 6 hours, see `domains.recheck-queue.ts`).
  */
-export class DomainStore {
+export class DomainsService {
   private readonly now: () => Date;
   private readonly log: (message: string) => void;
-  private readonly rechecker: DomainRecheck;
 
   constructor(
     private readonly collection: TypedCollection<typeof domains>,
-    private readonly options: DomainStoreOptions,
+    private readonly options: DomainsServiceOptions,
   ) {
-    this.now = options.now ?? (() => new Date());
-    this.log = options.log ?? ((message) => console.warn(message));
-    this.rechecker = new DomainRecheck(collection, {
-      dns: options.dns,
-      now: this.now,
-      log: this.log,
-      changed: (tenantId, hosts) => this.changed(tenantId, hosts),
-      emit: (event) => this.emit(event),
-    });
+    this.now = options.now;
+    this.log = options.log;
   }
 
   // -- reads ---------------------------------------------------------------
@@ -129,11 +134,10 @@ export class DomainStore {
    * tenant write drops from the resolver's cache.
    */
   async resolvingHostsOf(tenantId: ObjectId): Promise<string[]> {
-    const hosts = await this.verifiedHostsOf(tenantId);
-    const primary = await this.primaryHostOf(tenantId);
-    return primary === undefined || hosts.includes(primary)
-      ? hosts
-      : [...hosts, primary];
+    return resolvingHosts(
+      await this.verifiedHostsOf(tenantId),
+      await this.primaryHostOf(tenantId),
+    );
   }
 
   // -- writes --------------------------------------------------------------
@@ -151,33 +155,18 @@ export class DomainStore {
     const existing = await this.collection.findFirst({ tenantId, host });
     if (existing !== undefined) return existing;
     // A host another tenant verified is not claimable (it is theirs).
-    const owner = await this.tenantOfHost(host);
-    if (owner !== undefined) throw domainTaken();
+    if ((await this.tenantOfHost(host)) !== undefined) throw domainTaken();
     assertWithinQuota("domains", await this.count(tenantId), quota);
-    let created: DomainDoc;
-    try {
-      created = await this.collection.create({
-        tenantId,
-        host,
-        status: "pending",
-        txtToken: mintToken(),
-        primary: false,
-      });
-    } catch (error) {
-      if (!(error instanceof ConflictError)) throw error;
-      // A concurrent add of the same host by this tenant: it is the claim.
-      const raced = await this.collection.findFirst({ tenantId, host });
-      if (raced === undefined) throw error;
-      return raced;
-    }
+    const created = await this.createClaim(tenantId, host);
+    if (created.raced) return created.claim;
     // Two concurrent adds may both have passed the count: the loser backs out.
     try {
       assertWithinQuota("domains", (await this.count(tenantId)) - 1, quota);
     } catch (error) {
-      await this.collection.delete(created._id);
+      await this.collection.delete(created.claim._id);
       throw error;
     }
-    return created;
+    return created.claim;
   }
 
   /**
@@ -192,10 +181,11 @@ export class DomainStore {
     id: string,
   ): Promise<{ domain: DomainDoc; failure: CheckFailure | null }> {
     const claim = await this.find(tenantId, id);
-    if (claim === undefined) throw notFound();
+    if (claim === undefined) throw domainNotFound();
     if (claim.status === "verified") return { domain: claim, failure: null };
     const now = this.now();
-    assertOutsideCooldown(claim, now);
+    const wait = cooldownSeconds(claim.checkedAt, now);
+    if (wait > 0) throw verifyCooldown(wait);
     const failure = await checkClaim(this.options.dns, claim);
     if (failure !== null) {
       const domain = await this.collection.update(claim._id, {
@@ -203,23 +193,14 @@ export class DomainStore {
       });
       return { domain, failure };
     }
-    const verified = await promoteClaim(this.collection, claim, now, {
-      changed: (tenantId, hosts) => this.changed(tenantId, hosts),
-      emit: (event) => this.emit(event),
-    });
-    return { domain: verified, failure: null };
+    return { domain: await this.promote(claim, now), failure: null };
   }
 
   /** Makes a verified domain the tenant's issuer host. Idempotent. */
   async setPrimary(tenantId: ObjectId, id: string): Promise<DomainDoc> {
     const claim = await this.find(tenantId, id);
-    if (claim === undefined) throw notFound();
-    if (claim.status !== "verified") {
-      throw new DomainError(
-        "DOMAIN_NOT_VERIFIED",
-        "Only a verified domain can be made primary",
-      );
-    }
+    if (claim === undefined) throw domainNotFound();
+    if (claim.status !== "verified") throw domainNotVerified();
     if (claim.primary) return claim;
     const previous = await this.primaryHostOf(tenantId);
     const updated = await this.collection.update(claim._id, { primary: true });
@@ -239,12 +220,7 @@ export class DomainStore {
   async remove(tenantId: ObjectId, id: string): Promise<boolean> {
     const claim = await this.find(tenantId, id);
     if (claim === undefined) return false;
-    if (claim.primary) {
-      throw new DomainError(
-        "DOMAIN_PRIMARY",
-        "Make another domain primary before removing this one",
-      );
-    }
+    if (claim.primary) throw domainIsPrimary();
     await this.collection.delete(claim._id);
     await this.changed(tenantId, [claim.host]);
     return true;
@@ -264,26 +240,167 @@ export class DomainStore {
 
   // -- recheck -------------------------------------------------------------
 
-  /** One recheck pass (`DomainRecheck`, `domains.recheck.ts`). */
-  recheckAll(
-    onUnverified?: (domain: DomainDoc) => Promise<void>,
-  ): Promise<{ checked: number; unverified: number }> {
-    return this.rechecker.recheckAll(onUnverified);
+  /**
+   * One recheck pass over the verified domains. A lookup that could not be
+   * answered changes nothing. A domain that fails for `RECHECK_GRACE_DAYS`
+   * becomes `unverified` (a primary one keeps its flag and its issuer: nothing
+   * moves silently, the owners are told) and `onUnverified` is called once
+   * for it.
+   */
+  async recheckAll(
+    onUnverified: (domain: DomainDoc) => Promise<void>,
+  ): Promise<RecheckReport> {
+    const report = { checked: 0, unverified: 0 };
+    const verified = await this.collection.findMany({
+      filter: { status: "verified" },
+      sort: { checkedAt: 1 },
+    });
+    for (const claim of verified) {
+      try {
+        await this.recheckOne(claim, report, onUnverified);
+      } catch (error) {
+        this.log(`domains: recheck of ${claim.host} failed: ${String(error)}`);
+      }
+    }
+    return report;
   }
 
   // -- internals -----------------------------------------------------------
+
+  private async recheckOne(
+    claim: DomainDoc,
+    report: RecheckReport,
+    onUnverified: (domain: DomainDoc) => Promise<void>,
+  ): Promise<void> {
+    const failure = await checkClaim(this.options.dns, claim);
+    report.checked++;
+    const now = this.now();
+    const outcome = recheckOutcome(failure, claim, now);
+    if (outcome.kind === "skip") return;
+    if (outcome.kind === "fresh") {
+      await this.collection.update(
+        claim._id,
+        outcome.clearFailing
+          ? { failingSince: null, checkedAt: now }
+          : { checkedAt: now },
+      );
+      return;
+    }
+    if (outcome.kind === "failing") {
+      await this.collection.update(claim._id, {
+        failingSince: outcome.since,
+        checkedAt: now,
+      });
+      return;
+    }
+    await this.lapse(claim, outcome.since, now, onUnverified);
+    report.unverified++;
+  }
+
+  /**
+   * Still `primary` when it was: the issuer never changes by itself, and the
+   * console shows the banner. It stops serving all the same.
+   */
+  private async lapse(
+    claim: DomainDoc,
+    since: Date,
+    now: Date,
+    onUnverified: (domain: DomainDoc) => Promise<void>,
+  ): Promise<void> {
+    const lapsed = await this.collection.update(claim._id, {
+      status: "unverified",
+      failingSince: since,
+      checkedAt: now,
+    });
+    await this.changed(claim.tenantId, [claim.host]);
+    await this.emit({
+      action: "domain.lapse",
+      tenantId: claim.tenantId,
+      domainId: claim._id,
+    });
+    try {
+      await onUnverified(lapsed);
+    } catch (error) {
+      this.log(
+        `domains: could not tell the owners of ${claim.host}: ${String(error)}`,
+      );
+    }
+  }
+
+  /** Inserts the pending claim; `raced` when a concurrent add of the same host won. */
+  private async createClaim(
+    tenantId: ObjectId,
+    host: string,
+  ): Promise<{ claim: DomainDoc; raced: boolean }> {
+    try {
+      const claim = await this.collection.create({
+        tenantId,
+        host,
+        status: "pending",
+        txtToken: mintToken(),
+        primary: false,
+      });
+      return { claim, raced: false };
+    } catch (error) {
+      if (!(error instanceof ConflictError)) throw error;
+      // A concurrent add of the same host by this tenant: it is the claim.
+      const raced = await this.collection.findFirst({ tenantId, host });
+      if (raced === undefined) throw error;
+      return { claim: raced, raced: true };
+    }
+  }
+
+  /**
+   * Verification: the unique index on verified hosts decides a race; the
+   * winner then evicts every other pending (or lapsed) claim on the host.
+   */
+  private async promote(claim: DomainDoc, now: Date): Promise<DomainDoc> {
+    let verified: DomainDoc;
+    try {
+      verified = await this.collection.update(claim._id, {
+        status: "verified",
+        verifiedAt: now,
+        checkedAt: now,
+        failingSince: null,
+      });
+    } catch (error) {
+      if (error instanceof ConflictError) throw domainTaken();
+      throw error;
+    }
+    await this.evictLosers(claim);
+    await this.changed(claim.tenantId, [claim.host]);
+    return verified;
+  }
+
+  private async evictLosers(winner: DomainDoc): Promise<void> {
+    const others = { host: winner.host, _id: { $ne: winner._id } };
+    const evicted = await this.collection.findMany({ filter: others });
+    await this.collection.deleteMany(others);
+    // A lapsed primary evicted here moves its tenant's issuer back to the
+    // slug host: that tenant's cached entries must go too.
+    for (const loser of evicted) {
+      if (loser.primary) await this.changed(loser.tenantId, [winner.host]);
+      await this.emit({
+        action: "domain.evict",
+        tenantId: loser.tenantId,
+        domainId: loser._id,
+      });
+    }
+  }
 
   private normalise(raw: string): string {
     try {
       return normalizeDomainHost(raw, this.options.platformDomain);
     } catch (error) {
-      throw new DomainError("BAD_USER_INPUT", (error as Error).message);
+      throw badDomainInput(
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
   private async emit(event: DomainSystemEvent) {
     try {
-      await this.options.record?.(event);
+      await this.options.record(event);
     } catch (error) {
       this.log(
         `domains: could not record the ${event.action} event: ${String(error)}`,
@@ -292,15 +409,11 @@ export class DomainStore {
   }
 
   private async changed(tenantId: ObjectId, hosts: string[]) {
-    const notify = this.options.onHostsChanged;
-    if (notify === undefined) return;
     try {
-      const slugHost = await this.options.slugHostOf?.(tenantId.toHexString());
-      await notify([...new Set([...hosts, ...(slugHost ? [slugHost] : [])])]);
+      const slugHost = await this.options.slugHostOf(tenantId.toHexString());
+      await this.options.onHostsChanged(hostsToForget(hosts, slugHost));
     } catch (error) {
       this.log(`domains: cache invalidation failed: ${String(error)}`);
     }
   }
 }
-
-const notFound = () => new DomainError("NOT_FOUND", "No such domain");

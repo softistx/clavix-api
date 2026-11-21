@@ -4,7 +4,7 @@ import { exchangePolicy } from "./token-exchange";
 
 const TARGET = "https://target.example/api";
 const call = (
-  rules: ExchangeRules | null | undefined,
+  rules: ExchangeRules | null,
   over: {
     resource?: string;
     subjectClient?: string;
@@ -14,12 +14,10 @@ const call = (
 ) => {
   const asked: string[] = [];
   const policy = exchangePolicy(
-    rules === undefined
-      ? undefined
-      : async (clientId) => {
-          asked.push(clientId);
-          return rules;
-        },
+    async (clientId) => {
+      asked.push(clientId);
+      return rules;
+    },
     async (clientId) => over.agents?.includes(clientId) === true,
   );
   const answer = policy({
@@ -62,8 +60,7 @@ describe("exchangePolicy", () => {
     expect(await answer).toEqual({ mode: "delegation" });
   });
 
-  test("no port, or no rules, is refused", async () => {
-    expect(await call(undefined).answer).toBeNull();
+  test("a client with no rules is refused", async () => {
     expect(await call(null).answer).toBeNull();
   });
 

@@ -2,13 +2,16 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { TOKEN_EXCHANGE_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource } from "@/config/resources";
+import { registerClient } from "@/modules/clients";
+import { jsonOf } from "~/json";
+import { answerBody, recordBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 
 const SOURCE = "https://source.tx.example/api";
@@ -17,16 +20,6 @@ const OTHER = "https://other.tx.example/api";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const SUBJECT = "user-subject";
-
-interface Answer {
-  access_token?: string;
-  refresh_token?: string | null;
-  issued_token_type?: string;
-  token_type?: string;
-  scope?: string;
-  expires_in?: number;
-  error?: string;
-}
 
 const ids: Record<string, string> = {};
 const secrets: Record<string, string> = {};
@@ -43,7 +36,12 @@ async function tenant(slug: string, rules: boolean | "none" = true) {
   await registerStoredResource({ tenant: slug, uri: TARGET, scopes: ["read"] });
   await registerStoredResource({ tenant: slug, uri: OTHER, scopes: ["read"] });
   const exch = await registerClient(
-    { db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: slug,
       name: "Exchanger",
@@ -90,18 +88,18 @@ const exchange = (
     flow.basic(client.id, client.secret),
   );
 
-const answerOf = async (response: Response) =>
-  (await response.json()) as Answer;
+const answerOf = async (response: Response) => jsonOf(response, answerBody);
 
 const introspect = async (slug: string, token: string) =>
-  (await (
+  jsonOf(
     await flow.post(
       slug,
       "/introspect",
       { token },
       flow.basic("backend", flow.clients[slug]?.secret ?? ""),
-    )
-  ).json()) as Record<string, unknown>;
+    ),
+    recordBody,
+  );
 
 beforeAll(async () => {
   for (const slug of ["tx-a", "tx-b", "tx-norules"]) {
@@ -153,7 +151,12 @@ describe("the token exchange grant", () => {
 
   test("a subject client that is not listed is refused", async () => {
     const second = await registerClient(
-      { db: oauthDb, findTenant },
+      {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
+        db: oauthDb,
+        findTenant,
+      },
       {
         tenant: "tx-a",
         name: "Second",
@@ -203,7 +206,12 @@ describe("the token exchange grant", () => {
     const register = async (clientId: string) =>
       (
         await registerClient(
-          { db: oauthDb, findTenant },
+          {
+            detailTypes: noDetailTypes,
+            now: () => new Date(),
+            db: oauthDb,
+            findTenant,
+          },
           {
             tenant: slug,
             name: clientId,
@@ -302,7 +310,12 @@ describe("the token exchange grant", () => {
     // A public client cannot hold the grant at all.
     await expect(
       registerClient(
-        { db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: "tx-a",
           name: "Public",
@@ -314,7 +327,12 @@ describe("the token exchange grant", () => {
       ),
     ).rejects.toThrow("confidential client");
     await registerClient(
-      { db: oauthDb, findTenant },
+      {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
+        db: oauthDb,
+        findTenant,
+      },
       {
         tenant: "tx-a",
         name: "Public",

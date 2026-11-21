@@ -2,15 +2,20 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { createTenancy } from "@/config/tenancy";
-import type { TxtAnswer } from "@/modules/domains/dns";
-import { DomainStore } from "@/modules/domains/domains.service";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import type { TxtAnswer } from "@/modules/domains";
+import { DomainsService } from "@/modules/domains";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietDomains } from "~/ports";
 
 // createTenancy (the wiring of src/config/tenancy.ts) on the wired collection,
 // with the in-memory cache in place of Redis.
-const cache = memoryTenantCache();
+const cache = memoryTenantCache(Date.now);
 const { tenantResolver: resolver, tenantsService: service } = createTenancy({
+  domains: noCustomDomains.domains,
+  hostsOf: async () => [],
+  onCreated: async () => {},
+  log: () => {},
   tenants: mongo.db.tenants,
   cache,
   config: {
@@ -52,16 +57,20 @@ describe("custom domains in the production wiring", () => {
   test("a verified custom domain reaches relatedOrigins through the domains object of config/tenancy.ts", async () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     const records = new Map<string, TxtAnswer>();
-    const store = new DomainStore(mongo.db.domains, {
+    const store = new DomainsService(mongo.db.domains, {
+      ...quietDomains,
       dns: {
         resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
       },
       platformDomain: env.CLAVIX_DOMAIN,
       log: () => {},
+      now: () => new Date(),
     });
     const tenancy = createTenancy({
+      onCreated: async () => {},
+      log: () => {},
       tenants: mongo.db.tenants,
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config: {
         scheme: env.CLAVIX_PUBLIC_SCHEME,
         domain: env.CLAVIX_DOMAIN,

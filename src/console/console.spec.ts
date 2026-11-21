@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { fixedClock } from "@softistx/janus";
 import {
   createMemorySigningKeys,
+  type OAuthUserPrincipal,
   rotateSigningKeys,
   type SigningKeyStore,
   s256Challenge,
@@ -9,25 +10,40 @@ import {
 import { getCollection } from "@softistx/mongo";
 import { generateKeyPair, SignJWT } from "jose";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
 import { access } from "@/config/access";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes, noUserLock } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
 import type { AdminEventInput } from "@/console/admin-events/recorder";
-import { registerResource } from "@/modules/resources/register-resource";
-import { resources } from "@/modules/resources/resources.model";
-import { scopes } from "@/modules/resources/scopes.model";
-import { issuerOf, partitionOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { tenants } from "@/modules/tenants/tenants.model";
+import { registerClient } from "@/modules/clients";
+import {
+  detailTypes,
+  mongoDetailTypeClients,
+  ResourcesService,
+  resources,
+  scopes,
+} from "@/modules/resources";
+import {
+  issuerOf,
+  PLATFORM_TENANT_SLUG,
+  partitionOf,
+  tenants,
+} from "@/modules/tenants";
+import { userinfoOf } from "@/oauth/building";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
+import { type GqlResult, gqlOf } from "~/gql";
+import { errorBody, tokenBody } from "~/json";
+import { defined } from "~/narrow";
+import { serverAuthenticating } from "~/oauth-server-double";
+import { quietOAuth } from "~/ports";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
 import {
@@ -57,6 +73,7 @@ const FOREIGN = { id: "spec-foreign", secret: "" };
 const clock = fixedClock(new Date());
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -76,7 +93,7 @@ const issuers = createClavixOAuthIssuers({
 const serverOfClavix = async () =>
   issuers.serverFor(new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)));
 const deps = createConsoleDeps(issuers);
-const app = createApp({
+const app = createTestApp({
   oauth: issuers,
   console: {
     ...deps,
@@ -91,21 +108,18 @@ const app = createApp({
 const findTenant = (slug: string) =>
   getCollection(oauthDb, tenants).findFirst({ slug });
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 const call = (query: string, token?: string) =>
   app.request(`http://localhost${CONSOLE_PATH}`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
     },
     body: JSON.stringify({ query }),
   });
 const gql = async (query: string, token?: string) =>
-  (await (await call(query, token)).json()) as GqlResult;
+  gqlOf(await call(query, token));
 
 /** Proves the e-mail of a `clavix` user, as a confirmed link does. */
 async function verify(userId: string, verified = true) {
@@ -186,11 +200,7 @@ async function tokenFor(
       }),
     ),
   );
-  const body = (await exchanged.json()) as { access_token?: string };
-  if (body.access_token === undefined) {
-    throw new Error(`no token: ${JSON.stringify(body)}`);
-  }
-  return body.access_token;
+  return tokenBody.parse(await exchanged.json()).access_token;
 }
 
 let ada = "";
@@ -216,7 +226,12 @@ beforeAll(async () => {
     { now: clock.now(), lead: "1h", retireAfter: "2h" },
   );
   const registered = await registerClient(
-    { db: oauthDb, findTenant },
+    {
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+      detailTypes: noDetailTypes,
+    },
     {
       tenant: PLATFORM_TENANT_SLUG,
       name: "Spec console",
@@ -231,7 +246,12 @@ beforeAll(async () => {
   FOREIGN.secret =
     (
       await registerClient(
-        { db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: PLATFORM_TENANT_SLUG,
           name: "Spec foreign",
@@ -241,20 +261,19 @@ beforeAll(async () => {
         },
       )
     ).clientSecret ?? "";
-  await registerResource(
-    {
-      collection: getCollection(oauthDb, resources),
-      scopes: getCollection(oauthDb, scopes),
-      findTenant,
-      issuerOf: (slug) => issuerOf(slug, origin),
-    },
-    {
-      tenant: PLATFORM_TENANT_SLUG,
-      uri: OTHER,
-      name: "Other",
-      scopes: ["read"],
-    },
-  );
+  await new ResourcesService({
+    resources: getCollection(oauthDb, resources),
+    scopes: getCollection(oauthDb, scopes),
+    detailTypes: getCollection(oauthDb, detailTypes),
+    clients: mongoDetailTypeClients(oauthDb),
+    userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
+    findTenant,
+  }).registerResource({
+    tenant: PLATFORM_TENANT_SLUG,
+    uri: OTHER,
+    name: "Other",
+    scopes: ["read"],
+  });
   const janus = await janusIssuers.forRequest(
     new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
   );
@@ -291,6 +310,7 @@ describe("the clavix tenant requires DPoP", () => {
     app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: `${scheme} ${token}`,
         ...(proof === undefined ? {} : { dpop: proof }),
@@ -325,7 +345,7 @@ describe("the clavix tenant requires DPoP", () => {
         await key.proof("POST", PUBLIC_URL, { accessToken: token, nonce }),
       );
       expect(response.status).toBe(200);
-      const result = (await response.json()) as GqlResult;
+      const result = await gqlOf(response);
       expect(result.data?.["me"]).toMatchObject({ user: { id: ada } });
     } finally {
       await setRequired(false);
@@ -338,6 +358,7 @@ describe("the console's DPoP token", () => {
     app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: `${scheme} ${token}`,
         ...(proof === undefined ? {} : { dpop: proof }),
@@ -373,7 +394,7 @@ describe("the console's DPoP token", () => {
       await signed(key, token, nonce),
     );
     expect(response.status).toBe(200);
-    const result = (await response.json()) as GqlResult;
+    const result = await gqlOf(response);
     expect(result.errors).toBeUndefined();
     expect(result.data?.["me"]).toMatchObject({ user: { id: ada } });
   });
@@ -551,12 +572,9 @@ describe("the console's bearer token", () => {
       }),
     );
     expect(response.status).toBe(400);
-    const body = (await response.json()) as {
-      error?: string;
-      access_token?: string;
-    };
+    const body = errorBody.parse(await response.json());
     expect(body.error).toBe("unsupported_grant_type");
-    expect(body.access_token).toBeUndefined();
+    expect(body["access_token"]).toBeUndefined();
   });
 
   test("a principal with no user is refused", async () => {
@@ -564,18 +582,16 @@ describe("the console's bearer token", () => {
       audience: AUDIENCE,
       publicUrl: PUBLIC_URL,
       serverOfClavix: async () =>
-        ({
-          authenticateRequest: async () => ({
-            ok: {
-              clientId: CONSOLE_CLIENT_ID,
-              grantId: "g",
-              scopes: ["console"],
-              clientName: null,
-              bound: null,
-              jkt: null,
-            },
-          }),
-        }) as never,
+        serverAuthenticating({
+          clientId: CONSOLE_CLIENT_ID,
+          grantId: "g",
+          scopes: ["console"],
+          clientName: null,
+          bound: null,
+          jkt: null,
+          subjectType: "client",
+          authorizationDetails: [],
+        }),
     });
     const request = new Request("http://localhost/", {
       headers: { authorization: "Bearer x" },
@@ -583,25 +599,22 @@ describe("the console's bearer token", () => {
     expect(await userless(request)).toBeNull();
   });
 
-  const stubbed = (extra: Record<string, unknown>) =>
+  const stubbed = (extra: Partial<OAuthUserPrincipal>) =>
     createConsoleAuthenticator({
       audience: AUDIENCE,
       publicUrl: PUBLIC_URL,
       serverOfClavix: async () =>
-        ({
-          authenticateRequest: async () => ({
-            ok: {
-              clientId: CONSOLE_CLIENT_ID,
-              userId: "u1",
-              grantId: "g",
-              scopes: ["console"],
-              clientName: null,
-              bound: null,
-              jkt: null,
-              ...extra,
-            },
-          }),
-        }) as never,
+        serverAuthenticating({
+          clientId: CONSOLE_CLIENT_ID,
+          userId: "u1",
+          grantId: "g",
+          scopes: ["console"],
+          clientName: null,
+          bound: null,
+          jkt: null,
+          authorizationDetails: [],
+          ...extra,
+        }),
     });
   const stubRequest = (scheme: string) =>
     new Request("http://localhost/", {
@@ -609,24 +622,32 @@ describe("the console's bearer token", () => {
     });
 
   test("an exchanged (delegated) token is refused, bound or not", async () => {
-    const actor = { clientId: "other-client" };
+    const actor = { sub: "other-user", clientId: "other-client" };
     expect(await stubbed({ actor })(stubRequest("Bearer"))).toBeNull();
     expect(
-      await stubbed({ actor, bound: "dpop", jkt: "k" })(stubRequest("DPoP")),
+      await stubbed({ actor, bound: { type: "dpop", id: "k" }, jkt: "k" })(
+        stubRequest("DPoP"),
+      ),
     ).toBeNull();
   });
 
   test("a token with no actor is accepted, bound or not", async () => {
     expect(await stubbed({})(stubRequest("Bearer"))).not.toBeNull();
     expect(
-      await stubbed({ bound: "dpop", jkt: "k" })(stubRequest("DPoP")),
+      await stubbed({ bound: { type: "dpop", id: "k" }, jkt: "k" })(
+        stubRequest("DPoP"),
+      ),
     ).not.toBeNull();
   });
 
   test("a cookie alone authenticates nothing", async () => {
     const response = await app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: "sid=abc" },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        cookie: "sid=abc",
+      },
       body: JSON.stringify({ query: ME }),
     });
     expect(response.status).toBe(401);
@@ -657,7 +678,7 @@ describe("the guard", () => {
       typeDefs: "extend type Query { open: String! }",
       resolvers: { Query: { open: () => "secret" } },
     });
-    const guarded = createApp({
+    const guarded = createTestApp({
       oauth: issuers,
       console: {
         ...deps,
@@ -677,12 +698,13 @@ describe("the guard", () => {
     const response = await guarded.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer x",
       },
       body: JSON.stringify({ query: "{ open }" }),
     });
-    const result = (await response.json()) as GqlResult;
+    const result = await gqlOf(response);
     expect(result.data).toBeNull();
     expect(result.errors?.[0]?.extensions?.code).toBe("FORBIDDEN");
   });
@@ -714,20 +736,17 @@ describe("the verified e-mail gate (ADR-0041)", () => {
       "memberships { role }",
       "switchableTenants { totalCount }",
     ]) {
-      const hidden = (await (
-        await call(`{ me { ${field} } }`, token)
-      ).json()) as GqlResult;
+      const hidden = await gql(`{ me { ${field} } }`, token);
       expect(hidden.errors?.[0]?.extensions?.code).toBe("EMAIL_UNVERIFIED");
     }
     // The plan catalogue is signed-in only, and still needs the proof.
     expect(
-      ((await (await call("{ plans { id } }", token)).json()) as GqlResult)
-        .errors?.[0]?.extensions?.code,
+      (await gql("{ plans { id } }", token)).errors?.[0]?.extensions?.code,
     ).toBe("EMAIL_UNVERIFIED");
 
     const refused = await call(TENANT(), token);
     expect(refused.status).toBe(403);
-    const body = (await refused.json()) as GqlResult;
+    const body = await gqlOf(refused);
     expect(body.errors?.[0]?.extensions?.code).toBe("EMAIL_UNVERIFIED");
   });
 
@@ -738,18 +757,17 @@ describe("the verified e-mail gate (ADR-0041)", () => {
       token,
     );
     expect(refused.status).toBe(403);
-    expect(
-      ((await refused.json()) as GqlResult).errors?.[0]?.extensions?.code,
-    ).toBe("EMAIL_UNVERIFIED");
+    expect((await gqlOf(refused)).errors?.[0]?.extensions?.code).toBe(
+      "EMAIL_UNVERIFIED",
+    );
     expect((await findTenant("con-a"))?.name).toBe("A");
   });
 
   test("the proof opens the console, with the same token, and clearing it closes it again", async () => {
     const token = await tokenFor(erin, AUDIENCE, "console");
-    expect(
-      ((await (await call(TENANT(), token)).json()) as GqlResult).errors?.[0]
-        ?.extensions?.code,
-    ).toBe("EMAIL_UNVERIFIED");
+    expect((await gql(TENANT(), token)).errors?.[0]?.extensions?.code).toBe(
+      "EMAIL_UNVERIFIED",
+    );
     await verify(erin);
     const allowed = await gql(TENANT(), token);
     expect(allowed.errors).toBeUndefined();
@@ -767,10 +785,9 @@ describe("the verified e-mail gate (ADR-0041)", () => {
     );
     const frank = (await janus?.create({ email: "frank@console.test" }))?.id;
     const token = await tokenFor(frank ?? "", AUDIENCE, "console");
-    expect(
-      ((await (await call(TENANT(), token)).json()) as GqlResult).errors?.[0]
-        ?.extensions?.code,
-    ).toBe("EMAIL_UNVERIFIED");
+    expect((await gql(TENANT(), token)).errors?.[0]?.extensions?.code).toBe(
+      "EMAIL_UNVERIFIED",
+    );
   });
 
   test("a platform operator is held to it too: ADR-0039's exception is about the tenant, not the caller", async () => {
@@ -845,9 +862,12 @@ describe("the console seed", () => {
   test("the migration made the resource and the client, idempotently", async () => {
     const { seedConsole } = await import("@/migrations/console-seed");
     const stored = await resourcesFor(
-      (await tenantResolver.resolveHost(
-        `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
-      )) as never,
+      defined(
+        await tenantResolver.resolveHost(
+          `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
+        ),
+        "the platform tenant",
+      ),
     );
     expect(Object.keys(stored)).toContain(AUDIENCE);
     expect(stored[AUDIENCE]?.scopes).toContain("console");
@@ -868,6 +888,7 @@ describe("operators:grant", () => {
   const invited: { email: string; role: string }[] = [];
   const deps = {
     access,
+    lock: noUserLock,
     findByEmail: async (email: string) =>
       email === "bob@console.test"
         ? { id: bob, email, active: true }
@@ -1009,6 +1030,7 @@ describe("operators:grant", () => {
     const wired = operatorGrantDeps({
       findByEmail: async () => null,
       access,
+      lock: noUserLock,
       invitations: {
         invite: async (input) => {
           invites.push(input);
@@ -1067,7 +1089,7 @@ describe("the guards over HTTP", () => {
     },
   });
   const as = (userId: string, query: string, scopes = ["console"]) =>
-    createApp({
+    createTestApp({
       oauth: issuers,
       console: {
         ...deps,
@@ -1087,12 +1109,13 @@ describe("the guards over HTTP", () => {
       .request(`http://localhost${CONSOLE_PATH}`, {
         method: "POST",
         headers: {
+          ...clientHeaders,
           "content-type": "application/json",
           authorization: "Bearer x",
         },
         body: JSON.stringify({ query }),
       })
-      .then((r) => r.json() as Promise<GqlResult>);
+      .then(gqlOf);
   const code = (r: GqlResult) => r.errors?.[0]?.extensions?.code;
 
   test("a tenant admin edits their tenant, not another", async () => {
@@ -1140,17 +1163,18 @@ describe("the guards over HTTP", () => {
 
 describe("authentication failures", () => {
   const withAuth = (authenticate: () => Promise<never>) =>
-    createApp({ oauth: issuers, console: { ...deps, authenticate } }).request(
-      `http://localhost${CONSOLE_PATH}`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer x",
-        },
-        body: JSON.stringify({ query: ME }),
+    createTestApp({
+      oauth: issuers,
+      console: { ...deps, authenticate },
+    }).request(`http://localhost${CONSOLE_PATH}`, {
+      method: "POST",
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        authorization: "Bearer x",
       },
-    );
+      body: JSON.stringify({ query: ME }),
+    });
 
   test("a store outage is a 503, not a 401", async () => {
     expect(

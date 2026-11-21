@@ -1,0 +1,301 @@
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import { z } from "zod";
+import { access } from "@/config/access";
+import { createConsoleDeps } from "@/config/console";
+import { mongo } from "@/config/db";
+import { oauthDb } from "@/config/oauth-db";
+import { tenantsService } from "@/config/tenancy";
+import { CONSOLE_CLIENT_ID, CONSOLE_PATH } from "@/console/identity";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { createTestApp } from "~/app";
+import { at } from "~/body";
+import { clientHeaders } from "~/client-header";
+import { verifiedCallers } from "~/console";
+import { type GqlResult, gqlOf } from "~/gql";
+import { defined } from "~/narrow";
+
+const deps = createConsoleDeps({ serverFor: async () => null });
+const OPERATOR = "switch-operator";
+const PLATFORM_VIEWER = "switch-platform-viewer";
+const MEMBER = "switch-member";
+const MULTI = "switch-multi";
+const OUTSIDER = "switch-outsider";
+const HYBRID = "switch-hybrid";
+
+const request = (userId: string | null, query: string) =>
+  createTestApp({
+    console: {
+      ...verifiedCallers(deps),
+      authenticate: async () =>
+        userId === null
+          ? null
+          : {
+              userId,
+              clientId: CONSOLE_CLIENT_ID,
+              grantId: "g",
+              scopes: ["console"],
+              clientName: null,
+              bound: null,
+              jkt: null,
+              authorizationDetails: [],
+            },
+    },
+  }).request(`http://localhost${CONSOLE_PATH}`, {
+    method: "POST",
+    headers: {
+      ...clientHeaders,
+      "content-type": "application/json",
+      authorization: "Bearer x",
+    },
+    body: JSON.stringify({ query }),
+  });
+const as = async (userId: string, query: string) =>
+  gqlOf(await request(userId, query));
+
+const LIST = (args = "") =>
+  `{ me { switchableTenants${args} { items { role tenant { slug name status } } nextCursor totalCount } } }`;
+const PageSchema = z.looseObject({
+  items: z.array(
+    z.looseObject({
+      role: z.string(),
+      tenant: z.looseObject({
+        slug: z.string(),
+        name: z.string(),
+        status: z.string(),
+      }),
+    }),
+  ),
+  nextCursor: z.string().or(z.null()),
+  totalCount: z.number(),
+});
+const pageOf = (r: GqlResult) => at(r.data, "me.switchableTenants", PageSchema);
+const cursorOf = (r: GqlResult) =>
+  defined(pageOf(r).nextCursor, "a next cursor");
+const slugs = (r: GqlResult) => pageOf(r).items.map((i) => i.tenant.slug);
+
+const ids: Record<string, string> = {};
+async function make(slug: string, name = `${slug} Inc`) {
+  const tenant = await tenantsService.create({ slug, name, plan: "free" });
+  const id = tenant._id.toHexString();
+  ids[slug] = id;
+  return id;
+}
+
+const clean = async () => {
+  await mongo.db.tenants.raw.deleteMany({
+    slug: { $ne: PLATFORM_TENANT_SLUG },
+  });
+  await oauthDb.collection("relations").deleteMany({});
+};
+
+beforeAll(clean);
+afterAll(clean);
+beforeEach(async () => {
+  await clean();
+  await access.grantPlatform(OPERATOR, "owner");
+  await access.grantPlatform(PLATFORM_VIEWER, "viewer");
+  const a = await make("sw-alpha", "Alpha");
+  const b = await make("sw-beta", "Beta");
+  await make("sw-gamma", "Gamma");
+  await access.grantTenant(a, MEMBER, "admin");
+  await access.grantTenant(a, MULTI, "viewer");
+  await access.grantTenant(b, MULTI, "owner");
+  await access.grantTenant(b, HYBRID, "viewer");
+  await access.grantPlatform(HYBRID, "admin");
+});
+
+describe("Me.switchableTenants", () => {
+  test("a member sees the tenant of their membership with their role", async () => {
+    const r = await as(MEMBER, LIST());
+    expect(r.errors).toBeUndefined();
+    expect(pageOf(r)).toEqual({
+      items: [
+        {
+          role: "ADMIN",
+          tenant: { slug: "sw-alpha", name: "Alpha", status: "ACTIVE" },
+        },
+      ],
+      nextCursor: null,
+      totalCount: 1,
+    });
+  });
+
+  test("several memberships are listed by slug, each with its own role", async () => {
+    const r = await as(MULTI, LIST());
+    expect(pageOf(r).items).toMatchObject([
+      { role: "VIEWER", tenant: { slug: "sw-alpha" } },
+      { role: "OWNER", tenant: { slug: "sw-beta" } },
+    ]);
+  });
+
+  test("tenant A's member never sees tenant B", async () => {
+    expect(slugs(await as(MEMBER, LIST()))).toEqual(["sw-alpha"]);
+  });
+
+  test("a caller with no role gets an empty page", async () => {
+    const r = await as(OUTSIDER, LIST());
+    expect(r.errors).toBeUndefined();
+    expect(pageOf(r)).toEqual({
+      items: [],
+      nextCursor: null,
+      totalCount: 0,
+    });
+  });
+
+  test("a platform operator with no membership sees every live tenant with the platform role", async () => {
+    const r = await as(OPERATOR, LIST());
+    expect(slugs(r)).toEqual(
+      expect.arrayContaining(["sw-alpha", "sw-beta", "sw-gamma"]),
+    );
+    for (const item of pageOf(r).items) {
+      expect(item.role).toBe("OWNER");
+    }
+    const viewer = await as(PLATFORM_VIEWER, LIST('(q: "sw-")'));
+    expect(slugs(viewer)).toEqual(["sw-alpha", "sw-beta", "sw-gamma"]);
+    expect(
+      pageOf(viewer).items.every((i: { role: string }) => i.role === "VIEWER"),
+    ).toBe(true);
+  });
+
+  test("an operator's role on a tenant is the stronger of the two", async () => {
+    const r = await as(HYBRID, LIST('(q: "sw-")'));
+    const byslug = Object.fromEntries(
+      pageOf(r).items.map((i: { role: string; tenant: { slug: string } }) => [
+        i.tenant.slug,
+        i.role,
+      ]),
+    );
+    expect(byslug).toEqual({
+      "sw-alpha": "ADMIN",
+      "sw-beta": "ADMIN",
+      "sw-gamma": "ADMIN",
+    });
+  });
+
+  test("a suspended tenant stays listed with its status, a deleted one is left out", async () => {
+    await tenantsService.suspend(defined(ids["sw-alpha"], "sw-alpha"));
+    await tenantsService.trash(defined(ids["sw-beta"], "sw-beta"));
+    const member = await as(MULTI, LIST());
+    expect(pageOf(member).items).toMatchObject([
+      { tenant: { slug: "sw-alpha", status: "SUSPENDED" } },
+    ]);
+    const operator = await as(OPERATOR, LIST('(q: "sw-")'));
+    expect(
+      pageOf(operator).items.map(
+        (i: { tenant: { slug: string; status: string } }) => [
+          i.tenant.slug,
+          i.tenant.status,
+        ],
+      ),
+    ).toEqual([
+      ["sw-alpha", "SUSPENDED"],
+      ["sw-gamma", "ACTIVE"],
+    ]);
+  });
+
+  test("search matches the start of the slug or part of the name", async () => {
+    expect(slugs(await as(OPERATOR, LIST('(q: "sw-be")')))).toEqual([
+      "sw-beta",
+    ]);
+    expect(slugs(await as(OPERATOR, LIST('(q: "amm")')))).toEqual(["sw-gamma"]);
+    expect(slugs(await as(MULTI, LIST('(q: "BET")')))).toEqual(["sw-beta"]);
+    expect(slugs(await as(MULTI, LIST('(q: "gamma")')))).toEqual([]);
+  });
+
+  test("totalCount counts the caller's own tenants, whatever the page, and follows q", async () => {
+    const count = async (who: string, args = "") =>
+      pageOf(await as(who, LIST(args))).totalCount;
+    // A member of one tenant never counts another's.
+    expect(await count(MEMBER)).toBe(1);
+    expect(await count(MULTI)).toBe(2);
+    expect(await count(MULTI, '(q: "BET")')).toBe(1);
+    expect(await count(MULTI, "(first: 1)")).toBe(2);
+    expect(await count(OUTSIDER)).toBe(0);
+    // An operator counts every live tenant, on page 2 as on page 1.
+    const total = await count(OPERATOR, '(q: "sw-")');
+    expect(total).toBe(3);
+    const one = await as(OPERATOR, LIST('(q: "sw-", first: 2)'));
+    const cursor = cursorOf(one);
+    expect(pageOf(one).totalCount).toBe(3);
+    expect(
+      await count(OPERATOR, `(q: "sw-", first: 2, after: "${cursor}")`),
+    ).toBe(3);
+  });
+
+  test("an operator's page is cursor-paged", async () => {
+    const one = await as(OPERATOR, LIST('(q: "sw-", first: 2)'));
+    expect(slugs(one)).toEqual(["sw-alpha", "sw-beta"]);
+    const cursor = cursorOf(one);
+    expect(cursor).toBeString();
+    const two = await as(
+      OPERATOR,
+      LIST(`(q: "sw-", first: 2, after: "${cursor}")`),
+    );
+    expect(slugs(two)).toEqual(["sw-gamma"]);
+    expect(pageOf(two).nextCursor).toBeNull();
+  });
+
+  test("a member's page is cursor-paged too", async () => {
+    for (const n of ["a", "b", "c"]) {
+      const id = await make(`sw-m-${n}`);
+      await access.grantTenant(id, MEMBER, "viewer");
+    }
+    const one = await as(MEMBER, LIST("(first: 2)"));
+    expect(slugs(one)).toEqual(["sw-alpha", "sw-m-a"]);
+    const cursor = cursorOf(one);
+    const two = await as(MEMBER, LIST(`(first: 2, after: "${cursor}")`));
+    expect(slugs(two)).toEqual(["sw-m-b", "sw-m-c"]);
+    expect(pageOf(two).nextCursor).toBeNull();
+  });
+
+  test("a member's cursor is opaque, as an operator's is", async () => {
+    const one = await as(MULTI, LIST("(first: 1)"));
+    const cursor = cursorOf(one);
+    expect(cursor).toBeString();
+    expect(cursor).not.toBe("sw-alpha");
+    expect(
+      slugs(await as(MULTI, LIST(`(first: 1, after: "${cursor}")`))),
+    ).toEqual(["sw-beta"]);
+  });
+
+  test("first is held between 1 and 100, for a member and an operator", async () => {
+    for (const who of [MULTI, OPERATOR]) {
+      expect(slugs(await as(who, LIST('(q: "sw-", first: 0)')))).toHaveLength(
+        1,
+      );
+      expect(slugs(await as(who, LIST('(q: "sw-", first: -5)')))).toHaveLength(
+        1,
+      );
+      expect(
+        slugs(await as(who, LIST('(q: "sw-", first: 100000)'))).length,
+      ).toBeGreaterThan(1);
+    }
+  });
+
+  test("a cursor that is not valid is BAD_USER_INPUT, for a member and an operator", async () => {
+    for (const who of [MEMBER, OPERATOR]) {
+      for (const after of ["sw-alpha", "!!not-a-cursor"]) {
+        const r = await as(who, LIST(`(after: "${after}")`));
+        expect(r.errors?.[0]?.extensions?.code).toBe("BAD_USER_INPUT");
+      }
+    }
+  });
+
+  test("a cursor of one search is refused on another", async () => {
+    const one = await as(MULTI, LIST("(first: 1)"));
+    const cursor = cursorOf(one);
+    const r = await as(MULTI, LIST(`(q: "beta", after: "${cursor}")`));
+    expect(r.errors?.[0]?.extensions?.code).toBe("BAD_USER_INPUT");
+  });
+
+  test("a request with no valid token is a 401", async () => {
+    expect((await request(null, LIST())).status).toBe(401);
+  });
+});

@@ -1,4 +1,4 @@
-import { readiness } from "@/modules/health/ready";
+import { readiness } from "@/modules/health";
 import { mongo } from "./db";
 import { redis } from "./redis";
 
@@ -13,6 +13,6 @@ export const readyz = () =>
     },
     redis:
       appRedis === undefined
-        ? undefined
+        ? null
         : async () => (await appRedis.ping({ timeoutMs: 1_500 })).default.ok,
   });

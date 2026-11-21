@@ -1,11 +1,11 @@
 import { type FieldLimit, fieldRateLimit } from "@softistx/alxia-graphql";
 import { defineRateLimit, GuardError, type LimitResult } from "@softistx/redis";
-import { GraphQLError } from "graphql";
 import {
   type Bound,
   logSkipped,
   retryAfterSeconds,
 } from "@/http/throttle/core";
+import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "./context";
 
 export interface ConsoleLimitConfig {
@@ -59,16 +59,10 @@ export const consoleLimits = (config: ConsoleLimitConfig) => ({
 
 /** The console's refusal past a budget: `RATE_LIMITED`, 429, `retryAfter` (seconds) in the error and `Retry-After`. */
 export const rateLimited = (retryAfter: number) =>
-  new GraphQLError("Too many requests", {
-    extensions: {
-      code: "RATE_LIMITED",
-      retryAfter,
-      http: { status: 429, headers: { "retry-after": String(retryAfter) } },
-    },
-  });
+  fail("RATE_LIMITED", "Too many requests", { status: 429, retryAfter });
 
 /**
- * What the console's mutations spend (`ctx.budgets`; none without Redis).
+ * What the console's mutations spend (`ctx.budgets`; `noBudgets` without Redis).
  * Each call counts one and throws `rateLimited` past a limit.
  */
 export interface ConsoleBudgets {
@@ -99,7 +93,7 @@ export function createConsoleBudgets(
     inviteCaller: Bound<{ caller: string }>;
     inviteTenant: Bound<{ tenantId: string }>;
   },
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): ConsoleBudgets {
   const spend = async <P>(limit: Bound<P>, params: P, cost = 1) => {
     try {
@@ -111,8 +105,11 @@ export function createConsoleBudgets(
       if (error instanceof GuardError && error.code === "COST") {
         return {
           allowed: false,
+          limit: 0,
+          remaining: 0,
+          resetAfter: OVER_BUDGET_RETRY_MS,
           retryAfter: OVER_BUDGET_RETRY_MS,
-        } as LimitResult;
+        } satisfies LimitResult;
       }
       logSkipped(error, SKIPPED, log);
       return null;

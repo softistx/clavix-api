@@ -1,5 +1,5 @@
 import type { OAuthIssuerKey, OAuthResource } from "@softistx/janus-oauth";
-import { digestOf } from "@/modules/resources/detail-types/compile";
+import { digestOf } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
 import type { ResourcesFor } from "./ports";
@@ -54,12 +54,12 @@ const withScopes = (
 export const resolveIssuer =
   (
     resolver: Pick<TenantResolver, "resolveRequest">,
-    resourcesFor: ResourcesFor | undefined,
+    resourcesFor: ResourcesFor,
   ) =>
   async (request: Request): Promise<Keyed | null> => {
     const tenant = await resolver.resolveRequest(request);
     if (tenant === null) return null;
-    const resources = withScopes((await resourcesFor?.(tenant)) ?? {});
+    const resources = withScopes(await resourcesFor(tenant));
     return {
       issuer: tenant.issuer,
       // The tenant's id first: a new tenant under a purged tenant's slug has

@@ -1,5 +1,6 @@
 import type { Exclusive } from "@/console/exclusive";
-import { assertWithinQuota, QuotaExceededError } from "@/modules/usage/quota";
+import { assertWithinQuota, QuotaExceededError } from "@/modules/usage";
+import { extensionCodeOf } from "@/shared/errors";
 
 const NO_STORE = { "cache-control": "no-store" } as const;
 
@@ -40,8 +41,7 @@ export async function agentsQuotaRefusal(
 
 /** Without Redis a lock is in-process; with it, one that cannot be taken is a retryable 503. */
 export const lockUnavailable = (error: unknown): Response | null => {
-  const code = (error as { extensions?: { code?: unknown } } | null)?.extensions
-    ?.code;
+  const code = extensionCodeOf(error);
   return code === "SERVICE_UNAVAILABLE"
     ? Response.json(
         {

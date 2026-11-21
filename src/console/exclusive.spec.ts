@@ -5,7 +5,7 @@ const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 1));
 
 describe("createExclusive", () => {
   test("one at a time per key, other keys beside it, a failure frees the key", async () => {
-    const exclusive = createExclusive();
+    const exclusive = createExclusive(null);
     const log: string[] = [];
     const work =
       (name: string, fail = false) =>

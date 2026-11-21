@@ -1,8 +1,6 @@
-import type { TxtResolver } from "./dns";
-import { txtNameOf } from "./domain-host";
+import type { TxtResolver } from "./domains.dns";
 import type { DomainDoc } from "./domains.model";
-
-export type CheckFailure = "NO_RECORD" | "MISMATCH" | "LOOKUP_FAILED";
+import { type CheckFailure, txtNameOf } from "./domains.rules";
 
 /** Reads `_clavix.<host>` and compares it with the claim's token: `null` when it is there. */
 export async function checkClaim(

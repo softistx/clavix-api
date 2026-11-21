@@ -1,3 +1,4 @@
+import { defineCodes } from "@/i18n/define-codes";
 export type ConnectionErrorCode =
   | "BAD_USER_INPUT"
   | "NOT_FOUND"
@@ -22,3 +23,11 @@ export class ConnectionError extends Error {
     super(message);
   }
 }
+
+// The codes this module raises (the inventory: src/i18n/codes.ts).
+export const codes = defineCodes("connections", [
+  "CONNECTION_IN_USE",
+  "ISSUER_REFUSED",
+  "ISSUER_UNREACHABLE",
+  "SSO_REQUIRED",
+]);

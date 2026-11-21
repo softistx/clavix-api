@@ -2,12 +2,15 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { CLIENT_CREDENTIALS_GRANT } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
-import { catalog, registerStoredResource } from "@/config/resources";
+import { registerStoredResource, resourcesService } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { createConsoleAuthenticator } from "@/console/auth";
+import { registerClient } from "@/modules/clients";
+import { jsonOf } from "~/json";
+import { answerBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 import { withTenantState } from "./tenant-state";
 
@@ -16,16 +19,6 @@ const CLOSED = "https://closed.cc.example/api";
 const SLUG = "cc-a";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-
-interface Answer {
-  access_token?: string;
-  token_type?: string;
-  scope?: string;
-  expires_in?: number;
-  refresh_token?: string | null;
-  id_token?: string | null;
-  error?: string;
-}
 
 const secrets: Record<string, string> = {};
 let tenantId = new ObjectId();
@@ -41,7 +34,12 @@ async function machine(
   } = {},
 ) {
   const registered = await registerClient(
-    { db: oauthDb, findTenant },
+    {
+      detailTypes: noDetailTypes,
+      now: () => new Date(),
+      db: oauthDb,
+      findTenant,
+    },
     {
       tenant: options.slug ?? SLUG,
       name: clientId,
@@ -70,8 +68,7 @@ const token = (
     flow.basic(clientId, secrets[clientId] ?? ""),
   );
 
-const answerOf = async (response: Response) =>
-  (await response.json()) as Answer;
+const answerOf = async (response: Response) => jsonOf(response, answerBody);
 
 beforeAll(async () => {
   const { tenantId: id } = await flow.setUp(SLUG);
@@ -82,11 +79,11 @@ beforeAll(async () => {
     scopes: ["read", "write", "admin"],
   });
   await registerStoredResource({ tenant: SLUG, uri: CLOSED, scopes: ["read"] });
-  const [open] = (await catalog.listResources(tenantId)).filter(
+  const [open] = (await resourcesService.listResources(tenantId)).filter(
     (resource) => resource.uri === OPEN,
   );
   if (open === undefined) throw new Error("resource not stored");
-  await catalog.updateResource(tenantId, open._id.toHexString(), {
+  await resourcesService.updateResource(tenantId, open._id.toHexString(), {
     allowClientCredentials: true,
   });
   await machine("worker", { defaultScopes: ["read"] });
@@ -147,9 +144,7 @@ describe("the client credentials grant", () => {
     const store = (
       await import("@softistx/janus-oauth-mongo")
     ).createMongoOAuth(oauthDb, {
-      partition: (await import("@/modules/tenants/identity")).partitionOf(
-        tenantId,
-      ),
+      partition: (await import("@/modules/tenants")).partitionOf(tenantId),
     });
     await store.upsertClient({
       id: "forced-public",
@@ -184,7 +179,12 @@ describe("the client credentials grant", () => {
   test("a client with the grant needs allowed scopes, and defaults within them", async () => {
     await expect(
       registerClient(
-        { db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: SLUG,
           name: "none",
@@ -203,7 +203,12 @@ describe("the client credentials grant", () => {
   test("scopes belong to the grant: they go with it", async () => {
     await expect(
       registerClient(
-        { db: oauthDb, findTenant },
+        {
+          detailTypes: noDetailTypes,
+          now: () => new Date(),
+          db: oauthDb,
+          findTenant,
+        },
         {
           tenant: SLUG,
           name: "code",
@@ -217,18 +222,18 @@ describe("the client credentials grant", () => {
   });
 
   test("turning the resource's opt-in off refuses new tokens at once", async () => {
-    const [closing] = (await catalog.listResources(tenantId)).filter(
+    const [closing] = (await resourcesService.listResources(tenantId)).filter(
       (resource) => resource.uri === OPEN,
     );
     if (closing === undefined) throw new Error("resource not stored");
-    await catalog.updateResource(tenantId, closing._id.toHexString(), {
+    await resourcesService.updateResource(tenantId, closing._id.toHexString(), {
       allowClientCredentials: false,
     });
     const off = await token("worker", { resource: OPEN, scope: "read" });
     expect(off.status).toBe(400);
     // With no resource left that opted in, the grant is off for the tenant.
     expect((await answerOf(off)).error).toBe("unsupported_grant_type");
-    await catalog.updateResource(tenantId, closing._id.toHexString(), {
+    await resourcesService.updateResource(tenantId, closing._id.toHexString(), {
       allowClientCredentials: true,
     });
     expect((await token("worker", { scope: "read" })).status).toBe(400);
@@ -269,10 +274,10 @@ describe("the client credentials grant", () => {
       scopes: ["read"],
     });
     const [stored] = (
-      await catalog.listResources(new ObjectId(String(other)))
+      await resourcesService.listResources(new ObjectId(String(other)))
     ).filter((resource) => resource.uri === OPEN);
     if (stored === undefined) throw new Error("resource not stored");
-    await catalog.updateResource(
+    await resourcesService.updateResource(
       new ObjectId(String(other)),
       stored._id.toHexString(),
       {
@@ -309,7 +314,10 @@ describe("the client credentials grant", () => {
     const tenant = await findTenant("cc-susp");
     if (tenant === undefined) throw new Error("no tenant");
     await tenantsService.suspend(tenant._id.toHexString());
-    const guarded = withTenantState(flow.issuers, { resolver: tenantResolver });
+    const guarded = withTenantState(flow.issuers, {
+      resolver: tenantResolver,
+      onActive: async () => {},
+    });
     const response = await guarded.handle(
       new Request(flow.url("cc-susp", "/token"), {
         method: "POST",

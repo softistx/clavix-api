@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createApp } from "@/app";
+import { createTestApp } from "~/app";
+import { gqlOf } from "~/gql";
 
-const app = createApp();
+// The client header has its own spec (csrf.spec.ts); this one tests the
+// same-origin guard alone, whatever CLAVIX_REQUIRE_CLIENT_HEADER says.
+const app = createTestApp({ requireClientHeader: false });
 const URL_ = "http://acme.clavix.test/graphql";
 const json = { "content-type": "application/json" };
 // graxia's own CSRF check runs first and stays on: a GET or a non-JSON POST
@@ -19,12 +22,8 @@ const post = (headers: Record<string, string>, body: unknown) =>
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 
-interface Body {
-  data?: unknown;
-  errors?: { extensions?: { code?: string } }[];
-}
 const codeOf = async (response: Response) =>
-  ((await response.json()) as Body).errors?.[0]?.extensions?.code;
+  (await gqlOf(response)).errors?.[0]?.extensions?.code;
 
 const SIGN_OUT = { query: "mutation { signOut }" };
 const REQUEST_CODE = {

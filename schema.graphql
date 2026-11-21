@@ -1,0 +1,1245 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+"""
+Validates an argument or an input field when the request arrives, before the resolver runs. A value that breaks a constraint is refused with a BAD_USER_INPUT error whose extensions list each issue with its path and the constraint that refused it; null and omitted values are not checked. Each argument below is one constraint, and they combine on one field.
+"""
+directive @constraint(
+  """
+  The string must contain this text (case-sensitive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  contains: String
+  """
+  The string must end with this text (case-sensitive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  endsWith: String
+  """
+  The number must be strictly less than this value (the value itself is refused). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to Int and Float values.
+  """
+  exclusiveMax: Float
+  """
+  The number must be strictly greater than this value (the value itself is refused). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to Int and Float values.
+  """
+  exclusiveMin: Float
+  """
+  The string must match this named format: byte, date, date-time, email, ipv4, ipv6, uri or uuid, or a format the server registered. An unknown name fails at server startup. Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  format: String
+  """
+  The number must be less than or equal to this value (inclusive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to Int and Float values.
+  """
+  max: Float
+  """
+  The list must hold at most this many items (inclusive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to list values.
+  """
+  maxItems: Int
+  """
+  The string must be at most this many characters long (UTF-16 code units, inclusive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  maxLength: Int
+  """
+  The number must be greater than or equal to this value (inclusive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to Int and Float values.
+  """
+  min: Float
+  """
+  The list must hold at least this many items (inclusive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to list values.
+  """
+  minItems: Int
+  """
+  The string must be at least this many characters long (UTF-16 code units, inclusive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  minLength: Int
+  """
+  The number must be a whole multiple of this value (for example 5 accepts 0, 5 and 10). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to Int and Float values.
+  """
+  multipleOf: Float
+  """
+  The string must not contain this text (case-sensitive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  notContains: String
+  """
+  The string must match this regular expression (JavaScript syntax, not anchored unless it uses ^ and $). An invalid expression fails at server startup. Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  pattern: String
+  """
+  The string must start with this text (case-sensitive). Refused otherwise with a BAD_USER_INPUT error naming the constraint. Applies to String and ID values.
+  """
+  startsWith: String
+) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+"""
+The cost of a field, type, enum, scalar, argument or input field in the query cost limit, following the IBM GraphQL cost specification.
+"""
+directive @cost(
+  """
+  The cost it adds; it replaces the default object or scalar cost for what it marks, and on a field it is added once, not per list item.
+  """
+  weight: Int!
+) on ARGUMENT_DEFINITION | ENUM | FIELD_DEFINITION | INPUT_FIELD_DEFINITION | OBJECT | SCALAR
+
+"""
+Directs the executor to defer this fragment when the `if` argument is true or undefined.
+"""
+directive @defer(
+  """Deferred when true or undefined."""
+  if: Boolean! = true
+  """Unique name"""
+  label: String
+) on FRAGMENT_SPREAD | INLINE_FRAGMENT
+
+"""
+How many items a list field returns, used to multiply its cost in the query cost limit, following the IBM GraphQL cost specification.
+"""
+directive @listSize(
+  """
+  The list size to assume when no slicing argument gives one; it defaults to the server limits.cost.defaultListSize (10 unless configured) and it also sizes the inner levels of a nested list.
+  """
+  assumedSize: Int
+  """
+  Whether a request must give a non-negative integer for at least one slicing argument, otherwise it is rejected; true by default.
+  """
+  requireOneSlicingArgument: Boolean = true
+  """
+  The fields of the returned object that hold the list (for example the edges of a connection), each sized like this field instead of once.
+  """
+  sizedFields: [String!]
+  """
+  The names of the arguments (a dotted path reaches into an input) whose non-negative integer value is the list size; the largest given one is used.
+  """
+  slicingArguments: [String!]
+) on FIELD_DEFINITION
+
+"""
+Directs the executor to stream plural fields when the `if` argument is true or undefined.
+"""
+directive @stream(
+  """Stream when true or undefined."""
+  if: Boolean! = true
+  """Number of items to return immediately"""
+  initialCount: Int! = 0
+  """Unique name"""
+  label: String
+) on FIELD
+
+"""
+What accepting did. `signedIn` is false when the address already had an
+account: the invitation is accepted and the person signs in as usual.
+"""
+type AcceptedInvitation {
+  expiresAt: DateTime
+  organization: String!
+  signedIn: Boolean!
+  """Set when `signedIn`; the session cookie is on the response."""
+  user: CurrentUser
+}
+
+"""What a pending request can still be missing before it can be approved."""
+enum AuthenticationGap {
+  """
+  The user holds no second factor: enrol a passkey first, then the authenticator app.
+  """
+  ENROLMENT
+  """
+  The last proof is older than the request allows (`max_age`, `prompt=login`): prove again.
+  """
+  FRESH_PROOF
+  """
+  A second factor (a passkey or the authenticator app) the user holds, to prove now: `requestStepUp` and `requestPasskeyStepUp`.
+  """
+  SECOND_FACTOR
+}
+
+"""Standard base64 with padding, in its canonical spelling."""
+scalar Base64 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4648#section-4")
+
+"""URL-safe base64 without padding, in its canonical spelling."""
+scalar Base64URL @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4648#section-5")
+
+"""
+An integer of any size, as a decimal string (a safe-integer number is accepted as input).
+"""
+scalar BigInt
+
+"""An IPv4 block in CIDR notation, such as 10.0.0.0/8."""
+scalar CIDRv4 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4632")
+
+"""An IPv6 block in CIDR notation, such as 2001:db8::/32."""
+scalar CIDRv6 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4291")
+
+"""
+One authorization detail (RFC 9396) of a pending request, in words: the type's name and description from the
+tenant's texts, and its rows. Never raw JSON. Approval allows every detail or none (D4).
+"""
+type ConsentDetail {
+  """
+  What the type allows, in the viewer's language; empty when the tenant wrote none.
+  """
+  description: String!
+  rows: [ConsentDetailRow!]!
+  """
+  The type's name in the viewer's language (`Accept-Language`), the type itself when the tenant wrote none.
+  """
+  title: String!
+  """The detail's type, as the client asked for it."""
+  type: String!
+}
+
+"""
+One line of an authorization detail: a label and its value, in the viewer's language.
+"""
+type ConsentDetailRow {
+  label: String!
+  value: String!
+}
+
+"""An ISO 3166-1 alpha-2 country code, such as FR."""
+scalar CountryCode @specifiedBy(url: "https://www.iso.org/iso-3166-country-codes.html")
+
+"""
+A cuid2: a lowercase letter, then lowercase letters and digits, 2 to 32 in all.
+"""
+scalar Cuid2 @specifiedBy(url: "https://github.com/paralleldrive/cuid2")
+
+"""An ISO 4217 currency code, such as EUR."""
+scalar Currency @specifiedBy(url: "https://www.iso.org/iso-4217-currency-codes.html")
+
+"""The user a session belongs to, in the tenant's own user pool."""
+type CurrentUser {
+  email: EmailAddress!
+  emailVerified: Boolean!
+  id: ID!
+  name: String
+}
+
+"""A calendar date, YYYY-MM-DD, with no time and no time zone."""
+scalar Date @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc3339#section-5.6")
+
+"""An instant: an RFC 3339 date-time with its offset."""
+scalar DateTime @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc3339")
+
+"""An ISO 8601 duration, such as P1DT2H or PT0.5S."""
+scalar Duration @specifiedBy(url: "https://www.iso.org/iso-8601-date-and-time-format.html")
+
+"""An email address."""
+scalar EmailAddress
+
+"""One emoji, such as 👍."""
+scalar Emoji @specifiedBy(url: "https://www.unicode.org/reports/tr51/")
+
+"""A GUID: 8-4-4-4-12 hexadecimal digits, with no version check."""
+scalar GUID
+
+"""A CSS hsl() color, such as hsl(120, 100%, 50%)."""
+scalar HSL @specifiedBy(url: "https://www.w3.org/TR/css-color-4/#the-hsl-notation")
+
+"""A CSS hsla() color, such as hsla(120, 100%, 50%, 0.5)."""
+scalar HSLA @specifiedBy(url: "https://www.w3.org/TR/css-color-4/#the-hsl-notation")
+
+type Health {
+  status: String!
+  version: String!
+}
+
+"""A CSS hexadecimal color, such as #ff0000."""
+scalar HexColorCode @specifiedBy(url: "https://www.w3.org/TR/css-color-4/#hex-notation")
+
+"""A non-empty string of hexadecimal digits."""
+scalar Hexadecimal
+
+"""The enterprise identity provider that signs an address in."""
+type HomeRealm {
+  """The connection's id: the `provider` of `socialSignInStart`."""
+  connectionId: String!
+  """What the button says (the company's name for its identity provider)."""
+  name: String!
+}
+
+"""A way to sign in the hosted pages can offer."""
+enum HostedSignInMethod {
+  EMAIL_CODE
+  MAGIC_LINK
+  PASSKEY
+  PASSWORD
+}
+
+"""
+What the hosted sign-in page of the tenant the host names offers. Public; it
+says nothing about who may sign in. `methods` lists the enabled methods only,
+in the enum's order (PASSWORD never appears yet); `social` the enabled
+providers, then the enabled enterprise connections with `showButton` (id: the
+connection's id, label: its name). Never both empty.
+"""
+type HostedSignInMethods {
+  methods: [HostedSignInMethod!]!
+  social: [HostedSocialProvider!]!
+}
+
+"""A social provider the tenant offers on its hosted sign-in page."""
+type HostedSocialProvider {
+  """The provider's name in the URL and in `socialSignInStart` (`google`)."""
+  id: String!
+  """What the button says (`Google`)."""
+  label: String!
+}
+
+"""A host name, such as api.example.com."""
+scalar Hostname @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc1123")
+
+"""
+An International Bank Account Number, electronic form, such as FR1420041010050500013M02606.
+"""
+scalar IBAN @specifiedBy(url: "https://www.iso.org/standard/81090.html")
+
+"""An IPv4 or IPv6 address."""
+scalar IP @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4291")
+
+"""An IPv4 address in dotted-quad form."""
+scalar IPv4 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc791")
+
+"""An IPv6 address."""
+scalar IPv6 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4291")
+
+"""An ISBN-10 or ISBN-13, digits only, with its check digit verified."""
+scalar ISBN @specifiedBy(url: "https://www.isbn-international.org/content/isbn-users-manual/29")
+
+"""What the holder of an invitation code sees before accepting it."""
+type InvitationPreview {
+  """The address the invitation was sent to."""
+  email: EmailAddress!
+  expiresAt: DateTime!
+  """
+  What the invitee joins: the name of the tenant they will administer, or of the tenant whose user they become.
+  """
+  organization: String!
+  """
+  The role offered, as it was issued. An admin invitation: `owner`, `admin` or `viewer`.
+  """
+  role: String!
+}
+
+"""Any JSON value."""
+scalar JSON @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc8259")
+
+"""A JSON object."""
+scalar JSONObject @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc8259#section-4")
+
+"""
+A signed JSON Web Token in compact form. Its signature is not verified.
+"""
+scalar JWT @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc7519")
+
+"""A KSUID: 27 characters of base62."""
+scalar KSUID @specifiedBy(url: "https://github.com/segmentio/ksuid")
+
+"""A latitude in decimal degrees, from -90 to 90."""
+scalar Latitude
+
+"""A date and a time with no offset, such as 2024-03-10T10:15:30."""
+scalar LocalDateTime
+
+"""A time of day with no offset, such as 10:15 or 10:15:30."""
+scalar LocalTime
+
+"""A BCP 47 language tag in canonical form, such as fr-FR."""
+scalar Locale @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc5646")
+
+"""
+A signed 64-bit integer, as a decimal string (a safe-integer number is accepted as input).
+"""
+scalar Long
+
+"""A longitude in decimal degrees, from -180 to 180."""
+scalar Longitude
+
+"""
+A MAC address: six hex pairs separated by colons (not the IEEE hyphen form).
+"""
+scalar MAC
+
+"""
+The answer to `requestMagicLink`: always the same, whether the address has an
+account or not, so it says nothing about it. The link itself only reaches the
+inbox.
+"""
+type MagicLinkRequested {
+  """The link lives until then (15 minutes); only the last link sent works."""
+  expiresAt: DateTime!
+}
+
+type Mutation {
+  """
+  Accepts an invitation of the tenant the request's host names: the invitee's
+  account is made (e-mail proved) and what the invitation offers granted, once,
+  and the session opens. A second use of the code, or an admin invitation whose
+  tenant is gone, is INVITATION_INVALID, 400.
+  """
+  acceptInvitation(code: String!): AcceptedInvitation!
+  """
+  Checks the app's first code and makes the factor active; answers the recovery
+  codes, once. CODE_INVALID, SECOND_FACTOR_NOT_ENROLLED, SECOND_FACTOR_DISABLED.
+  """
+  activateSecondFactor(code: String!): RecoveryCodes!
+  """
+  Allows the device authorization the user code names, all its scopes and
+  authorization details or a subset of each. Needs a fresh session: STEP_UP_REQUIRED otherwise. NOT_FOUND for a
+  code that is unknown, lapsed or already decided, and when the server has no
+  device grant.
+  """
+  approveOAuthDeviceRequest(
+    """
+    The authorization details to allow, as a JSON array string of elements taken from `oauthDeviceRequest`, a subset of what the device asked for. Omit or pass null to allow all of them. A detail the device did not ask for answers NOT_FOUND, like an unasked scope. BAD_USER_INPUT when the string breaks the limits every authorization details input has (8192 bytes, 16 details, 8 levels deep, no repeated key, numbers in the safe range) or is not a JSON array of objects; its message says the shape, never the value. `"[]"` allows no detail. `scopes: []` with no detail selected, or with `"[]"`, is BAD_USER_INPUT before the code is looked up, whatever the code; a request that asked only for details is approved by omitting `scopes`, or with `scopes: []` and a non-empty selection. Allowing nothing of a live code is NOT_FOUND, as for a dead one.
+    """
+    authorizationDetails: String
+    """
+    The one object the access acts in. Omit or pass null for none. BAD_USER_INPUT when the server takes no bound object, or when it needs one and none is given; FORBIDDEN when the viewer may not bind access to it.
+    """
+    bound: OAuthBoundInput
+    """
+    The names of the scopes to allow, a subset of what the device asked for. Omit or pass null to allow all of them. A scope the device did not ask for answers NOT_FOUND, like an unknown code, so send scopes taken from `oauthDeviceRequest`.
+    """
+    scopes: [String!]
+    """The code as the user typed it, such as `bcdf-ghjk`."""
+    userCode: String!
+  ): Boolean!
+  """
+  Allows the request, all its scopes or a subset. Needs a fresh session:
+  STEP_UP_REQUIRED otherwise, which the application's step-up answers (the
+  authenticator app's code when the account has a second factor).
+  """
+  approveOAuthRequest(
+    """
+    The authorization details (RFC 9396) to allow, as a JSON array string of elements taken from `oauthRequest`, a subset of what the client asked for. Omit or pass null to allow all of them; `"[]"` allows none. The grant keeps exactly these. BAD_USER_INPUT when a detail was not asked for or was changed, when the request asked for none, or when the string breaks the limits every authorization details input has (8192 bytes, 16 details, 8 levels deep, no repeated key, numbers in the safe range) or is not a JSON array of objects; its message says the shape, never the value. Allowing neither a scope nor a detail (`scopes: []` with `"[]"`) is BAD_USER_INPUT.
+    """
+    authorizationDetails: String
+    """
+    The one object the access acts in, for example the workspace the viewer picked on the consent screen. Omit or pass null for none. Approving again with another object, or none, revokes the tokens the access opened. BAD_USER_INPUT when the server takes no bound object, or when it needs one and none is given; FORBIDDEN when the viewer may not bind access to it.
+    """
+    bound: OAuthBoundInput
+    """The id of the pending request to allow."""
+    id: ID!
+    """
+    The names of the scopes to allow, a subset of what the request asked for. Omit or pass null to allow all of them. BAD_USER_INPUT when one was not asked for.
+    """
+    scopes: [String!]
+  ): OAuthDecision!
+  """
+  Redeems the token of a verification link for the signed-in account only and
+  returns it with `emailVerified: true`. Every refusal (unknown, spent, expired
+  or stale token, another account's token, which is left unspent) is the same
+  EMAIL_VERIFICATION_INVALID, 400; the page offers a new link. UNAUTHENTICATED
+  (401) without a session, TENANT_SUSPENDED (403).
+  """
+  confirmEmailVerification(token: String!): CurrentUser!
+  """
+  Redeems the token of a sign-in link, proves the address and opens the session
+  (the cookie is set on the response). Every refusal (unknown, spent, expired or
+  stale link, deactivated user) is the same MAGIC_LINK_INVALID, 401; the page
+  offers a new link. MAGIC_LINK_DISABLED (404) when the switch is off; the token
+  is not spent then. SSO_REQUIRED (403), with no session, when the user's
+  domain requires single sign-on.
+  """
+  confirmMagicLink(token: String!): SignInResult!
+  """
+  Confirms it with the browser's answer (`credential.toJSON()`, as a JSON
+  string). PASSKEY_INVALID (401) for every refusal.
+  """
+  confirmPasskeyStepUp(challenge: String!, response: String!): StepUpConfirmed!
+  """
+  Redeems the challenge of a sign-in with the authenticator app's code and
+  opens the session (cookie set). Five attempts per challenge: CODE_INVALID
+  with `attemptsLeft`.
+  """
+  confirmSecondFactor(challenge: String!, code: String!): SecondFactorSignedIn!
+  """
+  Redeems the challenge with one of the user's passkeys, the browser's answer
+  to the challenge's `passkeyOptions` (`credential.toJSON()`, as a JSON
+  string), and opens the session (cookie set). The five attempts are the ones
+  of `confirmSecondFactor`: CODE_INVALID with `attemptsLeft` for an assertion
+  that does not verify or names another user's passkey; TOKEN_UNKNOWN,
+  TOKEN_SPENT, TOKEN_EXPIRED. `recoveryCodesLeft` is null.
+  """
+  confirmSecondFactorWithPasskey(assertion: String!, challenge: String!): SecondFactorSignedIn!
+  """
+  Confirms the step-up with its code: the session is stamped, and the next
+  approval states what it proved (`amr`, `acr`). CODE_INVALID with
+  `attemptsLeft`, TOKEN_UNKNOWN, TOKEN_SPENT, TOKEN_EXPIRED.
+  """
+  confirmStepUp(challenge: String!, code: String!): StepUpConfirmed!
+  """
+  Refuses the device authorization: the device's next poll is access_denied.
+  NOT_FOUND as `approveOAuthDeviceRequest`.
+  """
+  denyOAuthDeviceRequest(
+    """The code as the user typed it, such as `bcdf-ghjk`."""
+    userCode: String!
+  ): Boolean!
+  """Refuses the request."""
+  denyOAuthRequest(
+    """The id of the pending request to refuse."""
+    id: ID!
+  ): OAuthDecision!
+  """Turns the factor off, on a current code of the app."""
+  disableSecondFactor(code: String!): Boolean!
+  """
+  Starts a factor and answers the secret and the URI to show as a QR code.
+  SECOND_FACTOR_DISABLED (403) when the tenant did not turn TOTP on;
+  SECOND_FACTOR_ACTIVE when one is active; STEP_UP_REQUIRED when the session
+  proved who it is more than ten minutes ago; EMAIL_UNVERIFIED (403) until the
+  address is proven.
+  """
+  enrollSecondFactor: SecondFactorEnrolment!
+  """
+  Makes a registration challenge for the signed-in user. UNAUTHENTICATED (401)
+  when anonymous; EMAIL_UNVERIFIED (403) until the e-mail is proven (signing
+  in with an e-mailed code proves it).
+  """
+  passkeyRegistrationOptions: PasskeyRegistration!
+  """
+  Makes a sign-in challenge and the options the browser needs. Anonymous, and
+  the same for any visitor: it says nothing about who may sign in.
+  """
+  passkeySignInOptions: PasskeySignInChallenge!
+  """
+  Redeems the challenge with a recovery code instead (a lost phone). The code
+  is spent and `recoveryCodesLeft` answers what remains. Refused like
+  `confirmSecondFactor`.
+  """
+  recoverSecondFactor(challenge: String!, recoveryCode: String!): SecondFactorSignedIn!
+  """
+  Replaces all the recovery codes with new ones, on a current code of the app.
+  """
+  regenerateRecoveryCodes(code: String!): RecoveryCodes!
+  """
+  Finishes a registration with `navigator.credentials.create`'s answer
+  (`credential.toJSON()`, as a JSON string) and a name of 1 to 100 characters.
+  Needs a session that signed in within ten minutes (STEP_UP_REQUIRED, 403).
+  PASSKEY_INVALID (400) when the response does not verify, and the challenge is
+  spent: ask for new options. PASSKEY_TAKEN (409), PASSKEY_LIMIT (409, ten per user).
+  """
+  registerPasskey(challenge: String!, name: String!, response: String!): Passkey!
+  """
+  Removes one of the user's passkeys: true when this call removed it, false for
+  one that is not theirs or not there. Needs a session that signed in within ten
+  minutes (STEP_UP_REQUIRED, 403).
+  """
+  removePasskey(id: ID!): Boolean!
+  """
+  Mails the signed-in user a link that proves their address (hosted page
+  `/verify?token=...`, which must POST the token to `confirmEmailVerification`,
+  never confirm on GET). Always true: an already verified user gets the same
+  answer and no mail. Errors: UNAUTHENTICATED (401), TENANT_SUSPENDED (403),
+  EMAIL_VERIFICATION_THROTTLED (429, `retryAfter` and `Retry-After`).
+  """
+  requestEmailVerification: Boolean!
+  """
+  Asks for a sign-in link by e-mail (only when the deployment turns magic-link
+  sign-in on; otherwise 404 MAGIC_LINK_DISABLED, as if the operation did not
+  exist). The answer is the same for an address with an account, one without
+  and, on a tenant that closed sign-up, one that is not invited. The link opens
+  the hosted page `/sign-in/link?token=...` of the tenant, which must POST the
+  token to `confirmMagicLink` (never sign in on GET: mail scanners open links).
+  Errors: MAGIC_LINK_DISABLED (404), MAIL_THROTTLED (429), SSO_REQUIRED (403)
+  for an address whose domain requires single sign-on.
+  """
+  requestMagicLink(email: EmailAddress!): MagicLinkRequested!
+  """
+  Starts a step-up by one of the user's passkeys. A passkey reaches `phr` and
+  `mfa`. UNAUTHENTICATED (401) when anonymous.
+  """
+  requestPasskeyStepUp: PasskeyStepUpChallenge!
+  """
+  Reads the passkey options of a sign-in challenge again (the same as
+  `SecondFactorChallenge.passkeyOptions`), so a page keeps only the challenge
+  and not the options, which grow with the user's passkeys. Anonymous, as the
+  sign-in is. It counts no attempt and spends nothing; `confirmSecondFactorWithPasskey`
+  answers it. TOKEN_UNKNOWN, TOKEN_SPENT, TOKEN_EXPIRED; SECOND_FACTOR_NOT_ENROLLED
+  (409) when the user holds no passkey; SIGN_IN_METHOD_DISABLED when the tenant
+  turned passkeys off; PASSKEY_THROTTLED (429, `Retry-After`) past the
+  per-address and per-tenant limits of `passkeySignInOptions`, whose budget it shares.
+  """
+  requestSecondFactorPasskeyOptions(challenge: String!): SecondFactorPasskeyOptions!
+  """
+  Asks for a six-digit code by e-mail. The answer is the same for an address
+  with an account, one without and, on a tenant that closed sign-up, one that
+  is not invited: a code is sent only when an account exists (or sign-up is
+  open). Errors: MAIL_THROTTLED (429) past five requests per address and ten
+  minutes; SSO_REQUIRED (403) for an address whose domain requires single
+  sign-on (`hostedHomeRealm` names the connection to use).
+  """
+  requestSignInCode(email: EmailAddress!): SignInChallenge!
+  """
+  Starts a step-up of the signed-in session: the authenticator app's code for a
+  user who has one, else a code e-mailed to the user. A code step-up renews the
+  proof (`max_age`, `prompt=login`) and an app code also reaches `mfa`.
+  UNAUTHENTICATED (401) when anonymous.
+  """
+  requestStepUp: StepUpChallenge!
+  """
+  Takes back one of the viewer's own grants and every token it opened.
+  NOT_FOUND for another account's grant.
+  """
+  revokeConnectedApp(
+    """The grant's id: the `id` of an `OAuthConnectedApp`."""
+    id: ID!
+  ): Boolean!
+  """
+  Finishes a passkey sign-in with what `navigator.credentials.get` answered
+  (`credential.toJSON()`, as a JSON string) and opens the session; the cookie is
+  set on the response. Every refusal (unknown credential, wrong tenant, wrong
+  origin or relying party, a user not verified, a spent, lapsed or unknown
+  challenge, an inactive user, a malformed response) is the same
+  PASSKEY_INVALID, 401. The challenge is spent by the first try: ask for new
+  options. SSO_REQUIRED (403), with no session, when the user's domain requires
+  single sign-on.
+  """
+  signInWithPasskey(challenge: String!, response: String!): SignedIn!
+  """
+  Ends the session of the request and clears the cookie. True even when anonymous.
+  """
+  signOut: Boolean!
+  """
+  Completes the flow with the provider's callback URL and the `flow`
+  `socialSignInStart` answered, and opens the session (the cookie is set on the
+  response). Refusals are janus's codes: FLOW_EXPIRED, FLOW_MISMATCH,
+  PROVIDER_ERROR (502), SIGN_UP_DISABLED (403, no user holds the address and the
+  tenant closed sign-up, or the connection's just-in-time creation is off), EMAIL_UNVERIFIED (403), EMAIL_NOT_VERIFIED_FOR_LINK
+  (409), USER_INACTIVE (403), SOCIAL_STEP_UP_UNMET (403, the provider's
+  acr or max_age requirement was not met; the flow is spent).
+  """
+  socialSignInComplete(callbackUrl: String!, flow: String!): SocialSignInResult!
+  """
+  Begins a sign-in with the tenant's own app of `provider`, or with one of its
+  enterprise connections (`provider` is the `connectionId` of `hostedHomeRealm`).
+  `returnTo` is a path of this site. SIGN_IN_METHOD_DISABLED (404) when the
+  tenant does not offer that provider or the connection is off or unknown; the
+  sign-in limits apply (MAIL_THROTTLED, 429).
+  """
+  socialSignInStart(provider: String!, returnTo: String): SocialFlowStart!
+  """
+  Checks the code against its challenge and opens the session, or, for a user
+  who holds a TOTP second factor, answers a `SecondFactorChallenge` (no session
+  yet). Every refusal (wrong, spent, expired or unknown challenge) is the same
+  CODE_INVALID, 401. SSO_REQUIRED (403), with no session, when the user's
+  domain requires single sign-on.
+  """
+  verifySignInCode(challenge: String!, code: String!): SignInResult!
+}
+
+"""A Nano ID: 21 characters of A-Z, a-z, 0-9, _ and -."""
+scalar NanoID @specifiedBy(url: "https://github.com/ai/nanoid")
+
+"""A finite number below 0."""
+scalar NegativeFloat
+
+"""An integer from -2147483648 to -1."""
+scalar NegativeInt
+
+"""A string that is not empty and not only white space."""
+scalar NonEmptyString
+
+"""A finite number, 0 or above."""
+scalar NonNegativeFloat
+
+"""An integer from 0 to 2147483647."""
+scalar NonNegativeInt
+
+"""A finite number, 0 or below."""
+scalar NonPositiveFloat
+
+"""An integer from -2147483648 to 0."""
+scalar NonPositiveInt
+
+"""
+What the request asks of the user's authentication and whether the session meets
+it now (the tenant's multi-factor mode and the client's `acr_values`, `max_age`
+and `prompt=login`). `approveOAuthRequest` and `approveOAuthDeviceRequest` are
+refused with `UNMET_AUTHENTICATION_REQUIREMENTS` (403) while `met` is false.
+"""
+type OAuthAuthentication {
+  """The `acr` the request needs, null when it asks none."""
+  acr: String
+  """The `acr` the session has reached: the value the approval will state."""
+  current: String!
+  """
+  The longest time since the last proof, in seconds (0 for `prompt=login`); null when none.
+  """
+  maxAge: Int
+  """Whether the session meets every demand."""
+  met: Boolean!
+  """
+  What to do about it; empty when met, or when nothing the user can do would meet it.
+  """
+  missing: [AuthenticationGap!]!
+}
+
+"""
+The one object a grant acts in, as the application names it: a workspace, an
+organization. The access token's caller is pinned to it.
+"""
+type OAuthBound {
+  """The object's id."""
+  id: ID!
+  """
+  The object's kind, as the application names it, for example `workspace`.
+  """
+  type: String!
+}
+
+"""
+An object to bind a grant to, or to list the connected applications of.
+"""
+input OAuthBoundInput {
+  """The object's id: 1 to 200 characters."""
+  id: ID!
+  """
+  The object's kind, as the application names it, for example `workspace`: 1 to 64 characters.
+  """
+  type: String!
+}
+
+"""An application asking for access, or one the viewer allowed."""
+type OAuthClient {
+  """
+  Whether the client is one of the tenant's agents (dynamically registered, or described by a metadata document); false for the tenant's own clients.
+  """
+  agent: Boolean!
+  """The host of `url`, else null."""
+  host: String
+  """
+  The client_id. Show it on the consent screen: for a client identified by a
+  metadata document it is the document's URL.
+  """
+  id: ID!
+  """
+  The name the client gave itself, which anyone can claim: never rely on it alone.
+  """
+  name: String!
+  """
+  When the agent was registered (ISO 8601); null for a client that is no agent.
+  """
+  registeredAt: String
+  """The client_id when it is an http(s) URL, else null."""
+  url: String
+}
+
+"""An application the viewer allowed on a resource."""
+type OAuthConnectedApp {
+  """
+  The authorization details (RFC 9396) the viewer allowed, exactly as the last consent kept them, as a JSON array string such as `[{"type":"payment_initiation","actions":["initiate"]}]`; null when the grant holds none.
+  """
+  authorizationDetails: String
+  """
+  The object the access is bound to, which the application acts in for this client; null for none.
+  """
+  bound: OAuthBound
+  """The application the viewer allowed."""
+  client: OAuthClient!
+  """When the viewer first allowed it, as an ISO-8601 string."""
+  createdAt: String!
+  """The grant's id, which `revokeConnectedApp` takes."""
+  id: ID!
+  """The protected API the access was granted on."""
+  resource: String!
+  """
+  The permissions the viewer allowed, each with its label: the scopes of the last consent.
+  """
+  scopes: [OAuthScope!]!
+  """
+  When the allowed scopes were last set by a consent, as an ISO-8601 string.
+  """
+  updatedAt: String!
+}
+
+"""Where to send the user agent once a request is decided."""
+type OAuthDecision {
+  """The grant an approval opened; null for a denial."""
+  grantId: ID
+  """
+  302 the user agent here: the client's redirect URI with code or error, state and iss.
+  """
+  redirectTo: String!
+}
+
+"""
+A device authorization (RFC 8628) waiting for the viewer's decision, for the page where the user types the code shown on the device.
+"""
+type OAuthDeviceRequest {
+  authentication: OAuthAuthentication!
+  """
+  The authorization details (RFC 9396) the device asked for, validated, as a JSON array string such as `[{"type":"payment_initiation","actions":["initiate"]}]`; null when it asked for none. **Render every one**: show them on the verification page, as the user approves them on another device. `approveOAuthDeviceRequest` allows all of them or a selection.
+  """
+  authorizationDetails: String
+  """
+  The application on the device. Show its name and host: the user must recognise it.
+  """
+  client: OAuthClient!
+  """
+  The device's authorization details in words, one block each; empty when it asked for none.
+  """
+  details: [ConsentDetail!]!
+  """As `OAuthRequest.detailsComplete`."""
+  detailsComplete: Boolean!
+  """When the code lapses, as an ISO-8601 string."""
+  expiresAt: String!
+  """The protected API the access would be granted on."""
+  resource: String!
+  """The permissions the application asked for, each with its label."""
+  scopes: [OAuthScope!]!
+}
+
+"""
+An authorization request waiting for the viewer's decision: what the consent
+screen shows.
+"""
+type OAuthRequest {
+  """
+  The `acr_values` the client asked for, in its order; empty when it sent none. The server only keeps them: the application decides what proof to demand before `approveOAuthRequest`.
+  """
+  acrValues: [String!]!
+  authentication: OAuthAuthentication!
+  """
+  The authorization details (RFC 9396) the client asked for, validated, as a JSON array string such as `[{"type":"payment_initiation","actions":["initiate"]}]`; null when it asked for none. **Render every one**: approving allows all of them.
+  """
+  authorizationDetails: String
+  """The application asking for access."""
+  client: OAuthClient!
+  """
+  The request's authorization details in words, one block each; empty when it asked for none.
+  """
+  details: [ConsentDetail!]!
+  """
+  False when a detail cannot be fully described (its type was deleted, or it carries a key, action or value its
+  type no longer defines): the page must not offer approval, only deny, and approval is refused server-side with
+  `invalid_authorization_details`. True when there is nothing to describe.
+  """
+  detailsComplete: Boolean!
+  """When the request lapses, as an ISO-8601 string."""
+  expiresAt: String!
+  """
+  The request's id, which `oauthRequest`, `approveOAuthRequest` and `denyOAuthRequest` take.
+  """
+  id: ID!
+  """
+  The `login_hint` the client sent, to prefill or route the sign-in; null when it sent none.
+  """
+  loginHint: String
+  """
+  The `max_age` in seconds the client asked for (the longest time since the viewer last signed in); null when it sent none. Not enforced by the server.
+  """
+  maxAge: Int
+  """
+  The `prompt` values the client asked for (`login`, `consent`, `select_account`, `none`); empty when it sent none. Not enforced by the server.
+  """
+  prompt: [String!]!
+  """The host of `redirectUri`: show it beside the client."""
+  redirectHost: String!
+  """Where the client is sent back to."""
+  redirectUri: String!
+  """The protected API the access is for."""
+  resource: String!
+  """
+  The permissions the client asked for, each with its label. `approveOAuthRequest` may allow all of them or a subset.
+  """
+  scopes: [OAuthScope!]!
+}
+
+"""One permission, with the label your application maps it to."""
+type OAuthScope {
+  """
+  The label the server was given for this scope; the name itself when none.
+  """
+  label: String!
+  """
+  The scope's identifier as the client asked for it and as `approveOAuthRequest` takes it back, for example `read`.
+  """
+  name: String!
+}
+
+"""A MongoDB ObjectId: 24 hexadecimal digits."""
+scalar ObjectID @specifiedBy(url: "https://www.mongodb.com/docs/manual/reference/method/ObjectId/")
+
+"""
+A passkey the user registered. Never carries the public key or the counter.
+"""
+type Passkey {
+  backedUp: Boolean!
+  backupEligible: Boolean!
+  createdAt: DateTime!
+  """The credential id (base64url). Pass it to `removePasskey`."""
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+  transports: [String!]!
+}
+
+type PasskeyRegistration {
+  """The secret `registerPasskey` spends, once."""
+  challenge: String!
+  """The challenge lapses then (5 minutes)."""
+  expiresAt: DateTime!
+  """
+  JSON text for `navigator.credentials.create({ publicKey })`, after `PublicKeyCredential.parseCreationOptionsFromJSON`.
+  """
+  options: String!
+}
+
+"""
+A passwordless sign-in with a passkey, and the passkeys of the signed-in user,
+for the hosted pages of the tenant the request's host names. The relying party
+is the tenant's own host, so a passkey registered on one tenant is unknown to
+every other. WebAuthn options and responses travel as JSON text.
+"""
+type PasskeySignInChallenge {
+  """
+  A secret that goes back with the assertion; single use. Keep it in the page's server session, never in a URL or a log.
+  """
+  challenge: String!
+  """The challenge lapses then."""
+  expiresAt: DateTime!
+  """
+  JSON text for `navigator.credentials.get({ publicKey })`, after `PublicKeyCredential.parseRequestOptionsFromJSON`.
+  """
+  options: String!
+}
+
+"""
+A passkey step-up under way: the options for `navigator.credentials.get`, and the challenge `confirmPasskeyStepUp` redeems.
+"""
+type PasskeyStepUpChallenge {
+  challenge: String!
+  expiresAt: DateTime!
+  """
+  JSON text for `navigator.credentials.get({ publicKey })`, after `PublicKeyCredential.parseRequestOptionsFromJSON`.
+  """
+  options: String!
+}
+
+"""A phone number in E.164 form, such as +33612345678."""
+scalar PhoneNumber @specifiedBy(url: "https://www.itu.int/rec/T-REC-E.164")
+
+"""A TCP or UDP port number, from 0 to 65535."""
+scalar Port
+
+"""A finite number above 0."""
+scalar PositiveFloat
+
+"""An integer from 1 to 2147483647."""
+scalar PositiveInt
+
+"""
+The brand of the tenant the request's host names, for its hosted pages.
+Anonymous.
+"""
+type PublicBranding {
+  """
+  A background preset id of @softistx/material-core for the page's `Background`, or null.
+  """
+  backgroundPreset: String
+  """A stylesheet to inject; scoped to `[data-nxgt-theme="<themeName>"]`."""
+  css: String!
+  displayName: String!
+  """Relative to the tenant's host; null without a logo."""
+  logoUrl: String
+  """
+  A motif shape id of @softistx/material-core for that background, or null.
+  """
+  motif: String
+  """The `data-nxgt-theme` value the CSS is scoped to."""
+  themeName: String!
+}
+
+type Query {
+  """The applications the viewer allowed, oldest first."""
+  connectedApps(
+    """
+    Only the applications bound to this object. Omit or pass null for all of them.
+    """
+    bound: OAuthBoundInput
+  ): [OAuthConnectedApp!]!
+  """The signed-in user of this tenant, or null for an anonymous request."""
+  currentUser: CurrentUser
+  health: Health!
+  """
+  Home-realm discovery: the connection that owns the domain of `email`, or
+  null for an address that is not one, a domain nobody has verified, or a
+  connection that is turned off. Public, and it reveals that a domain has
+  single sign-on, so it spends the sign-in limits (MAIL_THROTTLED, 429).
+  The address's domain only is read; it is never stored or logged.
+  """
+  hostedHomeRealm(email: String!): HomeRealm
+  """
+  The methods the tenant of this host offers; 404 for a host that names no tenant.
+  """
+  hostedSignInMethods: HostedSignInMethods!
+  """
+  Reads an invitation code without using it. Every code that cannot be
+  accepted (unknown, spent, revoked, expired) is the same INVITATION_INVALID,
+  400.
+  """
+  invitationPreview(code: String!): InvitationPreview!
+  """
+  The signed-in user's passkeys, oldest first. UNAUTHENTICATED (401) when anonymous.
+  """
+  myPasskeys: [Passkey!]!
+  """
+  The device authorization the user code names, for the page where the user
+  types the code shown on the device. NOT_FOUND for a code that is unknown,
+  lapsed or already decided, all alike, and when the server has no device
+  grant.
+  """
+  oauthDeviceRequest(
+    """
+    The code as the user typed it, such as `bcdf-ghjk`: case, dashes and spaces do not matter.
+    """
+    userCode: String!
+  ): OAuthDeviceRequest!
+  """
+  The pending request `id` names, for the consent screen. NOT_FOUND for an
+  unknown, decided or lapsed request, and for one that is not the viewer's.
+  """
+  oauthRequest(
+    """
+    The id of the pending request, as your authorization endpoint handed it to the consent screen.
+    """
+    id: ID!
+  ): OAuthRequest!
+  """
+  The signed-in user's second factor. UNAUTHENTICATED (401) when anonymous.
+  """
+  secondFactor: SecondFactorStatus!
+  """
+  Until when the session counts as freshly confirmed (its sign-in or last step-up plus ten minutes); in the past once it no longer does.
+  """
+  sessionConfirmedUntil: DateTime
+  """
+  The host tenant's brand, or null (no tenant, or none set): the page keeps Clavix's own theme.
+  """
+  tenantBranding: PublicBranding
+}
+
+"""A CSS rgb() color, such as rgb(255, 0, 0)."""
+scalar RGB @specifiedBy(url: "https://www.w3.org/TR/css-color-4/#rgb-functions")
+
+"""A CSS rgba() color, such as rgba(255, 0, 0, 0.5)."""
+scalar RGBA @specifiedBy(url: "https://www.w3.org/TR/css-color-4/#rgb-functions")
+
+"""Ten recovery codes, shown once: no call answers them again."""
+type RecoveryCodes {
+  recoveryCodes: [String!]!
+}
+
+"""A SHA-256 digest: 64 hexadecimal digits."""
+scalar SHA256 @specifiedBy(url: "https://csrc.nist.gov/pubs/fips/180-4/upd1/final")
+
+"""A SHA-512 digest: 128 hexadecimal digits."""
+scalar SHA512 @specifiedBy(url: "https://csrc.nist.gov/pubs/fips/180-4/upd1/final")
+
+"""An integer from -9007199254740991 to 9007199254740991."""
+scalar SafeInt
+
+"""
+A sign-in that is not finished: the user holds a TOTP second factor, so no
+session is open yet. Answer it with `confirmSecondFactor` (the app's code),
+`recoverSecondFactor` (a recovery code) or `confirmSecondFactorWithPasskey` (its
+`passkeyOptions`' answer), with the same `challenge`. The
+challenge is a secret like a session token: keep it where the next request
+presents it, never in a URL or a log. Single use and `Cache-Control: no-store`.
+"""
+type SecondFactorChallenge {
+  challenge: String!
+  """The challenge lapses then."""
+  expiresAt: DateTime!
+  """What can answer it: `totp` always, `passkey` when the user holds one."""
+  methods: [String!]!
+  """
+  JSON text for `navigator.credentials.get({ publicKey })`; present exactly when `methods` holds `passkey`.
+  """
+  passkeyOptions: String
+  """
+  The path a social flow was started with, or null (always null for a code or a link).
+  """
+  returnTo: String
+}
+
+"""A factor started, not yet active. Never cached, never logged."""
+type SecondFactorEnrolment {
+  """The TOTP secret in base32, for a user who types it in."""
+  secret: String!
+  """The `otpauth://` URI to render as a QR code."""
+  uri: String!
+}
+
+"""
+The options of a second-factor sign-in's passkey, read again from its challenge.
+"""
+type SecondFactorPasskeyOptions {
+  """
+  JSON text for `navigator.credentials.get({ publicKey })`, the same as `SecondFactorChallenge.passkeyOptions`.
+  """
+  options: String!
+}
+
+"""
+A second-factor sign-in completed; the session cookie is set on the response.
+"""
+type SecondFactorSignedIn {
+  """When the session lapses if not used again; it slides."""
+  expiresAt: DateTime!
+  """Whether the session was opened from a device the user had not used."""
+  newDevice: Boolean!
+  """
+  The recovery codes left after `recoverSecondFactor` spent one; null after `confirmSecondFactor` and `confirmSecondFactorWithPasskey`.
+  """
+  recoveryCodesLeft: Int
+  user: CurrentUser!
+}
+
+"""
+The TOTP second factor of the signed-in user of the tenant the request's host
+names (an authenticator app and ten recovery codes), and the three answers that
+finish a sign-in that stopped at a `SecondFactorChallenge`. A tenant turns it on
+with `signIn.mfa.totp`; with it off, enrolment is refused and a user who already
+holds a factor keeps it (and can still disable it or renew the codes).
+"""
+type SecondFactorStatus {
+  """
+  True once the factor is active: a sign-in then asks for a code. A factor started and never activated is not enabled.
+  """
+  enabled: Boolean!
+  """
+  The recovery codes not yet used. Null without an active factor, 0 when all are spent.
+  """
+  recoveryCodesLeft: Int
+}
+
+"""A Semantic Versioning 2.0.0 version, such as 1.0.0-rc.1."""
+scalar SemVer @specifiedBy(url: "https://semver.org/spec/v2.0.0.html")
+
+"""
+A sign-in by an e-mailed code, for the hosted pages of the tenant the request's
+host names. Two steps: `requestSignInCode`, then `verifySignInCode`.
+"""
+type SignInChallenge {
+  """
+  A secret that goes back with the code. Keep it where the next request
+  presents it (the hosted page's server session or a short-lived cookie of its
+  own), never in a URL or a log. It is minted for every address, known or not.
+  """
+  challenge: String!
+  """The challenge, and the code with it, can be verified until then."""
+  expiresAt: DateTime!
+}
+
+"""
+What a sign-in by code or link answers: a session, or a second-factor challenge to answer first.
+"""
+union SignInResult = SecondFactorChallenge | SignedIn
+
+"""
+A sign-in that opened a session; the session cookie is set on the response.
+"""
+type SignedIn {
+  """When the session lapses if not used again; it slides."""
+  expiresAt: DateTime!
+  user: CurrentUser!
+}
+
+"""
+A social sign-in begun: send the visitor to `url`, and keep `flow` until the callback.
+"""
+type SocialFlowStart {
+  expiresAt: DateTime!
+  """
+  A secret like a session token: the hosted page's server keeps it in its own
+  HttpOnly SameSite=Lax cookie and hands it back to `socialSignInComplete`.
+  Never in a URL or a log.
+  """
+  flow: String!
+  """The provider's authorization URL."""
+  url: String!
+}
+
+"""
+A social sign-in that opened a session, or a second-factor challenge to answer first.
+"""
+union SocialSignInResult = SecondFactorChallenge | SocialSignedIn
+
+"""
+A social sign-in that opened a session; the session cookie is set on the response.
+"""
+type SocialSignedIn {
+  """Whether a user was made for this account."""
+  created: Boolean!
+  expiresAt: DateTime!
+  """
+  Whether this sign-in took over an account that held the e-mail without
+  ever proving it: its credentials, links and sessions are gone.
+  """
+  replaced: Boolean!
+  """The path the flow was started with, or null."""
+  returnTo: String
+  user: CurrentUser!
+}
+
+"""
+A step-up under way: keep `challenge` (never in a URL) and give it to `confirmStepUp` with the code.
+"""
+type StepUpChallenge {
+  challenge: String!
+  expiresAt: DateTime!
+  via: StepUpVia!
+}
+
+"""The session proved who it is just now."""
+type StepUpConfirmed {
+  confirmedAt: DateTime!
+  """
+  Until when the session counts as freshly confirmed; null when no window is set.
+  """
+  confirmedUntil: DateTime
+}
+
+"""How the code of a step-up reaches the user."""
+enum StepUpVia {
+  """A code e-mailed to the user's address (a user with no second factor)."""
+  EMAIL
+  """The code of the user's authenticator app; nothing is sent."""
+  SECOND_FACTOR
+}
+
+"""A time of day with its offset, such as 10:15:30Z (RFC 3339 full-time)."""
+scalar Time @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc3339#section-5.6")
+
+"""An IANA time zone name, such as Europe/Paris."""
+scalar TimeZone @specifiedBy(url: "https://www.iana.org/time-zones")
+
+"""
+An instant, as an integer number of milliseconds since 1970-01-01T00:00:00Z.
+"""
+scalar Timestamp
+
+"""A ULID: 26 characters of Crockford base32."""
+scalar ULID @specifiedBy(url: "https://github.com/ulid/spec")
+
+"""An absolute http or https URL."""
+scalar URL @specifiedBy(url: "https://url.spec.whatwg.org/")
+
+"""A UUID in its 8-4-4-4-12 hexadecimal form."""
+scalar UUID @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc9562")
+
+"""A version 4 (random) UUID."""
+scalar UUIDv4 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc9562")
+
+"""A version 7 (time-ordered) UUID."""
+scalar UUIDv7 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc9562")
+
+"""A UTC offset from -12:00 to +14:00, such as +05:30."""
+scalar UtcOffset
+
+"""No value: always null."""
+scalar Void
+
+"""An xid: 20 characters of lowercase base32hex."""
+scalar XID @specifiedBy(url: "https://github.com/rs/xid")

@@ -1,8 +1,8 @@
-import { GraphQLError } from "graphql";
 import { ObjectId } from "mongodb";
-import type { CliTenant } from "@/cli/errors";
-import { CatalogError } from "@/modules/resources/catalog.errors";
-import { RolesError } from "@/modules/roles/roles.errors";
+import { CatalogError } from "@/modules/resources";
+import { RolesError } from "@/modules/roles";
+import type { CliTenant } from "@/shared/cli";
+import { fail } from "@/shared/errors";
 import type { ConsoleContext } from "../context";
 import { liveTenant, tenantIdOf } from "./ids";
 
@@ -16,9 +16,7 @@ const STATUS = {
 
 /** A catalog or roles refusal as a GraphQL error carrying its code. */
 export const catalogError = (error: CatalogError | RolesError) =>
-  new GraphQLError(error.message, {
-    extensions: { code: error.code, http: { status: STATUS[error.code] } },
-  });
+  fail(error.code, error.message, { status: STATUS[error.code] });
 
 /** Runs a catalog or roles call, turning its refusals into GraphQL errors. */
 export async function refusing<T>(call: () => Promise<T>): Promise<T> {

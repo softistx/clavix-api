@@ -2,29 +2,35 @@ import { hkdfSync } from "node:crypto";
 import {
   createKeyGenerations,
   createTenantKeys,
-  ensureSigningKey,
-} from "@/keys";
-import { createSecretBox } from "@/modules/sign-in-methods/secrets";
+  KeysService,
+} from "@/modules/keys";
+import { createSecretBox } from "@/modules/sign-in-methods";
 import { mongo } from "./db";
 import { env } from "./env";
 import { parseMasterKeys } from "./master-keys";
+import { clock, warn } from "./runtime";
 
 // The tenants' signing keys, encrypted with CLAVIX_KEYS_MASTER_KEY. Slice C
 // (the OAuth endpoints) signs with `signingKeysFor(tenantId)`; the JWKS route
 // serves `jwksFor(tenantId)`. The tenant id is the hex id (`partitionOf`).
 // It is one key, or a keyring during a rotation (comma-separated, the first seals).
-export const masterKeys = parseMasterKeys(env.CLAVIX_KEYS_MASTER_KEY) as [
-  Uint8Array,
-  ...Uint8Array[],
-];
+export const masterKeys = parseMasterKeys(env.CLAVIX_KEYS_MASTER_KEY);
 
 /** Counts the changes to each tenant's published keys; the public documents cache keys on it. */
 export const keyGenerations = createKeyGenerations();
 
-export const { signingKeysFor, jwksFor } = createTenantKeys({
+const tenantKeys = createTenantKeys({
   db: mongo.db,
   masterKey: masterKeys,
   generations: keyGenerations,
+});
+
+/** The tenants' signing keys and JWKS, the generation counter and the rotation (the hourly pass, a tenant's first key, "rotate now"). */
+export const keysService = new KeysService({
+  keys: tenantKeys,
+  generations: keyGenerations,
+  now: clock,
+  log: warn,
 });
 
 /** Seals and opens the tenants' social client secrets, under a subkey of the master key (label `social-secrets`); with a keyring the first seals and every key opens. */
@@ -38,11 +44,6 @@ export const connectionSecretBox = createSecretBox(
   masterKeys,
   "connection-secrets",
 );
-
-/** A tenant's first (or replacement) key; `TenantsService.create` calls it. */
-export const ensureSigningKeyOf = async (tenantId: string): Promise<void> => {
-  await ensureSigningKey(signingKeysFor, tenantId);
-};
 
 /**
  * The secret of the DPoP server nonces (RFC 9449 §8): HKDF-SHA256 of the first

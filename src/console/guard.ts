@@ -1,10 +1,10 @@
 import { MapperKind, mapSchema } from "@graphql-tools/utils";
-import { denial } from "@softistx/janus-graphql";
-import { GraphQLError, type GraphQLSchema } from "graphql";
+import type { GraphQLSchema } from "graphql";
 import { ObjectId } from "mongodb";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { requireVerifiedEmail } from "@/users/verified-email";
-import type { ConsoleContext } from "./context";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { requireVerifiedEmail } from "@/modules/users";
+import { fail } from "@/shared/errors";
+import { type ConsoleContext, consoleContextOf } from "./context";
 import type { Permission } from "./model";
 
 /**
@@ -63,9 +63,7 @@ async function targetOf(ctx: ConsoleContext, tenantId: string) {
  * stays readable, nothing in it changes until the platform resumes the tenant.
  */
 const suspended = () =>
-  new GraphQLError("The tenant is suspended", {
-    extensions: { code: "TENANT_SUSPENDED", http: { status: 403 } },
-  });
+  fail("TENANT_SUSPENDED", "The tenant is suspended", { status: 403 });
 
 /**
  * Whether the caller's roles give `permission` on the tenant, for every way
@@ -135,7 +133,7 @@ export async function verifiedCaller(ctx: ConsoleContext) {
   requireVerifiedEmail({ emailVerified: await callerProved(ctx) });
 }
 
-const deny = () => denial("FORBIDDEN", "Not allowed");
+const deny = () => fail("FORBIDDEN", "Not allowed", { status: 403 });
 
 /**
  * Wraps every root field (query, mutation, subscription) of the schema so its
@@ -168,7 +166,7 @@ export function guardSchema(
       return {
         ...config,
         resolve: async (source, args, ctx, info) => {
-          await check(args, ctx as ConsoleContext);
+          await check(args, consoleContextOf(ctx));
           return resolve === undefined
             ? source?.[fieldName]
             : resolve(source, args, ctx, info);

@@ -5,7 +5,7 @@ import { migrate } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { tenants } from "@/modules/collections";
-import { type PublicOrigin, partitionOf } from "@/modules/tenants/identity";
+import { type PublicOrigin, partitionOf } from "@/modules/tenants";
 import { freshMigrationDb } from "~/migrations";
 import { clavixTenant } from "./2026-11-10-clavix-tenant.migration";
 import { seedConsole, unseedConsole } from "./console-seed";
@@ -28,11 +28,11 @@ describe("unseedConsole", () => {
     const store = createMongoOAuth(db, { partition: partitionOf(tenant._id) });
     const now = new Date();
     const later = new Date(now.getTime() + 3_600_000);
-    const grantId = "grant-1" as never;
+    const grantId = "grant-1";
     const common = {
       grantId,
-      userId: "user-1" as never,
-      clientId: CONSOLE_CLIENT_ID as never,
+      userId: "user-1",
+      clientId: CONSOLE_CLIENT_ID,
       resource: "https://console.clavix.test/api",
       scopes: ["console"],
       createdAt: now,
@@ -69,6 +69,6 @@ describe("unseedConsole", () => {
     expect(
       (await store.findRefreshToken("refresh-hash"))?.revokedAt,
     ).toBeInstanceOf(Date);
-    expect(await store.findClient(CONSOLE_CLIENT_ID as never)).toBeNull();
+    expect(await store.findClient(CONSOLE_CLIENT_ID)).toBeNull();
   });
 });

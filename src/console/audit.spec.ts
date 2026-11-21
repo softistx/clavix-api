@@ -1,13 +1,17 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { createApp } from "@/app";
+import { z } from "zod";
 import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { type GqlResult, gqlOf } from "~/gql";
+import { instance } from "~/narrow";
 import { adminEvents } from "./admin-events/admin-events.model";
 import {
   type AdminEventRecorder,
@@ -85,16 +89,12 @@ const ADMIN_A = "audit-admin-a";
 const VIEWER_A = "audit-viewer-a";
 const OPERATOR = "audit-operator";
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 const as = (
   userId: string,
   query: string,
   options: { recorder?: AdminEventRecorder; headers?: HeadersInit } = {},
 ) =>
-  createApp({
+  createTestApp({
     console: {
       ...verifiedCallers(deps),
       ...(options.recorder === undefined
@@ -116,13 +116,14 @@ const as = (
     .request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer x",
         ...options.headers,
       },
       body: JSON.stringify({ query }),
     })
-    .then((r) => r.json() as Promise<GqlResult>);
+    .then(gqlOf);
 const code = (r: GqlResult) => r.errors?.[0]?.extensions?.code;
 const stored = () =>
   mongo.db.adminEvents.raw.find({}).sort({ _id: 1 }).toArray();
@@ -188,7 +189,7 @@ describe("every mutation declares its audit action", () => {
       auditProblems(schema, {
         ...specAudits,
         "Mutation.rename": "Thing.Rename",
-        "Mutation.removeOperator": "remove operator.now" as never,
+        "Mutation.removeOperator": "remove operator.now",
       }).malformed,
     ).toEqual(["Mutation.rename", "Mutation.removeOperator"]);
   });
@@ -220,8 +221,10 @@ describe("ctx.audit", () => {
       action: "thing.rename",
       target: { type: "thing", id: "t-1" },
     });
-    expect((event["tenantId"] as ObjectId).toHexString()).toBe(tenantA);
-    expect((event["at"] as Date).getTime()).toBeGreaterThanOrEqual(before);
+    expect(instance(event["tenantId"], ObjectId).toHexString()).toBe(tenantA);
+    expect(instance(event["at"], Date).getTime()).toBeGreaterThanOrEqual(
+      before,
+    );
     expect(event["requestId"]).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -251,10 +254,13 @@ describe("ctx.audit", () => {
         headers: { "x-request-id": "forged" },
       },
     );
-    const ids = (await stored()).map((event) => event["requestId"] as string);
+    const ids = (await stored()).map((event) =>
+      z.string().parse(event["requestId"]),
+    );
     expect(ids).toHaveLength(3);
-    expect(ids[0]).toBe(ids[1] as string);
-    expect(ids[2]).not.toBe(ids[0] as string);
+    const [first, second, third] = ids;
+    expect(first).toBe(second);
+    expect(third).not.toBe(first);
     expect(ids).not.toContain("forged");
   });
 
@@ -327,11 +333,12 @@ describe("the recorder", () => {
   } as const;
 
   test("stores nothing beyond the target's type and id", async () => {
-    await adminEventRecorder.record({
+    const withSecrets = {
       ...event,
-      target: { ...event.target, secret: "s3cret", before: "old" } as never,
+      target: { ...event.target, secret: "s3cret", before: "old" },
       secret: "s3cret",
-    } as never);
+    };
+    await adminEventRecorder.record(withSecrets);
     const [found] = await stored();
     expect(found?.["target"]).toEqual({ type: "thing", id: "t-1" });
     expect(JSON.stringify(found)).not.toContain("s3cret");
@@ -340,7 +347,7 @@ describe("the recorder", () => {
 
   test("refuses an action that is not <noun>.<verb>, and a tenant id that is not one", async () => {
     await expect(
-      adminEventRecorder.record({ ...event, action: "Renamed it" as never }),
+      adminEventRecorder.record({ ...event, action: "Renamed.it" }),
     ).rejects.toThrow();
     await expect(
       adminEventRecorder.record({ ...event, tenantId: "not-an-id" }),
@@ -357,13 +364,14 @@ describe("the recorder", () => {
   });
 
   test("the server refuses a document with a field the schema does not have", async () => {
+    const target = { type: "thing", id: "t-1", before: "old" };
     await expect(
       mongo.db.adminEvents.raw.insertOne({
         _id: new ObjectId(),
         actor: "u-1",
         action: "thing.rename",
         tenantId: null,
-        target: { type: "thing", id: "t-1", before: "old" } as never,
+        target,
         at: new Date(),
         requestId: "r-1",
       }),

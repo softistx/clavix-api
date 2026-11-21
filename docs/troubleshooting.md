@@ -224,9 +224,6 @@ The message says which rule broke, and nothing was written:
   them with `Resource.detailTypes`, or create it first.
 - `a client that lists detail types must require PAR`: set `requirePushedAuthorizationRequests: true` (CLI
   `--require-par`) in the same call; turning PAR off on a client that lists types is refused likewise.
-- `cannot let a client that uses /authorize or the device grant list detail types yet`: the consent pages (`/authorize` and the
-  device review) do not show details yet, so the tenant must be in `CLAVIX_RAR_CONSENT_READY` (an operator sets it). A
-  token-exchange-only client is exempt.
 - `a client lists at most 50 detail types`.
 
 The CLI prints the same message as `clients:create: …`.
@@ -1051,3 +1048,11 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** Bun's bundler emits the ESM inits of `@simplewebauthn/server` before its CommonJS require of `reflect-metadata`, so `@peculiar/x509` loads `tsyringe` first.
 
 **Fix:** keep `import "reflect-metadata"` first in `src/server.ts`.
+
+## 403 `CLIENT_HEADER_REQUIRED` on `/graphql` or `/console/graphql`
+
+**When:** `CLAVIX_REQUIRE_CLIENT_HEADER=true` and the request carries no `x-clavix-client` header (or a blank one).
+
+**Why:** the API refuses it before parsing, so no resolver runs. Every first-party caller sends the header (clavix-ui sends `clavix-ui`).
+
+**Fix:** add `x-clavix-client: <your client name>` (any non-empty value) to the request, or leave the flag `false` until the caller is updated.

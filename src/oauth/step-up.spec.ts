@@ -8,19 +8,26 @@ import {
 } from "@softistx/janus-oauth";
 import { softwareAuthenticator } from "@softistx/janus-passkeys/testing";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
-import { SignInPolicyService } from "@/modules/sign-in-methods/service";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { originOf, rpIdOf } from "@/users/rp";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { registerClient } from "@/modules/clients";
+import { SignInPolicyService } from "@/modules/sign-in-methods";
+import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
+import { fieldOf } from "~/gql-field";
+import { jsonOf, tokenBody } from "~/json";
+import { parsed } from "~/narrow";
+import { deviceCodesBody, idTokenBody } from "~/oauth-bodies";
+import { quietOAuth, testSecrets } from "~/ports";
+import { createTenantParOff } from "~/tenant-par-off";
 import { ACR } from "./authentication-level";
 import { createClavixOAuthIssuers } from "./issuers";
 
@@ -47,6 +54,8 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -55,20 +64,14 @@ const issuers = createClavixOAuthIssuers({
   claimsFor,
   resourcesFor: () => ({ [RESOURCE]: { scopes: ["read"] } }),
 });
-const app = createApp({ oauth: issuers });
-const policies = new SignInPolicyService(tenantsService, {
-  seal: () => "",
-  open: () => "",
-} as never);
+const app = createTestApp({ oauth: issuers });
+const policies = new SignInPolicyService(
+  tenantsService,
+  testSecrets(),
+  () => {},
+);
 const url = (slug: string, path = "/") => `${issuerOf(slug, origin)}${path}`;
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: {
-    message: string;
-    extensions?: { code?: string; missing?: string[] };
-  }[];
-}
 const gql = async (
   slug: string,
   query: string,
@@ -77,17 +80,10 @@ const gql = async (
 ): Promise<GqlResult> => {
   const response = await app.request(url(slug, "/graphql"), {
     method: "POST",
-    headers: { "content-type": "application/json", cookie },
+    headers: { ...clientHeaders, "content-type": "application/json", cookie },
     body: JSON.stringify({ query, variables }),
   });
-  return (await response.json()) as GqlResult;
-};
-const fieldOf = <T>(result: GqlResult, key: string): T => {
-  const value = result.data?.[key];
-  if (value === undefined || value === null) {
-    throw new Error(`no ${key}: ${JSON.stringify(result.errors)}`);
-  }
-  return value as T;
+  return gqlOf(response);
 };
 const codeOf = (result: GqlResult) => result.errors?.[0]?.extensions?.code;
 
@@ -98,13 +94,17 @@ const DEVICE_APPROVE = `mutation($code: String!) { approveOAuthDeviceRequest(use
 const STEP_UP_OPTIONS = `mutation { requestPasskeyStepUp { options challenge } }`;
 const STEP_UP_CONFIRM = `mutation($c: String!, $r: String!) { confirmPasskeyStepUp(challenge: $c, response: $r) { confirmedAt } }`;
 
-interface Authentication {
-  acr: string | null;
-  current: string;
-  maxAge?: number | null;
-  met: boolean;
-  missing: string[];
-}
+const redirected = z.object({ redirectTo: z.string() });
+const loginTokens = tokenBody.extend({ id_token: z.string() });
+const authenticationBody = z.object({
+  acr: z.string().nullable(),
+  current: z.string(),
+  maxAge: z.number().nullish(),
+  met: z.boolean(),
+  missing: z.array(z.string()),
+});
+type Authentication = z.output<typeof authenticationBody>;
+const withAuthentication = z.object({ authentication: authenticationBody });
 const authenticationOf = async (
   slug: string,
   id: string,
@@ -112,8 +112,7 @@ const authenticationOf = async (
 ): Promise<Authentication> => {
   const result = await gql(slug, AUTH, { id }, cookie);
   expect(result.errors).toBeUndefined();
-  return fieldOf<{ authentication: Authentication }>(result, "oauthRequest")
-    .authentication;
+  return fieldOf(result, "oauthRequest", withAuthentication).authentication;
 };
 
 interface Person {
@@ -175,12 +174,13 @@ async function signedIn(
 async function stepUp(slug: string, person: Person) {
   const issued = await gql(slug, STEP_UP_OPTIONS, {}, person.cookie);
   expect(issued.errors).toBeUndefined();
-  const { options, challenge } = fieldOf<{
-    options: string;
-    challenge: string;
-  }>(issued, "requestPasskeyStepUp");
+  const { options, challenge } = fieldOf(
+    issued,
+    "requestPasskeyStepUp",
+    z.object({ options: z.string(), challenge: z.string() }),
+  );
   const response = await person.ceremony(
-    String((JSON.parse(options) as { challenge: string }).challenge),
+    parsed(z.object({ challenge: z.string() }), JSON.parse(options)).challenge,
   );
   const confirmed = await gql(
     slug,
@@ -239,9 +239,7 @@ const token = (slug: string, body: Record<string, string>) =>
 async function approved(slug: string, id: string, cookie: string) {
   const result = await gql(slug, APPROVE, { id }, cookie);
   expect(result.errors).toBeUndefined();
-  const { redirectTo } = fieldOf<{
-    redirectTo: string;
-  }>(result, "approveOAuthRequest");
+  const { redirectTo } = fieldOf(result, "approveOAuthRequest", redirected);
   const response = await token(slug, {
     grant_type: "authorization_code",
     code: new URL(redirectTo).searchParams.get("code") ?? "",
@@ -249,11 +247,7 @@ async function approved(slug: string, id: string, cookie: string) {
     code_verifier: VERIFIER,
   });
   expect(response.status).toBe(200);
-  return (await response.json()) as {
-    id_token: string;
-    access_token: string;
-    refresh_token?: string;
-  };
+  return jsonOf(response, loginTokens);
 }
 
 const tenantIds: Record<string, string> = {};
@@ -278,6 +272,8 @@ beforeAll(async () => {
     });
     const registered = await registerClient(
       {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },
@@ -381,10 +377,7 @@ describe("acr_values", () => {
     // (nxgt-janus#949, RFC 9470), and the request is spent.
     const refused = await gql("stup", APPROVE, { id }, dee.cookie);
     expect(refused.errors).toBeUndefined();
-    const { redirectTo } = fieldOf<{ redirectTo: string }>(
-      refused,
-      "approveOAuthRequest",
-    );
+    const { redirectTo } = fieldOf(refused, "approveOAuthRequest", redirected);
     const back = new URL(redirectTo);
     expect(back.origin + back.pathname).toBe(REDIRECT);
     expect(back.searchParams.get("error")).toBe(
@@ -408,7 +401,7 @@ describe("acr_values", () => {
       refresh_token: tokens.refresh_token ?? "",
     });
     expect(refreshed.status).toBe(200);
-    const { id_token } = (await refreshed.json()) as { id_token?: string };
+    const { id_token } = await jsonOf(refreshed, tokenBody);
     if (id_token !== undefined) {
       expect(decodeJwt(id_token)["acr"]).toBe(ACR.mfa);
     }
@@ -481,6 +474,8 @@ describe("the device flow", () => {
   const device = async (slug: string) => {
     await registerClient(
       {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
         db: oauthDb,
         findTenant: (s) => mongo.db.tenants.findFirst({ slug: s }),
       },
@@ -500,10 +495,7 @@ describe("the device flow", () => {
       }),
     );
     expect(response.status).toBe(200);
-    return (await response.json()) as {
-      device_code: string;
-      user_code: string;
-    };
+    return jsonOf(response, deviceCodesBody);
   };
 
   test("behaves like the code flow: refused with the gap, approved after a passkey step-up", async () => {
@@ -517,9 +509,7 @@ describe("the device flow", () => {
     );
     expect(read.errors).toBeUndefined();
     expect(
-      fieldOf<{
-        authentication: Authentication;
-      }>(read, "oauthDeviceRequest").authentication,
+      fieldOf(read, "oauthDeviceRequest", withAuthentication).authentication,
     ).toMatchObject({ met: false, missing: ["SECOND_FACTOR"] });
     expect(
       codeOf(
@@ -547,7 +537,7 @@ describe("the device flow", () => {
       }),
     );
     expect(polled.status).toBe(200);
-    const { id_token } = (await polled.json()) as { id_token: string };
+    const { id_token } = await jsonOf(polled, idTokenBody);
     expect(decodeJwt(id_token)["acr"]).toBe(ACR.phishingResistant);
   });
 });

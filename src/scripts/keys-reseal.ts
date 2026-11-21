@@ -2,11 +2,17 @@ import { connectionsService } from "@/config/connections";
 import { mongo } from "@/config/db";
 import { masterKeys } from "@/config/keys";
 import { redis } from "@/config/redis";
+import { warn } from "@/config/runtime";
+import { signInPolicyService } from "@/config/sign-in-policy";
 import { tenantsService } from "@/config/tenancy";
-import { webhookEndpoints } from "@/config/webhook-endpoints";
-import { signInPolicyService } from "@/console/modules/sign-in-methods/wiring";
-import { resealAllTenants, resealExitCode } from "@/keys";
-import { RESEAL_USAGE } from "@/keys/cli";
+import { webhooksService } from "@/config/webhooks-service";
+import {
+  RESEAL_USAGE,
+  resealAllTenants,
+  resealExitCode,
+  resealSecondFactorOf,
+} from "@/modules/keys";
+import { secondFactorKeysOf } from "@/modules/users";
 
 // Step 3 of a master-key rotation (docs/operations.md, "Rotating the master
 // key"): seals again, under the first key of CLAVIX_KEYS_MASTER_KEY (a
@@ -26,9 +32,14 @@ try {
   const report = await resealAllTenants({
     db: mongo.db,
     masterKeys,
+    log: warn,
+    resealSecondFactor: resealSecondFactorOf(
+      mongo.db,
+      secondFactorKeysOf(masterKeys),
+    ),
     tenantIds: () => tenantsService.allIds(),
     secretStores: {
-      webhookSecrets: (tenantId) => webhookEndpoints.resealSecrets(tenantId),
+      webhookSecrets: (tenantId) => webhooksService.resealSecrets(tenantId),
       connectionSecrets: (tenantId) =>
         connectionsService.resealSecrets(tenantId),
       socialSecrets: (tenantId) => signInPolicyService.resealSecrets(tenantId),

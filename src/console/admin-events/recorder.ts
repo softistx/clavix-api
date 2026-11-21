@@ -20,7 +20,7 @@ export interface AdminEventRecorder {
 
 export function createAdminEventRecorder(
   collection: TypedCollection<typeof adminEvents>,
-  now: () => Date = () => new Date(),
+  now: () => Date,
 ): AdminEventRecorder {
   return {
     async record({ actor, action, tenantId, target, requestId }) {

@@ -1,14 +1,16 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { agentClientsService } from "@/config/agent-clients";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
-import { assertWithinQuota, QuotaExceededError } from "./quota";
+import { registerClient } from "@/modules/clients";
+import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
+import { quietTenants } from "~/ports";
+import { QuotaExceededError } from "./usage.errors";
+import { assertWithinQuota } from "./usage.rules";
 import { UsageService } from "./usage.service";
 
 const tenant = (plan: "free" | "pro" | "enterprise" = "free") => ({
@@ -17,18 +19,37 @@ const tenant = (plan: "free" | "pro" | "enterprise" = "free") => ({
   quotaOverrides: {},
 });
 
-type Counter = ConstructorParameters<typeof UsageService>[2];
+type Counter = NonNullable<ConstructorParameters<typeof UsageService>[2]>;
+type Key = Parameters<Counter["keyFor"]>[0];
+const keyOf = ({ tenantId, month }: Key) => `${tenantId}:${month}`;
+
+/** A complete counter whose `add` and `count` are the given ones; the rest is never reached. */
+function counterOf(add: Counter["add"], count: Counter["count"]): Counter {
+  const refused = async (): Promise<never> => {
+    throw new Error("not used by the usage service");
+  };
+  return {
+    definition: { name: "spec:mau", key: keyOf },
+    keyFor: keyOf,
+    add,
+    count,
+    merge: refused,
+    delete: refused,
+  };
+}
+
 function fakeCounter() {
   const seen = new Map<string, Set<string>>();
-  const counter = {
-    add: async (key: { tenantId: string; month: string }, id: string) => {
-      const k = `${key.tenantId}:${key.month}`;
-      seen.set(k, (seen.get(k) ?? new Set()).add(id));
+  return counterOf(
+    async (key, ...ids) => {
+      const set = seen.get(keyOf(key)) ?? new Set<string>();
+      const before = set.size;
+      for (const id of ids) set.add(id);
+      seen.set(keyOf(key), set);
+      return set.size !== before;
     },
-    count: async (key: { tenantId: string; month: string }) =>
-      seen.get(`${key.tenantId}:${key.month}`)?.size ?? 0,
-  };
-  return counter as unknown as Counter;
+    async (key) => seen.get(keyOf(key))?.size ?? 0,
+  );
 }
 
 const logged: string[] = [];
@@ -40,7 +61,7 @@ const sources = {
   connections: async () => 0,
 };
 const at = new Date("2026-11-12T12:00:00Z");
-const make = (mau: Counter) =>
+const make = (mau: Counter | undefined) =>
   new UsageService(
     mongo.db.usageCounters,
     sources,
@@ -111,14 +132,10 @@ describe("UsageService", () => {
   });
 
   test("recordActive never throws, and reading falls back on the snapshot", async () => {
-    const broken = {
-      add: async () => {
-        throw new Error("redis down");
-      },
-      count: async () => {
-        throw new Error("redis down");
-      },
-    } as unknown as Counter;
+    const down = async (): Promise<never> => {
+      throw new Error("redis down");
+    };
+    const broken = counterOf(down, down);
     const service = make(broken);
     await service.recordActive("65f0000000000000000000aa", "u");
     expect(logged[0]).toContain("redis down");
@@ -146,6 +163,9 @@ describe("hard quotas", () => {
 describe("the clients count over the real OAuth store", () => {
   test("counts a tenant's registered clients and no other tenant's", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      ...quietTenants,
+      now: () => new Date(),
+      log: () => {},
       domain: "clavix.test",
     });
     const a = await service.create({ slug: "usea", name: "A" });
@@ -153,6 +173,8 @@ describe("the clients count over the real OAuth store", () => {
     const options = {
       db: oauthDb,
       findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+      now: () => new Date(),
+      detailTypes: noDetailTypes,
     };
     const redirect = "https://app.example/callback";
     await registerClient(options, {
@@ -179,6 +201,9 @@ describe("the clients count over the real OAuth store", () => {
   });
   test("agents are not clients: dynamic agents leave the clients count and fill the agents count", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      ...quietTenants,
+      now: () => new Date(),
+      log: () => {},
       domain: "clavix.test",
     });
     const t = await service.create({ slug: "usec", name: "C" });
@@ -186,6 +211,8 @@ describe("the clients count over the real OAuth store", () => {
     const options = {
       db: oauthDb,
       findTenant: (slug: string) => mongo.db.tenants.findFirst({ slug }),
+      now: () => new Date(),
+      detailTypes: noDetailTypes,
     };
     const redirect = "https://app.example/callback";
     await registerClient(options, {

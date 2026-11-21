@@ -3,8 +3,9 @@ import { access } from "@/config/access";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { codeOf, consoleAs } from "~/console";
+import { defined } from "~/narrow";
 
 // ADR-0039: a suspended tenant's console stays readable by its admins, every
 // write of theirs is TENANT_SUSPENDED (the guard), the platform's own
@@ -15,6 +16,8 @@ const viewer = consoleAs("sus-viewer");
 const operator = consoleAs("sus-operator");
 
 let tenant = "";
+const queryOf = (queries: Record<string, string>, name: string) =>
+  defined(queries[name], `the ${name} query`);
 
 const READS: Record<string, string> = {
   tenant: `query($t: ID!) { tenant(id: $t) { id status } }`,
@@ -77,7 +80,7 @@ describe("a suspended tenant's reads", () => {
   }
 
   test("the tenant exposes its status", async () => {
-    const result = await admin(READS["tenant"] as string, { t: tenant });
+    const result = await admin(queryOf(READS, "tenant"), { t: tenant });
     expect(result.data?.["tenant"]).toEqual({
       id: tenant,
       status: "SUSPENDED",
@@ -113,20 +116,20 @@ describe("a suspended tenant's writes", () => {
 
   test("a viewer stays FORBIDDEN (the role is checked first)", async () => {
     expect(
-      codeOf(await viewer(WRITES["createRole"] as string, { t: tenant })),
+      codeOf(await viewer(queryOf(WRITES, "createRole"), { t: tenant })),
     ).toBe("FORBIDDEN");
   });
 
   test("the error is a 403 with no write done", async () => {
-    const result = await admin(WRITES["updateTenant"] as string, { t: tenant });
+    const result = await admin(queryOf(WRITES, "updateTenant"), { t: tenant });
     expect(result.errors?.[0]?.message).toBe("The tenant is suspended");
     expect((await tenantsService.activeByIds([tenant])).length).toBe(0);
-    const read = await admin(READS["tenant"] as string, { t: tenant });
+    const read = await admin(queryOf(READS, "tenant"), { t: tenant });
     expect(read.data?.["tenant"]).toMatchObject({ status: "SUSPENDED" });
   });
 
   test("an operator's update still goes through", async () => {
-    const result = await operator(WRITES["updateTenant"] as string, {
+    const result = await operator(queryOf(WRITES, "updateTenant"), {
       t: tenant,
     });
     expect(result.errors).toBeUndefined();
@@ -142,7 +145,7 @@ describe("the platform's own tenant calls", () => {
     expect((await op("resumeTenant")).data?.["resumeTenant"]).toEqual({
       status: "ACTIVE",
     });
-    const wrote = await admin(WRITES["createRole"] as string, { t: tenant });
+    const wrote = await admin(queryOf(WRITES, "createRole"), { t: tenant });
     expect(wrote.errors).toBeUndefined();
     expect((await op("suspendTenant")).data?.["suspendTenant"]).toEqual({
       status: "SUSPENDED",
@@ -173,12 +176,12 @@ describe("a deleted tenant", () => {
     ]) {
       expect([
         name,
-        codeOf(await admin(READS[name] as string, { t: tenant })),
+        codeOf(await admin(queryOf(READS, name), { t: tenant })),
       ]).toEqual([name, "NOT_FOUND"]);
     }
-    expect(
-      (await admin(READS["tenant"] as string, { t: tenant })).data,
-    ).toEqual({ tenant: null });
+    expect((await admin(queryOf(READS, "tenant"), { t: tenant })).data).toEqual(
+      { tenant: null },
+    );
     await operator(`mutation($t: ID!) { restoreTenant(id: $t) { id } }`, {
       t: tenant,
     });

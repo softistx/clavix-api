@@ -1,28 +1,25 @@
 import { createMemoryWebhookQueue } from "@softistx/janus-webhooks";
 import { createRedisWebhookQueue } from "@softistx/janus-webhooks-redis";
 import { senderAddress } from "@/mail/mailer";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import {
   createWebhookDelivery,
   DISABLE_ACTOR,
+  disabledEndpointMail,
+  guardedFetch,
+  pruneWebhookSecrets,
   webhookQueueLimits,
-} from "@/modules/webhooks/delivery";
-import { disabledEndpointMail } from "@/modules/webhooks/notice";
-import { pruneWebhookSecrets } from "@/modules/webhooks/secrets-prune";
-import { guardedFetch } from "@/modules/webhooks/url-policy";
+} from "@/modules/webhooks";
 import { access } from "./access";
 import { adminEventRecorder } from "./admin-events";
 import { env } from "./env";
 import { eventBus } from "./events";
 import { mailer } from "./mail";
 import { redis } from "./redis";
-import { tenantAdmin, tenantResolver, tenantsService } from "./tenancy";
+import { clock, warn } from "./runtime";
+import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
-import {
-  urlPolicy,
-  webhookDeliveries,
-  webhookEndpoints,
-} from "./webhook-endpoints";
+import { urlPolicy, webhooksService } from "./webhooks-service";
 
 // The console's users are the `clavix` tenant's; its owners are mailed.
 const findOwner = async (id: string) => {
@@ -35,10 +32,13 @@ const findOwner = async (id: string) => {
 };
 
 // The queue's caps (G2-03): per tenant, from the environment.
-const queueLimits = webhookQueueLimits({
-  maxInFlight: env.CLAVIX_WEBHOOKS_MAX_IN_FLIGHT,
-  maxPending: env.CLAVIX_WEBHOOKS_MAX_PENDING,
-});
+const queueLimits = webhookQueueLimits(
+  {
+    maxInFlight: env.CLAVIX_WEBHOOKS_MAX_IN_FLIGHT,
+    maxPending: env.CLAVIX_WEBHOOKS_MAX_PENDING,
+  },
+  warn,
+);
 
 /**
  * The process-wide delivery (D20) over the real stores: the Redis queue when
@@ -48,9 +48,10 @@ const queueLimits = webhookQueueLimits({
  * tenant's owners.
  */
 export const webhookDelivery = createWebhookDelivery({
-  endpoints: webhookEndpoints,
-  deliveries: webhookDeliveries,
-  fetch: guardedFetch(urlPolicy),
+  webhooks: webhooksService,
+  fetch: guardedFetch(urlPolicy, fetch),
+  log: warn,
+  now: clock,
   queue:
     redis === undefined
       ? createMemoryWebhookQueue(queueLimits)
@@ -67,8 +68,8 @@ export const webhookDelivery = createWebhookDelivery({
       requestId: crypto.randomUUID(),
     });
     const [tenant, endpoint] = await Promise.all([
-      tenantAdmin.find(tenantId),
-      webhookEndpoints.find(tenantId, endpointId),
+      tenantsService.find(tenantId),
+      webhooksService.findEndpoint(tenantId, endpointId),
     ]);
     if (tenant === undefined || endpoint === undefined) return;
     const owners = await Promise.all(
@@ -92,14 +93,13 @@ export const webhookDelivery = createWebhookDelivery({
 eventBus.subscribe(webhookDelivery.relay);
 
 /** The daily clean-up of the expired rolled secrets over the real stores. */
-export const createWebhookSecretsPrune =
-  (now: () => Date = () => new Date()) =>
-  () =>
-    pruneWebhookSecrets(
-      {
-        tenantIds: () => tenantsService.activeIds(),
-        prune: (tenantId, at) =>
-          webhookEndpoints.pruneExpiredSecrets(tenantId, at),
-      },
-      now(),
-    );
+export const createWebhookSecretsPrune = (now: () => Date) => () =>
+  pruneWebhookSecrets(
+    {
+      tenantIds: () => tenantsService.activeIds(),
+      prune: (tenantId, at) =>
+        webhooksService.pruneExpiredSecrets(tenantId, at),
+      log: warn,
+    },
+    now(),
+  );

@@ -1,13 +1,17 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { protectedResource, s256Challenge } from "@softistx/janus-oauth";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
 import { agentClientsService } from "@/config/agent-clients";
 import { clientsService } from "@/config/clients";
 import { mongo } from "@/config/db";
+import { noThrottle } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
-import { tenantAdmin, tenantResolver, tenantsService } from "@/config/tenancy";
-import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
-import { partitionOf } from "@/modules/tenants/identity";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
+import type { AgentsPolicy } from "@/modules/oauth-policy";
+import { partitionOf } from "@/modules/tenants";
+import { errorBody, jsonOf } from "~/json";
+import { defined } from "~/narrow";
 import { createFlow, DOMAIN } from "~/oauth-flow";
 import { createRegisterRoute } from "./register-route";
 import {
@@ -65,7 +69,8 @@ const policy = (agents: Partial<AgentsPolicy>) => ({
 
 async function setAgents(slug: string, agents: Partial<AgentsPolicy>) {
   const found = await mongo.db.tenants.findFirst({ slug });
-  if (found == null) throw new Error(`no tenant ${slug}`);
+  if (found === null || found === undefined)
+    throw new Error(`no tenant ${slug}`);
   await tenantsService.updateOAuth(found._id, (tenant) => ({
     ...tenant.oauth,
     agents: policy(agents),
@@ -262,7 +267,7 @@ describe("throttle", () => {
       expect(statuses).toEqual([201, 201, 201, 429, 429]);
       expect(last?.headers.get("retry-after")).toBe("42");
       expect(
-        ((await (last as Response).json()) as { error: string }).error,
+        (await jsonOf(defined(last, "the last response"), errorBody)).error,
       ).toBe("temporarily_unavailable");
       expect(await countOf("ag-throttled")).toBe(3);
     } finally {
@@ -274,8 +279,8 @@ describe("throttle", () => {
 describe("agents quota", () => {
   test("403 access_denied once the tenant's quota is reached, other tenants unaffected", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-quota" });
-    if (found == null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    if (found === null || found === undefined) throw new Error("no tenant");
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 2 },
     });
@@ -295,8 +300,8 @@ describe("agents quota", () => {
 describe("agents quota under concurrency", () => {
   test("at most N of many simultaneous registrations pass a quota of N", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-race" });
-    if (found == null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    if (found === null || found === undefined) throw new Error("no tenant");
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 3 },
     });
@@ -314,7 +319,7 @@ describe("agents quota under concurrency", () => {
 describe("suspended tenant", () => {
   test("403 TENANT_SUSPENDED, and nothing stored", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-suspended" });
-    if (found == null) throw new Error("no tenant");
+    if (found === null || found === undefined) throw new Error("no tenant");
     await tenantsService.suspend(found._id);
     const response = await register("ag-suspended", {
       ...metadata,
@@ -433,14 +438,17 @@ describe("agent records", () => {
       ...metadata,
       redirect_uris: [CALLBACK],
     });
-    const { client_id } = (await response.json()) as { client_id: string };
+    const { client_id } = await jsonOf(
+      response,
+      z.looseObject({ client_id: z.string() }),
+    );
     const a = await tenantResolver.resolveHost(`ag-open.${DOMAIN}`);
     const b = await tenantResolver.resolveHost(`ag-off.${DOMAIN}`);
     if (a === null || b === null) throw new Error("no tenant");
     expect(await agentClientsService.has(a.tenantId, client_id)).toBe(true);
     expect(await agentClientsService.has(b.tenantId, client_id)).toBe(false);
     const doc = await mongo.db.tenants.findFirst({ slug: "ag-open" });
-    if (doc == null) throw new Error("no tenant");
+    if (doc === null || doc === undefined) throw new Error("no tenant");
     const before = await agentClientsService.count(a.tenantId);
     await clientsService.delete(doc, client_id);
     expect(await agentClientsService.has(a.tenantId, client_id)).toBe(false);
@@ -457,6 +465,7 @@ describe("agent records", () => {
     const route = createRegisterRoute({
       resolver: tenantResolver,
       serverFor: flow.issuers.serverFor,
+      throttle: noThrottle,
       agents: {
         ...agentClientsService,
         count: async () => 0,
@@ -467,6 +476,7 @@ describe("agent records", () => {
         remove: async () => {},
       },
       agentQuotaOf: async () => null,
+      exclusive: (_key, work) => work(),
       log: () => {},
     });
     const before = await clients();
@@ -490,14 +500,14 @@ describe("agent records", () => {
       software_id: "x".repeat(17 * 1024),
     });
     expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toBe(
+    expect((await jsonOf(response, errorBody)).error).toBe(
       "invalid_client_metadata",
     );
   });
 });
 
 describe("the registration body is bounded", () => {
-  const post = (init: RequestInit) =>
+  const post = (init: RequestInit & { duplex?: "half" }) =>
     flow.issuers.register(
       new Request(flow.url("ag-open", "/register"), {
         method: "POST",
@@ -519,7 +529,7 @@ describe("the registration body is bounded", () => {
       body,
       duplex: "half",
       headers: { "content-length": String(17 * 1024) },
-    } as RequestInit);
+    });
     expect(response.status).toBe(413);
     expect(await countOf("ag-open")).toBe(before);
   });
@@ -535,9 +545,9 @@ describe("the registration body is bounded", () => {
       },
     });
     const before = await countOf("ag-open");
-    const response = await post({ body, duplex: "half" } as RequestInit);
+    const response = await post({ body, duplex: "half" });
     expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toBe(
+    expect((await jsonOf(response, errorBody)).error).toBe(
       "invalid_client_metadata",
     );
     // The cap is 16 KiB: a handful of 4 KiB chunks, not the whole stream.
@@ -575,7 +585,7 @@ describe("metadata documents: abuse limits", () => {
       expect(statuses).toEqual([302, 302, 429, 429]);
       expect(last?.headers.get("retry-after")).toBe("17");
       expect(
-        ((await (last as Response).json()) as { error: string }).error,
+        (await jsonOf(defined(last, "the last response"), errorBody)).error,
       ).toBe("temporarily_unavailable");
       // The cache serves the second request: one fetch, none once throttled.
       expect(fetched).toBeLessThanOrEqual(2);
@@ -604,8 +614,9 @@ describe("metadata documents: abuse limits", () => {
   test("past the agents quota a new metadata client is refused 403 before any fetch, a known one is not", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-quota" });
     const tenant = await tenantResolver.resolveHost(`ag-docs-quota.${DOMAIN}`);
-    if (found == null || tenant === null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    if (found === null || found === undefined || tenant === null)
+      throw new Error("no tenant");
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 1 },
     });
@@ -616,9 +627,7 @@ describe("metadata documents: abuse limits", () => {
     fetched = 0;
     const refused = await authorize("ag-docs-quota");
     expect(refused.status).toBe(403);
-    expect(((await refused.json()) as { error: string }).error).toBe(
-      "access_denied",
-    );
+    expect((await jsonOf(refused, errorBody)).error).toBe("access_denied");
     expect(fetched).toBe(0);
     expect(await countOf("ag-docs-quota", "metadata")).toBe(0);
     // A client already recorded keeps working over the quota.
@@ -631,8 +640,8 @@ describe("metadata documents: abuse limits", () => {
 
   test("simultaneous first uses of one new client under a quota of 1 all pass and record it once", async () => {
     const found = await mongo.db.tenants.findFirst({ slug: "ag-docs-race" });
-    if (found == null) throw new Error("no tenant");
-    await tenantAdmin.setPlan(found._id, {
+    if (found === null || found === undefined) throw new Error("no tenant");
+    await tenantsService.setPlan(found._id, {
       plan: "free",
       quotaOverrides: { agents: 1 },
     });

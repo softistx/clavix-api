@@ -1,9 +1,7 @@
 import type { TypedCollection } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
-import { TenantAdminService, TenantsService } from "@/modules/tenants";
-import type { PublicOrigin } from "@/modules/tenants/identity";
-import { hostOf } from "@/modules/tenants/identity";
-import type { tenants } from "@/modules/tenants/tenants.model";
+import type { PublicOrigin, tenants } from "@/modules/tenants";
+import { hostOf, TenantsService } from "@/modules/tenants";
 import { createTenantResolver, type DomainDirectory } from "@/tenancy/resolver";
 import {
   noTenantCache,
@@ -12,21 +10,24 @@ import {
 } from "@/tenancy/tenant-cache";
 import { linkTenantToPlatform } from "./access";
 import { mongo } from "./db";
-import { createDomainStore } from "./domains";
+import { createDomainsService } from "./domains";
 import { env } from "./env";
-import { ensureSigningKeyOf } from "./keys";
+import { keysService } from "./keys";
 import { redis } from "./redis";
+import { clock, warn } from "./runtime";
 
 export interface TenancyOptions {
   tenants: TypedCollection<typeof tenants>;
   cache: TenantCache;
   config: PublicOrigin;
-  /** The custom domains hosts resolve through (A4). Default: none, only slug hosts resolve. */
-  domains?: DomainDirectory;
+  /** The custom domains hosts resolve through (A4). */
+  domains: DomainDirectory;
   /** A tenant's verified custom hosts, dropped from the cache with its slug host on each tenant write. */
-  hostsOf?: (tenantId: ObjectId) => Promise<string[]>;
-  /** Gives a new tenant its first signing key. Default: none. */
-  onCreated?: (tenantId: string) => void | Promise<void>;
+  hostsOf: (tenantId: ObjectId) => Promise<string[]>;
+  /** Gives a new tenant its first signing key. */
+  onCreated: (tenantId: string) => void | Promise<void>;
+  /** Where a hook failure is logged. */
+  log: (message: string) => void;
 }
 
 /**
@@ -40,70 +41,72 @@ export function createTenancy({
   domains,
   hostsOf,
   onCreated,
+  log,
 }: TenancyOptions) {
   const tenantResolver = createTenantResolver({
     // The trash included: a deleted tenant answers as a suspended one does.
     lookup: (slug) => tenants.findFirst({ slug }, { withDeleted: true }),
     cache,
     config,
-    ...(domains === undefined
-      ? {}
-      : {
-          domains,
-          lookupById: (id) => tenants.findById(id, { withDeleted: true }),
-        }),
+    log,
+    domains,
+    lookupById: (id) => tenants.findById(id, { withDeleted: true }),
   });
   const tenantsService = new TenantsService(tenants, {
+    domain: config.domain,
     onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
-    ...(hostsOf === undefined ? {} : { hostsOf }),
-    ...(onCreated === undefined ? {} : { onCreated }),
+    log,
+    now: clock,
+    hostsOf,
+    onCreated,
   });
-  const tenantAdmin = new TenantAdminService(tenants, tenantsService, {
-    onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
-    ...(hostsOf === undefined ? {} : { hostsOf }),
-  });
-  return { tenantResolver, tenantsService, tenantAdmin };
+  return { tenantResolver, tenantsService };
 }
 
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
 // The domain store and the resolver refer to each other (a domain write drops
 // hosts from the cache; a custom host resolves through the store): the
 // closures below are called only after both exist.
-const origin = {
+/** The tenants' parent domain, read once from the environment. */
+export const tenantDomain = env.CLAVIX_DOMAIN;
+
+/** Where a tenant's issuer lives: scheme, parent domain and port, read once from the environment. */
+export const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
-  domain: env.CLAVIX_DOMAIN,
+  domain: tenantDomain,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 
-export const domainStore = createDomainStore({
+export const domainsService = createDomainsService({
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
   slugHostOf: async (tenantId) => {
-    const tenant = await tenantAdmin.find(tenantId);
+    const tenant = await tenantsService.find(tenantId);
     return tenant === undefined
       ? undefined
       : hostOf(tenant.slug, env.CLAVIX_DOMAIN);
   },
 });
 
-export const { tenantResolver, tenantsService, tenantAdmin } = createTenancy({
+export const { tenantResolver, tenantsService } = createTenancy({
   tenants: mongo.db.tenants,
   // The first signing key, and the platform link (the console's permissions).
   onCreated: async (tenantId) => {
     // The link first: cheap and idempotent, so a failing key never leaves a tenant unseen by operators.
     await linkTenantToPlatform(tenantId);
-    await ensureSigningKeyOf(tenantId);
+    await keysService.ensureSigningKey(tenantId);
   },
   cache:
     redis === undefined
       ? noTenantCache
       : redisTenantCache(redis.cache.tenantHost),
   domains: {
-    tenantOfHost: (host) => domainStore.tenantOfHost(host),
-    primaryHostOf: (tenantId) => domainStore.primaryHostOf(tenantId),
-    verifiedHostsOf: (tenantId) => domainStore.verifiedHostsOf(tenantId),
+    tenantOfHost: (host) => domainsService.tenantOfHost(host),
+    primaryHostOf: (tenantId) => domainsService.primaryHostOf(tenantId),
+    verifiedHostsOf: (tenantId) => domainsService.verifiedHostsOf(tenantId),
   },
-  hostsOf: (tenantId) => domainStore.resolvingHostsOf(tenantId),
+  hostsOf: (tenantId) => domainsService.resolvingHostsOf(tenantId),
   config: origin,
+  log: warn,
 });
 
 /** A stored tenant by slug (suspended ones included), for the operator scripts. */

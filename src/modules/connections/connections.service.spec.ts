@@ -1,15 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import type { TxtAnswer } from "@/modules/domains/dns";
-import { createSecretBox } from "@/modules/sign-in-methods/secrets";
-import { QuotaExceededError } from "@/modules/usage/quota";
+import type { TxtAnswer } from "@/modules/domains";
+import { createSecretBox } from "@/modules/sign-in-methods";
+import { QuotaExceededError } from "@/modules/usage";
+import { defined, instance } from "~/narrow";
 import { ConnectionError } from "./connections.errors";
-import {
-  type ConnectionInput,
-  ConnectionsService,
-  txtNameOf,
-} from "./connections.service";
+import { ConnectionsService } from "./connections.service";
+import type { ConnectionInput } from "./connections.types";
+import { txtNameOf } from "./connections.utils";
 
 const collection = mongo.db.connections;
 const box = createSecretBox(
@@ -29,6 +28,7 @@ const service = new ConnectionsService(collection, box, {
     },
   },
   links: async () => linked,
+  advertisesIss: async () => false,
   now: () => clock,
   log: (message) => logged.push(message),
 });
@@ -88,8 +88,9 @@ describe("create", () => {
     try {
       await service.create(A, input({ issuer: "http://leak.acme.test" }), null);
     } catch (error) {
-      expect((error as Error).message).not.toContain("leak.acme.test");
-      expect((error as Error).message).not.toContain("s3cr3t-value");
+      const { message } = instance(error, Error);
+      expect(message).not.toContain("leak.acme.test");
+      expect(message).not.toContain("s3cr3t-value");
     }
     expect(await collection.raw.countDocuments({})).toBe(0);
   });
@@ -152,7 +153,7 @@ describe("domains", () => {
       false,
     );
     clock = new Date(clock.getTime() + 61_000);
-    txt = { kind: "records", values: [entry?.txtToken as string] };
+    txt = { kind: "records", values: [defined(entry, "the domain").txtToken] };
     const done = await service.verifyDomain(A, "acme", "acme.test");
     expect(done.verified).toBe(true);
     expect(done.connection.domains[0]?.verifiedAt).toEqual(clock);
@@ -166,7 +167,7 @@ describe("domains", () => {
     expect(await source.findConnectionByDomain("acme.test")).toBeNull();
     txt = {
       kind: "records",
-      values: [added.domains[0]?.txtToken as string],
+      values: [defined(added.domains[0], "the domain").txtToken],
     };
     await service.verifyDomain(A, "acme", "acme.test");
     const found = await source.findConnectionByDomain("acme.test");
@@ -188,7 +189,10 @@ describe("domains", () => {
   test("a secret that cannot be opened is not offered, and nothing is logged of it", async () => {
     await service.create(A, input(), null);
     const added = await service.addDomain(A, "acme", "acme.test");
-    txt = { kind: "records", values: [added.domains[0]?.txtToken as string] };
+    txt = {
+      kind: "records",
+      values: [defined(added.domains[0], "the domain").txtToken],
+    };
     await service.verifyDomain(A, "acme", "acme.test");
     // Sealed for another connection id: the context no longer matches.
     await collection.raw.updateMany(
@@ -203,7 +207,10 @@ describe("domains", () => {
     await service.create(A, input(), null);
     const added = await service.addDomain(A, "acme", "Acme.Test");
     expect(added.domains[0]?.domain).toBe("acme.test");
-    txt = { kind: "records", values: [added.domains[0]?.txtToken as string] };
+    txt = {
+      kind: "records",
+      values: [defined(added.domains[0], "the domain").txtToken],
+    };
     const out = await service.verifyDomain(A, "acme", "  ACME.test ");
     expect(out.verified).toBe(true);
     const after = await service.removeDomain(A, "acme", " Acme.TEST");
@@ -252,7 +259,10 @@ describe("update, secret and delete", () => {
   test("a new secret replaces the sealed one", async () => {
     await service.create(A, input(), null);
     const added = await service.addDomain(A, "acme", "acme.test");
-    txt = { kind: "records", values: [added.domains[0]?.txtToken as string] };
+    txt = {
+      kind: "records",
+      values: [defined(added.domains[0], "the domain").txtToken],
+    };
     await service.verifyDomain(A, "acme", "acme.test");
     await service.setSecret(A, "acme", "brand-new-secret");
     const found = await service.sourceOf(A).findConnection("acme");
@@ -299,10 +309,14 @@ describe("the iss response parameter (RFC 9207, IdP mix-up)", () => {
       return answer;
     },
     now: () => clock,
+    log: () => {},
   });
   const verified = async (id: string) => {
     const added = await pinning.addDomain(A, id, `${id}.test`);
-    txt = { kind: "records", values: [added.domains[0]?.txtToken as string] };
+    txt = {
+      kind: "records",
+      values: [defined(added.domains[0], "the domain").txtToken],
+    };
     await pinning.verifyDomain(A, id, `${id}.test`);
   };
 

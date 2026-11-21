@@ -157,6 +157,15 @@ export type Stack = {
   compose: (...args: string[]) => ReturnType<typeof $>;
 };
 
+/** A value `envProblems` has checked, or the refusal when it is missing. */
+export function requiredValue(
+  values: Record<string, string>,
+  key: string,
+): string {
+  const value = values[key];
+  return value === undefined ? fail(`${key} is missing`) : value;
+}
+
 /**
  * Loads deploy/.env (it must exist and be mode 600, or the script refuses) and
  * returns the compose runner of the staging stack: compose.yml plus the traefik
@@ -170,7 +179,7 @@ export async function loadStack(): Promise<Stack> {
   if (issues.length > 0)
     return fail(`the env file ${ENV_FILE}:\n  ${issues.join("\n  ")}`);
   const derived: Record<string, string> = {
-    CLAVIX_DOMAIN_RE: domainRegex(values["CLAVIX_DOMAIN"] as string),
+    CLAVIX_DOMAIN_RE: domainRegex(requiredValue(values, "CLAVIX_DOMAIN")),
   };
   const env = composeEnv(process.env, values, derived);
   const files = [
@@ -182,8 +191,8 @@ export async function loadStack(): Promise<Stack> {
   return {
     values,
     images: [
-      values["CLAVIX_API_IMAGE"] as string,
-      values["CLAVIX_UI_IMAGE"] as string,
+      requiredValue(values, "CLAVIX_API_IMAGE"),
+      requiredValue(values, "CLAVIX_UI_IMAGE"),
     ],
     compose: (...rest) =>
       $`docker compose ${files} --env-file ${ENV_FILE} ${rest}`

@@ -1,6 +1,15 @@
 import { graphql } from "@softistx/alxia-graphql";
 import type { Telemetry } from "@softistx/telemetry";
-import { agentsFor } from "./config/agent-clients";
+import { janusMasking, janusPlugin } from "@/modules/auth/auth.plugin";
+import { LOGO_PATH } from "@/modules/branding";
+import type {
+  AgentsFor,
+  DetailTextsFor,
+  ScopeTextsFor,
+} from "@/modules/consent";
+import { oauthContext } from "@/modules/consent/consent.plugin";
+import type { ReadyReport } from "@/modules/health";
+import { version } from "@/modules/health";
 import { serveLogo } from "./config/branding";
 import {
   serveTlsAsk,
@@ -8,17 +17,9 @@ import {
   TLS_ASK_PATH,
   WEBAUTHN_WELL_KNOWN,
 } from "./config/domains-routes";
-import { env } from "./config/env";
 import { readyz } from "./config/ready";
-import { detailTextsFor, scopeTextsFor } from "./config/resources";
-import {
-  deviceThrottle,
-  homeRealmThrottle,
-  passkeyThrottle,
-  signInThrottle,
-  ssoStartThrottle,
-  verifyThrottle,
-} from "./config/throttle";
+import { telemetry as appTelemetry } from "./config/telemetry";
+import { tenantResolver } from "./config/tenancy";
 import { serveAuditExport } from "./console/audit-export/export";
 import { useInviteBudget } from "./console/budgets";
 import { CONSOLE_EXPORT_PATH, CONSOLE_PATH } from "./console/identity";
@@ -26,20 +27,12 @@ import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
+import { CLIENT_HEADER, useClientHeader } from "./http/csrf";
+import { serveReadyz } from "./http/readyz";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
-import type { Throttle } from "./http/throttle/core";
+import { type ThrottleContext, throttlesOf } from "./http/throttle/context";
 import { reportUnexpected } from "./http/unexpected";
-import { janusMasking, janusPlugin } from "./modules/auth/plugin";
-import type { VerificationThrottle } from "./modules/auth/verification-throttle";
-import { LOGO_PATH } from "./modules/branding/logo-route";
-import { oauthContext } from "./modules/consent";
-import type { AgentsFor } from "./modules/consent/agent-marker";
-import type { DetailTextsFor } from "./modules/consent/detail-labels";
-import type { DeviceThrottle } from "./modules/consent/device-throttle";
-import type { ScopeTextsFor } from "./modules/consent/scope-labels";
-import { version } from "./modules/health";
-import type { ReadyReport } from "./modules/health/ready";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 
 // The largest body /graphql reads.
@@ -48,95 +41,77 @@ export const BODY_LIMIT = 100 * 1024;
 /** The highest cost of a console operation (graxia `limits.cost.max`; its default is 5 000). */
 export const CONSOLE_MAX_COST = 50_000;
 
+/** The ports `createApp` requires: bound in `src/config/app-ports.ts`. */
+export interface AppPorts extends ThrottleContext {
+  /** How many reverse proxies stand in front of the app (`CLAVIX_TRUSTED_PROXIES`). */
+  trustedProxies: number;
+  /** The GraphQL IDE (Apollo Sandbox) and introspection (`CLAVIX_GRAPHQL_IDE`). */
+  ide: boolean;
+  /** Refuse a GraphQL request without `x-clavix-client` (`CLAVIX_REQUIRE_CLIENT_HEADER`). */
+  requireClientHeader: boolean;
+  /** Where the consent page reads the tenants' scope texts. */
+  scopeTexts: ScopeTextsFor;
+  /** The same for the tenants' detail type texts (the request's `details`). */
+  detailTexts: DetailTextsFor;
+  /** The tenants' agents, for `OAuthClient.agent` on the hosted pages. */
+  agents: AgentsFor;
+}
+
+/** What `createApp` takes: the ports, and the entry-point options (their defaults are the app's config). */
+export interface AppOptions extends AppPorts {
+  oauth?: OAuthHandle;
+  // The console API (`/console/graphql`, src/console): bearer token, its own
+  // schema. Off without it, the route does not exist.
+  console?: ConsoleDeps & { schema?: typeof consoleSchema };
+  // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
+  telemetry?: Telemetry;
+  // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
+  ready?: () => Promise<ReadyReport>;
+}
+
+/** The base app: context, health and readiness probes, the logo, the TLS ask and the body limit. */
+function baseOf(options: AppOptions) {
+  return (
+    createBase(
+      tenantResolver,
+      throttlesOf(options),
+      options.telemetry ?? appTelemetry,
+      options.trustedProxies,
+    )
+      .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
+      // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
+      .all("/readyz", ({ request }) =>
+        serveReadyz(request, options.ready ?? readyz),
+      )
+      .all(LOGO_PATH, ({ request }) => serveLogo(request))
+      // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/domains.tls-ask.ts).
+      .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
+      .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
+      .bodyLimit(BODY_LIMIT)
+  );
+}
+
 // `GET /healthz`, the liveness probe (no dependency is checked), `GET /readyz`, the OAuth
 // endpoints when `oauth` is given (the issuers of src/oauth, which
 // src/server.ts passes), then POST and GET /graphql behind the base's
 // middlewares. The body limit is declared before the OAuth routes, since it
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.
-export function createApp(
-  options: {
-    oauth?: OAuthHandle;
-    // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
-    // default (none without REDIS_URL).
-    signInThrottle?: Throttle | undefined;
-    // The same for `passkeySignInOptions`.
-    passkeyThrottle?: Throttle | undefined;
-    // The same for `hostedHomeRealm`, apart from the sign-in code budget.
-    homeRealmThrottle?: Throttle | undefined;
-    // The same for `socialSignInStart` (social and enterprise).
-    ssoStartThrottle?: Throttle | undefined;
-    // The same for `requestEmailVerification` (per user too).
-    verifyThrottle?: VerificationThrottle | undefined;
-    // The same for the device verification page's code lookups.
-    deviceThrottle?: DeviceThrottle | undefined;
-    // The console API (`/console/graphql`, src/console): bearer token, its own
-    // schema. Off without it, the route does not exist.
-    console?: ConsoleDeps & { schema?: typeof consoleSchema };
-    // Where the consent page reads the tenants' scope texts; the stored ones by default.
-    scopeTexts?: ScopeTextsFor;
-    // The same for the tenants' detail type texts (the request's `details`).
-    detailTexts?: DetailTextsFor;
-    // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
-    agents?: AgentsFor;
-    // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
-    telemetry?: Telemetry;
-    // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
-    ready?: () => Promise<ReadyReport>;
-    // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
-    ide?: boolean;
-  } = {},
-) {
-  const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
-  const base = createBase(
-    undefined,
-    {
-      signInThrottle:
-        "signInThrottle" in options ? options.signInThrottle : signInThrottle,
-      passkeyThrottle:
-        "passkeyThrottle" in options
-          ? options.passkeyThrottle
-          : passkeyThrottle,
-      homeRealmThrottle:
-        "homeRealmThrottle" in options
-          ? options.homeRealmThrottle
-          : homeRealmThrottle,
-      ssoStartThrottle:
-        "ssoStartThrottle" in options
-          ? options.ssoStartThrottle
-          : ssoStartThrottle,
-      verifyThrottle:
-        "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
-      deviceThrottle:
-        "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
-    },
-    options.telemetry,
-  )
-    .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
-    // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
-    .all("/readyz", async ({ request }) => {
-      if (request.method !== "GET") return new Response(null, { status: 404 });
-      const report = await (options.ready ?? readyz)();
-      return Response.json(report, {
-        status: report.status === "ok" ? 200 : 503,
-        headers: { "cache-control": "no-store" },
-      });
-    })
-    .all(LOGO_PATH, ({ request }) => serveLogo(request))
-    // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/tls-ask.ts).
-    .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
-    .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
-    .bodyLimit(BODY_LIMIT);
+export function createApp(options: AppOptions) {
+  const { ide, requireClientHeader: requireClient } = options;
+  const base = baseOf(options);
   const mounted = (
     options.oauth === undefined ? base : mountOAuth(base, options.oauth)
   ).plugin((app) =>
     graphql(app, {
       schema,
       ide: ide ? "apollo-sandbox" : false,
+      sandbox: { initialHeaders: { [CLIENT_HEADER]: "apollo-sandbox" } },
       // Introspection follows the IDE: off wherever the IDE is.
       introspection: ide,
       onUnexpected: reportUnexpected,
       plugins: [
+        useClientHeader(requireClient),
         useSameOriginJson(),
         useWithoutQuotedValues(),
         janusPlugin(),
@@ -145,9 +120,9 @@ export function createApp(
           : [
               oauthContext(
                 { serverFor: options.oauth.serverFor },
-                options.scopeTexts ?? scopeTextsFor,
-                options.detailTexts ?? detailTextsFor,
-                options.agents ?? agentsFor,
+                options.scopeTexts,
+                options.detailTexts,
+                options.agents,
               ),
             ]),
       ],
@@ -169,14 +144,13 @@ export function createApp(
             // values): ten items assumed per list put the UI's Applications read at 24 530, over
             // graxia's default 5 000, refused with HTTP 200 and no data. The caller is an
             // authenticated, verified admin, and the limit still refuses a read that multiplies
-            // those lists (aliases). Spec: `modules/resources/cost.spec.ts`.
+            // those lists (aliases). Spec: `modules/resources/resources.cost.console.spec.ts`.
             limits: { cost: { max: CONSOLE_MAX_COST } },
             onUnexpected: reportUnexpected,
             plugins: [
-              // First: aliased invitations are counted before anything runs.
-              ...(consoleOptions.budgets === undefined
-                ? []
-                : [useInviteBudget(consoleOptions.budgets.inviteCaller)]),
+              useClientHeader(requireClient),
+              // Second, after the client header: aliased invitations are counted before anything runs.
+              useInviteBudget(consoleOptions.budgets.inviteCaller),
               useWithoutQuotedValues(),
               useConsole(consoleOptions),
             ],
@@ -189,7 +163,4 @@ export function createApp(
         );
 }
 
-// The app the server runs.
-export const app = createApp();
-
-export type App = typeof app;
+export type App = ReturnType<typeof createApp>;

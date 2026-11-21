@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import { mongo } from "@/config/db";
-import { PLATFORM_TENANT_SLUG } from "./slug";
+import { defined } from "~/narrow";
+import { quietTenants } from "~/ports";
+import { overriding } from "~/proxy-over";
 import {
   InvalidSlugError,
   PlatformTenantProtectedError,
   SlugTakenError,
 } from "./tenants.errors";
+import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { TenantsService } from "./tenants.service";
 
 // The wired collection: it carries the slug hooks (src/config/db.ts).
@@ -14,6 +17,8 @@ const collection = mongo.db.tenants;
 const hosts: string[][] = [];
 const logged: string[] = [];
 const service = new TenantsService(collection, {
+  ...quietTenants,
+  now: () => new Date(),
   domain: "clavix.test",
   onHostsChanged: (changed) => {
     hosts.push(changed);
@@ -33,6 +38,9 @@ describe("TenantsService onCreated", () => {
     const created: string[] = [];
     const quiet: string[] = [];
     const ok = new TenantsService(collection, {
+      ...quietTenants,
+      now: () => new Date(),
+      log: () => {},
       domain: "clavix.test",
       onCreated: (id) => {
         created.push(id);
@@ -42,6 +50,8 @@ describe("TenantsService onCreated", () => {
     expect(created).toEqual([tenant._id.toHexString()]);
 
     const failing = new TenantsService(collection, {
+      ...quietTenants,
+      now: () => new Date(),
       domain: "clavix.test",
       onCreated: () => {
         throw new Error("keys down");
@@ -122,7 +132,7 @@ describe("TenantsService", () => {
   test("the platform tenant cannot be suspended or deleted", async () => {
     const platform = await collection.findFirst({ slug: PLATFORM_TENANT_SLUG });
     expect(platform).toBeDefined();
-    const id = (platform as NonNullable<typeof platform>)._id;
+    const id = defined(platform, "the platform tenant")._id;
     await expect(service.suspend(id)).rejects.toThrow(
       PlatformTenantProtectedError,
     );
@@ -155,6 +165,8 @@ describe("TenantsService", () => {
 
   test("a hook that throws is logged and the write stands", async () => {
     const failing = new TenantsService(collection, {
+      ...quietTenants,
+      now: () => new Date(),
       domain: "clavix.test",
       onHostsChanged: () => {
         throw new Error("redis down");
@@ -174,30 +186,74 @@ describe("TenantsService", () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     // One racing write after the first read: the retry reads again and wins.
     let raced = 0;
-    const racing = {
-      getById: async (id: never) => {
-        const found = await collection.getById(id);
+    const racing = overriding(
+      collection,
+      "getById",
+      async (...args: Parameters<typeof collection.getById>) => {
+        const found = await collection.getById(...args);
         if (raced++ === 0) await collection.update(found._id, { name: "B" });
         return found;
       },
-      update: collection.update.bind(collection),
-    } as unknown as typeof collection;
-    const once = new TenantsService(racing, { domain: "clavix.test" });
+    );
+    const once = new TenantsService(racing, {
+      ...quietTenants,
+      now: () => new Date(),
+      domain: "clavix.test",
+      log: () => {},
+    });
     expect((await once.suspend(tenant._id)).status).toBe("suspended");
     // Two racing writes: the second conflict reaches the caller.
     raced = -1;
-    const always = {
-      getById: async (id: never) => {
-        const found = await collection.getById(id);
+    const always = overriding(
+      collection,
+      "getById",
+      async (...args: Parameters<typeof collection.getById>) => {
+        const found = await collection.getById(...args);
         await collection.update(found._id, { name: `N${raced++}` });
         return found;
       },
-      update: collection.update.bind(collection),
-    } as unknown as typeof collection;
+    );
     await expect(
-      new TenantsService(always, { domain: "clavix.test" }).reactivate(
-        tenant._id,
-      ),
+      new TenantsService(always, {
+        ...quietTenants,
+        now: () => new Date(),
+        domain: "clavix.test",
+        log: () => {},
+      }).reactivate(tenant._id),
+    ).rejects.toThrow(OptimisticLockError);
+  });
+
+  test("a policy change retries three times: two races win, a third reaches the caller", async () => {
+    const tenant = await service.create({ slug: "acme", name: "Acme" });
+    let reads = 0;
+    const racing = (limit: number) =>
+      overriding(
+        collection,
+        "getById",
+        async (...args: Parameters<typeof collection.getById>) => {
+          const found = await collection.getById(...args);
+          if (reads++ < limit) {
+            await collection.update(found._id, { name: `N${reads}` });
+          }
+          return found;
+        },
+      );
+    const twice = new TenantsService(racing(2), {
+      ...quietTenants,
+      now: () => new Date(),
+      domain: "clavix.test",
+      log: () => {},
+    });
+    await twice.updateSignIn(tenant._id, (t) => t.signIn);
+    expect(reads).toBe(3);
+    reads = 0;
+    await expect(
+      new TenantsService(racing(3), {
+        ...quietTenants,
+        now: () => new Date(),
+        domain: "clavix.test",
+        log: () => {},
+      }).updateSignIn(tenant._id, (t) => t.signIn),
     ).rejects.toThrow(OptimisticLockError);
   });
 

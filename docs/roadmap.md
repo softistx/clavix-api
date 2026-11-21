@@ -7,6 +7,13 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
+  `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
+  the `<name>.<role>.ts` shape with the console's resolvers inside their owning module; errors go
+  through one `fail()` with an inventory (today's codes unchanged); list resolvers batch their reads;
+  and `/graphql` requires a client header once the UI sends it
+  ([#401](https://github.com/softistx/clavix-api/issues/401)).
+
 - **Self-service e-mail verification** (API shipped, UI in progress) — a signed-in user asks for
   a verification mail and confirms it with the link's token (stable codes for invalid, throttled
   and done); the OIDC `email_verified` claim follows the flag; the console is refused with

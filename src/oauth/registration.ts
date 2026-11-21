@@ -5,7 +5,8 @@ import {
   type OAuthRegistration,
   redirectUriProblem,
 } from "@softistx/janus-oauth";
-import type { AgentsPolicy } from "@/modules/oauth-policy/oauth-policy.schema";
+import type { AgentsPolicy } from "@/modules/oauth-policy";
+import { unique } from "@/shared/values";
 
 /**
  * The transport of the Client ID Metadata Documents fetch. Production uses
@@ -19,8 +20,6 @@ export type MetadataTransport = Pick<
 
 /** The ports a metadata document may be served on (`allowPorts`): the standard HTTPS port. */
 export const DEFAULT_METADATA_PORTS: readonly number[] = [443];
-
-const unique = (list: readonly string[]) => [...new Set(list)];
 
 /**
  * janus's `registration` for a tenant's agents policy (M3, D7 and D8).

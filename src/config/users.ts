@@ -1,20 +1,21 @@
-import { adminInvitationHooks } from "@/console/modules/admins/accept";
 import { userKey } from "@/console/modules/user-key";
 import { janusListener } from "@/events/janus-listener";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { adminInvitationHooks } from "@/modules/admins";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { createTenantAuth, secondFactorKeysOf } from "@/modules/users";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import { secondFactorKeysOf } from "@/users/second-factor-keys";
-import { createTenantAuth } from "@/users/tenant-auth";
 import { access } from "./access";
 import { connectionsService } from "./connections";
 import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { masterKeys, secretBox } from "./keys";
+import { noInvitationHooks } from "./no-ops";
 import { oauthDb } from "./oauth-db";
+import { warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 
 // What accepting an invitation does: on the `clavix` tenant (the console's
-// users) an admin invitation grants its console role; nothing more elsewhere.
+// users) an admin invitation grants its console role; none elsewhere (`noInvitationHooks`).
 const adminHooks = (tenant: ResolvedTenant) =>
   adminInvitationHooks({
     access,
@@ -35,11 +36,17 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
   {
     resolver: tenantResolver,
     db: oauthDb,
+    log: warn,
     secondFactorKeys: secondFactorKeysOf(masterKeys),
     secrets: secretBox,
     connections: connectionsService,
     events: (tenant) => janusListener(tenant.tenantId, eventBus),
     invitationHooks: (tenant) =>
-      tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks(tenant) : undefined,
+      tenant.slug === PLATFORM_TENANT_SLUG
+        ? adminHooks(tenant)
+        : noInvitationHooks,
   },
 );
+
+/** The users module as the services registry hands it out: the per-tenant janus instances and the OAuth ports built on them. */
+export const usersService = { janusIssuers, authFor, claimsFor, forTenant };

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-// src/config/env.ts checks Bun.env once, when it is first imported: a spec
+// src/config/env/index.ts checks Bun.env once, when it is first imported: a spec
 // gives it a fresh copy (a query string makes a new module) under the values it
 // tests.
 let loads = 0;
@@ -17,7 +17,7 @@ const load = async (values: Record<string, string | undefined>) => {
   set(values);
   try {
     loads += 1;
-    return await import(`./env.ts?load=${loads}`);
+    return await import(`./env/index.ts?load=${loads}`);
   } finally {
     set(before);
   }
@@ -31,6 +31,7 @@ const clean = {
   CLAVIX_KEYS_MASTER_KEY: undefined,
   CLAVIX_SMTP_URL: undefined,
   CLAVIX_GRAPHQL_IDE: undefined,
+  CLAVIX_REQUIRE_CLIENT_HEADER: undefined,
 };
 
 const masterKey = Buffer.alloc(32, 7).toString("base64");
@@ -238,4 +239,15 @@ test("the GraphQL IDE: on under development, off elsewhere, refused in productio
   await expect(
     load({ ...production, CLAVIX_GRAPHQL_IDE: "true" }),
   ).rejects.toThrow("CLAVIX_GRAPHQL_IDE");
+});
+
+test("the client header is optional by default and only true or false are accepted", async () => {
+  expect((await load(clean)).env.CLAVIX_REQUIRE_CLIENT_HEADER).toBe(false);
+  expect(
+    (await load({ ...clean, CLAVIX_REQUIRE_CLIENT_HEADER: "true" })).env
+      .CLAVIX_REQUIRE_CLIENT_HEADER,
+  ).toBe(true);
+  await expect(
+    load({ ...clean, CLAVIX_REQUIRE_CLIENT_HEADER: "yes" }),
+  ).rejects.toThrow("CLAVIX_REQUIRE_CLIENT_HEADER");
 });

@@ -11,9 +11,11 @@
       "!!**/dist",
       "!!**/generated",
       "!!schema.graphql",
+      "!!console.schema.graphql",
       "!!docs/plans"
     ]
   },
+  "plugins": ["./lint/graphql-constant-names.grit"],
   "formatter": {
     "enabled": true,
     "indentStyle": "space"

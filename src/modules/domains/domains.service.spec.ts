@@ -1,16 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
-import { QuotaExceededError } from "@/modules/usage/quota";
-import type { TxtAnswer, TxtResolver } from "./dns";
+import { QuotaExceededError } from "@/modules/usage";
+import { instance } from "~/narrow";
+import { quietDomains } from "~/ports";
+import type { TxtAnswer, TxtResolver } from "./domains.dns";
 import { DomainError } from "./domains.errors";
-import {
-  DomainStore,
-  mintToken,
-  RECHECK_GRACE_DAYS,
-  VERIFY_COOLDOWN_SECONDS,
-} from "./domains.service";
-import type { DomainSystemEvent } from "./events";
+import type { DomainSystemEvent } from "./domains.events";
+import { RECHECK_GRACE_DAYS, VERIFY_COOLDOWN_SECONDS } from "./domains.rules";
+import { DomainsService } from "./domains.service";
+import { mintToken } from "./domains.utils";
 
 const collection = mongo.db.domains;
 const records = new Map<string, TxtAnswer>();
@@ -20,7 +19,8 @@ const dns: TxtResolver = {
 let clock = new Date("2026-11-12T12:00:00Z");
 const changed: string[][] = [];
 const events: DomainSystemEvent[] = [];
-const store = new DomainStore(collection, {
+const store = new DomainsService(collection, {
+  ...quietDomains,
   dns,
   platformDomain: "clavix.test",
   now: () => clock,
@@ -62,15 +62,6 @@ const addVerified = async (tenant: ObjectId, host: string) => {
   publish(claim.host, claim.txtToken);
   return (await store.verify(tenant, claim._id.toHexString())).domain;
 };
-
-describe("tokens", () => {
-  test("are unguessable and distinct", () => {
-    const a = mintToken();
-    expect(a).toStartWith("clavix-verify=");
-    expect(a.length).toBeGreaterThan(40);
-    expect(mintToken()).not.toBe(a);
-  });
-});
 
 describe("add", () => {
   test("normalises, is idempotent, starts pending with its own token", async () => {
@@ -163,11 +154,9 @@ describe("verify", () => {
     clock = new Date(clock.getTime() + 20_000);
     publish("auth.acme.com", claim.txtToken);
     const refused = await store.verify(A, id).catch((error: unknown) => error);
-    expect(refused).toBeInstanceOf(DomainError);
-    expect((refused as DomainError).code).toBe("VERIFY_COOLDOWN");
-    expect((refused as DomainError).retryAfter).toBe(
-      VERIFY_COOLDOWN_SECONDS - 20,
-    );
+    const cooldown = instance(refused, DomainError);
+    expect(cooldown.code).toBe("VERIFY_COOLDOWN");
+    expect(cooldown.retryAfter).toBe(VERIFY_COOLDOWN_SECONDS - 20);
     // The refused call neither looked up DNS nor moved the claim's checkedAt.
     expect((await store.find(A, id))?.status).toBe("pending");
     clock = new Date(clock.getTime() + (VERIFY_COOLDOWN_SECONDS - 20) * 1_000);
@@ -205,7 +194,8 @@ describe("verify", () => {
 
   test("an event that cannot be recorded does not fail the verification", async () => {
     const logged: string[] = [];
-    const failing = new DomainStore(collection, {
+    const failing = new DomainsService(collection, {
+      ...quietDomains,
       dns,
       platformDomain: "clavix.test",
       now: () => clock,
@@ -272,7 +262,10 @@ describe("recheckAll", () => {
 
   test("a record still there keeps the domain verified", async () => {
     await addVerified(A, "auth.acme.com");
-    expect(await store.recheckAll()).toEqual({ checked: 1, unverified: 0 });
+    expect(await store.recheckAll(async () => {})).toEqual({
+      checked: 1,
+      unverified: 0,
+    });
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
   });
 
@@ -280,7 +273,7 @@ describe("recheckAll", () => {
     await addVerified(A, "auth.acme.com");
     records.set("_clavix.auth.acme.com", { kind: "failed" });
     clock = new Date(clock.getTime() + 30 * DAY);
-    expect((await store.recheckAll()).unverified).toBe(0);
+    expect((await store.recheckAll(async () => {})).unverified).toBe(0);
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
   });
 
@@ -309,9 +302,9 @@ describe("recheckAll", () => {
   test("the record coming back resets the grace", async () => {
     const claim = await addVerified(A, "auth.acme.com");
     records.clear();
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     publish("auth.acme.com", claim.txtToken);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     const stored = await collection.findById(claim._id);
     expect(stored?.failingSince).toBeNull();
   });
@@ -320,9 +313,9 @@ describe("recheckAll", () => {
     const claim = await addVerified(A, "auth.acme.com");
     await store.setPrimary(A, claim._id.toHexString());
     records.clear();
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     clock = new Date(clock.getTime() + 8 * DAY);
-    await store.recheckAll();
+    await store.recheckAll(async () => {});
     expect(await store.primaryHostOf(A)).toBe("auth.acme.com");
     expect(await store.tenantOfHost("auth.acme.com")).toEqual(A);
     expect(await store.verifiedHostsOf(A)).toEqual([]);

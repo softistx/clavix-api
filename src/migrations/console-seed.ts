@@ -3,7 +3,6 @@ import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { getCollection } from "@softistx/mongo";
 import type { Db } from "mongodb";
-import { registerClient } from "@/clients/register-client";
 import { createAccess } from "@/console/access";
 import {
   CONSOLE_CLIENT_ID,
@@ -11,18 +10,31 @@ import {
   consoleAudience,
   consoleRedirectUri,
 } from "@/console/identity";
-import { registerResource } from "@/modules/resources/register-resource";
-import { resources } from "@/modules/resources/resources.model";
-import { scopes } from "@/modules/resources/scopes.model";
+import { registerClient } from "@/modules/clients";
+import type { ClientDetailTypes } from "@/modules/resources";
+import {
+  detailTypes,
+  mongoDetailTypeClients,
+  ResourcesService,
+  resources,
+  scopes,
+} from "@/modules/resources";
 import {
   issuerOf,
+  PLATFORM_TENANT_SLUG,
   type PublicOrigin,
   partitionOf,
-} from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { tenants } from "@/modules/tenants/tenants.model";
+  tenants,
+} from "@/modules/tenants";
+import { userinfoOf } from "@/oauth/building";
 
 export const NAME = "Clavix console";
+
+// A frozen migration reads nothing from `src/config`: the console's own client
+// lists no detail types, and the clock is `new Date()`.
+const noDetailTypes: ClientDetailTypes = {
+  namesOf: async () => new Set<string>(),
+};
 
 /**
  * Seeds what the console signs in with, in the `clavix` tenant: the console
@@ -37,22 +49,22 @@ export async function seedConsole(
 ): Promise<{ clientSecret: string | null }> {
   const collection = getCollection(db, tenants);
   const findTenant = (slug: string) => collection.findFirst({ slug });
-  await registerResource(
-    {
-      collection: getCollection(db, resources),
-      scopes: getCollection(db, scopes),
-      findTenant,
-      issuerOf: (slug) => issuerOf(slug, origin),
-    },
-    {
-      tenant: PLATFORM_TENANT_SLUG,
-      uri: consoleAudience(origin),
-      name: NAME,
-      scopes: CONSOLE_SCOPES,
-    },
-  );
+  const service = new ResourcesService({
+    resources: getCollection(db, resources),
+    scopes: getCollection(db, scopes),
+    detailTypes: getCollection(db, detailTypes),
+    clients: mongoDetailTypeClients(db),
+    userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
+    findTenant,
+  });
+  await service.registerResource({
+    tenant: PLATFORM_TENANT_SLUG,
+    uri: consoleAudience(origin),
+    name: NAME,
+    scopes: CONSOLE_SCOPES,
+  });
   const client = await registerClient(
-    { db, findTenant },
+    { db, findTenant, now: () => new Date(), detailTypes: noDetailTypes },
     {
       tenant: PLATFORM_TENANT_SLUG,
       name: NAME,

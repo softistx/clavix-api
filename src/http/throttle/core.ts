@@ -104,7 +104,7 @@ export function createThrottle(
   limits: BoundLimits,
   refuse: (result: LimitResult) => Error,
   skipped: string,
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): Throttle {
   const options = { timeoutMs: REDIS_TIMEOUT_MS };
   const refusals = new WeakSet<Error>();
@@ -171,7 +171,7 @@ export function createUserThrottle(
   limits: UserBoundLimits,
   refuse: (result: LimitResult) => Error,
   skipped: string,
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): UserThrottle {
   const shared = createThrottle(limits, refuse, skipped, log);
   return {

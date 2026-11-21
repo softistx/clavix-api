@@ -1,14 +1,15 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
-import { partitionOf } from "@/modules/tenants/identity";
-import { UsageService } from "@/modules/usage/usage.service";
+import { partitionOf } from "@/modules/tenants";
+import { UsageService } from "@/modules/usage";
 import { agentClientsService } from "./agent-clients";
 import { connectionsService } from "./connections";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { redis } from "./redis";
-import { domainStore } from "./tenancy";
-import { webhookEndpoints } from "./webhook-endpoints";
+import { clock, warn } from "./runtime";
+import { domainsService } from "./tenancy";
+import { webhooksService } from "./webhooks-service";
 
 // The tenant's partition of the janus store counts its own registered clients
 // (`countClients({ source })`, on the `source` index `db:sync` creates).
@@ -42,9 +43,11 @@ export const usageService = new UsageService(
       return Math.max(0, registered - agents);
     },
     agents: (tenantId) => agentClientsService.count(tenantId),
-    webhooks: (tenantId) => webhookEndpoints.count(tenantId),
+    webhooks: (tenantId) => webhooksService.countEndpoints(tenantId),
     connections: (tenantId) => connectionsService.count(tenantId),
-    domains: (tenantId) => domainStore.count(new ObjectId(tenantId)),
+    domains: (tenantId) => domainsService.count(new ObjectId(tenantId)),
   },
   redis?.mau,
+  warn,
+  clock,
 );

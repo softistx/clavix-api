@@ -5,7 +5,7 @@ import { migrate } from "@softistx/mongo/migrations";
 import type { Db } from "mongodb";
 import { CONSOLE_CLIENT_ID } from "@/console/identity";
 import { tenants } from "@/modules/collections";
-import { type PublicOrigin, partitionOf } from "@/modules/tenants/identity";
+import { type PublicOrigin, partitionOf } from "@/modules/tenants";
 import { freshMigrationDb } from "~/migrations";
 import { clavixTenant } from "./2026-11-10-clavix-tenant.migration";
 import { oauthPolicyMigration } from "./2026-11-16-oauth-policy.migration";
@@ -67,7 +67,7 @@ describe(id, () => {
     expect(await requireParAndDpopOnConsole(db)).toBe(false);
     const twice = await platform();
     expect(twice?.version).toBe(once?.version ?? -1);
-    expect(twice?.oauth).toEqual(once?.oauth as never);
+    expect(twice?.oauth).toEqual(once?.oauth);
     expect(await consoleClient()).toEqual(client);
   });
 
@@ -122,12 +122,20 @@ describe(id, () => {
   });
 
   test("the registered migration runs up then down", async () => {
-    await consolePushedDpopMigration.up({ db } as never);
+    await consolePushedDpopMigration.up({
+      db,
+      client: db.client,
+      session: undefined,
+    });
     expect((await platform())?.oauth.dpop.required).toBe(true);
     expect((await consoleClient())?.requirePushedAuthorizationRequests).toBe(
       true,
     );
-    await consolePushedDpopMigration.down?.({ db } as never);
+    await consolePushedDpopMigration.down?.({
+      db,
+      client: db.client,
+      session: undefined,
+    });
     expect((await platform())?.oauth.dpop.required).toBe(false);
   });
 });

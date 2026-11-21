@@ -1,11 +1,11 @@
 import type { ObjectId } from "mongodb";
-import { relatedOriginsOf } from "@/modules/domains/well-known";
+import { relatedOriginsOf } from "@/modules/domains";
 import {
   issuerOf,
   issuerOfHost,
   type PublicOrigin,
   partitionOf,
-} from "@/modules/tenants/identity";
+} from "@/modules/tenants";
 import { hostOfRequest, normalizeHost, slugOfHost } from "./host";
 import type { ResolvedTenant } from "./resolved-tenant";
 import { noTenantCache, type TenantCache } from "./tenant-cache";
@@ -43,14 +43,14 @@ export interface TenantResolverOptions {
   /**
    * Custom domains (A4): the tenant a non-slug host serves and a tenant's
    * primary host. Both are needed to resolve a custom host; the issuer follows
-   * the primary host (ADR-0032). Without it only slug hosts resolve.
+   * the primary host (ADR-0032).
    */
-  domains?: DomainDirectory;
-  /** The stored tenant with this id, in the trash or not. Needed with `domains`. */
-  lookupById?: (id: ObjectId) => Promise<TenantRecord | undefined>;
+  domains: DomainDirectory;
+  /** The stored tenant with this id, in the trash or not: how a custom host's tenant is read. */
+  lookupById: (id: ObjectId) => Promise<TenantRecord | undefined>;
   /** Where issuers live (`CLAVIX_DOMAIN`, scheme, port). */
   config: PublicOrigin;
-  log?: (message: string) => void;
+  log: (message: string) => void;
   /**
    * Seconds a resolved tenant stays cached. Default 60: also the bound on how
    * long a suspension can take to apply when its invalidation was lost.
@@ -130,17 +130,17 @@ async function loadTenant(
   if (slug !== null) {
     record = await options.lookup(slug);
   } else {
-    const id = await options.domains?.tenantOfHost(host);
-    record = id === undefined ? undefined : await options.lookupById?.(id);
+    const id = await options.domains.tenantOfHost(host);
+    record = id === undefined ? undefined : await options.lookupById(id);
   }
   const primary =
     record === undefined
       ? undefined
-      : await options.domains?.primaryHostOf(record._id);
+      : await options.domains.primaryHostOf(record._id);
   const verifiedHosts =
     record === undefined
       ? undefined
-      : await options.domains?.verifiedHostsOf(record._id);
+      : await options.domains.verifiedHostsOf(record._id);
   return toResolved(record, options.config, primary, verifiedHosts);
 }
 
@@ -193,15 +193,14 @@ export function createTenantResolver(
   options: TenantResolverOptions,
 ): TenantResolver {
   const { cache, config } = options;
-  const log = options.log ?? ((message) => console.warn(message));
+  const log = options.log;
 
   const resolveHost = async (raw: string) => {
     const host = normalizeHost(raw);
     if (host === null) return null;
     const slug = slugOfHost(host, config.domain);
-    // Only hosts of a valid slug shape (or, with custom domains, any other
-    // host, read from the domains by an indexed lookup) reach Mongo.
-    if (slug === null && options.domains === undefined) return null;
+    // Only hosts of a valid slug shape (or any other host, read from the
+    // domains by an indexed lookup) reach Mongo.
     // Under the platform apex but not a valid slug: never a custom domain.
     if (slug === null && host.endsWith(`.${config.domain}`)) return null;
     if (slug === null && host === config.domain) return null;

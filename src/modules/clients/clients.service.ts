@@ -1,46 +1,34 @@
+import { deleteClient } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import type { Db } from "mongodb";
-import type { CliTenant } from "@/cli/errors";
-import { clientIdOf, type registerClient } from "@/clients/register-client";
-import type { TokenExchangeRules } from "@/modules/client-policies/client-policies.model";
-import type { ClientPoliciesService } from "@/modules/client-policies/client-policies.service";
-import { CatalogError } from "@/modules/resources/catalog.errors";
-import type { ClientDetailTypes } from "@/modules/resources/detail-types/client-opt-in";
-import { partitionOf } from "@/modules/tenants/identity";
-import { type AgentsReader, agentKindsOf, refuseAgent } from "./client-agents";
-import { deleteClientAndRules } from "./client-deletion";
+import type { TokenExchangeRules } from "@/modules/client-policies";
+import { validateTokenExchange } from "@/modules/client-policies";
+import { CatalogError } from "@/modules/resources";
+import { partitionOf } from "@/modules/tenants";
+import type { CliTenant } from "@/shared/cli";
+import { registerForTenant } from "./clients.register";
 import {
-  type ClientRegistration,
-  type ClientView,
+  checkQuery,
+  checkSizes,
+  clientIdOf,
+  MAX_CURSOR,
+  sameClient,
+} from "./clients.rules";
+import { countClientViews, listClientViews } from "./clients.search";
+import type {
+  ClientListOptions,
+  ClientsServiceOptions,
+  ClientView,
+  CreateClientInput,
+  RegisterClientInput,
+  TokenExchangeInput,
+  UpdateClientInput,
+} from "./clients.types";
+import {
+  agentKindsOf,
   capability,
-  countClientViews,
-  listClientViews,
+  sentSettings,
   viewOf,
-} from "./client-listing";
-import { registerForTenant } from "./client-register";
-import { checkQuery, checkSizes, MAX_CURSOR, sameClient } from "./client-rules";
-import {
-  clientTokenExchange,
-  setClientTokenExchange,
-  tokenExchangesOf,
-} from "./client-token-exchange";
-
-export type { ClientView } from "./client-listing";
-
-export interface ClientsServiceOptions {
-  /** The plain driver `Db` of the janus OAuth collections (`oauthDb`). */
-  db: Db;
-  /** The clients' per-client rules, removed with the client. */
-  policies: ClientPoliciesService;
-  /**
-   * The tenant's agents: they are told apart in the listing, and a deleted
-   * client stops being one (it frees the `agents` quota).
-   */
-  agents?: AgentsReader;
-  /** The tenants' detail types a client may list (R3); without it none can be listed. */
-  detailTypes?: ClientDetailTypes;
-  now?: () => Date;
-}
+} from "./clients.utils";
 
 /**
  * A tenant's OAuth clients for the console. The janus store is the truth (one
@@ -61,37 +49,39 @@ export class ClientsService {
 
   private register(
     tenant: CliTenant,
-    input: Omit<Parameters<typeof registerClient>[1], "tenant">,
+    input: Omit<RegisterClientInput, "tenant">,
   ) {
-    return registerForTenant(
-      {
-        db: this.options.db,
-        now: this.options.now,
-        detailTypes: this.options.detailTypes,
-      },
-      tenant,
-      input,
-    );
+    const { db, now, detailTypes } = this.options;
+    return registerForTenant({ db, now, detailTypes }, tenant, input);
   }
 
-  /** The tenant's agents among some client ids (none without the agents store). */
+  /** The tenant's agents among some client ids. */
   private agentsOf(tenant: CliTenant) {
     return agentKindsOf(this.options.agents, tenant);
+  }
+
+  /**
+   * Refuses a write on an agent (dynamic or metadata): an agent is read-only in
+   * the console, whatever its id looks like. It answers as an unknown client, and
+   * runs before any validation that depends on the id.
+   */
+  private async refuseAgent(tenant: CliTenant, clientId: string) {
+    if ((await this.agentsOf(tenant)([clientId])).has(clientId)) {
+      throw new CatalogError("NOT_FOUND", "No such client");
+    }
+  }
+
+  private async require(tenant: CliTenant, clientId: string) {
+    const found = await this.find(tenant, clientId);
+    if (found === null) throw new CatalogError("NOT_FOUND", "No such client");
+    return found;
   }
 
   /**
    * One page of the tenant's clients. `kinds` keeps only those registrations
    * (`console`, `dynamic`, `metadata`); none: every one, the agents included.
    */
-  async list(
-    tenant: CliTenant,
-    options: {
-      after?: string | null;
-      limit: number;
-      q?: string | undefined;
-      kinds?: readonly ClientRegistration[] | undefined;
-    },
-  ) {
+  async list(tenant: CliTenant, options: ClientListOptions) {
     checkQuery(options.q);
     if ((options.after?.length ?? 0) > MAX_CURSOR) {
       throw new CatalogError("BAD_USER_INPUT", "Unknown cursor");
@@ -105,10 +95,7 @@ export class ClientsService {
   /** How many clients of the tenant match `q` and `kinds`, whatever the page. */
   async count(
     tenant: CliTenant,
-    options: {
-      q?: string | undefined;
-      kinds?: readonly ClientRegistration[] | undefined;
-    } = {},
+    options: Pick<ClientListOptions, "q" | "kinds"> = {},
   ) {
     checkQuery(options.q);
     return countClientViews(
@@ -133,17 +120,8 @@ export class ClientsService {
     return viewOf(record, await this.agentsOf(tenant)([clientId]));
   }
 
-  private async require(tenant: CliTenant, clientId: string) {
-    const found = await this.find(tenant, clientId);
-    if (found === null) throw new CatalogError("NOT_FOUND", "No such client");
-    return found;
-  }
-
   /** Whether `input` describes the stored client: a repeat of its creation. */
-  async matches(
-    tenant: CliTenant,
-    input: Parameters<ClientsService["create"]>[1],
-  ): Promise<boolean> {
+  async matches(tenant: CliTenant, input: CreateClientInput): Promise<boolean> {
     const clientId = input.clientId ?? clientIdOf(input.name);
     if (clientId === "") return false;
     const existing = await this.find(tenant, clientId);
@@ -153,22 +131,7 @@ export class ClientsService {
   /** A new client; `clientSecret` (confidential only) is returned here and nowhere else. */
   async create(
     tenant: CliTenant,
-    input: {
-      name: string;
-      type: "public" | "confidential";
-      redirectUris: readonly string[];
-      clientId?: string | undefined;
-      requirePar?: boolean | undefined;
-      dpopBound?: boolean | undefined;
-      /** The detail types the client may ask for (each a tenant type; needs `requirePar`). Default: none. */
-      detailTypes?: readonly string[] | undefined;
-      /** Default: `authorization_code` and `refresh_token`. */
-      grants?: readonly string[] | undefined;
-      /** The `client_credentials` scope ceiling (needs that grant, and a confidential client). */
-      allowedScopes?: readonly string[] | undefined;
-      /** The `client_credentials` default scopes, within `allowedScopes`. */
-      defaultScopes?: readonly string[] | undefined;
-    },
+    input: CreateClientInput,
   ): Promise<{ client: ClientView; clientSecret: string | null }> {
     checkSizes(input);
     const clientId = input.clientId ?? clientIdOf(input.name);
@@ -191,20 +154,7 @@ export class ClientsService {
       redirectUris: input.redirectUris,
       type: input.type,
       clientId,
-      ...(input.requirePar === undefined
-        ? {}
-        : { requirePar: input.requirePar }),
-      ...(input.dpopBound === undefined ? {} : { dpopBound: input.dpopBound }),
-      ...(input.grants === undefined ? {} : { grants: input.grants }),
-      ...(input.detailTypes === undefined
-        ? {}
-        : { detailTypes: input.detailTypes }),
-      ...(input.allowedScopes === undefined
-        ? {}
-        : { allowedScopes: input.allowedScopes }),
-      ...(input.defaultScopes === undefined
-        ? {}
-        : { defaultScopes: input.defaultScopes }),
+      ...sentSettings(input),
     });
     return {
       client: await this.require(tenant, registered.clientId),
@@ -216,18 +166,9 @@ export class ClientsService {
   async update(
     tenant: CliTenant,
     clientId: string,
-    input: {
-      name?: string | undefined;
-      redirectUris?: readonly string[] | undefined;
-      requirePar?: boolean | undefined;
-      dpopBound?: boolean | undefined;
-      detailTypes?: readonly string[] | undefined;
-      grants?: readonly string[] | undefined;
-      allowedScopes?: readonly string[] | undefined;
-      defaultScopes?: readonly string[] | undefined;
-    },
+    input: UpdateClientInput,
   ): Promise<ClientView> {
-    await refuseAgent(this.options.agents, tenant, clientId);
+    await this.refuseAgent(tenant, clientId);
     checkSizes(input);
     const current = await this.require(tenant, clientId);
     await this.register(tenant, {
@@ -235,55 +176,65 @@ export class ClientsService {
       redirectUris: input.redirectUris ?? current.redirectUris,
       type: current.type,
       clientId,
+      // Left out, `registerClient` keeps the stored detail types and scopes
+      // (a stale type stays; the scopes are dropped with the grant).
+      ...sentSettings(input),
+      // Kept as recorded unless the call changes them.
       requirePar:
         input.requirePar ?? current.requirePushedAuthorizationRequests,
       dpopBound: input.dpopBound ?? current.dpopBoundAccessTokens,
-      // Kept as recorded unless the call changes them.
       grants: input.grants ?? current.grantTypes,
-      // Left out, `registerClient` keeps the stored list (a stale type stays).
-      ...(input.detailTypes === undefined
-        ? {}
-        : { detailTypes: input.detailTypes }),
-      // Left out, `registerClient` keeps the stored scopes (dropped with the grant).
-      ...(input.allowedScopes === undefined
-        ? {}
-        : { allowedScopes: input.allowedScopes }),
-      ...(input.defaultScopes === undefined
-        ? {}
-        : { defaultScopes: input.defaultScopes }),
     });
     return this.require(tenant, clientId);
   }
 
   /** The client's token exchange rules (RFC 8693); `null` when it has none. */
-  tokenExchange(tenant: CliTenant, clientId: string) {
-    return clientTokenExchange(this.options.policies, tenant, clientId);
+  async tokenExchange(tenant: CliTenant, clientId: string) {
+    return (
+      (await this.options.policies.tokenExchange(tenant._id, clientId)) ?? null
+    );
   }
 
   /** The token exchange rules of these clients, by client id (one read). */
-  tokenExchangeOf(tenant: CliTenant, clientIds: readonly string[]) {
-    return tokenExchangesOf(this.options.policies, tenant, clientIds);
+  async tokenExchangeOf(tenant: CliTenant, clientIds: readonly string[]) {
+    return (
+      (await this.options.policies.tokenExchangeOf(tenant._id, clientIds)) ??
+      new Map<string, TokenExchangeRules>()
+    );
   }
 
-  /** Replaces the client's token exchange rules; see `setClientTokenExchange`. */
+  /**
+   * Replaces the client's token exchange rules. The client is a confidential
+   * one of the tenant, each target one of the tenant's resources
+   * (`resourceUris`), and the subject clients are `"any"` or a list of
+   * client ids (checked for shape only: a client may be created later), and
+   * `subjectAgents` also covers the tokens of the tenant's agents (D12).
+   * Delegation is the only mode.
+   */
   async setTokenExchange(
     tenant: CliTenant,
     clientId: string,
-    input: {
-      targetResources: readonly string[];
-      subjectClients: readonly string[] | "any";
-      subjectAgents?: boolean;
-    },
+    input: TokenExchangeInput,
     resourceUris: readonly string[],
   ): Promise<TokenExchangeRules> {
-    await refuseAgent(this.options.agents, tenant, clientId);
-    return setClientTokenExchange(
-      this.options.policies,
-      tenant,
-      await this.require(tenant, clientId),
+    await this.refuseAgent(tenant, clientId);
+    const client = await this.require(tenant, clientId);
+    if (client.type !== "confidential") {
+      throw new CatalogError(
+        "BAD_USER_INPUT",
+        "Only a confidential client can exchange tokens",
+      );
+    }
+    const { targets, subjects, agents } = validateTokenExchange(
       input,
       resourceUris,
     );
+    return this.options.policies.setTokenExchange(tenant._id, clientId, {
+      targetResources: targets,
+      subjectClients: subjects,
+      subjectAgents: agents,
+      mode: "delegation",
+    });
   }
 
   /** Mints a new secret (the old one stops working); shown here once. */
@@ -291,7 +242,7 @@ export class ClientsService {
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ client: ClientView; clientSecret: string }> {
-    await refuseAgent(this.options.agents, tenant, clientId);
+    await this.refuseAgent(tenant, clientId);
     const current = await this.require(tenant, clientId);
     if (current.type !== "confidential") {
       throw new CatalogError(
@@ -316,26 +267,37 @@ export class ClientsService {
     };
   }
 
+  /**
+   * Deletes the client. `unmanaged` is a record this service does not manage
+   * (not registered through the console or the script, and no recorded agent):
+   * it is left alone, and the caller has nothing to record. `removed` is
+   * `false` when it was not there. One read decides both, so the answer cannot
+   * disagree with what was done. The client goes first (nothing new can be
+   * granted to it), then its standing grants and their tokens are revoked, its
+   * rules removed: on a repeat too, so a run that stopped between the steps is
+   * finished.
+   */
   async delete(
     tenant: CliTenant,
     clientId: string,
   ): Promise<{ removed: boolean; unmanaged: boolean }> {
-    const tenantId = tenant._id.toHexString();
+    const { policies, agents } = this.options;
+    const store = this.storeOf(tenant);
     // A client the agents store knows is deleted like any other, a metadata
     // one included (it is fetched again, and recorded again, at its next use).
     const agent = (await this.agentsOf(tenant)([clientId])).has(clientId);
-    const result = await deleteClientAndRules(
-      this.storeOf(tenant),
-      this.options.policies,
-      tenant,
-      clientId,
-      (this.options.now ?? (() => new Date()))(),
-      agent,
-    );
-    // On a repeat too: a run that stopped between the two is finished.
-    if (!result.unmanaged) {
-      await this.options.agents?.remove(tenantId, clientId);
+    const record = await store.findClient(clientId);
+    if (record !== null && record.source !== "registered" && !agent) {
+      return { removed: false, unmanaged: true };
     }
-    return result;
+    const removed = await deleteClient(store, clientId, {
+      now: this.options.now(),
+    });
+    // The client's rules go with it, and it leaves the other clients' rules
+    // that name it as a subject.
+    await policies.deleteForClient(tenant._id, clientId);
+    await policies.removeSubjectClient(tenant._id, clientId);
+    await agents.remove(tenant._id.toHexString(), clientId);
+    return { removed, unmanaged: false };
   }
 }

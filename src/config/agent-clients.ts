@@ -1,15 +1,13 @@
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
-import { AgentClientsService } from "@/modules/agents/agent-clients.service";
-import type { AgentsFor } from "@/modules/consent/agent-marker";
+import { AgentsService } from "@/modules/agents";
+import type { AgentsFor } from "@/modules/consent";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { tenantResolver } from "./tenancy";
 
 /** The real agents store. The collection is tenant-owned: only this wiring and its module reach it. */
-export const agentClientsService = new AgentClientsService(
-  mongo.db.agentClients,
-);
+export const agentClientsService = new AgentsService(mongo.db.agentClients);
 
 /** Whether janus stored this client of the tenant from a metadata document (the partition is the tenant's). */
 export const isMetadataClient = async (

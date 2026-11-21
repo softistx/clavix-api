@@ -1,4 +1,4 @@
-import type { PublicOrigin } from "@/modules/tenants/identity";
+import type { PublicOrigin } from "@/modules/tenants";
 
 /** The console API's path on the graxia endpoint of `src/console`, apart from the hosted pages' `/graphql`. */
 export const CONSOLE_PATH = "/console/graphql";

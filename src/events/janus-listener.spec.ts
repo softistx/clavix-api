@@ -1,19 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import type { UserEvent } from "@softistx/janus";
+import { mintId, type UserEvent } from "@softistx/janus";
 import type { EventBus } from "./bus";
 import { janusListener } from "./janus-listener";
 import type { ClavixEvent } from "./types";
 
 const TENANT = "b".repeat(24);
 const at = new Date("2026-11-01T10:00:00Z");
+const USER = mintId(at.getTime());
 
 /** The auth events of a janus event; every janus event also reaches the webhooks. */
-async function run(type: string) {
+async function run(type: UserEvent["type"]) {
   const all = await runAll(type);
   return all.filter((event) => event.kind === "auth");
 }
 
-async function runAll(type: string) {
+async function runAll(type: UserEvent["type"]) {
   const emitted: ClavixEvent[] = [];
   const bus: Pick<EventBus, "emit"> = {
     emit: async (event) => {
@@ -23,7 +24,13 @@ async function runAll(type: string) {
   await janusListener(
     TENANT,
     bus,
-  )({ type, userId: "u1", occurredAt: at } as unknown as UserEvent);
+  )({
+    id: mintId(at.getTime()),
+    type,
+    userId: USER,
+    userType: "user",
+    occurredAt: at,
+  });
   return emitted;
 }
 
@@ -35,7 +42,7 @@ describe("janusListener", () => {
         tenantId: TENANT,
         type: "secondFactor.enabled",
         outcome: "success",
-        userId: "u1",
+        userId: USER,
         at,
       },
     ]);
@@ -63,7 +70,7 @@ describe("janusListener", () => {
       event: {
         type: "user.created",
         occurredAt: at,
-        data: { tenantId: TENANT, userId: "u1" },
+        data: { tenantId: TENANT, userId: USER },
       },
     });
   });

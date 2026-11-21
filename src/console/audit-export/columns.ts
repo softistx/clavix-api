@@ -1,4 +1,4 @@
-import type { StoredAuthEvent } from "@/modules/audit/auth-events.service";
+import type { StoredAuthEvent } from "@/modules/audit";
 import type { StoredAdminEvent } from "../admin-events/reader";
 
 /** One exported row: column name to text (`null`: an empty cell). */

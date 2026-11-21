@@ -1,0 +1,15 @@
+import { expect, test } from "bun:test";
+import { GraphQLError } from "graphql";
+import { instance } from "~/narrow";
+import { janusMasking } from "./auth.plugin";
+
+// An unexpected resolver error must not reach the client in production mode
+// (janus-graphql 0.24.2 fixed `janusMaskError()` leaking it under envelop 6; `janusGraxiaMaskError()` is the graxia one).
+test("an unexpected error is masked in production mode", () => {
+  const original = new GraphQLError("db password is hunter2", {
+    originalError: new Error("db password is hunter2"),
+  });
+  const masked = janusMasking.maskError(original, { correlationId: "c1" });
+  expect(JSON.stringify(masked)).not.toContain("hunter2");
+  expect(instance(masked, Error).message).toBe("Unexpected error.");
+});

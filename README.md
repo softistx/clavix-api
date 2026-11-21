@@ -95,7 +95,6 @@ one needs on top:
 | `CLAVIX_DEVICE_USER_LIMIT` / `CLAVIX_DEVICE_USER_WINDOW_SECONDS`         | device user-code lookups per signed-in user: 20 per 600 s (see "Device authorization grant")                                                                                                                                                   |
 | `CLAVIX_DEVICE_IP_LIMIT` / `CLAVIX_DEVICE_IP_WINDOW_SECONDS`             | device user-code lookups per client address and tenant: 30 per 600 s                                                                                                                                                                           |
 | `CLAVIX_DEVICE_TENANT_LIMIT` / `CLAVIX_DEVICE_TENANT_WINDOW_SECONDS`     | device user-code lookups per tenant: 300 per 3600 s                                                                                                                                                                                            |
-| `CLAVIX_RAR_CONSENT_READY`                                               | tenants whose code or device clients may list authorization detail types: slugs separated by commas, or `*`; default none (temporary, see "Authorization details")                                                                             |
 | `CLAVIX_REGISTER_IP_LIMIT` / `CLAVIX_REGISTER_IP_WINDOW_SECONDS`         | `/register` calls per client address and tenant: 20 per 3600 s (see "Agent registration throttle" in docs/operations.md)                                                                                                                       |
 | `CLAVIX_REGISTER_TENANT_LIMIT` / `CLAVIX_REGISTER_TENANT_WINDOW_SECONDS` | `/register` calls per tenant: 500 per 3600 s                                                                                                                                                                                                   |
 | `CLAVIX_METADATA_IP_LIMIT` / `CLAVIX_METADATA_IP_WINDOW_SECONDS`         | metadata-document fetches (`/authorize`, `/par`) per client address and tenant: 30 per 60 s                                                                                                                                                    |
@@ -115,6 +114,7 @@ one needs on top:
 | `CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`                                          | webhook requests in flight at once per tenant, all instances together: 4. One tenant's flood cannot starve another tenant's endpoints                                                                                                          |
 | `CLAVIX_WEBHOOKS_MAX_PENDING`                                            | webhook deliveries one tenant may hold in the queue: 5000. One more is refused (logged with ids, never retried)                                                                                                                                |
 | `CLAVIX_GRAPHQL_IDE`                                                     | `true` serves the GraphQL IDE (Apollo Sandbox) on `GET /graphql` and allows introspection of the hosted schema; default `true` under `bun dev` (`NODE_ENV=development`), `false` elsewhere, and `true` is refused in production                |
+| `CLAVIX_REQUIRE_CLIENT_HEADER`                                           | `true` makes `/graphql` and `/console/graphql` answer 403 `CLIENT_HEADER_REQUIRED` before parsing when `x-clavix-client` is missing or blank; default `false` until every caller sends it                                                      |
 | `CLAVIX_TRUSTED_PROXIES`                                                 | reverse proxies in front of the app; required in production (0 if none), default 0 elsewhere (see "Sign-in code limits")                                                                                                                       |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`                                            | optional: the OTLP/HTTP collector of traces and logs (D24); unset, nothing is exported (see operations, "Telemetry")                                                                                                                           |
 | `OTEL_EXPORTER_OTLP_HEADERS`                                             | optional: `key=value` pairs separated by commas, sent to the collector                                                                                                                                                                         |
@@ -159,7 +159,7 @@ Each tenant has its own signing keys (ADR-0010), kept in the `oauthSigningKeys` 
 `@softistx/janus-oauth-mongo`: the private JWK is encrypted with `CLAVIX_KEYS_MASTER_KEY`
 (AES-256-GCM) and the store of a tenant, partitioned by its id, cannot read another's. Janus signs;
 Clavix adds no `jose`.
-- `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (`src/config/keys.ts`; `tenantId` is the
+- `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (methods of `KeysService`, built in `src/config/keys.ts`; `tenantId` is the
   tenant's id in hex, `partitionOf`) give the OAuth endpoints the `SigningKeyStore` and the public JWKS.
 - A tenant gets its first key when it is created (`TenantsService.create`). If that call fails it is
   logged and the tenant stands; the hourly job creates the key within the hour.
@@ -167,7 +167,7 @@ Clavix adds no `jose`.
   default is public. A tenant with no key yet has an empty JWKS: the OAuth endpoints treat it as transient.
 - `CLAVIX_KEYS_MASTER_KEY` is generated with `openssl rand -base64 32`.
 - Rotation: ES256 keys sign for 90 days; the next key is published 48 h before it takes over and
-  a retired key stays published 24 h (`src/keys/policy.ts`). An hourly `key-rotation` job on
+  a retired key stays published 24 h (`src/modules/keys/keys.rules.ts`). An hourly `key-rotation` job on
   `@softistx/redis` (cron `0 * * * *`) runs the step over every active tenant, and the server runs
   one pass at start, which also gives the seeded `clavix` tenant its key. Without `REDIS_URL`
   (development) only the pass at start runs.
@@ -542,7 +542,7 @@ in `src/console/modules/index.ts`) and records it once its change is stored; AGE
 events" has the rules:
 
 ```ts
-// src/console/modules/tenants/index.ts
+// src/modules/tenants/tenants.console-guards.ts
 export const tenantsAudits: Audits = {
   "Mutation.renameTenant": "tenant.rename",
 };
@@ -929,9 +929,6 @@ action or enum value its type no longer defines (what the page could show is the
 only narrow them, a re-consent that leaves one out revokes the grant's tokens (one that asks for none keeps the standing grant), and a token
 exchange inherits them on the same resource and drops them on another.
 
-**Consent gate (temporary).** The hosted pages (clavix-ui) do not render `details` yet. Until they do, a client that shows a consent page (its grants include `authorization_code`, for `/authorize`, or the device
-grant, for the hosted device review) can list types only on a tenant listed in `CLAVIX_RAR_CONSENT_READY` (slugs
-separated by commas, or `*`; default none). A token-exchange-only client has no consent page and is not held back. The variable goes away with the hosted pages' details.
 Details travel in the 4 KiB `/authorize` URL or the 8 KiB `/par` body, so prefer `/par`.
 
 **Managing the types (console API).** `Resource.detailTypes` lists a resource's types;
@@ -1074,7 +1071,7 @@ tenant, not across tenants: the same person in two tenants is two users with two
 ## Users per tenant
 
 Each tenant has its own user pool (ADR-0008): one `@softistx/janus` instance per tenant
-(`createJanusIssuers`, `src/users`), built on its first request and rebuilt when the tenant's
+(`createJanusIssuers`, `src/modules/users`), built on its first request and rebuilt when the tenant's
 `version` moves, over its partition of the janus user stores (`partitioned*` collections,
 partition = the tenant's id in hex; `bun run db:sync` creates them). The same e-mail is two users in
 two tenants, and a user id, a session or a token of one tenant is unknown to another. An unknown
@@ -1084,7 +1081,7 @@ or suspended host has no instance.
 - **Lifetime**: 14 days, sliding (renewed once a day), and never more than 30 days after sign-in
   (`session.absolute`): past it the session is anonymous however recently it was used.
 - **Passkey relying party** (a default to confirm before the first production passkey, since a passkey is bound to its relying party for good): the tenant's own host. `rpIdOf(tenant)` is
-  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/users/rp.ts`); the verified custom domains are its related origins (`passkeys.relatedOrigins`, see Custom domains).
+  `<slug>.<CLAVIX_DOMAIN>` and `originOf(tenant)` its origin (`src/modules/users/users.rp.ts`); the verified custom domains are its related origins (`passkeys.relatedOrigins`, see Custom domains).
 - `authFor` and `claimsFor` (`src/config/users.ts`) are the OAuth issuers' ports, wired in
   `src/server.ts`. Consent and passkeys are below, and a client's `/authorize` needs a resource: userinfo's, or one
   registered with `resources:create`. `__Host-` cookies need https (Chrome accepts `localhost`).
@@ -1431,7 +1428,7 @@ A request that mixes consent and other root fields gets the 403. A refused reque
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` the server finishes the requests in flight, then waits up to 10 seconds for
-the sign-in code mails still being handed to the relay (`drain` in `src/modules/auth/outbox.ts`, an
+the sign-in code mails still being handed to the relay (`drain` in `src/modules/auth/auth.outbox.ts`, an
 `onStop` hook in `src/server.ts`), so a code is not lost; a mail still in flight after that is dropped
 and logged (the visitor asks again).
 

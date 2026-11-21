@@ -1,13 +1,13 @@
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { redis } from "@/config/redis";
-import { tenantsCollection, tenantsService } from "@/config/tenancy";
-import { parseTenantArgs, USAGE } from "@/modules/tenants/cli";
-import { issuerOf } from "@/modules/tenants/identity";
+import { tenantsService } from "@/config/tenancy";
 import {
-  registerTenant,
+  issuerOf,
+  parseTenantArgs,
   TenantInputError,
-} from "@/modules/tenants/register-tenant";
+  USAGE,
+} from "@/modules/tenants";
 
 // Creates a tenant until the console exists (M2), through the same service the
 // platform uses (slug rules, reserved slugs, first signing key). Idempotent:
@@ -21,10 +21,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
-  const result = await registerTenant(
-    { service: tenantsService, collection: tenantsCollection },
-    parseTenantArgs(args),
-  );
+  const result = await tenantsService.register(parseTenantArgs(args));
   console.log(
     JSON.stringify(
       {

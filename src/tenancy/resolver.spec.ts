@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
-import { signInPolicySchema } from "@/modules/sign-in-methods/sign-in.schema";
+import { oauthPolicySchema } from "@/modules/oauth-policy";
+import { signInPolicySchema } from "@/modules/sign-in-methods";
+import { noCustomDomains } from "~/ports";
 import { isLive } from "./resolved-tenant";
 import { createTenantResolver, type TenantRecord } from "./resolver";
 import { memoryTenantCache, type TenantCache } from "./tenant-cache";
@@ -14,11 +15,12 @@ const config = {
 
 function setup(
   records: TenantRecord[],
-  cache: TenantCache = memoryTenantCache(),
+  cache: TenantCache = memoryTenantCache(Date.now),
 ) {
   const lookups: string[] = [];
   const logged: string[] = [];
   const resolver = createTenantResolver({
+    ...noCustomDomains,
     lookup: async (slug) => {
       lookups.push(slug);
       return records.find((r) => r.slug === slug);
@@ -63,9 +65,11 @@ describe("resolveHost", () => {
 
   test("the issuer carries a configured scheme and port", async () => {
     const resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async () => acme,
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config: { scheme: "http", domain: "clavix.test", port: 3000 },
+      log: () => {},
     });
     expect((await resolver.resolveHost("acme.clavix.test"))?.issuer).toBe(
       "http://acme.clavix.test:3000",
@@ -84,7 +88,7 @@ describe("resolveHost", () => {
   test("a hit is stored for 60 s, none for 30 s", async () => {
     const stored: [string, unknown, number][] = [];
     const cache: TenantCache = {
-      ...memoryTenantCache(),
+      ...memoryTenantCache(Date.now),
       get: async () => undefined,
       set: (host, value, ttl) => {
         stored.push([host, value, ttl]);
@@ -197,7 +201,7 @@ describe("invalidate", () => {
 describe("cache-aside race", () => {
   test("a suspension between the read and the set does not leave a stale entry", async () => {
     const records: TenantRecord[] = [acme];
-    const inner = memoryTenantCache();
+    const inner = memoryTenantCache(Date.now);
     let resolver: ReturnType<typeof createTenantResolver>;
     let raced = false;
     const cache: TenantCache = {
@@ -213,6 +217,7 @@ describe("cache-aside race", () => {
       },
     };
     resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async (slug) => records.find((r) => r.slug === slug),
       cache,
       config,
@@ -229,7 +234,7 @@ describe("cache-aside race", () => {
 
   test("a creation between the read and the set drops the cached null", async () => {
     const records: TenantRecord[] = [];
-    const inner = memoryTenantCache();
+    const inner = memoryTenantCache(Date.now);
     let raced = false;
     const cache: TenantCache = {
       ...inner,
@@ -242,6 +247,7 @@ describe("cache-aside race", () => {
       },
     };
     const resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async (slug) => records.find((r) => r.slug === slug),
       cache,
       config,
@@ -256,7 +262,7 @@ describe("invalidate failure", () => {
   test("a failed delete is retried once", async () => {
     let calls = 0;
     const cache: TenantCache = {
-      ...memoryTenantCache(),
+      ...memoryTenantCache(Date.now),
       delete: async () => {
         calls++;
         if (calls === 1) throw new Error("down");
@@ -269,7 +275,7 @@ describe("invalidate failure", () => {
 
   test("two failures reach the caller", async () => {
     const cache: TenantCache = {
-      ...memoryTenantCache(),
+      ...memoryTenantCache(Date.now),
       delete: async () => {
         throw new Error("down");
       },
@@ -288,6 +294,7 @@ describe("custom domains", () => {
     primary?: string,
   ) {
     return createTenantResolver({
+      ...noCustomDomains,
       lookup: async (slug) => (slug === record.slug ? record : undefined),
       lookupById: async (id) => (id.equals(record._id) ? record : undefined),
       domains: {
@@ -295,7 +302,7 @@ describe("custom domains", () => {
         primaryHostOf: async () => primary,
         verifiedHostsOf: async () => [],
       },
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config,
       log: () => {},
     });
@@ -323,13 +330,14 @@ describe("custom domains", () => {
 
   test("carries the origins of the tenant's verified domains (ADR-0036), none without a directory", async () => {
     const resolver = createTenantResolver({
+      ...noCustomDomains,
       lookup: async () => acme,
       domains: {
         tenantOfHost: async () => undefined,
         primaryHostOf: async () => undefined,
         verifiedHostsOf: async () => ["login.acme.test", "auth.acme.com"],
       },
-      cache: memoryTenantCache(),
+      cache: memoryTenantCache(Date.now),
       config,
       log: () => {},
     });

@@ -3,48 +3,32 @@ import type { GraphQLContext } from "@softistx/alxia-graphql";
 import { telemetry as tracing } from "@softistx/alxia-telemetry";
 import type { JanusContext } from "@softistx/janus-graphql";
 import { type Telemetry, withAttributes } from "@softistx/telemetry";
-import { env } from "@/config/env";
-import { telemetry as appTelemetry } from "@/config/telemetry";
-import { tenantResolver } from "@/config/tenancy";
-import {
-  deviceThrottle,
-  homeRealmThrottle,
-  passkeyThrottle,
-  signInThrottle,
-  ssoStartThrottle,
-  verifyThrottle,
-} from "@/config/throttle";
 import type { ThrottleContext } from "@/http/throttle/context";
+import type { TenantJanus } from "@/modules/users/users.tenant-janus";
+import { isRecord } from "@/shared/values";
 import { isTenantless, tenantAttributes } from "@/telemetry/tenant";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
-import type { TenantJanus } from "@/users/tenant-janus";
 
 // The base: what every resolver reads, decorated or derived here.
 // The throttles of the anonymous operations (`ctx.signInThrottle`,
 // `ctx.passkeyThrottle`, `ctx.homeRealmThrottle`, `ctx.ssoStartThrottle`, `ctx.verifyThrottle`,
-// `ctx.deviceThrottle`; none: no extra limit) ride on the context, typed.
+// `ctx.deviceThrottle`; the no-op where there is no Redis) ride on the context, typed.
 // `tenant()` is the tenant the request's host names (`null`: none, a 404 for
 // the OAuth endpoints), resolved once per request, on first use.
 export function createBase(
-  resolver: TenantResolver = tenantResolver,
-  throttles: ThrottleContext = {
-    signInThrottle,
-    passkeyThrottle,
-    homeRealmThrottle,
-    ssoStartThrottle,
-    verifyThrottle,
-    deviceThrottle,
-  },
-  telemetry: Telemetry = appTelemetry,
+  resolver: TenantResolver,
+  throttles: ThrottleContext,
+  telemetry: Telemetry,
+  trustedProxies: number,
 ) {
-  // `ctx.ip`: the connection's address, or, behind CLAVIX_TRUSTED_PROXIES
+  // `ctx.ip`: the connection's address, or, behind `trustedProxies` (CLAVIX_TRUSTED_PROXIES, bound in `appPorts`)
   // proxies, the client X-Forwarded-For names (never believed beyond them).
   return (
     alxia(
-      env.CLAVIX_TRUSTED_PROXIES === 0
+      trustedProxies === 0
         ? {}
-        : { ip: forwardedIp({ trusted: env.CLAVIX_TRUSTED_PROXIES }) },
+        : { ip: forwardedIp({ trusted: trustedProxies }) },
     )
       // First, so the server span holds everything the request runs (D24).
       .use(
@@ -55,7 +39,6 @@ export function createBase(
           traced: (ctx) => !isTenantless(ctx.url.pathname),
         }),
       )
-      .decorate({ env })
       .decorate(throttles)
       .derive(({ request }) => {
         let tenant: Promise<ResolvedTenant | null> | undefined;
@@ -87,3 +70,20 @@ export type Base = ReturnType<typeof createBase>;
 // A resolver's context: graxia's and the base's. The generated `Resolvers` takes
 // it (codegen.ts: `contextType`).
 export type Context = Readonly<GraphQLContext<Base, JanusContext<TenantJanus>>>;
+
+/** Whether a context is the app's GraphQL context: the tenant reader, janus and the throttles. */
+export const isContext = (ctx: unknown): ctx is Context =>
+  isRecord(ctx) &&
+  typeof ctx["tenant"] === "function" &&
+  isRecord(ctx["janus"]) &&
+  isRecord(ctx["deviceThrottle"]);
+
+/**
+ * The app's GraphQL context. A context that is not it means the app is wired
+ * wrong (a package called back with another one): a plain `Error`, a masked
+ * 500 that is reported, never a `NOT_FOUND`.
+ */
+export const contextOf = (ctx: unknown): Context => {
+  if (!isContext(ctx)) throw new Error("The resolver context is not the app's");
+  return ctx;
+};

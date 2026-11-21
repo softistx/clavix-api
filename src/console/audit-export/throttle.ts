@@ -28,7 +28,7 @@ export type ExportThrottle = (tenantId: string) => Promise<number | null>;
 /** Redis down or slow: the export goes through, logged (it is authenticated and audited). */
 export function createExportThrottle(
   limit: Bound<{ tenantId: string }>,
-  log: (message: string) => void = (message) => console.warn(message),
+  log: (message: string) => void,
 ): ExportThrottle {
   return async (tenantId) => {
     const result = await consumeOrSkip(

@@ -1,17 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { createApp } from "@/app";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
+import { gqlOf } from "~/gql";
 
-const app = createApp();
+const app = createTestApp();
 const LEAK = "987654321";
-
-interface Body {
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 
 const post = (query: string, variables: unknown) =>
   app.request("http://acme.clavix.test/graphql", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
 
@@ -28,9 +26,9 @@ describe("variable coercion errors on the hosted /graphql", () => {
         'mutation V($c: String!) { verifySignInCode(challenge: "x", code: $c) { __typename } }',
         { c: code },
       );
-      const text = await response.text();
+      const text = await response.clone().text();
       expect(text).not.toContain(LEAK);
-      const [error] = (JSON.parse(text) as Body).errors ?? [];
+      const [error] = (await gqlOf(response)).errors ?? [];
       expect(error?.message).toContain('Variable "$c" got an invalid value');
       expect(error?.extensions?.code).toBe("BAD_USER_INPUT");
     });

@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
 import { graphqlClient } from "@softistx/alxia-graphql/testing";
+import { version } from "@/modules/health";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
 import { graphql } from "~/generated/graphql";
-import { createApp } from "./app";
-import { version } from "./modules/health";
+import { gqlOf } from "~/gql";
 
-const app = createApp();
+const app = createTestApp();
 
-const Health = graphql(`
+const HEALTH_QUERY = graphql(`
   query Health {
     health {
       status
@@ -22,7 +24,9 @@ test("GET /healthz answers ok and the version", async () => {
 });
 
 test("Query.health answers ok and the version through /graphql", async () => {
-  const result = await graphqlClient(app).query(Health);
+  const result = await graphqlClient(app, { headers: clientHeaders }).query(
+    HEALTH_QUERY,
+  );
   expect(result.data?.health).toEqual({
     status: "ok",
     version,
@@ -31,23 +35,20 @@ test("Query.health answers ok and the version through /graphql", async () => {
 
 // The page runs a third-party script on the origin that holds the session
 // cookie: it is never served unless the IDE is switched on (development).
-const openIde = (target: ReturnType<typeof createApp>) =>
+const openIde = (target: ReturnType<typeof createTestApp>) =>
   target.request("http://localhost/graphql", {
     headers: { accept: "text/html,application/xhtml+xml" },
   });
-const introspect = async (target: ReturnType<typeof createApp>) => {
+const introspect = async (target: ReturnType<typeof createTestApp>) => {
   const response = await target.request("http://localhost/graphql", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify({
       query:
         '{ __schema { queryType { name } } __type(name: "Query") { name } }',
     }),
   });
-  return (await response.json()) as {
-    data?: unknown;
-    errors?: { message: string }[];
-  };
+  return await gqlOf(response);
 };
 
 test("GET /graphql from a browser is not an IDE page by default", async () => {
@@ -65,13 +66,14 @@ test("the hosted schema is not introspected by default", async () => {
     "introspection",
   );
   // An ordinary query still runs.
-  expect((await graphqlClient(app).query(Health)).data?.health.status).toBe(
-    "ok",
-  );
+  expect(
+    (await graphqlClient(app, { headers: clientHeaders }).query(HEALTH_QUERY))
+      .data?.health.status,
+  ).toBe("ok");
 });
 
 test("with the IDE switched on (development) the page and introspection are back", async () => {
-  const dev = createApp({ ide: true });
+  const dev = createTestApp({ ide: true });
   const response = await openIde(dev);
   expect(response.headers.get("content-type")).toContain("text/html");
   expect((await introspect(dev)).errors).toBeUndefined();

@@ -1,28 +1,27 @@
 import { describe, expect, test } from "bun:test";
-import type { OAuthEvent } from "@softistx/janus-oauth";
+import type { OAuthEvent, OAuthEventType } from "@softistx/janus-oauth";
 import type { EventBus } from "./bus";
 import { oauthListener } from "./oauth-listener";
-import type { ClavixEvent } from "./types";
+import type { AuthEvent, ClavixEvent } from "./types";
 
 const TENANT = "b".repeat(24);
 const ISSUER = "https://acme.clavix.test";
 const at = new Date("2026-11-01T10:00:00Z");
 
 const event = (
-  type: string,
+  type: OAuthEventType,
   data: Record<string, unknown> = {},
   more: Record<string, unknown> = {},
-): OAuthEvent =>
-  ({
-    id: "0193-event",
-    type,
-    occurredAt: at,
-    issuer: ISSUER,
-    clientId: "c1",
-    userId: "u1",
-    data,
-    ...more,
-  }) as unknown as OAuthEvent;
+): OAuthEvent => ({
+  id: "0193-event",
+  type,
+  occurredAt: at,
+  issuer: ISSUER,
+  clientId: "c1",
+  userId: "u1",
+  data,
+  ...more,
+});
 
 async function run(e: OAuthEvent, tenant = TENANT) {
   const emitted: ClavixEvent[] = [];
@@ -36,7 +35,11 @@ async function run(e: OAuthEvent, tenant = TENANT) {
 }
 
 describe("oauthListener", () => {
-  const cases: [string, Record<string, unknown>, object][] = [
+  const cases: [
+    OAuthEventType,
+    Record<string, unknown>,
+    Pick<AuthEvent, "type" | "outcome" | "reason">,
+  ][] = [
     [
       "oauth.grant.created",
       { via: "device", grantId: "g" },
@@ -90,7 +93,7 @@ describe("oauthListener", () => {
           clientId: "c1",
           requestId: "0193-event",
           at,
-        } as ClavixEvent,
+        },
       ]);
     });
   }

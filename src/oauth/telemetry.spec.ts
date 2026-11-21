@@ -2,8 +2,10 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Exporter, Signal } from "@softistx/telemetry";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { buildTelemetry } from "@/telemetry/build";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
 import { createFlow } from "~/oauth-flow";
 
 // D24: every issuer's server is traced; the attributes never hold a token,
@@ -36,7 +38,7 @@ afterAll(async () => {
 });
 
 test("a token request is a span with its client, grant and tenant, and no secret", async () => {
-  const client = flow.clients["otel-a"] as { id: string; secret: string };
+  const client = defined(flow.clients["otel-a"], "the otel-a client");
   const { body } = await flow.authorizeCode("otel-a", "openid");
   const response = await flow.post(
     "otel-a",
@@ -45,7 +47,7 @@ test("a token request is a span with its client, grant and tenant, and no secret
     flow.basic(client.id, client.secret),
   );
   expect(response.status).toBe(200);
-  const tokens = (await response.json()) as { access_token: string };
+  const tokens = await jsonOf(response, tokenBody);
   await telemetry.flush();
 
   const span = signals.find(

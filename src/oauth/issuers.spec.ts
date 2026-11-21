@@ -6,13 +6,17 @@ import {
   type SigningKeyStore,
   s256Challenge,
 } from "@softistx/janus-oauth";
+import { z } from "zod";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
-import { TenantsService } from "@/modules/tenants/tenants.service";
+import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { jsonOf, tokenBody } from "~/json";
+import { defined } from "~/narrow";
+import { recordBody } from "~/oauth-bodies";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
+import { createTenantParOff } from "~/tenant-par-off";
 import { createClavixOAuthIssuers } from "./issuers";
 import type { AuthFor, SigningKeysFor } from "./ports";
 import { resolveIssuer } from "./resolution";
@@ -24,11 +28,16 @@ const REDIRECT = "https://app.example/callback";
 const config = { scheme: "https", domain: DOMAIN } as const;
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
+  log: () => {},
   lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
+  now: () => new Date(),
+  log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
@@ -65,6 +74,8 @@ const resourcesFor = () => ({
   [NO_SCOPE_RESOURCE]: { scopes: [] },
 });
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
   db: oauthDb,
@@ -141,12 +152,12 @@ const refresh = (slug: string, clientId: string, token: string) =>
     refresh_token: token,
   });
 
-interface Tokens {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
+const tokensBody = tokenBody.extend({
+  refresh_token: z.string(),
+  expires_in: z.number(),
+});
 const clients: Record<string, string> = {};
+const clientOf = (slug: string) => defined(clients[slug], `the ${slug} client`);
 
 async function setUp(slug: string) {
   await createTenantParOff(tenants, { slug, name: slug });
@@ -180,10 +191,10 @@ afterAll(async () => {
 
 describe("authorization code with PKCE", () => {
   test("the full flow ends in a JWT access token of 15 minutes and a refresh token", async () => {
-    const code = await codeFor("acme", clients["acme"] as string);
-    const response = await exchange("acme", clients["acme"] as string, code);
+    const code = await codeFor("acme", clientOf("acme"));
+    const response = await exchange("acme", clientOf("acme"), code);
     expect(response.status).toBe(200);
-    const tokens = (await response.json()) as Tokens;
+    const tokens = await jsonOf(response, tokensBody);
     expect(tokens.expires_in).toBe(15 * 60);
     expect(tokens.access_token.split(".")).toHaveLength(3);
     const server = await serverOf("acme");
@@ -197,57 +208,52 @@ describe("authorization code with PKCE", () => {
   });
 
   test("a wrong verifier is refused and a code is single-use", async () => {
-    const code = await codeFor("acme", clients["acme"] as string);
+    const code = await codeFor("acme", clientOf("acme"));
     const wrong = await post("acme", "/token", {
       grant_type: "authorization_code",
-      client_id: clients["acme"] as string,
+      client_id: clientOf("acme"),
       code,
       redirect_uri: REDIRECT,
       code_verifier: "w".repeat(64),
       resource: RESOURCE,
     });
     expect(wrong.status).toBe(400);
-    const good = await exchange("acme", clients["acme"] as string, code);
+    const good = await exchange("acme", clientOf("acme"), code);
     expect(good.status).toBe(400);
   });
 });
 
 describe("refresh tokens", () => {
   test("rotate on every use", async () => {
-    const code = await codeFor("acme", clients["acme"] as string);
-    const first = (await (
-      await exchange("acme", clients["acme"] as string, code)
-    ).json()) as Tokens;
-    const second = await refresh(
-      "acme",
-      clients["acme"] as string,
-      first.refresh_token,
+    const code = await codeFor("acme", clientOf("acme"));
+    const first = await jsonOf(
+      await exchange("acme", clientOf("acme"), code),
+      tokensBody,
     );
+    const second = await refresh("acme", clientOf("acme"), first.refresh_token);
     expect(second.status).toBe(200);
-    const rotated = (await second.json()) as Tokens;
+    const rotated = await jsonOf(second, tokensBody);
     expect(rotated.refresh_token).not.toBe(first.refresh_token);
     expect(rotated.access_token).not.toBe(first.access_token);
   });
 
   test("a reused refresh token revokes the whole grant", async () => {
-    const code = await codeFor("acme", clients["acme"] as string);
-    const first = (await (
-      await exchange("acme", clients["acme"] as string, code)
-    ).json()) as Tokens;
-    const second = (await (
-      await refresh("acme", clients["acme"] as string, first.refresh_token)
-    ).json()) as Tokens;
-    const reuse = await refresh(
-      "acme",
-      clients["acme"] as string,
-      first.refresh_token,
+    const code = await codeFor("acme", clientOf("acme"));
+    const first = await jsonOf(
+      await exchange("acme", clientOf("acme"), code),
+      tokensBody,
     );
+    const second = await jsonOf(
+      await refresh("acme", clientOf("acme"), first.refresh_token),
+      tokensBody,
+    );
+    const reuse = await refresh("acme", clientOf("acme"), first.refresh_token);
     expect(reuse.status).toBe(400);
     expect(await reuse.json()).toMatchObject({ error: "invalid_grant" });
     // The newest token went with the grant, and so did the access tokens.
     const newest = await refresh(
       "acme",
-      clients["acme"] as string,
+      clientOf("acme"),
       second.refresh_token,
     );
     expect(newest.status).toBe(400);
@@ -274,8 +280,12 @@ describe("a client's grant types (janus-oauth enforces them)", () => {
     const code = await codeFor("acme", client.id);
     const exchanged = await exchange("acme", client.id, code);
     expect(exchanged.status).toBe(200);
-    const tokens = (await exchanged.json()) as Tokens;
-    const refused = await refresh("acme", client.id, tokens.refresh_token);
+    const tokens = await jsonOf(exchanged, tokenBody);
+    const refused = await refresh(
+      "acme",
+      client.id,
+      tokens.refresh_token ?? "absent",
+    );
     expect(refused.status).toBe(400);
     expect(await refused.json()).toMatchObject({
       error: "unauthorized_client",
@@ -289,9 +299,10 @@ describe("a client's grant types (janus-oauth enforces them)", () => {
       redirectUris: [REDIRECT],
       grantTypes: ["authorization_code", "refresh_token"],
     });
-    const tokens = (await (
-      await exchange("acme", client.id, await codeFor("acme", client.id))
-    ).json()) as Tokens;
+    const tokens = await jsonOf(
+      await exchange("acme", client.id, await codeFor("acme", client.id)),
+      tokensBody,
+    );
     expect(
       (await refresh("acme", client.id, tokens.refresh_token)).status,
     ).toBe(200);
@@ -311,20 +322,17 @@ describe("a client's grant types (janus-oauth enforces them)", () => {
 
 describe("revocation", () => {
   test("revoking a refresh token ends its use", async () => {
-    const code = await codeFor("acme", clients["acme"] as string);
-    const tokens = (await (
-      await exchange("acme", clients["acme"] as string, code)
-    ).json()) as Tokens;
+    const code = await codeFor("acme", clientOf("acme"));
+    const tokens = await jsonOf(
+      await exchange("acme", clientOf("acme"), code),
+      tokensBody,
+    );
     const revoked = await post("acme", "/revoke", {
-      client_id: clients["acme"] as string,
+      client_id: clientOf("acme"),
       token: tokens.refresh_token,
     });
     expect(revoked.status).toBe(200);
-    const after = await refresh(
-      "acme",
-      clients["acme"] as string,
-      tokens.refresh_token,
-    );
+    const after = await refresh("acme", clientOf("acme"), tokens.refresh_token);
     expect(after.status).toBe(400);
   });
 });
@@ -337,7 +345,7 @@ describe("metadata", () => {
         "/.well-known/oauth-authorization-server",
       );
       expect(response.status).toBe(200);
-      const metadata = (await response.json()) as Record<string, unknown>;
+      const metadata = await jsonOf(response, recordBody);
       expect(metadata["issuer"]).toBe(`https://${slug}.${DOMAIN}`);
       expect(metadata["token_endpoint"]).toBe(
         `https://${slug}.${DOMAIN}/token`,
@@ -407,8 +415,8 @@ describe("rebuild on tenant change", () => {
 
 describe("tenant isolation", () => {
   test("A's code, tokens and client are refused on B", async () => {
-    const acme = clients["acme"] as string;
-    const globex = clients["globex"] as string;
+    const acme = clientOf("acme");
+    const globex = clientOf("globex");
     const code = await codeFor("acme", acme);
 
     // The code, with A's client and with B's.
@@ -427,9 +435,7 @@ describe("tenant isolation", () => {
     });
     expect((await get("globex", `/authorize?${query}`)).status).toBe(400);
 
-    const tokens = (await (
-      await exchange("acme", acme, code)
-    ).json()) as Tokens;
+    const tokens = await jsonOf(await exchange("acme", acme, code), tokensBody);
     // The refresh token, and the access token, on B.
     expect((await refresh("globex", acme, tokens.refresh_token)).status).toBe(
       400,

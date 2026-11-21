@@ -1,13 +1,13 @@
-import { createApp } from "@/app";
 import { createConsoleDeps } from "@/config/console";
+import { noBudgets } from "@/config/no-ops";
 import type { ConsoleBudgets } from "@/console/budgets";
 import type { ConsoleDirectory } from "@/console/context";
 import { CONSOLE_PATH } from "@/console/identity";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
 
-export interface ConsoleResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
+export type ConsoleResult = GqlResult;
 
 // The console's wiring with no OAuth server behind it: `authenticate` is
 // replaced below, so the token is never verified (console.spec.ts covers that).
@@ -36,10 +36,10 @@ export function consoleRequestAs(
   userId: string,
   {
     verified = true,
-    budgets,
+    budgets = noBudgets,
   }: { verified?: boolean; budgets?: ConsoleBudgets } = {},
 ) {
-  const app = createApp({
+  const app = createTestApp({
     console: {
       ...deps,
       budgets,
@@ -62,6 +62,7 @@ export function consoleRequestAs(
     app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer spec",
       },
@@ -81,8 +82,7 @@ export function consoleAs(
   return async (
     query: string,
     variables: Record<string, unknown> = {},
-  ): Promise<ConsoleResult> =>
-    (await (await request(query, variables)).json()) as ConsoleResult;
+  ): Promise<ConsoleResult> => gqlOf(await request(query, variables));
 }
 
 /** The first error's code, `undefined` when the call succeeded. */
@@ -101,11 +101,11 @@ export function exportAs(
     throttle?: (tenantId: string) => Promise<number | null>;
   },
 ) {
-  const app = createApp({
+  const app = createTestApp({
     console: {
       ...deps,
       directory: { ...deps.directory, emailVerified: async () => true },
-      ...(auditExport === undefined ? {} : { auditExport }),
+      auditExport: { ...deps.auditExport, ...auditExport },
       authenticate: async () => ({
         userId,
         clientId: "spec",

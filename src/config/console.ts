@@ -6,18 +6,20 @@ import {
   consoleAudience,
   consoleOrigin,
 } from "@/console/identity";
-import { createJanusAdmins } from "@/console/modules/admins/janus-admins";
-import { createJanusUsers } from "@/console/modules/users/janus-users";
 import type { ConsoleDeps } from "@/console/plugin";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { createJanusAdmins } from "@/modules/admins";
+import { UsersService } from "@/modules/users";
 import type { OAuthHandle } from "@/oauth/routes";
 import { access } from "./access";
 import { adminEventReader, adminEventRecorder } from "./admin-events";
 import { authEventsService } from "./audit";
+import { clavixTenant, consoleDirectory } from "./console-directory";
 import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { invitationsOf } from "./invitations";
+import { noBudgets, unthrottled } from "./no-ops";
 import { redis } from "./redis";
+import { clock, reportError, warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
@@ -29,10 +31,6 @@ const origin = {
 
 /** The audience of the console's access tokens: `https://console.<CLAVIX_DOMAIN>/api`. */
 export const consoleResource = consoleAudience(origin);
-
-/** The `clavix` tenant (the console signs in through it); `null` while it is missing (it cannot be suspended). */
-const clavixTenant = () =>
-  tenantResolver.resolveHost(`${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`);
 
 /** The tenant with this id (suspended included: the console reads it), resolved through its own host; `null` when gone or trashed. */
 async function resolveById(id: string) {
@@ -62,8 +60,10 @@ export function createConsoleDeps(
       },
     }),
     access,
+    now: clock,
+    reportError,
     admins: createJanusAdmins(invitationsOf(clavixTenant)),
-    users: createJanusUsers({
+    users: new UsersService({
       janusOf: async (id) => {
         const tenant = await resolveById(id);
         return tenant === null ? null : forTenant(tenant);
@@ -80,47 +80,17 @@ export function createConsoleDeps(
     }),
     exclusive,
     budgets:
-      redis === undefined ? undefined : createConsoleBudgets(redis.limits),
-    auditExport:
       redis === undefined
-        ? {}
-        : { throttle: createExportThrottle(redis.limits.auditExport) },
+        ? noBudgets
+        : createConsoleBudgets(redis.limits, warn),
+    auditExport: {
+      throttle:
+        redis === undefined
+          ? unthrottled
+          : createExportThrottle(redis.limits.auditExport, warn),
+    },
     adminEvents: adminEventRecorder,
     activity: { admin: adminEventReader, auth: authEventsService },
-    directory: {
-      findUser: async (id) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        const user = (await janus?.findUser(id)) ?? null;
-        return user === null
-          ? null
-          : {
-              id: user.id,
-              email: user.email,
-              name: user.name,
-              active: user.active,
-            };
-      },
-      emailVerified: async (id) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        if (janus === null) throw new Error("the clavix tenant is unavailable");
-        return (await janus.findUser(id))?.emailVerified === true;
-      },
-      findUserByEmail: async (email) => {
-        const tenant = await clavixTenant();
-        const janus = tenant === null ? null : await forTenant(tenant);
-        if (janus === null) throw new Error("the clavix tenant is unavailable");
-        return janus.findByEmail(email);
-      },
-      tenantsByIds: async (ids) =>
-        (await tenantsService.liveByIds(ids)).map((tenant) => ({
-          id: tenant._id.toHexString(),
-          slug: tenant.slug,
-          name: tenant.name,
-          status: tenant.status,
-          plan: tenant.plan,
-        })),
-    },
+    directory: consoleDirectory,
   };
 }

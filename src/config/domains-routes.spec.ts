@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import { mintToken } from "@/modules/domains/domains.service";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { z } from "zod";
+import { mintToken } from "@/modules/domains";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { jsonOf } from "~/json";
 import { mongo } from "./db";
 import { serveWebauthnOrigins, tlsAskOver } from "./domains-routes";
 import { env } from "./env";
@@ -115,7 +117,7 @@ describe("serveWebauthnOrigins", () => {
   test("a live tenant's slug host lists its verified domains only", async () => {
     const res = await wellKnown(`rt-live.${D}`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { origins: string[] };
+    const body = await jsonOf(res, z.object({ origins: z.array(z.string()) }));
     expect(body.origins.sort()).toEqual(
       [
         `${scheme}://ok.live-example.com${port}`,

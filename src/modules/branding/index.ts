@@ -1,24 +1,9 @@
-import { brandingService } from "@/config/branding";
-import type { Resolvers } from "@/generated/graphql/resolvers";
-import { logoUrl } from "./logo-route";
-import { THEME_NAME } from "./theme";
+// The module's import surface (branding: a tenant's brand, theme and logo).
+// `branding.resolver` is imported by file by `modules/index.ts` and
+// `branding.console-resolver` by `console/modules/index.ts`, so this barrel never
+// loads the config wiring back.
 
-export const branding: Resolvers = {
-  Query: {
-    tenantBranding: async (_, __, ctx) => {
-      const tenant = await ctx.tenant();
-      if (tenant === null) return null;
-      const found = await brandingService.get(tenant.tenantId);
-      return found === undefined
-        ? null
-        : {
-            displayName: found.displayName,
-            themeName: THEME_NAME,
-            css: found.css,
-            backgroundPreset: found.backgroundPreset,
-            motif: found.motif,
-            logoUrl: found.logo === null ? null : logoUrl(found.logo.hash),
-          };
-    },
-  },
-};
+export { codes } from "./branding.errors";
+export { LOGO_PATH, logoRoute } from "./branding.logo-route";
+export { BrandingService } from "./branding.service";
+export { compileTheme } from "./branding.theme";

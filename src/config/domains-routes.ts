@@ -1,19 +1,19 @@
 import { ObjectId } from "mongodb";
 import {
   platformHostPolicy,
+  relatedOrigins,
   TLS_ASK_PATH,
   tlsAsk,
-} from "@/modules/domains/tls-ask";
-import { tlsAskGate } from "@/modules/domains/tls-limit";
-import {
-  relatedOrigins,
+  tlsAskGate,
   WEBAUTHN_WELL_KNOWN,
-} from "@/modules/domains/well-known";
+} from "@/modules/domains";
 import { hostOfRequest } from "@/tenancy/host";
 import { isLive } from "@/tenancy/resolved-tenant";
 import { env } from "./env";
+import { unlimited } from "./no-ops";
 import { redis } from "./redis";
-import { domainStore, tenantResolver } from "./tenancy";
+import { warn } from "./runtime";
+import { domainsService, tenantResolver } from "./tenancy";
 
 export { TLS_ASK_PATH, WEBAUTHN_WELL_KNOWN };
 
@@ -27,9 +27,10 @@ const askLimits = redis?.limits;
 export const tlsAskOver = (secret: string | undefined) =>
   tlsAsk({
     secret,
+    log: warn,
     platformDomain: env.CLAVIX_DOMAIN,
     allowed: async (host) => {
-      if ((await domainStore.verifiedHost(host)) === undefined) return false;
+      if ((await domainsService.verifiedHost(host)) === undefined) return false;
       const tenant = await tenantResolver.resolveHost(host);
       return tenant !== null && isLive(tenant);
     },
@@ -43,12 +44,14 @@ export const tlsAskOver = (secret: string | undefined) =>
       },
     }),
     // Fails closed when Redis is down (`tlsAskGate`); no Redis at all
-    // (development, specs): no limit.
+    // (development, specs): `unlimited`.
     limit:
       askLimits === undefined
-        ? undefined
-        : tlsAskGate(() =>
-            askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),
+        ? unlimited
+        : tlsAskGate(
+            () =>
+              askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),
+            warn,
           ),
   });
 
@@ -64,7 +67,7 @@ export async function serveWebauthnOrigins(request: Request) {
   }
   const slugHost = new URL(tenant.slugIssuer).hostname;
   if (host !== slugHost) return new Response(null, { status: 404 });
-  const hosts = await domainStore.verifiedHostsOf(
+  const hosts = await domainsService.verifiedHostsOf(
     new ObjectId(tenant.tenantId),
   );
   return relatedOrigins(hosts, {

@@ -8,8 +8,7 @@ import {
   TOKEN_EXCHANGE_GRANT,
 } from "@softistx/janus-oauth";
 import { decodeJwt } from "jose";
-import { createApp } from "@/app";
-import { registerClient } from "@/clients/register-client";
+import { z } from "zod";
 import {
   clientPoliciesService,
   exchangeRulesFor,
@@ -18,18 +17,25 @@ import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import {
-  catalog,
   registerStoredResource,
   resourcesFor,
+  resourcesService,
 } from "@/config/resources";
 import { tenantResolver, tenantsService } from "@/config/tenancy";
 import { authFor, claimsFor, janusIssuers } from "@/config/users";
-import { mongoClientDetailTypes } from "@/modules/resources/detail-types";
-import { issuerOf } from "@/modules/tenants/identity";
-import { PLATFORM_TENANT_SLUG } from "@/modules/tenants/slug";
+import { registerClient } from "@/modules/clients";
+import { mongoClientDetailTypes } from "@/modules/resources";
+import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
-import { SESSION_COOKIE } from "@/users/tenant-janus";
-import { createTenantParOff } from "../../test/tenant-par-off";
+import { createTestApp } from "~/app";
+import { clientHeaders } from "~/client-header";
+import { type GqlResult, gqlOf } from "~/gql";
+import { fieldOf } from "~/gql-field";
+import { errorBody, jsonOf, tokenBody } from "~/json";
+import { deviceCodesBody, parBody, recordBody } from "~/oauth-bodies";
+import { quietOAuth } from "~/ports";
+import { createTenantParOff } from "~/tenant-par-off";
 
 // M3b R4, end to end: authorization details (RFC 9396) from PAR to the
 // tokens, through the hosted consent API (`oauthRequest.details`).
@@ -53,6 +59,8 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
+  clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,
@@ -62,9 +70,9 @@ const issuers = createClavixOAuthIssuers({
   resourcesFor,
   exchangeRulesFor,
 });
-const app = createApp({ oauth: issuers });
+const app = createTestApp({ oauth: issuers });
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const ready = mongoClientDetailTypes(mongo.db.detailTypes, () => true);
+const ready = mongoClientDetailTypes(mongo.db.detailTypes);
 const text = (fr: string, en: string) => ({ fr, en });
 
 const url = (path = "/") => `${issuerOf(SLUG, origin)}${path}`;
@@ -73,10 +81,6 @@ const basic = (id: string, secret: string) =>
 const secrets: Record<string, string> = {};
 let cookie = "";
 
-interface GqlResult {
-  data?: Record<string, unknown> | null;
-  errors?: { message: string; extensions?: { code?: string } }[];
-}
 const gql = async (
   query: string,
   variables: Record<string, unknown>,
@@ -85,21 +89,19 @@ const gql = async (
   const response = await app.request(url("/graphql"), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       cookie,
       ...(language === undefined ? {} : { "accept-language": language }),
     },
     body: JSON.stringify({ query, variables }),
   });
-  return (await response.json()) as GqlResult;
+  return gqlOf(response);
 };
 
-// One field of a result's data, known to be there.
-const field = <T>(result: GqlResult, name: string): T => {
-  const value = result.data?.[name];
-  if (value === undefined || value === null) throw new Error(`no ${name}`);
-  return value as T;
-};
+const redirected = z.object({ redirectTo: z.string() });
+const withDetails = z.object({ details: z.array(z.unknown()) });
+const withComplete = z.object({ detailsComplete: z.boolean() });
 
 const DETAILS = `details { type title description rows { label value } }`;
 const REQUEST = `query($id: ID!) { oauthRequest(id: $id) { authorizationDetails ${DETAILS} } }`;
@@ -134,8 +136,6 @@ const post = (
       body: new URLSearchParams(body),
     }),
   );
-const json = async <T = Record<string, unknown>>(response: Response) =>
-  (await response.json()) as T;
 
 async function pushed(
   details: unknown,
@@ -160,7 +160,7 @@ async function pushed(
     client,
   );
   expect(response.status).toBe(201);
-  const { request_uri } = await json<{ request_uri: string }>(response);
+  const { request_uri } = await jsonOf(response, parBody);
   const authorize = await issuers.handle(
     new Request(
       url(
@@ -176,8 +176,7 @@ async function pushed(
 async function approve(id: string) {
   const approved = await gql(APPROVE, { id });
   expect(approved.errors).toBeUndefined();
-  return field<{ redirectTo: string }>(approved, "approveOAuthRequest")
-    .redirectTo;
+  return fieldOf(approved, "approveOAuthRequest", redirected).redirectTo;
 }
 
 const codeToken = (redirectTo: string, client = "payer") =>
@@ -193,22 +192,20 @@ const codeToken = (redirectTo: string, client = "payer") =>
     client,
   );
 
-interface Tokens {
-  access_token: string;
-  refresh_token?: string;
-  authorization_details?: Record<string, unknown>[];
-}
+const tokensBody = tokenBody.extend({
+  authorization_details: z.array(recordBody).optional(),
+});
 /** PAR with these details, consent, approval, code exchange. */
 async function consented(details: unknown, scope = "read") {
   const response = await codeToken(
     await approve(await pushed(details, { scope })),
   );
   expect(response.status).toBe(200);
-  return json<Tokens>(response);
+  return jsonOf(response, tokensBody);
 }
 
 const introspect = async (token: string) =>
-  json(await post("/introspect", { token }, "payer"));
+  jsonOf(await post("/introspect", { token }, "payer"), recordBody);
 
 beforeAll(async () => {
   await createTenantParOff(tenantsService, { slug: SLUG, name: SLUG });
@@ -228,7 +225,7 @@ beforeAll(async () => {
     tenantId: tenant._id,
   });
   if (pay === undefined) throw new Error("no resource");
-  await catalog.createDetailType(tenant._id, pay._id.toHexString(), {
+  await resourcesService.createDetailType(tenant._id, pay._id.toHexString(), {
     type: "payment",
     name: text("Paiement", "Payment"),
     description: text("Initier des virements", "Start transfers"),
@@ -253,7 +250,7 @@ beforeAll(async () => {
     input: Partial<Parameters<typeof registerClient>[1]>,
   ) => {
     const done = await registerClient(
-      { db: oauthDb, findTenant, detailTypes: ready },
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
       {
         tenant: SLUG,
         name: clientId,
@@ -300,15 +297,19 @@ describe("authorization details through consent", () => {
     const id = await pushed(asked);
     const view = await gql(REQUEST, { id });
     expect(view.errors).toBeUndefined();
-    const request = view.data?.["oauthRequest"] as {
-      authorizationDetails: string;
-      details: unknown[];
-    };
+    const request = fieldOf(
+      view,
+      "oauthRequest",
+      z.object({
+        authorizationDetails: z.string(),
+        details: z.array(z.unknown()),
+      }),
+    );
     // Every detail reaches the hosted API, in words, none raw.
     expect(request.details).toHaveLength(2);
     expect(JSON.parse(request.authorizationDetails)).toHaveLength(2);
 
-    const tokens = await json<Tokens>(await codeToken(await approve(id)));
+    const tokens = await jsonOf(await codeToken(await approve(id)), tokensBody);
     expect(tokens.authorization_details).toEqual(asked);
     expect(decodeJwt(tokens.access_token)["authorization_details"]).toEqual(
       asked,
@@ -333,7 +334,7 @@ describe("authorization details through consent", () => {
     const detailsIn = async (language?: string) => {
       const view = await gql(REQUEST, { id }, language);
       expect(view.errors).toBeUndefined();
-      return field<{ details: unknown[] }>(view, "oauthRequest").details;
+      return fieldOf(view, "oauthRequest", withDetails).details;
     };
     expect(await detailsIn("fr-CA,en;q=0.8")).toEqual([
       {
@@ -373,13 +374,19 @@ describe("authorization details through consent", () => {
       tenantId: tenant._id,
     });
     if (resource === undefined) throw new Error("none");
-    await catalog.createDetailType(tenant._id, resource._id.toHexString(), {
-      type: "ledger",
-      name: text("", "Ledger"),
-      fields: [{ key: "account", kind: "string", label: text("", "Account") }],
-    });
+    await resourcesService.createDetailType(
+      tenant._id,
+      resource._id.toHexString(),
+      {
+        type: "ledger",
+        name: text("", "Ledger"),
+        fields: [
+          { key: "account", kind: "string", label: text("", "Account") },
+        ],
+      },
+    );
     await registerClient(
-      { db: oauthDb, findTenant, detailTypes: ready },
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
       {
         tenant: SLUG,
         name: "payer",
@@ -392,16 +399,14 @@ describe("authorization details through consent", () => {
     );
     const id = await pushed([{ type: "ledger", account: "A-1" }]);
     const view = await gql(REQUEST, { id }, "fr");
-    expect(field<{ details: unknown[] }>(view, "oauthRequest").details).toEqual(
-      [
-        {
-          type: "ledger",
-          title: "Ledger",
-          description: "",
-          rows: [{ label: "Account", value: "A-1" }],
-        },
-      ],
-    );
+    expect(fieldOf(view, "oauthRequest", withDetails).details).toEqual([
+      {
+        type: "ledger",
+        title: "Ledger",
+        description: "",
+        rows: [{ label: "Account", value: "A-1" }],
+      },
+    ]);
   });
 });
 
@@ -421,7 +426,7 @@ describe("what happens to the details after consent", () => {
       "payer",
     );
     expect(refreshed.status).toBe(200);
-    const narrowed = await json<Tokens>(refreshed);
+    const narrowed = await jsonOf(refreshed, tokensBody);
     expect(narrowed.authorization_details).toEqual([first]);
     expect(decodeJwt(narrowed.access_token)["authorization_details"]).toEqual([
       first,
@@ -439,7 +444,7 @@ describe("what happens to the details after consent", () => {
       "payer",
     );
     expect(widened.status).toBe(400);
-    expect((await json<{ error: string }>(widened)).error).toBe(
+    expect((await jsonOf(widened, errorBody)).error).toBe(
       "invalid_authorization_details",
     );
   });
@@ -476,14 +481,14 @@ describe("what happens to the details after consent", () => {
     const same = await exchange(PAY);
     expect(same.status).toBe(200);
     expect(
-      decodeJwt((await json<Tokens>(same)).access_token)[
+      decodeJwt((await jsonOf(same, tokensBody)).access_token)[
         "authorization_details"
       ],
     ).toEqual(asked);
     const other = await exchange(OTHER);
     expect(other.status).toBe(200);
     expect(
-      decodeJwt((await json<Tokens>(other)).access_token)[
+      decodeJwt((await jsonOf(other, tokensBody)).access_token)[
         "authorization_details"
       ],
     ).toBeUndefined();
@@ -504,15 +509,10 @@ describe("the device flow", () => {
       "tv",
     );
     expect(response.status).toBe(200);
-    const codes = await json<{ device_code: string; user_code: string }>(
-      response,
-    );
+    const codes = await jsonOf(response, deviceCodesBody);
     const view = await gql(DEVICE, { c: codes.user_code }, "fr");
     expect(view.errors).toBeUndefined();
-    const shown = field<{ details: unknown[] }>(
-      view,
-      "oauthDeviceRequest",
-    ).details;
+    const shown = fieldOf(view, "oauthDeviceRequest", withDetails).details;
     expect(shown).toMatchObject([
       {
         type: "payment",
@@ -534,7 +534,7 @@ describe("the device flow", () => {
       "tv",
     );
     expect(tokens.status).toBe(200);
-    const body = await json<Tokens>(tokens);
+    const body = await jsonOf(tokens, tokensBody);
     expect(body.authorization_details).toEqual(asked);
     expect(decodeJwt(body.access_token)["authorization_details"]).toEqual(
       asked,
@@ -559,7 +559,7 @@ describe("details the page cannot fully describe", () => {
       tenantId: tenant._id,
     });
     if (resource === undefined) throw new Error("none");
-    const created = await catalog.createDetailType(
+    const created = await resourcesService.createDetailType(
       tenant._id,
       resource._id.toHexString(),
       {
@@ -573,7 +573,7 @@ describe("details the page cannot fully describe", () => {
     );
     giftId = created._id.toHexString();
     await registerClient(
-      { db: oauthDb, findTenant, detailTypes: ready },
+      { now: () => new Date(), db: oauthDb, findTenant, detailTypes: ready },
       {
         tenant: SLUG,
         name: "gifter",
@@ -605,14 +605,14 @@ describe("details the page cannot fully describe", () => {
       "gifter",
     );
     expect(response.status).toBe(200);
-    return json<{ device_code: string; user_code: string }>(response);
+    return jsonOf(response, deviceCodesBody);
   };
 
   test("unchanged: complete and approved", async () => {
     await createGift("gift-ok");
     const id = await pushed([gifted("gift-ok")], { client: "gifter" });
     const view = await gql(VIEW, { id });
-    expect(field<unknown>(view, "oauthRequest")).toEqual({
+    expect(fieldOf(view, "oauthRequest", z.unknown())).toEqual({
       detailsComplete: true,
       details: [{ type: "gift-ok" }],
     });
@@ -621,8 +621,7 @@ describe("details the page cannot fully describe", () => {
     const codes = await deviceCode([gifted("gift-ok")]);
     const seen = await gql(DEVICE_VIEW, { c: codes.user_code });
     expect(
-      field<{ detailsComplete: boolean }>(seen, "oauthDeviceRequest")
-        .detailsComplete,
+      fieldOf(seen, "oauthDeviceRequest", withComplete).detailsComplete,
     ).toBe(true);
     expect((await gql(APPROVE_DEVICE, { c: codes.user_code })).errors).toBe(
       undefined,
@@ -656,20 +655,19 @@ describe("details the page cannot fully describe", () => {
     const tenantId = await createGift("gift-edit");
     const id = await pushed([gifted("gift-edit")], { client: "gifter" });
     const codes = await deviceCode([gifted("gift-edit")]);
-    await catalog.updateDetailType(tenantId, giftId, {
+    await resourcesService.updateDetailType(tenantId, giftId, {
       fields: [{ key: "note", kind: "string", label: text("Note", "Note") }],
     });
     const view = await gql(VIEW, { id });
-    expect(
-      field<{ detailsComplete: boolean }>(view, "oauthRequest").detailsComplete,
-    ).toBe(false);
+    expect(fieldOf(view, "oauthRequest", withComplete).detailsComplete).toBe(
+      false,
+    );
     const refused = await gql(APPROVE, { id });
     expect(codeOf(refused)).toBe("BAD_USER_INPUT");
     expect(refused.errors?.[0]?.message).toBe("invalid_authorization_details");
     const seen = await gql(DEVICE_VIEW, { c: codes.user_code });
     expect(
-      field<{ detailsComplete: boolean }>(seen, "oauthDeviceRequest")
-        .detailsComplete,
+      fieldOf(seen, "oauthDeviceRequest", withComplete).detailsComplete,
     ).toBe(false);
     const device = await gql(APPROVE_DEVICE, { c: codes.user_code });
     expect(device.errors?.[0]?.message).toBe("invalid_authorization_details");
@@ -688,9 +686,9 @@ describe("details the page cannot fully describe", () => {
     const codes = await deviceCode([gifted("gift-gone")]);
     await dropGift("gift-gone");
     const view = await gql(VIEW, { id });
-    expect(
-      field<{ detailsComplete: boolean }>(view, "oauthRequest").detailsComplete,
-    ).toBe(false);
+    expect(fieldOf(view, "oauthRequest", withComplete).detailsComplete).toBe(
+      false,
+    );
     expect(codeOf(await gql(APPROVE, { id }))).toBe("BAD_USER_INPUT");
     expect(codeOf(await gql(APPROVE_DEVICE, { c: codes.user_code }))).toBe(
       "BAD_USER_INPUT",
@@ -700,8 +698,8 @@ describe("details the page cannot fully describe", () => {
   test("a request without details is complete", async () => {
     const id = await pushed(null);
     const view = await gql(VIEW, { id });
-    expect(
-      field<{ detailsComplete: boolean }>(view, "oauthRequest").detailsComplete,
-    ).toBe(true);
+    expect(fieldOf(view, "oauthRequest", withComplete).detailsComplete).toBe(
+      true,
+    );
   });
 });
