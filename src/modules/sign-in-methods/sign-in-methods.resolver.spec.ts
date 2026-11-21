@@ -26,6 +26,7 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { SignInPolicyService } from "./sign-in-methods.service";
@@ -81,6 +82,7 @@ async function gql(
   const response = await app.request(`${issuerOf(slug, origin)}/graphql`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       "x-forwarded-for": "198.51.100.23",
       ...headers,
@@ -861,7 +863,7 @@ function github(email: string) {
   const calls: { url: string; body: string; authorization: string }[] = [];
   const json = (value: unknown) =>
     new Response(JSON.stringify(value), {
-      headers: { "content-type": "application/json" },
+      headers: { ...clientHeaders, "content-type": "application/json" },
     });
   const fake = (async (input: unknown, init?: RequestInit) => {
     const request = new Request(input as string, init);

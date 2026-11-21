@@ -28,6 +28,7 @@ import { registerClient } from "@/modules/clients/register-client";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { settled } from "./auth.outbox";
 import { AuthService } from "./auth.service";
@@ -62,6 +63,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       "x-forwarded-for": ip,
       ...(cookie === undefined ? {} : { cookie }),

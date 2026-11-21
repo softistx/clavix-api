@@ -3,6 +3,7 @@ import { createConsoleDeps } from "@/config/console";
 import type { ConsoleBudgets } from "@/console/budgets";
 import type { ConsoleDirectory } from "@/console/context";
 import { CONSOLE_PATH } from "@/console/identity";
+import { clientHeaders } from "~/client-header";
 
 export interface ConsoleResult {
   data?: Record<string, unknown> | null;
@@ -62,6 +63,7 @@ export function consoleRequestAs(
     app.request(`http://localhost${CONSOLE_PATH}`, {
       method: "POST",
       headers: {
+        ...clientHeaders,
         "content-type": "application/json",
         authorization: "Bearer spec",
       },

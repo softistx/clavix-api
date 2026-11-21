@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "@/app";
 
-const app = createApp();
+// The client header has its own spec (csrf.spec.ts); this one tests the
+// same-origin guard alone, whatever CLAVIX_REQUIRE_CLIENT_HEADER says.
+const app = createApp({ requireClientHeader: false });
 const URL_ = "http://acme.clavix.test/graphql";
 const json = { "content-type": "application/json" };
 // graxia's own CSRF check runs first and stays on: a GET or a non-JSON POST

@@ -19,6 +19,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 import { createTenantParOff } from "../../test/tenant-par-off";
 import { ACR } from "./authentication-level";
 import { createClavixOAuthIssuers } from "./issuers";
@@ -76,7 +77,7 @@ const gql = async (
 ): Promise<GqlResult> => {
   const response = await app.request(url(slug, "/graphql"), {
     method: "POST",
-    headers: { "content-type": "application/json", cookie },
+    headers: { ...clientHeaders, "content-type": "application/json", cookie },
     body: JSON.stringify({ query, variables }),
   });
   return (await response.json()) as GqlResult;

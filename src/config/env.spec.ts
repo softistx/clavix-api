@@ -31,6 +31,7 @@ const clean = {
   CLAVIX_KEYS_MASTER_KEY: undefined,
   CLAVIX_SMTP_URL: undefined,
   CLAVIX_GRAPHQL_IDE: undefined,
+  CLAVIX_REQUIRE_CLIENT_HEADER: undefined,
 };
 
 const masterKey = Buffer.alloc(32, 7).toString("base64");
@@ -238,4 +239,15 @@ test("the GraphQL IDE: on under development, off elsewhere, refused in productio
   await expect(
     load({ ...production, CLAVIX_GRAPHQL_IDE: "true" }),
   ).rejects.toThrow("CLAVIX_GRAPHQL_IDE");
+});
+
+test("the client header is optional by default and only true or false are accepted", async () => {
+  expect((await load(clean)).env.CLAVIX_REQUIRE_CLIENT_HEADER).toBe(false);
+  expect(
+    (await load({ ...clean, CLAVIX_REQUIRE_CLIENT_HEADER: "true" })).env
+      .CLAVIX_REQUIRE_CLIENT_HEADER,
+  ).toBe(true);
+  await expect(
+    load({ ...clean, CLAVIX_REQUIRE_CLIENT_HEADER: "yes" }),
+  ).rejects.toThrow("CLAVIX_REQUIRE_CLIENT_HEADER");
 });

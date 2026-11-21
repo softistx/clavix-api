@@ -23,6 +23,7 @@ import {
   SESSION_COOKIE,
   SIGN_IN_CODE_LIFESPAN,
 } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 import { afterAnswer, settled } from "./auth.outbox";
 
 const memory = mailer as MemoryMailer;
@@ -60,6 +61,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(cookie === undefined ? {} : { cookie }),
       ...extra,

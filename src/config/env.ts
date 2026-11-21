@@ -107,6 +107,15 @@ export const env = defineEnv({
     .enum(production ? ["false"] : ["true", "false"])
     .default(Bun.env.NODE_ENV === "development" ? "true" : "false")
     .transform((value) => value === "true"),
+  // Refuse a `/graphql` or `/console/graphql` request that carries no
+  // `x-clavix-client` header (403 `CLIENT_HEADER_REQUIRED`, before parsing).
+  // Off by default so a caller that does not send it yet keeps working; turn it
+  // on once clavix-ui's `client-header.ts` (U3) is deployed, then it becomes
+  // the default (src/http/csrf.ts).
+  CLAVIX_REQUIRE_CLIENT_HEADER: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   // Sign-in code requests (`requestSignInCode`), on top of janus's 5 per address
   // per 10 min. Per client address and tenant, and per tenant. They need
   // Redis (REDIS_URL): without it there is no such limit.

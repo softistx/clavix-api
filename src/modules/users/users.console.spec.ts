@@ -22,6 +22,7 @@ import { authFor, claimsFor, forTenant } from "@/config/users";
 import { CONSOLE_PATH } from "@/console/identity";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
+import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
 const origin = {
@@ -82,6 +83,7 @@ async function post(url: string, query: string, bearer?: string) {
   const response = await app.request(url, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
     },

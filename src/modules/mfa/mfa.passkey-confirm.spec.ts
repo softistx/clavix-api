@@ -14,6 +14,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf } from "@/modules/users/rp";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 // `confirmSecondFactorWithPasskey` (clavix-api#293): the hosted second-factor
 // page answers a `SecondFactorChallenge` with a passkey bound to it.
@@ -54,6 +55,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       origin: (await tenantOf(slug)).issuer.replace(/\/$/, ""),
       ...(cookie === undefined ? {} : { cookie }),

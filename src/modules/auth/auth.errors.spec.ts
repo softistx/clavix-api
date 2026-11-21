@@ -18,6 +18,7 @@ describe("auth errors", () => {
   test("the module's codes keep their upper-snake values", () => {
     expect(codes.module).toBe("auth");
     expect([...codes.codes]).toEqual([
+      "CLIENT_HEADER_REQUIRED",
       "CODE_INVALID",
       "EMAIL_UNVERIFIED",
       "EMAIL_VERIFICATION_INVALID",

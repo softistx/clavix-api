@@ -13,6 +13,7 @@ import { janusIssuers } from "@/config/users";
 import { CONSOLE_PATH } from "@/console/identity";
 import { adminScope } from "@/modules/invitations/invitations.rules";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 
 // The bearer token is the user id: tokens are console.spec's business, this
@@ -62,6 +63,7 @@ async function post(
   const response = await app.request(url, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
     },

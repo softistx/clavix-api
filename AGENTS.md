@@ -302,6 +302,13 @@ is `__Host-`). A new operation needs no guard of its own; never add a CORS plugi
 On stop, `server.ts` has an `onStop` hook that awaits `drain()` (`src/modules/auth/auth.outbox.ts`, 10 s)
 so a code mail in flight is not lost; `stopTimeout` is set above it.
 
+`useClientHeader` (`src/http/csrf.ts`, first plugin of `/graphql` and of `/console/graphql`) answers 403
+`CLIENT_HEADER_REQUIRED` before parsing when `x-clavix-client` is missing or blank (any non-empty value
+passes, no allow list; a GET of the IDE page is exempt, and the IDE sandbox sends `apollo-sandbox`). It takes an
+explicit boolean: `createApp({ requireClientHeader })`, defaulting to `CLAVIX_REQUIRE_CLIENT_HEADER`
+(`false`). It stays OFF until clavix-ui's U3 sender (`clavix-ui`) is deployed; it is then turned on, and later
+becomes the default. Every spec request to these paths sends `clientHeaders` (`test/client-header.ts`).
+
 ## Signing keys
 
 `src/modules/keys/` holds the per-tenant signing keys on janus (`signingKeysFor`, `jwksFor`, wired in

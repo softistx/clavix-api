@@ -18,6 +18,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 import {
   createPasskeyThrottle,
   type PasskeyLimitConfig,
@@ -63,6 +64,7 @@ async function post(
   const response = await app.request(`${issuer}/graphql`, {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       origin: issuer.replace(/\/$/, ""),
       "x-forwarded-for": ip,
@@ -120,7 +122,11 @@ describe("unknown host", () => {
     const host = `http://nobody-here.${env.CLAVIX_DOMAIN}`;
     const response = await app.request(`${host}/graphql`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: host },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        origin: host,
+      },
       body: JSON.stringify({ query: OPTIONS }),
     });
     const body = (await response.json()) as {

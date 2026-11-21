@@ -11,14 +11,6 @@ import {
 import { env } from "./config/env";
 import { readyz } from "./config/ready";
 import { detailTextsFor, scopeTextsFor } from "./config/resources";
-import {
-  deviceThrottle,
-  homeRealmThrottle,
-  passkeyThrottle,
-  signInThrottle,
-  ssoStartThrottle,
-  verifyThrottle,
-} from "./config/throttle";
 import { serveAuditExport } from "./console/audit-export/export";
 import { useInviteBudget } from "./console/budgets";
 import { CONSOLE_EXPORT_PATH, CONSOLE_PATH } from "./console/identity";
@@ -26,9 +18,12 @@ import { type ConsoleDeps, useConsole } from "./console/plugin";
 import { consoleSchema } from "./console/schema";
 import { useWithoutQuotedValues } from "./http/coercion";
 import { createBase } from "./http/context";
+import { CLIENT_HEADER, useClientHeader } from "./http/csrf";
+import { serveReadyz } from "./http/readyz";
 import { useSameOriginJson } from "./http/same-origin";
 import { schema } from "./http/schema";
 import type { Throttle } from "./http/throttle/core";
+import { throttlesFor } from "./http/throttles";
 import { reportUnexpected } from "./http/unexpected";
 import { janusMasking, janusPlugin } from "./modules/auth/auth.plugin";
 import type { VerificationThrottle } from "./modules/auth/auth.verification-throttle";
@@ -48,80 +43,57 @@ export const BODY_LIMIT = 100 * 1024;
 /** The highest cost of a console operation (graxia `limits.cost.max`; its default is 5 000). */
 export const CONSOLE_MAX_COST = 50_000;
 
+/** What `createApp` takes; every part has its default. */
+export interface AppOptions {
+  oauth?: OAuthHandle;
+  // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
+  // default (none without REDIS_URL).
+  signInThrottle?: Throttle | undefined;
+  // The same for `passkeySignInOptions`.
+  passkeyThrottle?: Throttle | undefined;
+  // The same for `hostedHomeRealm`, apart from the sign-in code budget.
+  homeRealmThrottle?: Throttle | undefined;
+  // The same for `socialSignInStart` (social and enterprise).
+  ssoStartThrottle?: Throttle | undefined;
+  // The same for `requestEmailVerification` (per user too).
+  verifyThrottle?: VerificationThrottle | undefined;
+  // The same for the device verification page's code lookups.
+  deviceThrottle?: DeviceThrottle | undefined;
+  // The console API (`/console/graphql`, src/console): bearer token, its own
+  // schema. Off without it, the route does not exist.
+  console?: ConsoleDeps & { schema?: typeof consoleSchema };
+  // Where the consent page reads the tenants' scope texts; the stored ones by default.
+  scopeTexts?: ScopeTextsFor;
+  // The same for the tenants' detail type texts (the request's `details`).
+  detailTexts?: DetailTextsFor;
+  // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
+  agents?: AgentsFor;
+  // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
+  telemetry?: Telemetry;
+  // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
+  ready?: () => Promise<ReadyReport>;
+  // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
+  ide?: boolean;
+  // Refuse a GraphQL request without `x-clavix-client`; `CLAVIX_REQUIRE_CLIENT_HEADER` by default.
+  requireClientHeader?: boolean;
+}
+
 // `GET /healthz`, the liveness probe (no dependency is checked), `GET /readyz`, the OAuth
 // endpoints when `oauth` is given (the issuers of src/oauth, which
 // src/server.ts passes), then POST and GET /graphql behind the base's
 // middlewares. The body limit is declared before the OAuth routes, since it
 // applies only to the routes declared after it. The IDE follows alxia's dev
 // switch: on under `bun dev`, off otherwise.
-export function createApp(
-  options: {
-    oauth?: OAuthHandle;
-    // The per-IP and per-tenant sign-in code limits; the app's Redis ones by
-    // default (none without REDIS_URL).
-    signInThrottle?: Throttle | undefined;
-    // The same for `passkeySignInOptions`.
-    passkeyThrottle?: Throttle | undefined;
-    // The same for `hostedHomeRealm`, apart from the sign-in code budget.
-    homeRealmThrottle?: Throttle | undefined;
-    // The same for `socialSignInStart` (social and enterprise).
-    ssoStartThrottle?: Throttle | undefined;
-    // The same for `requestEmailVerification` (per user too).
-    verifyThrottle?: VerificationThrottle | undefined;
-    // The same for the device verification page's code lookups.
-    deviceThrottle?: DeviceThrottle | undefined;
-    // The console API (`/console/graphql`, src/console): bearer token, its own
-    // schema. Off without it, the route does not exist.
-    console?: ConsoleDeps & { schema?: typeof consoleSchema };
-    // Where the consent page reads the tenants' scope texts; the stored ones by default.
-    scopeTexts?: ScopeTextsFor;
-    // The same for the tenants' detail type texts (the request's `details`).
-    detailTexts?: DetailTextsFor;
-    // The tenants' agents, for `OAuthClient.agent` on the hosted pages; the stored ones by default.
-    agents?: AgentsFor;
-    // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
-    telemetry?: Telemetry;
-    // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
-    ready?: () => Promise<ReadyReport>;
-    // The GraphQL IDE (Apollo Sandbox) and introspection; `CLAVIX_GRAPHQL_IDE` by default.
-    ide?: boolean;
-  } = {},
-) {
+export function createApp(options: AppOptions = {}) {
   const ide = options.ide ?? env.CLAVIX_GRAPHQL_IDE;
-  const base = createBase(
-    undefined,
-    {
-      signInThrottle:
-        "signInThrottle" in options ? options.signInThrottle : signInThrottle,
-      passkeyThrottle:
-        "passkeyThrottle" in options
-          ? options.passkeyThrottle
-          : passkeyThrottle,
-      homeRealmThrottle:
-        "homeRealmThrottle" in options
-          ? options.homeRealmThrottle
-          : homeRealmThrottle,
-      ssoStartThrottle:
-        "ssoStartThrottle" in options
-          ? options.ssoStartThrottle
-          : ssoStartThrottle,
-      verifyThrottle:
-        "verifyThrottle" in options ? options.verifyThrottle : verifyThrottle,
-      deviceThrottle:
-        "deviceThrottle" in options ? options.deviceThrottle : deviceThrottle,
-    },
-    options.telemetry,
-  )
+  const requireClient =
+    options.requireClientHeader ?? env.CLAVIX_REQUIRE_CLIENT_HEADER;
+  const base = createBase(undefined, throttlesFor(options), options.telemetry)
     .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
     // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
-    .all("/readyz", async ({ request }) => {
-      if (request.method !== "GET") return new Response(null, { status: 404 });
-      const report = await (options.ready ?? readyz)();
-      return Response.json(report, {
-        status: report.status === "ok" ? 200 : 503,
-        headers: { "cache-control": "no-store" },
-      });
-    })
+    .all("/readyz", ({ request }) =>
+      serveReadyz(request, options.ready ?? readyz),
+    )
     .all(LOGO_PATH, ({ request }) => serveLogo(request))
     // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/domains.tls-ask.ts).
     .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
@@ -133,10 +105,12 @@ export function createApp(
     graphql(app, {
       schema,
       ide: ide ? "apollo-sandbox" : false,
+      sandbox: { initialHeaders: { [CLIENT_HEADER]: "apollo-sandbox" } },
       // Introspection follows the IDE: off wherever the IDE is.
       introspection: ide,
       onUnexpected: reportUnexpected,
       plugins: [
+        useClientHeader(requireClient),
         useSameOriginJson(),
         useWithoutQuotedValues(),
         janusPlugin(),
@@ -173,6 +147,7 @@ export function createApp(
             limits: { cost: { max: CONSOLE_MAX_COST } },
             onUnexpected: reportUnexpected,
             plugins: [
+              useClientHeader(requireClient),
               // First: aliased invitations are counted before anything runs.
               ...(consoleOptions.budgets === undefined
                 ? []

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "@/app";
+import { clientHeaders } from "~/client-header";
 
 const app = createApp();
 const LEAK = "987654321";
@@ -8,7 +9,7 @@ const MEDIA = ["application/json", "application/graphql-response+json"];
 const post = (accept: string, query: string, variables: unknown) =>
   app.request("http://acme.clavix.test/graphql", {
     method: "POST",
-    headers: { "content-type": "application/json", accept },
+    headers: { ...clientHeaders, "content-type": "application/json", accept },
     body: JSON.stringify({ query, variables }),
   });
 

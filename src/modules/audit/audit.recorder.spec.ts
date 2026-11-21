@@ -16,6 +16,7 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users/tenant-janus";
+import { clientHeaders } from "~/client-header";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a
 // recorder that is down never fails the sign-in (D13).
@@ -41,6 +42,7 @@ async function gql(
   const response = await app.request(url(slug), {
     method: "POST",
     headers: {
+      ...clientHeaders,
       "content-type": "application/json",
       "x-forwarded-for": "198.51.100.9",
       "user-agent": "Mozilla/5.0 Firefox/130.0",

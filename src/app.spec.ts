@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { graphqlClient } from "@softistx/alxia-graphql/testing";
+import { clientHeaders } from "~/client-header";
 import { graphql } from "~/generated/graphql";
 import { createApp } from "./app";
 import { version } from "./modules/health";
@@ -22,7 +23,9 @@ test("GET /healthz answers ok and the version", async () => {
 });
 
 test("Query.health answers ok and the version through /graphql", async () => {
-  const result = await graphqlClient(app).query(Health);
+  const result = await graphqlClient(app, { headers: clientHeaders }).query(
+    Health,
+  );
   expect(result.data?.health).toEqual({
     status: "ok",
     version,
@@ -38,7 +41,7 @@ const openIde = (target: ReturnType<typeof createApp>) =>
 const introspect = async (target: ReturnType<typeof createApp>) => {
   const response = await target.request("http://localhost/graphql", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify({
       query:
         '{ __schema { queryType { name } } __type(name: "Query") { name } }',
@@ -65,9 +68,10 @@ test("the hosted schema is not introspected by default", async () => {
     "introspection",
   );
   // An ordinary query still runs.
-  expect((await graphqlClient(app).query(Health)).data?.health.status).toBe(
-    "ok",
-  );
+  expect(
+    (await graphqlClient(app, { headers: clientHeaders }).query(Health)).data
+      ?.health.status,
+  ).toBe("ok");
 });
 
 test("with the IDE switched on (development) the page and introspection are back", async () => {

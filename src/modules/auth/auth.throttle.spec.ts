@@ -17,6 +17,7 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
+import { clientHeaders } from "~/client-header";
 import { settled } from "./auth.outbox";
 import { createSignInThrottle, type SignInLimitConfig } from "./auth.throttle";
 
@@ -77,7 +78,11 @@ async function setup(limits: SignInLimitConfig) {
   const ask = async (slug: string, ip: string, email = nextEmail()) => {
     const response = await app.request(`${issuerOf(slug, origin)}/graphql`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      headers: {
+        ...clientHeaders,
+        "content-type": "application/json",
+        "x-forwarded-for": ip,
+      },
       body: JSON.stringify({ query: REQUEST, variables: { email } }),
     });
     const body = (await response.json()) as {
