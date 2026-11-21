@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { OptimisticLockError } from "@softistx/mongo";
 import { mongo } from "@/config/db";
+import { quietTenants } from "~/ports";
 import {
   InvalidSlugError,
   PlatformTenantProtectedError,
@@ -14,6 +15,7 @@ const collection = mongo.db.tenants;
 const hosts: string[][] = [];
 const logged: string[] = [];
 const service = new TenantsService(collection, {
+  ...quietTenants,
   now: () => new Date(),
   domain: "clavix.test",
   onHostsChanged: (changed) => {
@@ -34,6 +36,7 @@ describe("TenantsService onCreated", () => {
     const created: string[] = [];
     const quiet: string[] = [];
     const ok = new TenantsService(collection, {
+      ...quietTenants,
       now: () => new Date(),
       log: () => {},
       domain: "clavix.test",
@@ -45,6 +48,7 @@ describe("TenantsService onCreated", () => {
     expect(created).toEqual([tenant._id.toHexString()]);
 
     const failing = new TenantsService(collection, {
+      ...quietTenants,
       now: () => new Date(),
       domain: "clavix.test",
       onCreated: () => {
@@ -159,6 +163,7 @@ describe("TenantsService", () => {
 
   test("a hook that throws is logged and the write stands", async () => {
     const failing = new TenantsService(collection, {
+      ...quietTenants,
       now: () => new Date(),
       domain: "clavix.test",
       onHostsChanged: () => {
@@ -188,6 +193,7 @@ describe("TenantsService", () => {
       update: collection.update.bind(collection),
     } as unknown as typeof collection;
     const once = new TenantsService(racing, {
+      ...quietTenants,
       now: () => new Date(),
       domain: "clavix.test",
       log: () => {},
@@ -205,6 +211,7 @@ describe("TenantsService", () => {
     } as unknown as typeof collection;
     await expect(
       new TenantsService(always, {
+        ...quietTenants,
         now: () => new Date(),
         domain: "clavix.test",
         log: () => {},
@@ -227,6 +234,7 @@ describe("TenantsService", () => {
         update: collection.update.bind(collection),
       }) as unknown as typeof collection;
     const twice = new TenantsService(racing(2), {
+      ...quietTenants,
       now: () => new Date(),
       domain: "clavix.test",
       log: () => {},
@@ -236,6 +244,7 @@ describe("TenantsService", () => {
     reads = 0;
     await expect(
       new TenantsService(racing(3), {
+        ...quietTenants,
         now: () => new Date(),
         domain: "clavix.test",
         log: () => {},

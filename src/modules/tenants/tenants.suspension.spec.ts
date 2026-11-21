@@ -10,6 +10,7 @@ import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService, RECHECK_GRACE_DAYS } from "@/modules/domains";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
 import { clientHeaders } from "~/client-header";
+import { quietDomains } from "~/ports";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
 import { issuerOf } from "./tenants.utils";
 
@@ -129,6 +130,7 @@ describe("a suspension and the cached custom hosts", () => {
     const records = new Map<string, TxtAnswer>();
     let clock = new Date("2026-11-12T12:00:00Z");
     const store = new DomainsService(mongo.db.domains, {
+      ...quietDomains,
       dns: {
         resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
       },
@@ -157,6 +159,7 @@ describe("a suspension and the cached custom hosts", () => {
     expect(await store.verifiedHostsOf(created._id)).toEqual([kept]);
 
     const tenancy = createTenancy({
+      onCreated: async () => {},
       log: () => {},
       tenants: mongo.db.tenants,
       cache: memoryTenantCache(Date.now),

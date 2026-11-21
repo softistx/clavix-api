@@ -17,6 +17,7 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a
 // recorder that is down never fails the sign-in (D13).
@@ -28,6 +29,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),

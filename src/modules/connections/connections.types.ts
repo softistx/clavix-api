@@ -45,8 +45,8 @@ export type ConnectionsFetch = NonNullable<OidcConnectionsOptions["fetch"]>;
 export interface ConnectionsOptions {
   txt: TxtResolver;
   links: LinkCounter;
-  /** Reads the issuer's metadata: whether it advertises the `iss` response parameter (RFC 9207). Absent: never pinned. */
-  advertisesIss?: (issuer: string) => Promise<boolean>;
+  /** Reads the issuer's metadata: whether it advertises the `iss` response parameter (RFC 9207). */
+  advertisesIss: (issuer: string) => Promise<boolean>;
   now: () => Date;
   log: (message: string) => void;
 }

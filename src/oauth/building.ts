@@ -33,13 +33,11 @@ export interface BuildDeps {
   authFor: AuthFor;
   oidc: ReturnType<typeof createOidcProvider>;
   clock: Clock;
-  rolesFor?: RolesFor | undefined;
-  /** Absent: no client may exchange tokens. */
-  exchangeRulesFor?: ExchangeRulesFor | undefined;
-  /** Absent: no client is an agent, so `subjectAgents` covers nothing. */
-  agentCheckFor?: AgentCheckFor | undefined;
-  /** The listener of a tenant's OAuth events (D12, D14); absent: none is reported. */
-  eventsFor?: ((tenant: ResolvedTenant) => OAuthEventListener) | undefined;
+  rolesFor: RolesFor;
+  exchangeRulesFor: ExchangeRulesFor;
+  agentCheckFor: AgentCheckFor;
+  /** The listener of a tenant's OAuth events (D12, D14). */
+  eventsFor: (tenant: ResolvedTenant) => OAuthEventListener;
   /** Specs inject the metadata documents' transport; production uses janus's. */
   metadataTransport?: MetadataTransport | undefined;
   /** The ports a metadata document may be served on. Default: 443. */
@@ -114,14 +112,11 @@ export const buildIssuer =
       ),
       // RFC 8693: served by every tenant (see `exchangePolicy`).
       tokenExchange: {
-        policy: exchangePolicy(
-          exchangeRulesFor?.(tenant),
-          agentCheckFor?.(tenant),
-        ),
+        policy: exchangePolicy(exchangeRulesFor(tenant), agentCheckFor(tenant)),
       },
       // Consents, revocations, reuse, device decisions, exchanges and
       // registrations of THIS tenant's issuer, for its own log only (D14).
-      ...(eventsFor === undefined ? {} : { events: eventsFor(tenant) }),
+      events: eventsFor(tenant),
       lifetimes,
       accessTokens: {
         format: "jwt" as const,
@@ -147,7 +142,7 @@ export const buildIssuer =
           amr?: readonly string[];
         }) => ({
           // A machine has no roles: its subject is a client id, not a user.
-          ...(rolesFor === undefined || subjectType === "client"
+          ...(subjectType === "client"
             ? {}
             : {
                 roles: await rolesFor(tenant)(

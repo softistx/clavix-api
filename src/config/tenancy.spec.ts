@@ -6,11 +6,15 @@ import type { TxtAnswer } from "@/modules/domains";
 import { DomainsService } from "@/modules/domains";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietDomains } from "~/ports";
 
 // createTenancy (the wiring of src/config/tenancy.ts) on the wired collection,
 // with the in-memory cache in place of Redis.
 const cache = memoryTenantCache(Date.now);
 const { tenantResolver: resolver, tenantsService: service } = createTenancy({
+  domains: noCustomDomains.domains,
+  hostsOf: async () => [],
+  onCreated: async () => {},
   log: () => {},
   tenants: mongo.db.tenants,
   cache,
@@ -54,6 +58,7 @@ describe("custom domains in the production wiring", () => {
     const tenant = await service.create({ slug: "acme", name: "Acme" });
     const records = new Map<string, TxtAnswer>();
     const store = new DomainsService(mongo.db.domains, {
+      ...quietDomains,
       dns: {
         resolveTxt: async (name) => records.get(name) ?? { kind: "none" },
       },
@@ -62,6 +67,7 @@ describe("custom domains in the production wiring", () => {
       now: () => new Date(),
     });
     const tenancy = createTenancy({
+      onCreated: async () => {},
       log: () => {},
       tenants: mongo.db.tenants,
       cache: memoryTenantCache(Date.now),

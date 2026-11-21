@@ -9,6 +9,7 @@ import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { secretBox } from "@/config/keys";
+import { unthrottled } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import {
   domainsService,
@@ -61,6 +62,7 @@ const as = async (
 ): Promise<Result> => {
   const response = await createApp({
     console: {
+      auditExport: { throttle: unthrottled },
       now: () => new Date(),
       reportError: () => {},
       authenticate: async () => ({

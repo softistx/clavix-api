@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { QuotaExceededError } from "@/modules/usage/usage.errors";
+import { quietDomains } from "~/ports";
 import type { TxtAnswer, TxtResolver } from "./domains.dns";
 import { DomainError } from "./domains.errors";
 import type { DomainSystemEvent } from "./domains.events";
@@ -18,6 +19,7 @@ let clock = new Date("2026-11-12T12:00:00Z");
 const changed: string[][] = [];
 const events: DomainSystemEvent[] = [];
 const store = new DomainsService(collection, {
+  ...quietDomains,
   dns,
   platformDomain: "clavix.test",
   now: () => clock,
@@ -194,6 +196,7 @@ describe("verify", () => {
   test("an event that cannot be recorded does not fail the verification", async () => {
     const logged: string[] = [];
     const failing = new DomainsService(collection, {
+      ...quietDomains,
       dns,
       platformDomain: "clavix.test",
       now: () => clock,

@@ -20,6 +20,7 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import {
   createHomeRealmThrottle,
   createSsoStartThrottle,
@@ -33,6 +34,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),

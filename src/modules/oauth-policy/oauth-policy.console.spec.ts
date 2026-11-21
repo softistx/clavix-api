@@ -6,6 +6,7 @@ import { access } from "@/config/access";
 import { adminEventReader, adminEventRecorder } from "@/config/admin-events";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
+import { unthrottled } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantsService } from "@/config/tenancy";
 import type { ConsoleAdmins, ConsoleUsers } from "@/console/context";
@@ -34,6 +35,7 @@ const as = async (
 ): Promise<Result> => {
   const response = await createApp({
     console: {
+      auditExport: { throttle: unthrottled },
       now: () => new Date(),
       reportError: () => {},
       authenticate: async () => ({

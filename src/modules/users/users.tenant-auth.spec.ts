@@ -13,11 +13,17 @@ import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import {
+  noCustomDomains,
+  quietJanus,
+  quietOAuth,
+  quietTenants,
+  quietUsers,
+} from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { originOf, rpIdOf } from "./users.rp";
 import { SESSION_COOKIE } from "./users.session";
 import { createTenantAuth } from "./users.tenant-auth";
-import { buildTenantJanus } from "./users.tenant-janus";
 
 const DOMAIN = "clavix.test";
 const RESOURCE = "https://api.clavix.test/mcp";
@@ -26,18 +32,21 @@ const EMAIL = "ada@example.test";
 const config = { scheme: "https", domain: DOMAIN } as const;
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: (slug) => mongo.db.tenants.findFirst({ slug }),
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
   onHostsChanged: (hosts) => resolver.invalidate(hosts),
 });
 const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth({
+  ...quietUsers,
   resolver,
   db: oauthDb,
   log: () => {},
@@ -45,6 +54,7 @@ const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth({
 
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,
@@ -375,11 +385,7 @@ describe("magic link policy", () => {
         methods: [{ type: "magicLink" as const, enabled: true }],
       },
     };
-    expect(buildTenantJanus(oauthDb, chosen, () => {}).magicLink.enabled).toBe(
-      true,
-    );
-    expect(buildTenantJanus(oauthDb, tenant, () => {}).magicLink.enabled).toBe(
-      false,
-    );
+    expect(quietJanus(oauthDb, chosen).magicLink.enabled).toBe(true);
+    expect(quietJanus(oauthDb, tenant).magicLink.enabled).toBe(false);
   });
 });

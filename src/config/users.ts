@@ -9,12 +9,13 @@ import { connectionsService } from "./connections";
 import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { masterKeys, secretBox } from "./keys";
+import { noInvitationHooks } from "./no-ops";
 import { oauthDb } from "./oauth-db";
 import { warn } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 
 // What accepting an invitation does: on the `clavix` tenant (the console's
-// users) an admin invitation grants its console role; nothing more elsewhere.
+// users) an admin invitation grants its console role; none elsewhere (`noInvitationHooks`).
 const adminHooks = (tenant: ResolvedTenant) =>
   adminInvitationHooks({
     access,
@@ -41,7 +42,9 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     connections: connectionsService,
     events: (tenant) => janusListener(tenant.tenantId, eventBus),
     invitationHooks: (tenant) =>
-      tenant.slug === PLATFORM_TENANT_SLUG ? adminHooks(tenant) : undefined,
+      tenant.slug === PLATFORM_TENANT_SLUG
+        ? adminHooks(tenant)
+        : noInvitationHooks,
   },
 );
 

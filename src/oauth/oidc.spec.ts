@@ -12,6 +12,7 @@ import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../test/tenant-par-off";
 import { createClavixOAuthIssuers, userinfoOf } from "./issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "./ports";
@@ -24,12 +25,14 @@ const config = { scheme: "https", domain: DOMAIN } as const;
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: findTenant,
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
@@ -66,6 +69,7 @@ const claimsFor: ClaimsFor = (tenant) => async (subject) => ({
 });
 
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,

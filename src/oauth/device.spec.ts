@@ -210,7 +210,10 @@ describe("tenant state", () => {
     const tenant = await findTenant("dev-susp");
     if (tenant === undefined) throw new Error("no tenant");
     await tenantsService.suspend(tenant._id);
-    const guarded = withTenantState(flow.issuers, { resolver: tenantResolver });
+    const guarded = withTenantState(flow.issuers, {
+      resolver: tenantResolver,
+      onActive: async () => {},
+    });
     const response = await guarded.handle(
       new Request(flow.url("dev-susp", "/device_authorization"), {
         method: "POST",

@@ -16,6 +16,7 @@ import {
 import { createClavixOAuthIssuers, userinfoOf } from "@/oauth/issuers";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { mongoDetailTypeClients } from "./resources.client-lists";
 import { ResourcesService } from "./resources.service";
@@ -42,12 +43,14 @@ const build = (resources = mongo.db.resources) =>
 const service = build();
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: findTenant,
   cache: noTenantCache,
   config,
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
@@ -55,6 +58,7 @@ const tenants = new TenantsService(mongo.db.tenants, {
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,

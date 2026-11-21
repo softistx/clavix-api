@@ -14,6 +14,7 @@ import {
   TenantsService,
 } from "@/modules/tenants";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import { buildTelemetry } from "./build";
 import { parseOtlpHeaders } from "./otlp-headers";
 
@@ -25,6 +26,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),

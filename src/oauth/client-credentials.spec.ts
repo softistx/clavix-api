@@ -307,7 +307,10 @@ describe("the client credentials grant", () => {
     const tenant = await findTenant("cc-susp");
     if (tenant === undefined) throw new Error("no tenant");
     await tenantsService.suspend(tenant._id.toHexString());
-    const guarded = withTenantState(flow.issuers, { resolver: tenantResolver });
+    const guarded = withTenantState(flow.issuers, {
+      resolver: tenantResolver,
+      onActive: async () => {},
+    });
     const response = await guarded.handle(
       new Request(flow.url("cc-susp", "/token"), {
         method: "POST",

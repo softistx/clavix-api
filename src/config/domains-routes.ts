@@ -22,6 +22,9 @@ export { TLS_ASK_PATH, WEBAUTHN_WELL_KNOWN };
  */
 const askLimits = redis?.limits;
 
+/** No Redis (development, specs): every ask is within the limit. */
+const unlimited = async (): Promise<boolean> => true;
+
 /** The ask over the real stores, with the given secret (specs pass their own). */
 export const tlsAskOver = (secret: string | undefined) =>
   tlsAsk({
@@ -43,10 +46,10 @@ export const tlsAskOver = (secret: string | undefined) =>
       },
     }),
     // Fails closed when Redis is down (`tlsAskGate`); no Redis at all
-    // (development, specs): no limit.
+    // (development, specs): `unlimited`.
     limit:
       askLimits === undefined
-        ? undefined
+        ? unlimited
         : tlsAskGate(
             () =>
               askLimits.tlsAsk.consume({ scope: "all" }, 1, { timeoutMs: 250 }),

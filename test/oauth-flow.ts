@@ -22,6 +22,7 @@ import type {
   RegisterThrottle,
 } from "@/oauth/register-throttle";
 import type { MetadataTransport } from "@/oauth/registration";
+import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "./tenant-par-off";
 
 export const DOMAIN = (await import("@/config/env")).env.CLAVIX_DOMAIN;
@@ -66,6 +67,7 @@ export function createFlow(
     email_verified: true,
   });
   const base = createClavixOAuthIssuers({
+    ...quietOAuth,
     clock: { now: () => new Date() },
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,

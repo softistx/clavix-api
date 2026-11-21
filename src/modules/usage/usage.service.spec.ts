@@ -7,6 +7,7 @@ import { oauthDb } from "@/config/oauth-db";
 import { usageService } from "@/config/usage";
 import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, TenantsService } from "@/modules/tenants";
+import { quietTenants } from "~/ports";
 import { QuotaExceededError } from "./usage.errors";
 import { assertWithinQuota } from "./usage.rules";
 import { UsageService } from "./usage.service";
@@ -146,6 +147,7 @@ describe("hard quotas", () => {
 describe("the clients count over the real OAuth store", () => {
   test("counts a tenant's registered clients and no other tenant's", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      ...quietTenants,
       now: () => new Date(),
       log: () => {},
       domain: "clavix.test",
@@ -182,6 +184,7 @@ describe("the clients count over the real OAuth store", () => {
   });
   test("agents are not clients: dynamic agents leave the clients count and fill the agents count", async () => {
     const service = new TenantsService(mongo.db.tenants, {
+      ...quietTenants,
       now: () => new Date(),
       log: () => {},
       domain: "clavix.test",

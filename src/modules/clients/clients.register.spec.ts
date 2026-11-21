@@ -24,6 +24,7 @@ import {
 } from "@/shared/cli";
 import { createTenantResolver } from "@/tenancy/resolver";
 import { noTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { parseClientArgs } from "./clients.cli";
 import { registerClient } from "./clients.register";
@@ -36,12 +37,14 @@ const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const options = { db: oauthDb, findTenant, now: () => new Date() };
 
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   lookup: findTenant,
   cache: noTenantCache,
   config,
   log: () => {},
 });
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: DOMAIN,
@@ -49,6 +52,7 @@ const tenants = new TenantsService(mongo.db.tenants, {
 });
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver,

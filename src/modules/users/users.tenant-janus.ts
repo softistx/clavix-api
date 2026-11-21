@@ -19,7 +19,6 @@ import { isEnabled } from "@/modules/sign-in-methods";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { originOf, rpIdOf } from "./users.rp";
 import { userSchema } from "./users.schema";
-import { ephemeralSecondFactorKeys } from "./users.second-factor-keys";
 import {
   MAGIC_LINK_LIFESPAN,
   SESSION,
@@ -42,9 +41,7 @@ export interface InvitationHooks {
   }): void | Promise<void>;
 }
 
-export type InvitationHooksFor = (
-  tenant: ResolvedTenant,
-) => InvitationHooks | undefined;
+export type InvitationHooksFor = (tenant: ResolvedTenant) => InvitationHooks;
 
 /**
  * A passkey as the first factor: the relying party is the tenant's own
@@ -72,12 +69,12 @@ function buildJanus(
   db: Db,
   tenant: ResolvedTenant,
   secondFactorKeys: [SealingKey, ...SealingKey[]],
-  social?: SocialConfig,
-  hooks?: InvitationHooks,
-  events?: UserEventListener,
+  social: SocialConfig | undefined,
+  hooks: InvitationHooks,
+  events: UserEventListener,
 ) {
   return janus({
-    ...(events === undefined ? {} : { events }),
+    events,
     // janus refuses a social config with no provider: such a tenant gets none.
     ...(social === undefined ? {} : { social }),
     user: userSchema,
@@ -117,8 +114,8 @@ function buildJanus(
         email: invitation.email,
         name: invitation.name,
       }),
-      ...(hooks === undefined ? {} : { beforeAccept: hooks.beforeAccept }),
-      onAccepted: hooks?.onAccepted ?? (() => {}),
+      beforeAccept: hooks.beforeAccept,
+      onAccepted: hooks.onAccepted,
     },
   });
 }
@@ -145,12 +142,11 @@ export function buildTenantJanus(
   db: Db,
   tenant: ResolvedTenant,
   log: (message: string) => void,
-  secrets?: SecretBox,
-  hooks?: InvitationHooks,
-  events?: UserEventListener,
-  // Specs only: the server always passes the keyring's (`createTenantJanusIssuers`).
-  secondFactorKeys: [SealingKey, ...SealingKey[]] = ephemeralSecondFactorKeys(),
-  connections?: ConnectionsOf,
+  secrets: SecretBox,
+  hooks: InvitationHooks,
+  events: UserEventListener,
+  secondFactorKeys: [SealingKey, ...SealingKey[]],
+  connections: ConnectionsOf,
 ): TenantJanus {
   const { config, realms } = socialConfigOf(tenant, secrets, log, connections);
   // Traced (D24): a span per flow, the security events as logs; neither names an address or a login.

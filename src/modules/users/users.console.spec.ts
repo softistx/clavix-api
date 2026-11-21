@@ -24,6 +24,7 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
+import { quietOAuth } from "~/ports";
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -32,6 +33,7 @@ const origin = {
 } as const;
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,

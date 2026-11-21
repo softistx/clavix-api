@@ -14,13 +14,9 @@ import {
   PLATFORM_TENANT_SLUG,
   TenantsService,
 } from "@/modules/tenants";
-import {
-  buildTenantJanus,
-  originOf,
-  rpIdOf,
-  SESSION_COOKIE,
-} from "@/modules/users";
+import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
+import { quietJanus, quietTenants } from "~/ports";
 
 const app = createApp();
 const origin = {
@@ -29,6 +25,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -516,15 +513,11 @@ describe("development over http", () => {
   test("a tenant on an http .localhost origin builds a janus with its real rpId and origin, passkeys on", async () => {
     const tenant = await tenantOf("acme");
     const issuer = "http://acme.clavix.localhost:3000";
-    const janus = buildTenantJanus(
-      oauthDb,
-      {
-        ...tenant,
-        issuer,
-        slugIssuer: issuer,
-      },
-      () => {},
-    );
+    const janus = quietJanus(oauthDb, {
+      ...tenant,
+      issuer,
+      slugIssuer: issuer,
+    });
     expect(janus.passkeys).toBeDefined();
     expect(rpIdOf({ slugIssuer: issuer })).toBe("acme.clavix.localhost");
     expect(originOf({ slugIssuer: issuer })).toBe(issuer);

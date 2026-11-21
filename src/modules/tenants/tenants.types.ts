@@ -11,29 +11,29 @@ export interface PublicOrigin {
 export interface TenantsServiceOptions {
   /** The current time. */
   now: () => Date;
-  /** The apex tenants' hosts hang under. Default `CLAVIX_DOMAIN`. */
-  domain?: string;
+  /** The apex tenants' hosts hang under (`CLAVIX_DOMAIN`, passed by `config/tenancy.ts`). */
+  domain: string;
   /**
    * Called with the hosts whose resolution may have changed, after the write
-   * (the resolver's cache drops them from step 3 of slice 1.1). Default: none.
+   * (the resolver's cache drops them from step 3 of slice 1.1).
    * Contract: it runs after the write is stored; an error it throws is logged
    * (`log`) and swallowed, never reaching the caller, so the write stands. A
    * cache that failed to drop a host heals by its TTL.
    */
-  onHostsChanged?: (hosts: string[]) => void | Promise<void>;
+  onHostsChanged: (hosts: string[]) => void | Promise<void>;
   /**
    * Every custom host that resolves to the tenant (verified, or a lapsed primary), dropped with its slug host on each
    * write: a suspended or deleted tenant must stop resolving on them at once.
-   * Default: none. An error is logged and the slug host is still dropped.
+   * An error is logged and the slug host is still dropped.
    */
-  hostsOf?: (tenantId: ObjectId) => string[] | Promise<string[]>;
+  hostsOf: (tenantId: ObjectId) => string[] | Promise<string[]>;
   /**
    * Called with the tenant's id (hex, the janus partition) once it is created,
    * to give it its first signing key before any token. Same contract as
    * `onHostsChanged`: an error is logged and swallowed, the tenant stands, and
    * the rotation job creates the key within the hour.
    */
-  onCreated?: (tenantId: string) => void | Promise<void>;
+  onCreated: (tenantId: string) => void | Promise<void>;
   /** Where a hook failure is logged. */
   log: (message: string) => void;
 }

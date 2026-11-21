@@ -37,6 +37,7 @@ import { userinfoOf } from "@/oauth/building";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
+import { quietOAuth } from "~/ports";
 import { createConsoleAuthenticator } from "./auth";
 import { onPlatform, onTenant } from "./guard";
 import {
@@ -66,6 +67,7 @@ const FOREIGN = { id: "spec-foreign", secret: "" };
 const clock = fixedClock(new Date());
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,
   db: oauthDb,

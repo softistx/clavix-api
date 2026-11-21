@@ -7,9 +7,9 @@ import { oauthPolicySchema } from "@/modules/oauth-policy/oauth-policy.schema";
 import { signInPolicySchema } from "@/modules/sign-in-methods";
 import { createTenantResolver, type TenantRecord } from "@/tenancy/resolver";
 import { memoryTenantCache } from "@/tenancy/tenant-cache";
+import { noCustomDomains, quietJanus, quietUsers } from "~/ports";
 import { SESSION_COOKIE } from "./users.session";
 import { createTenantAuth } from "./users.tenant-auth";
-import { buildTenantJanus } from "./users.tenant-janus";
 
 // ADR-0036: the rpId stays the slug host; a verified custom domain is a related
 // origin, so a ceremony run on it is accepted. janus-passkeys compares
@@ -34,6 +34,7 @@ const record: TenantRecord = {
 /** The domains of the tenant, as the store would answer. */
 const verified = new Set<string>();
 const resolver = createTenantResolver({
+  ...noCustomDomains,
   lookup: async (slug) => (slug === record.slug ? record : undefined),
   lookupById: async () => record,
   domains: {
@@ -46,6 +47,7 @@ const resolver = createTenantResolver({
   log: () => {},
 });
 const { janusIssuers } = createTenantAuth({
+  ...quietUsers,
   resolver,
   db: oauthDb,
   log: () => {},
@@ -131,14 +133,10 @@ describe("passkeys on a custom domain (related origins)", () => {
     const tenant = await resolver.resolveHost(SLUG_HOST);
     if (tenant === null) throw new Error("no tenant");
     expect(() =>
-      buildTenantJanus(
-        oauthDb,
-        {
-          ...tenant,
-          relatedOrigins: relatedOriginsOf(["a.example"], config),
-        },
-        () => {},
-      ),
+      quietJanus(oauthDb, {
+        ...tenant,
+        relatedOrigins: relatedOriginsOf(["a.example"], config),
+      }),
     ).not.toThrow();
   });
 });

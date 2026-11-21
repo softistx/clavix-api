@@ -107,7 +107,7 @@ export function exportAs(
     console: {
       ...deps,
       directory: { ...deps.directory, emailVerified: async () => true },
-      ...(auditExport === undefined ? {} : { auditExport }),
+      auditExport: { ...deps.auditExport, ...auditExport },
       authenticate: async () => ({
         userId,
         clientId: "spec",

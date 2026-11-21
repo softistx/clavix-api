@@ -73,11 +73,11 @@ export interface ConsoleDeps {
   now: () => Date;
   /** Where a swallowed failure (token check, export record) is logged, with its cause. */
   reportError: (message: string, cause: unknown) => void;
-  /** The audit export's limits; the real ones (100 000 rows) by default. */
-  auditExport?: {
+  /** The audit export's limits: `maxRows` is the real one (100 000 rows) when left out. */
+  auditExport: {
     maxRows?: number;
-    /** Per-tenant export budget; none without Redis. */
-    throttle?: ExportThrottle;
+    /** Per-tenant export budget (`unthrottled` without Redis). */
+    throttle: ExportThrottle;
   };
 }
 

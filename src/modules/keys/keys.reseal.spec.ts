@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { StoreFailure } from "@softistx/janus";
+import { mintWebhookSecret } from "@softistx/janus-webhooks";
 import { mongo } from "@/config/db";
 import { ConnectionsService } from "@/modules/connections";
 import {
@@ -11,6 +12,7 @@ import {
 import { TenantsService } from "@/modules/tenants";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
+import { quietTenants } from "~/ports";
 import { resealAllTenants } from "./keys.reseal";
 import { ensureSigningKey } from "./keys.service";
 import { createTenantKeys } from "./keys.signing-keys";
@@ -30,6 +32,7 @@ type Ring = [Uint8Array, ...Uint8Array[]];
 /** Clavix's own sealed stores as the server wires them, over one keyring. */
 const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
   const tenants = new TenantsService(mongo.db.tenants, {
+    ...quietTenants,
     log,
     now: () => new Date(),
   });
@@ -46,6 +49,7 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
       policy: { allowPrivate: false, resolve: async () => ["93.184.216.34"] },
       log,
       now: () => new Date(),
+      mint: mintWebhookSecret,
     },
   );
   const connections = new ConnectionsService(
@@ -54,6 +58,7 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
     {
       txt: { resolveTxt: async () => ({ kind: "none" }) },
       links: async () => 0,
+      advertisesIss: async () => false,
       log,
       now: () => new Date(),
     },

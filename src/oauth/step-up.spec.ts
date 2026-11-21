@@ -19,6 +19,7 @@ import { SignInPolicyService } from "@/modules/sign-in-methods";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { originOf, rpIdOf, SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
+import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "../../test/tenant-par-off";
 import { ACR } from "./authentication-level";
 import { createClavixOAuthIssuers } from "./issuers";
@@ -46,6 +47,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,

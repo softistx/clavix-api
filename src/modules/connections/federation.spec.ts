@@ -32,6 +32,7 @@ import { ACR, acrOf } from "@/oauth/authentication-level";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import type { AuthFor, ClaimsFor, SigningKeysFor } from "@/oauth/ports";
 import { clientHeaders } from "~/client-header";
+import { noCustomDomains, quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 // Tenant "fedidp" of this very Clavix is the upstream identity provider of
@@ -60,6 +61,7 @@ const IDP_ISSUER = `https://${IDP_HOST}`;
 const memory = mailer as MemoryMailer;
 
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -93,6 +95,7 @@ const app = createApp({
 
 // The upstream: its own OAuth issuers over the same database, like oidc.spec.
 const idpResolver = (await import("@/tenancy/resolver")).createTenantResolver({
+  ...noCustomDomains,
   log: () => {},
   lookup: (slug: string) => mongo.db.tenants.findFirst({ slug }),
   cache: (await import("@/tenancy/tenant-cache")).noTenantCache,
@@ -118,6 +121,7 @@ const claimsFor: ClaimsFor = () => async (subject) => ({
   email_verified: true,
 });
 const idp = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: idpResolver,

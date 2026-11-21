@@ -21,6 +21,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
 import { type ConsoleResult, codeOf, verifiedCallers } from "~/console";
+import { quietOAuth } from "~/ports";
 
 // A tenant-level role on the `clavix` tenant is not the platform's: every
 // console write that targets it needs the platform permission.
@@ -31,6 +32,7 @@ let OWNER = "";
 // The real wiring (issuers, grants): deleting a user needs the user's grants.
 const keys = new Map<string, SigningKeyStore>();
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,

@@ -14,17 +14,17 @@ import type { ExchangeRules } from "./ports";
  */
 export const exchangePolicy =
   (
-    rulesOf: ((clientId: string) => Promise<ExchangeRules | null>) | undefined,
-    isAgent?: (clientId: string) => Promise<boolean>,
+    rulesOf: (clientId: string) => Promise<ExchangeRules | null>,
+    isAgent: (clientId: string) => Promise<boolean>,
   ): OAuthTokenExchangeOptions["policy"] =>
   async ({ clientId, subject, resource }) => {
-    const rules = await rulesOf?.(clientId);
-    if (rules === undefined || rules === null) return null;
+    const rules = await rulesOf(clientId);
+    if (rules === null) return null;
     if (!rules.targetResources.includes(resource)) return null;
     if (
       rules.subjectClients !== "any" &&
       !rules.subjectClients.includes(subject.clientId) &&
-      !(rules.subjectAgents && (await isAgent?.(subject.clientId)) === true)
+      !(rules.subjectAgents && (await isAgent(subject.clientId)))
     ) {
       return null;
     }

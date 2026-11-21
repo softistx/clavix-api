@@ -13,16 +13,15 @@ export interface TlsAskDeps {
   allowed(host: string): Promise<boolean>;
   /**
    * Whether a certificate may be issued for a host under the platform domain
-   * (`<slug>.<platformDomain>` of a live tenant, `console.`, the apex). Unset:
-   * none is, only custom domains are served.
+   * (`<slug>.<platformDomain>` of a live tenant, `console.`, the apex).
    */
-  allowedPlatformHost?: ((host: string) => Promise<boolean>) | undefined;
+  allowedPlatformHost: (host: string) => Promise<boolean>;
   /**
    * Spends one ask of a host that may have a certificate (an unknown host
    * never reaches it); `false` past the limit, and when the limiter cannot
    * answer (fails closed, see `tlsAskGate`).
    */
-  limit?: (() => Promise<boolean>) | undefined;
+  limit: () => Promise<boolean>;
   log: (message: string) => void;
 }
 
@@ -105,14 +104,14 @@ export function tlsAsk(deps: TlsAskDeps) {
     // a real host needs. The limit then counts only the asks about to say yes.
     try {
       const ok = underPlatform
-        ? ((await deps.allowedPlatformHost?.(host)) ?? false)
+        ? await deps.allowedPlatformHost(host)
         : await deps.allowed(host);
       if (!ok) return answer(404);
     } catch (error) {
       deps.log(`tls-ask: lookup failed: ${String(error)}`);
       return answer(404);
     }
-    if (deps.limit !== undefined && !(await deps.limit())) return answer(429);
+    if (!(await deps.limit())) return answer(429);
     return answer(200);
   };
 }

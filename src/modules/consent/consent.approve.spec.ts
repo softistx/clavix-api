@@ -23,6 +23,7 @@ import {
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
+import { quietOAuth, quietTenants } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 
 const RESOURCE = "https://api.clavix.test/mcp";
@@ -34,6 +35,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
@@ -48,6 +50,7 @@ const signingKeysFor = (tenantId: string) => {
   return store;
 };
 const issuers = createClavixOAuthIssuers({
+  ...quietOAuth,
   clock: { now: () => new Date() },
   dpopNonceSecret: "spec-dpop-nonce-secret",
   resolver: tenantResolver,

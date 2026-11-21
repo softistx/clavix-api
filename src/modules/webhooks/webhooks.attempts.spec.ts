@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mintWebhookSecret } from "@softistx/janus-webhooks";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { createSecretBox } from "@/modules/sign-in-methods";
@@ -19,6 +20,7 @@ const service = new WebhooksService(
   {
     policy: { allowPrivate: false, resolve: async () => [] },
     now: () => new Date(),
+    mint: mintWebhookSecret,
     log: () => {},
   },
 );

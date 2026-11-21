@@ -16,6 +16,7 @@ import {
 } from "@/modules/tenants";
 import { MAGIC_LINK_LIFESPAN, SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import { settled } from "./auth.outbox";
 
 // Magic link is the tenant's choice, off until it turns it on (its sign-in
@@ -28,6 +29,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const service = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),

@@ -29,6 +29,7 @@ import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { createClavixOAuthIssuers } from "@/oauth/issuers";
 import { clientHeaders } from "~/client-header";
+import { quietOAuth } from "~/ports";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { settled } from "./auth.outbox";
 import { AuthService } from "./auth.service";
@@ -373,6 +374,7 @@ describe("the OIDC email_verified claim follows the flag", () => {
   const VERIFIER = "v".repeat(64);
   const keys = createMemorySigningKeys();
   const issuers = createClavixOAuthIssuers({
+    ...quietOAuth,
     clock: { now: () => new Date() },
     dpopNonceSecret: "spec-dpop-nonce-secret",
     resolver: tenantResolver,

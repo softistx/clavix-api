@@ -27,6 +27,7 @@ import {
 } from "@/modules/tenants";
 import { SESSION_COOKIE } from "@/modules/users";
 import { clientHeaders } from "~/client-header";
+import { quietTenants } from "~/ports";
 import { createFlow } from "../../../test/oauth-flow";
 import { createTenantParOff } from "../../../test/tenant-par-off";
 import { SignInPolicyService } from "./sign-in-methods.service";
@@ -59,6 +60,7 @@ const origin = {
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
 const tenants = new TenantsService(mongo.db.tenants, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),

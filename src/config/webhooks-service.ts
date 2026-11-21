@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises";
+import { mintWebhookSecret } from "@softistx/janus-webhooks";
 import { type UrlPolicy, WebhooksService } from "@/modules/webhooks";
 import { mongo } from "./db";
 import { env } from "./env";
@@ -21,5 +22,5 @@ export const webhooksService = new WebhooksService(
   mongo.db.webhookEndpoints,
   mongo.db.webhookDeliveries,
   webhookSecretBox,
-  { policy: urlPolicy, now: clock, log: warn },
+  { policy: urlPolicy, now: clock, mint: mintWebhookSecret, log: warn },
 );

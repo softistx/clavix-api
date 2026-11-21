@@ -3,6 +3,7 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients";
+import { quietTenants } from "~/ports";
 import { parseTenantArgs } from "./tenants.cli";
 import { TenantInputError } from "./tenants.errors";
 import { PLATFORM_TENANT_SLUG, RESERVED_SLUGS } from "./tenants.rules";
@@ -12,6 +13,7 @@ import { partitionOf } from "./tenants.utils";
 const collection = mongo.db.tenants;
 const created: string[] = [];
 const service = new TenantsService(collection, {
+  ...quietTenants,
   now: () => new Date(),
   log: () => {},
   domain: "clavix.test",

@@ -75,7 +75,7 @@ export async function authorize(
   if (tenant === undefined) {
     return refusal(404, "NOT_FOUND", "No such tenant");
   }
-  const retryAfter = await deps.auditExport?.throttle?.(tenantId);
+  const retryAfter = await deps.auditExport.throttle(tenantId);
   if (retryAfter !== undefined && retryAfter !== null) {
     return refusal(429, "RATE_LIMITED", "Too many exports", {
       "retry-after": String(retryAfter),
