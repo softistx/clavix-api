@@ -45,6 +45,9 @@ import { mountOAuth, type OAuthHandle } from "./oauth/routes";
 // The largest body /graphql reads.
 export const BODY_LIMIT = 100 * 1024;
 
+/** The highest cost of a console operation (graxia `limits.cost.max`; its default is 5 000). */
+export const CONSOLE_MAX_COST = 50_000;
+
 // `GET /healthz`, the liveness probe (no dependency is checked), `GET /readyz`, the OAuth
 // endpoints when `oauth` is given (the issuers of src/oauth, which
 // src/server.ts passes), then POST and GET /graphql behind the base's
@@ -162,6 +165,12 @@ export function createApp(
             ide: false,
             // Deliberate: the bearer token is checked first (`useConsole`), so only an authenticated admin introspects.
             introspection: true,
+            // The console reads a tenant's stored lists nested (resources > detail types > fields >
+            // values): ten items assumed per list put the UI's Applications read at 24 530, over
+            // graxia's default 5 000, refused with HTTP 200 and no data. The caller is an
+            // authenticated, verified admin, and the limit still refuses a read that multiplies
+            // those lists (aliases). Spec: `modules/resources/cost.spec.ts`.
+            limits: { cost: { max: CONSOLE_MAX_COST } },
             onUnexpected: reportUnexpected,
             plugins: [
               // First: aliased invitations are counted before anything runs.
