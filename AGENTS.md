@@ -643,7 +643,7 @@ the token claims, slices A4 and A5 the profile.
   MULTI_SELECT), a DATE is `YYYY-MM-DD`, a DATETIME is RFC 3339, NUMBER and BOOLEAN are native. A
   `client_credentials` token carries none; a reserved key is dropped and `roles`, `auth_time`, `acr` and
   `amr` win over an attribute claim. 100 STRING values weigh under 8 KiB (spec), so TEXT stays emittable.
-  **ID token and userinfo too** (janus-oidc 0.5 `scopeClaims` as a function): the `AttributeScopesFor` port
+  **ID token and userinfo too** (janus-oidc 0.5 `scopeClaims` as a function; the user's own claims, `picture` included, win over an attribute: `RESERVED_CLAIMS` drops it from the catalogue and `issuers-oidc.ts` spreads `own` last): the `AttributeScopesFor` port
   (same wiring) gives `oidcProviderOf` (`oauth/issuers-oidc.ts`) the tenant's scope table (emission scope to
   claim keys, `AttributeClaimsService.scopeClaims`, `claimTable`), unioned with `openid: [roles]`. Janus asks
   it on every discovery document, userinfo request and ID token, so the claims are released by their scope and
