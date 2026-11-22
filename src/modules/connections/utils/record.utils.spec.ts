@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { sealedUnder } from "~/webhook-docs";
-import { type ConnectionDoc, connections } from "./connections.model";
+import { type ConnectionDoc, connections } from "../connections.model";
 import {
   algorithmOf,
   claimsOf,
@@ -9,7 +9,7 @@ import {
   nextOf,
   normalDomain,
   txtNameOf,
-} from "./connections.utils";
+} from "./record.utils";
 
 const _id = new ObjectId();
 const stamp = new Date("2026-01-01T00:00:00Z");

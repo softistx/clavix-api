@@ -4,12 +4,14 @@ import { catalogTenant } from "@/console/modules/catalog-support";
 import { issuerFor } from "@/console/modules/issuer";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { effectiveQuotas } from "@/modules/tenants";
-import { createOf, patchOf, refusing } from "./connections.console-support";
+import { refusing } from "./connections.console-support";
 import {
   connectionShape,
   connectionsKey,
   connectionTarget,
-} from "./connections.utils";
+  createOf,
+  patchOf,
+} from "./utils";
 
 export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
   createConnection: async (_, { tenantId, input }, ctx) => {
