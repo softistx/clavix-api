@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { extensionCodeOf } from "@/shared/errors";
-import type { AttributeType } from "./attributes.model";
-import type { AttributeDoc } from "./attributes.types";
+import type { AttributeType } from "../attributes.model";
+import type { AttributeDoc } from "../attributes.types";
 import {
   canonicalValue,
   fieldOf,

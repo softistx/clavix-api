@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { AttributeType } from "./attributes.model";
-import type { AttributeDoc } from "./attributes.types";
-import type { ValueDoc } from "./values.types";
+import type { AttributeType } from "../attributes.model";
+import type { AttributeDoc } from "../attributes.types";
+import type { ValueDoc } from "../values.types";
 import { byUser, matches, shown } from "./values.utils";
 
 const attribute = (type: AttributeType): AttributeDoc => {

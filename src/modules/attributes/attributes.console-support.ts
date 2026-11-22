@@ -12,7 +12,7 @@ import type {
   CreateAttributeInput,
   UpdateAttributeInput,
 } from "./attributes.types";
-import { shape } from "./attributes.utils";
+import { shape } from "./utils";
 import type { ValueChange } from "./values.types";
 
 /** The tenant of the call (suspended included; the guard refuses its writes): the id as an ObjectId. */

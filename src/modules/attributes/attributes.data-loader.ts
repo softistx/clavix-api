@@ -3,7 +3,7 @@ import DataLoader from "dataloader";
 import { ObjectId } from "mongodb";
 import { attributesService, attributeValuesService } from "@/config/attributes";
 import type { ConsoleContext } from "@/console/context";
-import { attributeValueView } from "./values.utils";
+import { attributeValueView } from "./utils";
 
 /**
  * `TenantUser.attributes` of one tenant, batched per request: the general

@@ -590,6 +590,11 @@ A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slice 
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
 reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A2 to A5 add
 the stored values, the role links, the claims and the profile.
+- **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
+  with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
+  `values.service.ts`), `rules/`, `utils/`; the single-file roles (`attributes.model.ts`,
+  `attributes.errors.ts`, `attributes.refusals.ts`, `attributes.data-loader.ts`, the console files and the
+  `*.types.ts`) stay at the root. Files import each other relatively and through these barrels.
 - **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
   `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
   and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
@@ -600,17 +605,17 @@ the stored values, the role links, the claims and the profile.
   label language), a unit, options (SELECT and MULTI_SELECT only, 100 at most), `required` (USER family
   only), `userEditable`, `unique` (STRING and NUMBER only) and `emissionScope` (a scope of the tenant or a
   standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
-  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `attributes.rules.ts`.
+  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `rules/attributes.rules.ts`.
 - **The stored values** (slice A2) are the tenant-owned collection `attributeValues` (`attributes.model.ts`: one
   document per user and attribute, unique on `{tenantId, userId, attributeId}`, a partial unique index
   on `uniqueKey` for `unique` attributes; purged with the tenant, in the allow list of
-  `tenancy/guards.spec.ts`), reached only through `AttributeValuesService` (`values.service.ts`, built in
+  `tenancy/guards.spec.ts`), reached only through `AttributeValuesService` (`services/values.service.ts`, built in
   `src/config/attributes.ts` before `AttributesService`, which takes it as its `AttributeValues` port:
   counts, `setUnique`, `removeAll`). With values, the type is locked (`ATTRIBUTE_TYPE_LOCKED`, checked
   again after the write), a removed option in use is refused (`ATTRIBUTE_OPTION_IN_USE`), `unique` over
   duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`; the flag is put back), and the permanent delete removes
   the values first. `UserAttribute.roles` is `[]` until A3.
-- **Values** (`values.rules.ts`, `values.utils.ts`): a value is exactly the one typed field of its
+- **Values** (`rules/values.rules.ts`, `utils/values.utils.ts`): a value is exactly the one typed field of its
   attribute (`text` for STRING and TEXT, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`,
   `time`, `options` for SELECT and MULTI_SELECT; the SDL input is `@oneOf`), canonicalised on write
   (NFC-trimmed text, lower-cased hex colour, `-0` as `0`, UTC-midnight dates, `HH:mm:ss` times, SELECT as a
@@ -621,7 +626,7 @@ the stored values, the role links, the claims and the profile.
   reports the rest), `ATTRIBUTE_ROLE_NOT_HELD` (a `roleId` section, until A3). A save checks every change
   first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
   tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
-  social holder runs without the user's lock (a fresh, replaced account no console save targets).
+  social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.
 - **Console**: `setUserAttributeValues` (`edit`, audit `user.setAttributes`, under the user's lock only, rank
   2 of `lock-order.spec.ts`), `TenantUser.attributes` and `attributesComplete` (per-request loaders in
   `attributes.data-loader.ts`), and `userDataExport` (`users.export.ts`, `edit`, recorded as `user.export`

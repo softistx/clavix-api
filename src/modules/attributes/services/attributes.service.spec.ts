@@ -3,9 +3,9 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { extensionCodeOf } from "@/shared/errors";
 import { defined } from "~/narrow";
-import type { AttributeType } from "./attributes.model";
+import type { AttributeType } from "../attributes.model";
+import type { AttributeValues } from "../attributes.types";
 import { AttributesService } from "./attributes.service";
-import type { AttributeValues } from "./attributes.types";
 
 // A tenant id of its own: the service reads and writes through the scope, so
 // no tenant document is needed and no other spec's data is touched.

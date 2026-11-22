@@ -1,10 +1,12 @@
 import { socialResolvers } from "@softistx/janus-graphql";
 import { ObjectId } from "mongodb";
 import { attributeValuesService } from "@/config/attributes";
+import { exclusive } from "@/config/exclusive";
 import { grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
+import { userKey } from "@/console/modules/user-key";
 import type { Context } from "@/http/context";
 import { challengeAnswer } from "@/modules/mfa";
 import { services } from "@/modules/services";
@@ -162,6 +164,21 @@ export async function requireOfferedProvider(
   }
 }
 
+/**
+ * The previous holder's attribute values are personal data of someone else:
+ * the new holder starts with none. Under the user's lock, the one every write
+ * of that user's values takes (`setUserAttributeValues`, `deleteUser`), so a
+ * concurrent save cannot land after the erase and outlive it.
+ */
+export function eraseReplacedValues(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  return exclusive(userKey(tenantId, userId), async () => {
+    await attributeValuesService.removeUser(new ObjectId(tenantId), userId);
+  });
+}
+
 /** What a completed social flow answers with. */
 type Completed = Awaited<
   ReturnType<(typeof social)["Mutation"]["socialSignInComplete"]>
@@ -196,12 +213,7 @@ export async function completedAnswer(
       done.userId,
       grantsRevokeQueue.current,
     );
-    // The previous holder's attribute values are personal data of someone
-    // else: the new holder starts with none.
-    await attributeValuesService.removeUser(
-      new ObjectId(tenantId),
-      done.userId,
-    );
+    await eraseReplacedValues(tenantId, done.userId);
   }
   // janus types the user as an id and a type only: read the profile.
   const user = await auth.findUser(done.userId);

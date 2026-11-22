@@ -11,7 +11,17 @@ import {
   OIDC_SCOPES,
 } from "@/modules/resources";
 import { isOneOf } from "@/shared/values";
-import { refuse, refuseCommon } from "./attributes.refusals";
+import { refuse, refuseCommon } from "../attributes.refusals";
+import type {
+  AttributeChanges,
+  AttributeDoc,
+  AttributeFields,
+  AttributesOptions,
+  CreateAttributeInput,
+  ListFilter,
+  NewAttribute,
+  UpdateAttributeInput,
+} from "../attributes.types";
 import {
   checkBehaviour,
   cleanKey,
@@ -22,17 +32,7 @@ import {
   MAX_DESCRIPTION,
   mergedLabel,
   removedOptionKeys,
-} from "./attributes.rules";
-import type {
-  AttributeChanges,
-  AttributeDoc,
-  AttributeFields,
-  AttributesOptions,
-  CreateAttributeInput,
-  ListFilter,
-  NewAttribute,
-  UpdateAttributeInput,
-} from "./attributes.types";
+} from "../rules";
 import {
   byPosition,
   fieldsOf,
@@ -40,7 +40,7 @@ import {
   positionAfter,
   positionAt,
   STEP,
-} from "./attributes.utils";
+} from "../utils";
 
 const STALE = "The attribute was changed meanwhile; read it and try again";
 

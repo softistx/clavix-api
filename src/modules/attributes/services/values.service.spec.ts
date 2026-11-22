@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { extensionCodeOf } from "@/shared/errors";
 import { defined } from "~/narrow";
-import type { AttributeType } from "./attributes.model";
+import type { AttributeType } from "../attributes.model";
 import { AttributesService } from "./attributes.service";
 import { AttributeValuesService } from "./values.service";
 

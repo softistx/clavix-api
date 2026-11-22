@@ -1,7 +1,7 @@
-import type { AttributeType, StoredValue } from "./attributes.model";
-import { refuse } from "./attributes.refusals";
-import type { AttributeDoc } from "./attributes.types";
-import type { ValueInput } from "./values.types";
+import type { AttributeType, StoredValue } from "../attributes.model";
+import { refuse } from "../attributes.refusals";
+import type { AttributeDoc } from "../attributes.types";
+import type { ValueInput } from "../values.types";
 
 export const MAX_STRING = 200;
 export const MAX_TEXT = 2000;

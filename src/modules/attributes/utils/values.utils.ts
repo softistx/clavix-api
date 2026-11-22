@@ -1,7 +1,7 @@
-import type { AttributeType, StoredValue } from "./attributes.model";
-import type { AttributeDoc } from "./attributes.types";
+import type { AttributeType, StoredValue } from "../attributes.model";
+import type { AttributeDoc } from "../attributes.types";
+import type { ExportedValue, ShownValue, ValueDoc } from "../values.types";
 import { shape } from "./attributes.utils";
-import type { ExportedValue, ShownValue, ValueDoc } from "./values.types";
 
 const NONE = {
   text: null,

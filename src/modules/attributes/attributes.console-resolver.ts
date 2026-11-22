@@ -14,7 +14,7 @@ import {
 } from "./attributes.console-support";
 import { completeLoader, sectionsLoader } from "./attributes.data-loader";
 import { refuse, refuseCommon } from "./attributes.refusals";
-import { target } from "./attributes.utils";
+import { target } from "./utils";
 
 export {
   attributesAudits,

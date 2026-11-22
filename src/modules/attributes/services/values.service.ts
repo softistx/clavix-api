@@ -1,14 +1,9 @@
 import { ConflictError, scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
-import { refuse, refuseCommon } from "./attributes.refusals";
-import type { AttributeDoc, AttributeValues } from "./attributes.types";
-import { byPosition } from "./attributes.utils";
-import {
-  canonicalValue,
-  isEmpty,
-  MAX_CHANGES,
-  uniqueKeyOf,
-} from "./values.rules";
+import { refuse, refuseCommon } from "../attributes.refusals";
+import type { AttributeDoc, AttributeValues } from "../attributes.types";
+import { canonicalValue, isEmpty, MAX_CHANGES, uniqueKeyOf } from "../rules";
+import { byPosition, byUser, matches } from "../utils";
 import type {
   ExportedValue,
   PlannedWrite,
@@ -16,8 +11,7 @@ import type {
   ValueChange,
   ValueDoc,
   ValuesOptions,
-} from "./values.types";
-import { byUser, matches } from "./values.utils";
+} from "../values.types";
 
 const TAKEN = "another user already holds this value";
 
