@@ -18,27 +18,30 @@ import { QuotaExceededError } from "@/modules/usage";
  * issuers that advertise `iss`. `reset` (run after each test) puts them back
  * and empties the collection.
  */
-export const connectionsHarness = () => {
-  const collection = mongo.db.connections;
-  const box = createSecretBox(
-    crypto.getRandomValues(new Uint8Array(32)),
-    "connection-secrets",
-  );
-  const state: {
-    clock: Date;
-    txt: TxtAnswer;
-    linked: number;
-    asked: string[];
-    logged: string[];
-    advertised: Map<string, boolean | Error>;
-  } = {
-    clock: new Date("2026-11-18T12:00:00Z"),
-    txt: { kind: "none" },
-    linked: 0,
-    asked: [],
-    logged: [],
-    advertised: new Map(),
-  };
+type HarnessState = {
+  clock: Date;
+  txt: TxtAnswer;
+  linked: number;
+  asked: string[];
+  logged: string[];
+  advertised: Map<string, boolean | Error>;
+};
+
+const freshState = (): HarnessState => ({
+  clock: new Date("2026-11-18T12:00:00Z"),
+  txt: { kind: "none" },
+  linked: 0,
+  asked: [],
+  logged: [],
+  advertised: new Map(),
+});
+
+/** The four services over `collection`, their ports read from `state`. */
+const servicesOver = (
+  collection: typeof mongo.db.connections,
+  box: ReturnType<typeof createSecretBox>,
+  state: HarnessState,
+) => {
   const log = (message: string) => state.logged.push(message);
   const records = new ConnectionRecordsService(collection, box, {
     links: async () => state.linked,
@@ -59,6 +62,21 @@ export const connectionsHarness = () => {
   });
   const secrets = new ConnectionSecretsService(records, box, log);
   const sources = new ConnectionSourcesService(records, box, log);
+  return { records, domains, secrets, sources };
+};
+
+export const connectionsHarness = () => {
+  const collection = mongo.db.connections;
+  const box = createSecretBox(
+    crypto.getRandomValues(new Uint8Array(32)),
+    "connection-secrets",
+  );
+  const state = freshState();
+  const { records, domains, secrets, sources } = servicesOver(
+    collection,
+    box,
+    state,
+  );
   const input = (over: Partial<ConnectionInput> = {}): ConnectionInput => ({
     id: "acme",
     name: "Acme SSO",

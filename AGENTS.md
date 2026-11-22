@@ -834,12 +834,12 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 
 ## Enterprise OIDC connections (`src/modules/connections`, console side folded in by A15: `connections.console.graphqls`, `connections.console-resolver.ts` with its `-queries`, `-mutations`, `-guards`, `-support`; `src/config/connections.ts`)
 
-- Layout (A4): `connections.resolver.ts` (+ `.resolver-support.ts`), `.errors.ts`, `.rules.ts`, `.utils.ts`,
+- Layout (A4): `connections.resolver.ts` (+ `.resolver-support.ts`), `.errors.ts`, `.rules.ts`,
   `.types.ts`, `.record.ts`, `.discovery.ts`, `.sso-gate.ts`, `.integrity.ts`, `utils/` and `services/`: the domain's services
   (owner, 2026-11-20, no facade), `ConnectionRecordsService` (`records.service.ts`), `ConnectionDomainsService`,
   `ConnectionSecretsService` and `ConnectionSourcesService`, each built on its own in `src/config/connections.ts`,
-  called directly by its consumers, with its spec beside it (the 80-line cap per method holds, and pure parts go to
-  `.rules.ts` / `.utils.ts` / `.errors.ts`). `index.ts` is the import surface for other modules, and
+  called directly by its consumers, with its spec beside it (the 250-line cap is per method there: a method of 50 lines or more is a
+  finding, 80 is the hard cap; pure parts go to `.rules.ts` / `utils/` / `.errors.ts`). `index.ts` is the import surface for other modules, and
   `src/modules/services.ts` wires `connections` (the records) and `connectionSources` (D10; the services stay built in
   `src/config/connections.ts`, and `ConnectionSourcesService` holds the specs-only seams, so `services()` returns the
   process-wide instances until a consumer needs a per-request one: D10 follow-up). Deep imports allowed: `src/config/connections.ts` (the wiring that builds the service) and
