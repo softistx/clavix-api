@@ -57,6 +57,22 @@ export type RolesFor = (
   tenant: ResolvedTenant,
 ) => (userId: string, audience: string | null) => Promise<string[]>;
 
+/**
+ * The attribute claims of a tenant's users (user-attributes slice A6): each
+ * attribute whose emission scope is among `scopes`, that the user has a value
+ * for, and, for a role attribute, that a role the user holds links and that
+ * applies to `audience` (see `RolesFor`). `audience` is `null` when the token
+ * has no resource. Access tokens only, until the ID token and userinfo can
+ * declare per-tenant claims (nxgt-janus J1).
+ */
+export type AttributesFor = (
+  tenant: ResolvedTenant,
+) => (
+  userId: string,
+  scopes: readonly string[],
+  audience: string | null,
+) => Promise<Record<string, unknown>>;
+
 /** What a client may do with the token exchange grant (RFC 8693), from its `clientPolicies` rules. */
 export interface ExchangeRules {
   /** URIs of the resources an exchanged token may be issued for. */

@@ -589,8 +589,8 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices A1 to A3; the plan is
 `spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
-reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A4 and A5 add
-the claims and the profile.
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slice A6 adds
+the token claims, slices A4 and A5 the profile.
 - **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
   with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
   `values.service.ts`, `role-attributes.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`); the single-file roles (`attributes.model.ts`,
@@ -630,6 +630,21 @@ the claims and the profile.
   first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
   tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
   social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.
+- **Claims** (slice A6, `AttributeClaimsService` in `services/claims.service.ts`, which also reads the `resources` collection, pure parts in
+  `utils/claims.utils.ts`): the `AttributesFor` port (`src/oauth/ports.ts`, required, bound in
+  `src/config/attributes.ts`, passed through `createClavixOAuthIssuers` like `rolesFor`) gives the
+  `accessTokens.claims` hook the attribute claims of a user; `accessTokenClaims` (`oauth/building-parts.ts`)
+  runs it on every issue and refresh, so a removed role or an archived attribute leaves the next token. A value is
+  emitted only when the attribute is live and its `emissionScope` is among the token's scopes, the stored
+  `type` is the attribute's current one, and, for a ROLE attribute, a held role that links it is
+  tenant-wide or belongs to the resource whose `uri` is the token's `aud` (a token with no resource, the
+  userinfo one, counts tenant-wide roles only). Encoding: a choice is its option key (an array for
+  MULTI_SELECT), a DATE is `YYYY-MM-DD`, a DATETIME is RFC 3339, NUMBER and BOOLEAN are native. A
+  `client_credentials` token carries none; a reserved key is dropped and `roles`, `auth_time`, `acr` and
+  `amr` win over an attribute claim. 100 STRING values weigh under 8 KiB (spec), so TEXT stays emittable.
+  **Access tokens only until nxgt-janus J1**: the ID token and userinfo cannot declare per-tenant claims
+  yet (janus-oidc's `scopeClaims` is a fixed table), so they carry none. Specs: `claims.service.spec.ts`,
+  `claims.utils.spec.ts`, `oauth/building-parts.spec.ts`, `oauth/attributes-claims.spec.ts`.
 - **Role attributes** (slice A3): the tenant-owned collection `roleAttributes` (`{tenantId, roleId,
   attributeId, required}`, unique on the three ids, purged with the tenant) links a ROLE-family attribute
   to one precise role, `required` for that role only. `RoleAttributesService`

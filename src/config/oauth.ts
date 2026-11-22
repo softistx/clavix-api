@@ -4,6 +4,7 @@ import type { AuthFor, ClaimsFor } from "@/oauth/ports";
 import { withPublicDocuments } from "@/oauth/public-documents";
 import { withTenantState } from "@/oauth/tenant-state";
 import { withAgentRegistration } from "./agents-registration";
+import { attributesFor } from "./attributes";
 import { agentCheckFor, exchangeRulesFor } from "./client-policies";
 import { env } from "./env";
 import { eventBus } from "./events";
@@ -36,6 +37,7 @@ export const createIssuers = (authFor: AuthFor, claimsFor: ClaimsFor) =>
           claimsFor,
           resourcesFor,
           rolesFor,
+          attributesFor,
           exchangeRulesFor,
           agentCheckFor,
           metadataPorts: env.CLAVIX_METADATA_PORTS,
