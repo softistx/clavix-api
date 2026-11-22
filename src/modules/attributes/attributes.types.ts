@@ -14,8 +14,7 @@ export type AttributeDoc = ReadDocumentOf<typeof userAttributes>;
  * What the catalogue asks of the stored values (slice A2 owns them): how many
  * exist, so that a type, an option or a uniqueness can be locked or refused,
  * and the removal that goes with a permanent delete. Required and bound in
- * `src/config/attributes.ts`; until A2 it is `noAttributeValues` (no value
- * exists, so every count is 0).
+ * `src/config/attributes.ts` to `AttributeValuesService`.
  */
 export interface AttributeValues {
   /** How many users hold a value of the attribute. */
@@ -39,6 +38,16 @@ export interface AttributeValues {
   ): Promise<number>;
   /** The values that another user's value of the attribute already equals (what a `unique` flag would refuse). */
   countDuplicates(tenantId: ObjectId, attributeId: ObjectId): Promise<number>;
+  /**
+   * Writes (or clears) the unique key of every value of the attribute once its
+   * `unique` flag changed. `false` when two values collide: nothing is left
+   * changed and the flag must go back.
+   */
+  setUnique(
+    tenantId: ObjectId,
+    attributeId: ObjectId,
+    unique: boolean,
+  ): Promise<boolean>;
   /** Removes every value of the attribute (its permanent delete). Idempotent. */
   removeAll(tenantId: ObjectId, attributeId: ObjectId): Promise<void>;
 }

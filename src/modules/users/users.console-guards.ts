@@ -12,6 +12,8 @@ export const usersGuards: Guards = {
   "Query.userGrants": onTenant("view", tenantArg),
   // A user's sessions: read is `view`, ending one is `edit`.
   "Query.userSessions": onTenant("view", tenantArg),
+  // The whole personal record of a user (a GDPR access request): `edit`.
+  "Query.userDataExport": onTenant("edit", tenantArg),
   "Mutation.revokeUserSession": onTenant("edit", tenantArg),
   "Mutation.inviteUser": onTenant("edit", tenantArg),
   "Mutation.revokeInvitation": onTenant("edit", tenantArg),

@@ -17,6 +17,11 @@ const STATUS = {
   ATTRIBUTE_ARCHIVED: 409,
   ATTRIBUTE_NOT_ARCHIVED: 409,
   ATTRIBUTE_DELETE_UNCONFIRMED: 400,
+  ATTRIBUTE_FAMILY_MISMATCH: 400,
+  ATTRIBUTE_ROLE_NOT_HELD: 409,
+  ATTRIBUTE_VALUE_INVALID: 400,
+  ATTRIBUTE_VALUE_TAKEN: 409,
+  ATTRIBUTE_REQUIRED: 400,
 } as const satisfies Record<(typeof codes.codes)[number], number>;
 
 /** A refusal of this module: one of its codes, its message and the field it is about. */

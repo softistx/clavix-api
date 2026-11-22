@@ -69,3 +69,50 @@ export const userAttributes = defineCollection({
   timestamps: true,
   optimisticLock: true,
 });
+
+/** What a stored value holds, canonical per type (a `Date` for DATE and DATETIME, the option keys for a choice). */
+export const storedValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.date(),
+  z.array(z.string()),
+]);
+export type StoredValue = z.infer<typeof storedValueSchema>;
+
+// A user's value of an attribute (user-attributes plan, slice A2). Tenant-owned
+// (ADR-0006): reached only through `scopeToTenant`, purged with the tenant.
+// `type` is copied from the attribute at write time: a read ignores a value
+// whose type no longer matches (risk 3). `uniqueKey` is the normalised value of
+// a `unique` attribute (null otherwise), under a partial unique index.
+export const attributeValues = defineCollection({
+  name: "attributeValues",
+  schema: z.object({
+    _id: id(),
+    ...tenantField,
+    userId: z.string(),
+    attributeId: id(),
+    type: z.enum(ATTRIBUTE_TYPES),
+    value: storedValueSchema,
+    uniqueKey: z.string().nullable().default(null),
+    updatedBy: z.object({ kind: z.enum(["admin", "user"]), id: z.string() }),
+  }),
+  indexes: [
+    {
+      key: { tenantId: 1, userId: 1, attributeId: 1 },
+      unique: true,
+      name: "attributeValues_user_attribute_unique",
+    },
+    {
+      key: { tenantId: 1, attributeId: 1, uniqueKey: 1 },
+      unique: true,
+      partialFilterExpression: { uniqueKey: { $type: "string" } },
+      name: "attributeValues_attribute_unique_key",
+    },
+    {
+      key: { tenantId: 1, attributeId: 1, value: 1 },
+      name: "attributeValues_attribute_value",
+    },
+  ],
+  timestamps: true,
+});

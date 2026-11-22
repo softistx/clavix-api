@@ -59,7 +59,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   - **the registries** load a role file by file so the barrel never loads it: `modules/index.ts` (the hosted `*.resolver.ts`), `console/modules/index.ts` (the `*.console-resolver.ts`), `http/graphql-mount.ts` and `http/schema.ts` (`auth.plugin`, `consent.plugin`, `consent.resolver`), and `modules/collections.ts` (the models registry, keyed as `mongo.db` exposes them);
   - **queues, workers and Redis throttles**, wired by `server.ts`, `config/redis.ts`, `config/redis-limits.ts` and `config/domains-job.ts` (a barrel would load Redis or the worker): `keys.queue`, `keys.worker`, `agents.prune-*`, `audit.retention-*`, `consent.queue`, `domains.recheck-*`, `tenants.purge-*`, `webhooks.secrets-prune-*`, `auth.throttle`, `auth.verification-throttle`, `consent.device-throttle`, `passkeys.throttle` (their limit configs, which the barrel cannot export without closing cycles through `config/redis.ts`);
   - **leaf files** (one rule, A29): a file that imports no service, resolver or barrel of the app, only packages, `shared/` or other leaves (`.errors`, `.schema`, `.model`, `.challenge`), may be imported by file from another module. Importing one never loads the module's services, so it cannot close a cycle through the barrel. Used by `i18n/codes.ts` (the `.errors` of `attributes`, `auth`, `connections`, `consent`, `invitations`, `mfa`, `passkeys`; `attributes.errors` holds the codes only, its `refuse` helpers are in `attributes.refusals`), `admins.errors.ts` (`invitations.errors`), `auth.service.ts` (`mfa.challenge`), `events/types.ts` (`audit.model`), `tenancy/resolved-tenant.ts` and the tenants model and service (`sign-in-methods.schema`, `oauth-policy.schema`); generated code (`src/generated/`) is exempt, its type imports follow the schema;
-  - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 6 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and the `services` folder (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `keys.reseal.spec.ts` and `test/connections-service.ts` take the connections `services` folder (specs only); `lock-order.spec.ts` takes `users.console-mutations`, a console-resolver part loaded by file like the registry's.
+  - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 6 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and the `services` folder (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `keys.reseal.spec.ts` and `test/connections-service.ts` take the connections `services` folder (specs only); `lock-order.spec.ts` takes `users.console-mutations` and `attributes.console-resolver`, console-resolver parts loaded by file like the registry's.
     `scripts/`, `load/` and `package.json` are not modules. Tests import fixtures as `~/<file>` (`test/`), never a relative path to `test/`.
 - **Named exceptions** (owner decisions D1, D2 and D8 of the alignment plan, not the RAR D1/D2 below; each is deliberate, not drift):
   - **D1, two schemas**: the hosted `/graphql` (cookie, tenant from the Host) and the console `/console/graphql` (bearer or DPoP JWT of the
@@ -203,7 +203,7 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   added, the original error fails the sign-in as before.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/modules/sign-in-methods/`, folded in by A15: `sign-in-methods.console.graphqls`, `sign-in-methods.console-resolver.ts` with its `-guards` and `-support` (`policyOf`; `issuerFor` lives in `src/console/modules/issuer.ts`, shared with connections), the enum maps and `policyShape` in `sign-in-methods.utils.ts`, `sign-in-methods.console.spec.ts`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
-- **Console users** (`src/modules/users/`, folded in by A13: `users.console.graphqls`, `users.console-resolver.ts` with its `-queries`, `-mutations`, `-support` and `-guards` (guards and audits maps), `users.data-loader.ts`, `users.owners.ts`, `users.errors.ts`, `users.utils.ts`, `users.types.ts`; the console schema loads `src/modules/**/*.console.graphqls` beside `src/console/**/*.graphqls`, the hosted one leaves both out): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port, implemented by `UsersService` (`users.service.ts`, one service per domain: users, sessions, second factor, invitations and grants; built in `src/config/console.ts` over a `UsersSource`, since it needs the OAuth handle), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `deviceOptions` in `src/modules/auth/auth.utils.ts` on the e-mail code and magic-link sign-ins). Per-request loaders (`oncePerRequest`, one per tenant, no cache across requests; `users.data-loader.ts`): `secondFactorLoader` (`TenantUser.secondFactor`) and `userLoader` (`roleMembers` reads a page's pool users with ONE `ConsoleUsers.findMany`, `null` for an id the pool lacks). `clients` and `tenants` lists have no per-row read (no field resolver; the tenant page carries its documents), so they have no loader. Each mutation records its admin event (`user.*`; ids only), repeats included.
+- **Console users** (`src/modules/users/`, folded in by A13: `users.console.graphqls`, `users.console-resolver.ts` with its `-queries`, `-mutations`, `-support` and `-guards` (guards and audits maps), `users.data-loader.ts`, `users.owners.ts`, `users.export.ts` (the `userDataExport` read), `users.errors.ts`, `users.utils.ts`, `users.types.ts`; the console schema loads `src/modules/**/*.console.graphqls` beside `src/console/**/*.graphqls`, the hosted one leaves both out): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port, implemented by `UsersService` (`users.service.ts`, one service per domain: users, sessions, second factor, invitations and grants; built in `src/config/console.ts` over a `UsersSource`, since it needs the OAuth handle), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `deviceOptions` in `src/modules/auth/auth.utils.ts` on the e-mail code and magic-link sign-ins). Per-request loaders (`oncePerRequest`, one per tenant, no cache across requests; `users.data-loader.ts`): `secondFactorLoader` (`TenantUser.secondFactor`) and `userLoader` (`roleMembers` reads a page's pool users with ONE `ConsoleUsers.findMany`, `null` for an id the pool lacks). `clients` and `tenants` lists have no per-row read (no field resolver; the tenant page carries its documents), so they have no loader. Each mutation records its admin event (`user.*`; ids only), repeats included.
 - **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; `keys:reseal` wraps them again under the first).
 
 `src/modules/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
@@ -585,11 +585,16 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 
 ## User attributes (`src/modules/attributes`, with its `attributes.console-*` files; `src/config/attributes.ts`)
 
-A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slice A1; the plan is
+A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices A1 and A2; the plan is
 `spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
-reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A2 to A5 add
-the stored values, the role links, the claims and the profile.
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A3 to A5 add
+the role links, the claims and the profile.
+- **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
+  with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
+  `values.service.ts`), `rules/`, `utils/`; the single-file roles (`attributes.model.ts`,
+  `attributes.errors.ts`, `attributes.refusals.ts`, `attributes.data-loader.ts`, the console files and the
+  `*.types.ts`) stay at the root. Files import each other relatively and through these barrels.
 - **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
   `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
   and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
@@ -600,13 +605,36 @@ the stored values, the role links, the claims and the profile.
   label language), a unit, options (SELECT and MULTI_SELECT only, 100 at most), `required` (USER family
   only), `userEditable`, `unique` (STRING and NUMBER only) and `emissionScope` (a scope of the tenant or a
   standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
-  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `attributes.rules.ts`.
-- **The stored values are a port, `AttributeValues`** (`attributes.types.ts`), required and bound in
-  `src/config/attributes.ts` (beside the required `clock`, from `config/runtime`, and the read-only `scopes` collection). Until A2 it is `noAttributeValues` (`src/config/no-ops.ts`): every count is 0,
-  so `valueCount` reads 0 and no lock applies. With values, the type is locked
-  (`ATTRIBUTE_TYPE_LOCKED`, checked again after the write), a removed option in use is refused
-  (`ATTRIBUTE_OPTION_IN_USE`), `unique` over duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`), and the
-  permanent delete removes the values first. `UserAttribute.roles` is `[]` until A3.
+  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `rules/attributes.rules.ts`.
+- **The stored values** (slice A2) are the tenant-owned collection `attributeValues` (`attributes.model.ts`: one
+  document per user and attribute, unique on `{tenantId, userId, attributeId}`, a partial unique index
+  on `uniqueKey` for `unique` attributes; purged with the tenant, in the allow list of
+  `tenancy/guards.spec.ts`), reached only through `AttributeValuesService` (`services/values.service.ts`, built in
+  `src/config/attributes.ts` before `AttributesService`, which takes it as its `AttributeValues` port:
+  counts, `setUnique`, `removeAll`). With values, the type is locked (`ATTRIBUTE_TYPE_LOCKED`, checked
+  again after the write), a removed option in use is refused (`ATTRIBUTE_OPTION_IN_USE`), `unique` over
+  duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`; the flag is put back), and the permanent delete removes
+  the values first. `UserAttribute.roles` is `[]` until A3.
+- **Values** (`rules/values.rules.ts`, `utils/values.utils.ts`): a value is exactly the one typed field of its
+  attribute (`text` for STRING and TEXT, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`,
+  `time`, `options` for SELECT and MULTI_SELECT; the SDL input is `@oneOf`), canonicalised on write
+  (NFC-trimmed text, lower-cased hex colour, `-0` as `0`, UTC-midnight dates, `HH:mm:ss` times, SELECT as a
+  one-item array). `uniqueKey` is the lower-cased text or the number, set only on a `unique` attribute.
+  Refusals: `ATTRIBUTE_VALUE_INVALID` (field `values.<i>`), `ATTRIBUTE_FAMILY_MISMATCH`,
+  `ATTRIBUTE_VALUE_TAKEN` (a race on the unique index is rolled back by hand: no transactions),
+  `ATTRIBUTE_REQUIRED` (the console refuses a clear of a required value; `TenantUser.attributesComplete`
+  reports the rest), `ATTRIBUTE_ROLE_NOT_HELD` (a `roleId` section, until A3). A save checks every change
+  first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
+  tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
+  social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.
+- **Console**: `setUserAttributeValues` (`edit`, audit `user.setAttributes`, under the user's lock only, rank
+  2 of `lock-order.spec.ts`), `TenantUser.attributes` and `attributesComplete` (per-request loaders in
+  `attributes.data-loader.ts`), and `userDataExport` (`users.export.ts`, `edit`, recorded as `user.export`
+  by an explicit `ctx.audit`, since `Audits` covers mutations only).
+- **Personal data (GDPR)**: the export holds the profile, every stored value (an archived attribute's or a
+  changed type's flagged `hidden`), the roles (`RolesService.personalDataOf`), the grants and the sessions.
+  A user's values are erased with `deleteUser` and when a social sign-in replaces an unverified holder
+  (`completedAnswer`); a tenant purge removes them with the collection.
 - **Updates** send the `version` read (a stale one is `CONFLICT`); nothing is written when nothing
   changes; an archived attribute is refused (`ATTRIBUTE_ARCHIVED`) until restored. `position` is a
   gapped number: a move writes one document, and renumbers the family only when two neighbours are too
@@ -615,7 +643,8 @@ the stored values, the role links, the claims and the profile.
 - **Refusals** go through `refuse` / `refuseCommon` (`attributes.refusals.ts`: the helpers and each code's status; `attributes.errors.ts`: the codes);
   the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
 - **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
-  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`.
+  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`, and on a user
+  `user.setAttributes` and `user.export` (never a value).
 
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)
 

@@ -5,7 +5,10 @@
 export { oauthSigningKeys } from "@softistx/janus-oauth-mongo";
 export { adminEvents } from "../console/admin-events/admin-events.model";
 export { agentClients } from "./agents/agents.model";
-export { userAttributes } from "./attributes/attributes.model";
+export {
+  attributeValues,
+  userAttributes,
+} from "./attributes/attributes.model";
 export { authEvents } from "./audit/audit.model";
 export { branding } from "./branding/branding.model";
 export { clientPolicies } from "./client-policies/client-policies.model";

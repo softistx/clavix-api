@@ -3,9 +3,9 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { extensionCodeOf } from "@/shared/errors";
 import { defined } from "~/narrow";
-import type { AttributeType } from "./attributes.model";
+import type { AttributeType } from "../attributes.model";
+import type { AttributeValues } from "../attributes.types";
 import { AttributesService } from "./attributes.service";
-import type { AttributeValues } from "./attributes.types";
 
 // A tenant id of its own: the service reads and writes through the scope, so
 // no tenant document is needed and no other spec's data is touched.
@@ -18,6 +18,7 @@ const held = {
   otherType: 0,
   options: 0,
   duplicates: 0,
+  unique: true,
   removed: [] as string[],
   during: async () => {},
 };
@@ -31,6 +32,7 @@ const values: AttributeValues = {
   },
   countOptions: async () => held.options,
   countDuplicates: async () => held.duplicates,
+  setUnique: async () => held.unique,
   removeAll: async (_, id) => {
     held.removed.push(id.toHexString());
   },
@@ -48,6 +50,7 @@ const reset = () => {
   held.otherType = 0;
   held.options = 0;
   held.duplicates = 0;
+  held.unique = true;
   held.removed = [];
   held.during = async () => {};
 };
@@ -282,6 +285,7 @@ describe("attributes catalogue", () => {
       ),
     ).toBe("ATTRIBUTE_NOT_UNIQUE");
     held.duplicates = 0;
+    held.unique = true;
     const retyped = await service.update(
       tenant,
       text._id.toHexString(),

@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { attributeValuesService } from "@/config/attributes";
 import { rolesService } from "@/config/roles";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
@@ -83,6 +84,8 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
         // Their role assignments go with them; on a repeat too, so a retry
         // finishes what a failed first run left.
         await rolesService.removeUser(new ObjectId(tenantId), userId);
+        // Their attribute values are personal data: erased with the account.
+        await attributeValuesService.removeUser(new ObjectId(tenantId), userId);
         // An operator (a user of `clavix`) also holds console roles: they go
         // too, or a deleted account would keep its platform and tenant roles.
         if (tenant.slug === PLATFORM_TENANT_SLUG) {

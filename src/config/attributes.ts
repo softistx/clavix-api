@@ -1,16 +1,24 @@
-import { AttributesService } from "@/modules/attributes";
+import {
+  AttributesService,
+  AttributeValuesService,
+} from "@/modules/attributes";
 import { mongo } from "./db";
-import { noAttributeValues } from "./no-ops";
 import { clock } from "./runtime";
 
 /**
- * The real attribute catalogue. The collection is tenant-owned: only this
- * wiring and its module reach it. The stored values are slice A2's; until they
- * ship `noAttributeValues` answers that none exist.
+ * The values users hold for the attributes. The collections are tenant-owned:
+ * only this wiring and the module reach them. Built first, since the catalogue
+ * asks the values what they hold (counts, locks) and clears them on a delete.
  */
+export const attributeValuesService = new AttributeValuesService({
+  values: mongo.db.attributeValues,
+  attributes: mongo.db.userAttributes,
+});
+
+/** The real attribute catalogue. */
 export const attributesService = new AttributesService({
   attributes: mongo.db.userAttributes,
   scopes: mongo.db.scopes,
-  values: noAttributeValues,
+  values: attributeValuesService,
   clock,
 });

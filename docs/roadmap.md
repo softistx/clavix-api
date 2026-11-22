@@ -16,8 +16,9 @@ nxgt-janus release says which.
 - **User attributes** — a tenant defines the extra fields of its users (text, number, date, choice,
   yes/no…) in a catalogue: key, label and description per language, unit, options, required,
   user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
-  restored and deleted for good. The catalogue is first; stored values, role links, claims and the
-  profile follow on the same integration branch
+  restored and deleted for good. The catalogue and the stored values come first (an admin sets a user's
+  values, the data export and the erase on deletion are in); role links, claims and the profile follow on
+  the same integration branch
   ([#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,

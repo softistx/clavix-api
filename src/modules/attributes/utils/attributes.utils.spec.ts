@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
-import type { AttributeDoc } from "./attributes.types";
+import type { AttributeDoc } from "../attributes.types";
 import {
   byPosition,
   fieldsOf,

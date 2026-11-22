@@ -922,9 +922,9 @@ On `updateRole` or `deleteRole` of a role whose `managed` field is `true`: Clavi
 tenant and keeps it as it is. Nothing was written. Hide Edit and Delete on such a role; assigning
 it with `assignRole` still works. A tenant's own roles (`managed: false`) are not affected.
 
-### `ATTRIBUTE_*` codes on a user attribute
+### `ATTRIBUTE_*` codes on a user attribute and its values
 
-Every refusal on the attribute catalogue writes nothing.
+Every refusal on the attribute catalogue or on a user's values writes nothing.
 - `ATTRIBUTE_KEY_INVALID` (400): the key is not 2 to 64 characters of a lower-case letter, then lower-case letters, digits and `_`.
 - `ATTRIBUTE_KEY_RESERVED` (400): the key is a claim name tokens already carry (`email`, `roles`, `scope`...). Pick another.
 - `ATTRIBUTE_KEY_TAKEN` (409): the tenant has an attribute with that key, an archived one included. Restore it, or delete it for good to free the key.
@@ -940,6 +940,12 @@ Every refusal on the attribute catalogue writes nothing.
 - `ATTRIBUTE_DELETE_UNCONFIRMED` (400): `confirmKey` is not the attribute's key.
 - `CONFLICT` on `updateUserAttribute`: the `version` is stale (or another edit landed while a refused type change was being put back); read the attribute again and resend.
 - `NOT_FOUND` `No such attribute`: the id names no attribute of this tenant (another tenant's id is not found either).
+- `ATTRIBUTE_VALUE_INVALID` (400): a value does not fit its attribute; `field` is `values.<i>`, the index of the change. Set exactly the one field of the attribute's type (`text`, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`, `time`, `options`), within its limits (200 characters, 2000 for TEXT, a known option, at most 100 options).
+- `ATTRIBUTE_FAMILY_MISMATCH` (400): the attribute is not in the section being set (a ROLE attribute in the general section, or the reverse).
+- `ATTRIBUTE_VALUE_TAKEN` (409): another user holds that value of a `unique` attribute (text compares in lower case).
+- `ATTRIBUTE_REQUIRED` (400): a console save cannot clear a required attribute's value.
+- `ATTRIBUTE_ROLE_NOT_HELD` (409): `section.roleId` is given and the user holds no such role section (role sections arrive with the role links).
+- `BAD_USER_INPUT` on `setUserAttributeValues`: more than 100 changes in one call.
 - `BAD_USER_INPUT` on an attribute: a label needs at least one language, a unit holds at most 20 characters, a list holds at most 100 options, each option needs a label and a key of 1 to 63 characters (lower-case letters, digits, `_`, `-`) that no other option uses, options belong only to SELECT and MULTI_SELECT attributes, and `required` is for USER-family attributes only; the message names the field.
 
 ### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
@@ -947,7 +953,7 @@ Every refusal on the attribute catalogue writes nothing.
 `No such role`: the id names no role of this tenant (another tenant's id is not found either), or the
 role was deleted while `assignRole` ran. `No such resource`: `createRole` was given a `resourceId`
 that is not a resource of this tenant, or the resource was deleted at that moment. `No such user`:
-`assignRole` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
+`assignRole`, `setUserAttributeValues` or `userDataExport` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
 was written. List the roles, resources or users again and send an id from there. `deleteRole` and
 `unassignRole` never answer `NOT_FOUND`: they are repeatable and answer `false` when there is nothing
 to remove.

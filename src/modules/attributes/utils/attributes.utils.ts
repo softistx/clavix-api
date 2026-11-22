@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { AttributeDoc, AttributeFields } from "./attributes.types";
+import type { AttributeDoc, AttributeFields } from "../attributes.types";
 
 /** The gap under which a move renumbers the family: two floats too close to split again. */
 export const MIN_GAP = 1e-6;

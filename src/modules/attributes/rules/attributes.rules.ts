@@ -2,9 +2,9 @@ import { RESERVED_ACCESS_TOKEN_CLAIMS } from "@softistx/janus-oauth";
 import { cleanTranslations, mergeTranslations } from "@/modules/resources";
 import type { Translation } from "@/shared/translations";
 import { unique } from "@/shared/values";
-import type { AttributeOption, AttributeType } from "./attributes.model";
-import { refuse, refuseCommon } from "./attributes.refusals";
-import type { AttributeDoc, OptionDraft, Texts } from "./attributes.types";
+import type { AttributeOption, AttributeType } from "../attributes.model";
+import { refuse, refuseCommon } from "../attributes.refusals";
+import type { AttributeDoc, OptionDraft, Texts } from "../attributes.types";
 
 export const MAX_ATTRIBUTES = 100;
 export const MAX_OPTIONS = 100;

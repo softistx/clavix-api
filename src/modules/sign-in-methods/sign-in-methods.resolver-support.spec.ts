@@ -1,0 +1,93 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { ObjectId } from "mongodb";
+import { attributesService, attributeValuesService } from "@/config/attributes";
+import { mongo } from "@/config/db";
+import { exclusive } from "@/config/exclusive";
+import { userKey } from "@/console/modules/user-key";
+import { eraseReplacedValues } from "./sign-in-methods.resolver-support";
+
+const tenant = new ObjectId();
+const admin = { kind: "admin", id: "admin-1" } as const;
+
+afterAll(async () => {
+  await mongo.db.attributeValues.raw.deleteMany({ tenantId: tenant });
+  await mongo.db.userAttributes.raw.deleteMany({ tenantId: tenant });
+});
+
+const count = (userId: string) =>
+  mongo.db.attributeValues.raw.countDocuments({ tenantId: tenant, userId });
+
+describe("eraseReplacedValues", () => {
+  test("a save and the erase of the same user run one after the other: no value outlives the erase", async () => {
+    const attribute = await attributesService.create(tenant, {
+      key: "erased",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    const change = {
+      attributeId: attribute._id.toHexString(),
+      value: { text: "kept" },
+    };
+    const save = (userId: string) =>
+      exclusive(userKey(tenant.toHexString(), userId), () =>
+        attributeValuesService.save(tenant, userId, [change], admin, true),
+      );
+
+    // The save is queued first, the erase right behind it: whichever the
+    // scheduler starts, the erase runs after the save has landed.
+    const saving = save("racer");
+    const erasing = eraseReplacedValues(tenant.toHexString(), "racer");
+    await Promise.all([saving, erasing]);
+    expect(await count("racer")).toBe(0);
+  });
+
+  test("the erase waits for the user's lock", async () => {
+    const attribute = await attributesService.create(tenant, {
+      key: "waits",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    await attributeValuesService.save(
+      tenant,
+      "held",
+      [{ attributeId: attribute._id.toHexString(), value: { text: "v" } }],
+      admin,
+      true,
+    );
+    let release: () => void = () => {};
+    const holder = exclusive(
+      userKey(tenant.toHexString(), "held"),
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const erasing = eraseReplacedValues(tenant.toHexString(), "held");
+    // Let the event loop turn: the erase is queued behind the holder.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await count("held")).toBe(1);
+    release();
+    await Promise.all([holder, erasing]);
+    expect(await count("held")).toBe(0);
+  });
+
+  test("another user's values are untouched", async () => {
+    const attribute = await attributesService.create(tenant, {
+      key: "other",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    await attributeValuesService.save(
+      tenant,
+      "bystander",
+      [{ attributeId: attribute._id.toHexString(), value: { text: "v" } }],
+      admin,
+      true,
+    );
+    await eraseReplacedValues(tenant.toHexString(), "someone-else");
+    expect(await count("bystander")).toBe(1);
+  });
+});

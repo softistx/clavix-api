@@ -1,22 +1,34 @@
-import { attributesService } from "@/config/attributes";
+import { freshPerMutation } from "@softistx/alxia-graphql";
+import { attributesService, attributeValuesService } from "@/config/attributes";
 import { refusing } from "@/console/modules/catalog-support";
 import { idArg } from "@/console/modules/ids";
+import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
 import {
+  changesOf,
   createInput,
   shapeOne,
   shapes,
   tenantOf,
   updateInput,
 } from "./attributes.console-support";
-import { target } from "./attributes.utils";
+import { completeLoader, sectionsLoader } from "./attributes.data-loader";
+import { refuse, refuseCommon } from "./attributes.refusals";
+import { target } from "./utils";
 
 export {
   attributesAudits,
   attributesGuards,
 } from "./attributes.console-guards";
 
-export const attributes: Resolvers = {
+export const attributes: Resolvers = freshPerMutation({
+  TenantUser: {
+    // Batched for a page of users, read only when the field is selected.
+    attributes: (user, _, ctx) =>
+      sectionsLoader(ctx, user.tenantId).load(user.id),
+    attributesComplete: (user, _, ctx) =>
+      completeLoader(ctx, user.tenantId).load(user.id),
+  },
   Query: {
     userAttributes: async (_, { tenantId, family, archived }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
@@ -35,6 +47,47 @@ export const attributes: Resolvers = {
     },
   },
   Mutation: {
+    setUserAttributeValues: async (
+      _,
+      { tenantId, userId, section, values },
+      ctx,
+    ) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      idArg(userId, "userId");
+      if (section.roleId !== null && section.roleId !== undefined) {
+        // Role sections arrive with slice A3: no role section is held yet.
+        return refuse(
+          "ATTRIBUTE_ROLE_NOT_HELD",
+          "The user does not hold this role",
+          "section.roleId",
+        );
+      }
+      // The user is checked under its lock, so a concurrent `deleteUser`
+      // (which sweeps the values under the same key) leaves no orphan value.
+      const known = await ctx.exclusive(
+        userKey(tenant.hex, userId),
+        async () => {
+          if ((await ctx.users.find(tenant.hex, userId)) === null) return false;
+          await refusing(() =>
+            attributeValuesService.save(
+              tenant.id,
+              userId,
+              changesOf(values),
+              { kind: "admin", id: ctx.principal.userId },
+              true,
+            ),
+          );
+          return true;
+        },
+      );
+      if (!known) return refuseCommon("NOT_FOUND", "No such user");
+      await ctx.audit("user.setAttributes", {
+        type: "user",
+        id: userId,
+        tenantId: tenant.hex,
+      });
+      return sectionsLoader(ctx, tenant.hex).load(userId);
+    },
     createUserAttribute: async (_, { tenantId, input }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
       const created = await refusing(() =>
@@ -99,4 +152,4 @@ export const attributes: Resolvers = {
       return true;
     },
   },
-};
+});
