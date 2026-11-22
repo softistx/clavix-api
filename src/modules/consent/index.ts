@@ -1,6 +1,6 @@
 // The module's import surface (consent: the hosted `/consent` and device pages,
 // the approval hooks, the revocation of replaced grants). Imported by file:
-// `consent.resolver` (`http/schema.ts`), `consent.plugin` (`app.ts`),
+// `consent.resolver` (`http/schema.ts`), `consent.plugin` (`http/graphql-mount.ts`),
 // `consent.device-throttle` and `consent.queue` (`config/redis.ts`) and
 // `consent.errors` (`i18n/codes.ts`), so this barrel never loads the config
 // wiring or the queue.
