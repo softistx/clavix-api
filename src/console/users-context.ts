@@ -1,5 +1,7 @@
 // The console users port and the views it answers (split from `context.ts`).
 
+import type { ProfileChanges, ProfileView } from "@/modules/profile";
+
 /** An end user of a tenant, as the console shows it. */
 export interface TenantUserView {
   id: string;
@@ -8,6 +10,8 @@ export interface TenantUserView {
   emailVerified: boolean;
   active: boolean;
   createdAt: Date;
+  /** The standard profile fields (`null` for one not set). */
+  profile: ProfileView;
 }
 
 /** One standing session of a user, without its token. */
@@ -89,11 +93,24 @@ export interface ConsoleUsers {
     id: string,
     active: boolean,
   ): Promise<TenantUserView | null>;
-  /** Sets the display name; the user as written, or `null` when unknown. */
-  rename(
+  /**
+   * Applies a checked profile change (the display name and the standard
+   * fields) in one version-checked write; the user as written, or `null` when
+   * unknown. A phone number that changes starts unverified.
+   */
+  update(
     tenantId: string,
     id: string,
-    name: string,
+    changes: ProfileChanges,
+  ): Promise<TenantUserView | null>;
+  /**
+   * Marks the user's phone proved (or not); `null` when the user is unknown,
+   * `PROFILE_FIELD_INVALID` is the caller's when the user has no phone.
+   */
+  setPhoneVerified(
+    tenantId: string,
+    id: string,
+    verified: boolean,
   ): Promise<TenantUserView | null>;
   /** Sets or clears the verified flag only; the user as written, or `null` when unknown. */
   setEmailVerified(

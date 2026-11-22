@@ -5,6 +5,7 @@ import type {
   UserSecondFactorView,
 } from "@/console/context";
 import { createExclusive } from "@/console/exclusive";
+import { emptyProfile } from "@/modules/profile";
 import { withMembers } from "~/members";
 import { secondFactorLoader, userLoader } from "./users.data-loader";
 
@@ -18,6 +19,7 @@ const user = (id: string): TenantUserView => ({
   emailVerified: true,
   active: true,
   createdAt: new Date(0),
+  profile: emptyProfile(new Date(0)),
 });
 
 const requestWith = (users: Partial<ConsoleContext["users"]>) =>

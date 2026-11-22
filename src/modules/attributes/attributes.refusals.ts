@@ -1,4 +1,3 @@
-import type { ErrorCode } from "@/i18n/codes";
 import { fail } from "@/shared/errors";
 import type { codes } from "./attributes.errors";
 
@@ -33,12 +32,4 @@ export function refuse(
   throw fail(code, message, { status: STATUS[code], field });
 }
 
-/** A refusal with a common code (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`) and its status. */
-export function refuseCommon(
-  code: Extract<ErrorCode, "NOT_FOUND" | "CONFLICT" | "BAD_USER_INPUT">,
-  message: string,
-  field?: string,
-): never {
-  const status = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 }[code];
-  throw fail(code, message, { status, field });
-}
+export { refuseCommon } from "@/shared/errors";
