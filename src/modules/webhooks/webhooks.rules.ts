@@ -10,6 +10,12 @@ import type {
 
 /** What a rolled secret keeps signing for (D19). */
 export const ROLL_OVERLAP_MS = 24 * 60 * 60 * 1000;
+/** The type of the event `sendTestWebhook` sends: not in the catalogue, never subscribed to. */
+export const TEST_EVENT_TYPE = "webhook.test";
+
+/** The actor of the admin event the auto-disable records (D20). */
+export const DISABLE_ACTOR = "system:webhooks:disable";
+
 /** Given-up deliveries in a row after which an endpoint is switched off (D20). */
 export const GIVE_UP_LIMIT = 5;
 /** The secrets an endpoint keeps at most: the current one and the last rolled ones. */

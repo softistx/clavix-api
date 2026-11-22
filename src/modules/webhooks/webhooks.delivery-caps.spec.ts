@@ -7,16 +7,16 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { createSecretBox } from "@/modules/sign-in-methods";
 import { fetchDouble } from "~/fetch-double";
+import { createWebhookDelivery } from "./webhooks.delivery";
+import { userWebhookEvent } from "./webhooks.events";
+import { WebhooksService } from "./webhooks.service";
+import { guardedFetch, type UrlPolicy } from "./webhooks.url-policy";
 import {
-  createWebhookDelivery,
   endpointIdOf,
   queueEndpointId,
   webhookGroupOf,
   webhookQueueLimits,
-} from "./webhooks.delivery";
-import { userWebhookEvent } from "./webhooks.events";
-import { WebhooksService } from "./webhooks.service";
-import { guardedFetch, type UrlPolicy } from "./webhooks.url-policy";
+} from "./webhooks.utils";
 
 // Tenant FLOOD's receiver never answers until it is released: its requests stay
 // in flight. Tenant CALM's receiver answers at once. The queue's caps are the

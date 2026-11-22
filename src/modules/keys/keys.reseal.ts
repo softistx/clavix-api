@@ -18,49 +18,76 @@ import {
 
 type Step = [string, () => Promise<void>];
 
+/** Seals the tenant's private signing keys again, under the first master key. */
+const signingKeysStep =
+  (
+    report: ResealCounts,
+    partition: string,
+    { db, masterKeys }: ResealDeps,
+  ): (() => Promise<void>) =>
+  async () => {
+    const done = await resealMongoSigningKeys(db, {
+      encryptionKey: [...masterKeys],
+      partition,
+    });
+    report.resealed += done.resealed;
+    report.current += done.current;
+    report.skipped += done.skipped;
+  };
+
+/** Seals the tenant's TOTP secrets again, then counts the seals left behind. */
+const secondFactorStep =
+  (
+    report: ResealCounts,
+    partition: string,
+    { db }: ResealDeps,
+    sealAgain: ResealSecondFactor,
+    firstKeyId: string,
+  ): (() => Promise<void>) =>
+  async () => {
+    const run = await sealAgain(partition);
+    for (const field of COUNT_FIELDS) {
+      report.secondFactor[field] += run[field];
+    }
+    const seals = await countSecondFactorSeals(db, partition, firstKeyId);
+    report.secondFactor.sealed += seals.sealed;
+    report.secondFactor.behind += seals.behind;
+    report.secondFactor.recoveryCodesBehind += seals.recoveryCodesBehind;
+  };
+
+/** Seals one of Clavix's own secret stores again for the tenant. */
+const secretStoreStep =
+  (
+    report: ResealCounts,
+    partition: string,
+    { secretStores }: ResealDeps,
+    store: SecretStore,
+  ): (() => Promise<void>) =>
+  async () => {
+    const run = await secretStores[store](partition);
+    for (const field of [...COUNT_FIELDS, "behind"] as const) {
+      report[store][field] += run[field];
+    }
+  };
+
 /** The steps of one tenant: its signing keys, its TOTP secrets, each sealed store. */
 function stepsOf(
   report: ResealCounts,
   partition: string,
-  { db, masterKeys, secretStores }: ResealDeps,
+  deps: ResealDeps,
   sealAgain: ResealSecondFactor,
   firstKeyId: string,
 ): Step[] {
   return [
-    [
-      "signing keys",
-      async () => {
-        const done = await resealMongoSigningKeys(db, {
-          encryptionKey: [...masterKeys],
-          partition,
-        });
-        report.resealed += done.resealed;
-        report.current += done.current;
-        report.skipped += done.skipped;
-      },
-    ],
+    ["signing keys", signingKeysStep(report, partition, deps)],
     [
       "second factor",
-      async () => {
-        const run = await sealAgain(partition);
-        for (const field of COUNT_FIELDS) {
-          report.secondFactor[field] += run[field];
-        }
-        const seals = await countSecondFactorSeals(db, partition, firstKeyId);
-        report.secondFactor.sealed += seals.sealed;
-        report.secondFactor.behind += seals.behind;
-        report.secondFactor.recoveryCodesBehind += seals.recoveryCodesBehind;
-      },
+      secondFactorStep(report, partition, deps, sealAgain, firstKeyId),
     ],
     ...SECRET_STORES.map(
       (store: SecretStore): Step => [
         store,
-        async () => {
-          const run = await secretStores[store](partition);
-          for (const field of [...COUNT_FIELDS, "behind"] as const) {
-            report[store][field] += run[field];
-          }
-        },
+        secretStoreStep(report, partition, deps, store),
       ],
     ),
   ];

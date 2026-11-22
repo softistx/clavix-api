@@ -4,61 +4,20 @@ import {
   type Delivery,
   type EndpointResolver,
   type GivingUp,
-  type RefusedDelivery,
   type WebhookQueue,
-  type WebhookQueueLimits,
   webhooks,
 } from "@softistx/janus-webhooks";
 import type { ClavixEvent } from "@/events/types";
-import {
-  type ClavixWebhookEvent,
-  signedInWebhookEvent,
-  type WebhookData,
-} from "./webhooks.events";
+import type { ClavixWebhookEvent } from "./webhooks.events";
+import { TEST_EVENT_TYPE } from "./webhooks.rules";
 import type { WebhooksService } from "./webhooks.service";
-
-/** The type of the event `sendTestWebhook` sends: not in the catalogue, never subscribed to. */
-export const TEST_EVENT_TYPE = "webhook.test";
-
-/**
- * The queue's name for an endpoint: `<tenantId>.<endpointId>` (both hex ids,
- * no dot). The queue caps what one *group* holds (`webhookGroupOf`), so the
- * tenant must be readable from the name, in every process.
- */
-export const queueEndpointId = (tenantId: string, endpointId: string) =>
-  `${tenantId}.${endpointId}`;
-
-/** The queue's group of an endpoint: its tenant. A name with no dot (a delivery queued before the prefix) is its own group. */
-export const webhookGroupOf = (queueEndpoint: string) =>
-  queueEndpoint.split(".")[0] ?? queueEndpoint;
-
-/** The endpoint's own id out of the queue's name. */
-export const endpointIdOf = (queueEndpoint: string) => {
-  const dot = queueEndpoint.indexOf(".");
-  return dot === -1 ? queueEndpoint : queueEndpoint.slice(dot + 1);
-};
-
-/**
- * The queue's caps (G2-03), per tenant (`webhookGroupOf`): a tenant whose
- * endpoint floods, or answers slowly, holds at most `maxInFlight` requests in
- * flight and `maxPending` deliveries; the other tenants' endpoints are claimed
- * all the same. Every process passes the same ones. A refused delivery is
- * reported by ids only (never a URL or a body).
- */
-export const webhookQueueLimits = (
-  caps: { maxInFlight: number; maxPending: number },
-  log: (message: string) => void,
-): WebhookQueueLimits => ({
-  ...caps,
-  groupOf: webhookGroupOf,
-  onRefused: ({ event, group, maxPending }: RefusedDelivery) =>
-    log(
-      `webhooks: delivery ${event.id} refused, tenant ${group ?? "?"} holds ${maxPending}`,
-    ),
-});
-
-/** The actor of the admin event the auto-disable records (D20). */
-export const DISABLE_ACTOR = "system:webhooks:disable";
+import {
+  attemptRecordOf,
+  endpointIdOf,
+  queuedEndpoints,
+  relayedEventOf,
+  testEventOf,
+} from "./webhooks.utils";
 
 export interface DisabledEndpoint {
   tenantId: string;
@@ -86,27 +45,15 @@ export interface DeliveryDeps {
 
 type Log = (message: string) => void;
 
-/** The tenant's endpoints for one event, queue-named; a test event reaches its one endpoint, whatever its types. */
+/** The tenant's endpoints for one event, queue-named. */
 function endpointResolver(
   deps: DeliveryDeps,
 ): EndpointResolver<ClavixWebhookEvent> {
-  return async (event) => {
-    const all = await deps.webhooks.deliveryEndpoints(event.data.tenantId);
-    const tenantId = event.data.tenantId;
-    const named = (list: typeof all) =>
-      list.map((endpoint) => ({
-        ...endpoint,
-        id: queueEndpointId(tenantId, endpoint.id),
-      }));
-    if (event.type === TEST_EVENT_TYPE) {
-      return named(
-        all
-          .filter((endpoint) => endpoint.id === event.data.endpointId)
-          .map(({ types: _types, ...endpoint }) => endpoint),
-      );
-    }
-    return named(all);
-  };
+  return async (event) =>
+    queuedEndpoints(
+      event,
+      await deps.webhooks.deliveryEndpoints(event.data.tenantId),
+    );
 }
 
 /**
@@ -119,27 +66,15 @@ function attemptHandler(
 ): (attempt: Attempt<ClavixWebhookEvent>) => Promise<void> {
   return async (attempt) => {
     const tenantId = attempt.event.data.tenantId;
+    const record = attemptRecordOf(attempt);
     try {
-      await deps.webhooks.recordAttempt(tenantId, {
-        endpointId: endpointIdOf(attempt.endpoint),
-        eventId: attempt.event.id,
-        type: attempt.event.type,
-        attempt: attempt.attempt,
-        status: attempt.status,
-        error: attempt.error,
-        durationMs: attempt.durationMs,
-        delivered: attempt.delivered,
-        willRetry: attempt.willRetry,
-      });
+      await deps.webhooks.recordAttempt(tenantId, record);
     } catch (error) {
       log(`webhooks: could not log an attempt: ${String(error)}`);
     }
     if (!attempt.delivered) return;
     try {
-      await deps.webhooks.recordDelivered(
-        tenantId,
-        endpointIdOf(attempt.endpoint),
-      );
+      await deps.webhooks.recordDelivered(tenantId, record.endpointId);
     } catch (error) {
       log(`webhooks: could not record a delivery: ${String(error)}`);
     }
@@ -167,6 +102,20 @@ function giveUpHandler(
   };
 }
 
+/** The `webhooks()` listener every tenant's events go through. */
+function deliveryListener(deps: DeliveryDeps) {
+  return webhooks<ClavixWebhookEvent>({
+    endpoints: endpointResolver(deps),
+    fetch: deps.fetch,
+    queue: deps.queue,
+    ...(deps.retries === undefined ? {} : { retries: deps.retries }),
+    ...(deps.timeout === undefined ? {} : { timeout: deps.timeout }),
+    ...(deps.poll === undefined ? {} : { poll: deps.poll }),
+    onAttempt: attemptHandler(deps, deps.log),
+    onGivingUp: giveUpHandler(deps, deps.log),
+  });
+}
+
 /**
  * The process-wide delivery (D20): one `webhooks()` for every tenant, whose
  * endpoints are read at send time and at each attempt from the tenant the
@@ -174,36 +123,16 @@ function giveUpHandler(
  * retry. It is fed by the event bus (`relay`) and by `sendTest`.
  */
 export function createWebhookDelivery(deps: DeliveryDeps) {
-  const log = deps.log;
-  const listener = webhooks<ClavixWebhookEvent>({
-    endpoints: endpointResolver(deps),
-    fetch: deps.fetch,
-    queue: deps.queue,
-    ...(deps.retries === undefined ? {} : { retries: deps.retries }),
-    ...(deps.timeout === undefined ? {} : { timeout: deps.timeout }),
-    ...(deps.poll === undefined ? {} : { poll: deps.poll }),
-    onAttempt: attemptHandler(deps, log),
-    onGivingUp: giveUpHandler(deps, log),
-  });
-
+  const listener = deliveryListener(deps);
   return {
     /** The event bus subscriber: a failure rejects, and the bus swallows it (D13). */
     relay: async (event: ClavixEvent): Promise<void> => {
-      if (event.kind === "webhook") await listener(event.event);
-      else if (event.kind === "auth") {
-        const signedIn = signedInWebhookEvent(event, deps.now);
-        if (signedIn !== undefined) await listener(signedIn);
-      }
+      const relayed = relayedEventOf(event, deps.now);
+      if (relayed !== undefined) await listener(relayed);
     },
     /** Sends a `webhook.test` event to this one endpoint; its event id. */
     async sendTest(tenantId: string, endpointId: string): Promise<string> {
-      const data: WebhookData = { tenantId, endpointId };
-      const event: ClavixWebhookEvent = {
-        id: crypto.randomUUID(),
-        type: TEST_EVENT_TYPE,
-        occurredAt: deps.now(),
-        data,
-      };
+      const event = testEventOf(tenantId, endpointId, deps.now());
       await listener(event);
       return event.id;
     },

@@ -777,8 +777,8 @@ comparison is `domains.check.ts`.
 ## Webhooks (`src/modules/webhooks`, console side folded in by A15: `webhooks.console.graphqls`, `webhooks.console-resolver.ts`, `-guards`, `-support`, `-parent`; `src/config/webhooks.ts`)
 
 A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
-- Layout (A6): `webhooks.model.ts` (both collections), `.errors.ts`, `.rules.ts` (input rules, the roll),
-  `.utils.ts`, `.types.ts`, `.events.ts`, `.notice.ts`, `.url-policy.ts`, `.delivery.ts`, the secrets-prune
+- Layout (A6): `webhooks.model.ts` (both collections), `.errors.ts`, `.rules.ts` (input rules, the roll, `TEST_EVENT_TYPE`, `DISABLE_ACTOR`),
+  `.utils.ts` (the queue names and caps, the relayed and test events), `.types.ts`, `.events.ts`, `.notice.ts`, `.url-policy.ts`, `.delivery.ts`, the secrets-prune
   files (`.secrets-prune.ts`, `.secrets-prune-queue.ts`, `.secrets-prune-worker.ts`), and `webhooks.service.ts`:
   one service per domain (owner, 2026-11-20) holding the endpoint methods (`listEndpoints`, `createEndpoint`,
   `rollSecret`, `deliveryEndpoints`, `resealSecrets`, `recordDelivered`, `recordGiveUp`, ...) and the attempt
@@ -793,12 +793,12 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   rolled secret or a switched-off endpoint is honoured by a retry, and another tenant's events never
   reach an endpoint. It is a bus subscriber (`relay`); the queue is Redis (`createRedisWebhookQueue`,
   prefix `clavix:webhooks:`) when `REDIS_URL` is set, memory otherwise; `server.ts` closes it on stop.
-- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/modules/webhooks/webhooks.delivery.ts`, applied in `src/config/webhooks.ts`) gives both
+- **Queue caps (G2-03, nxgt-janus #974/#982)**: `webhookQueueLimits` (`src/modules/webhooks/webhooks.utils.ts`, applied in `src/config/webhooks.ts`) gives both
   queues (Redis and memory) `maxInFlight` (`CLAVIX_WEBHOOKS_MAX_IN_FLIGHT`, 4), `maxPending`
   (`CLAVIX_WEBHOOKS_MAX_PENDING`, 5000) and `groupOf`. **Assumed, not answered**: the caps are per tenant, not
   per endpoint, because janus-webhooks counts per group once `groupOf` is set (one queue cannot cap both). So the
   queue's endpoint name is `<tenantId>.<endpointId>` (`queueEndpointId`, `webhookGroupOf`, `endpointIdOf` in
-  `webhooks.delivery.ts`): the resolver adds the prefix and every callback strips it before it touches a store. The
+  `webhooks.utils.ts`): the resolver adds the prefix and every callback strips it before it touches a store. The
   claim also rotates over endpoints, so one endpoint of a tenant does not take the tenant's whole share.
 - **Console budgets (`src/console/budgets.ts`, #328)**: `ctx.budgets` (`ConsoleDeps.budgets`; required, `noBudgets` without Redis) holds the
   `@softistx/redis` limits of the console mutations that act outside the platform. `sendTestWebhook` spends

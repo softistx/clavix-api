@@ -1,5 +1,12 @@
 import type { ConsoleDeps } from "../plugin";
-import { authorize, bodyOf, exceeds, rangeStart, recordExport } from "./steps";
+import {
+  authorize,
+  bodyOf,
+  exceeds,
+  exportHeaders,
+  rangeStart,
+  recordExport,
+} from "./steps";
 
 /** D17: an export holds at most this many rows (the newest ones). */
 export const EXPORT_MAX_ROWS = 100_000;
@@ -22,27 +29,15 @@ export async function serveAuditExport(
   const allowed = await authorize(request, deps);
   if (allowed instanceof Response) return allowed;
   const { userId, tenant, params } = allowed;
-  const { tenantId, log, format } = params;
   const now = deps.now();
   const start = rangeStart(tenant.plan, params.from, now);
   const maxRows = deps.auditExport.maxRows ?? EXPORT_MAX_ROWS;
   const filter = { from: start, to: params.to };
   const truncated = await exceeds(deps, params, filter, maxRows);
-  const failure = await recordExport(deps, userId, tenantId, log);
+  const failure = await recordExport(deps, userId, params.tenantId, params.log);
   if (failure !== undefined) return failure;
-  const day = now.toISOString().slice(0, 10);
   return new Response(bodyOf(deps, params, filter, maxRows), {
     status: 200,
-    headers: {
-      "content-type":
-        format === "csv"
-          ? "text/csv; charset=utf-8"
-          : "application/x-ndjson; charset=utf-8",
-      "content-disposition": `attachment; filename="clavix-${log}-events-${tenant.slug}-${day}.${format}"`,
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-      "x-clavix-export-from": start.toISOString(),
-      "x-clavix-export-truncated": String(truncated),
-    },
+    headers: exportHeaders(allowed, start, now, truncated),
   });
 }

@@ -1,6 +1,18 @@
+import type {
+  Attempt,
+  RefusedDelivery,
+  WebhookQueueLimits,
+} from "@softistx/janus-webhooks";
 import type { ObjectId } from "mongodb";
+import type { ClavixEvent } from "@/events/types";
 import type { WebhookEndpointParent } from "./webhooks.console-parent";
+import {
+  type ClavixWebhookEvent,
+  signedInWebhookEvent,
+  type WebhookData,
+} from "./webhooks.events";
 import type { EndpointSecret } from "./webhooks.model";
+import { TEST_EVENT_TYPE } from "./webhooks.rules";
 import type {
   AttemptRecord,
   DeliveryEndpoint,
@@ -95,3 +107,101 @@ export const attemptShape = (doc: WebhookDeliveryDoc) => ({
   willRetry: doc.willRetry,
   at: doc.at,
 });
+
+/**
+ * The queue's name for an endpoint: `<tenantId>.<endpointId>` (both hex ids,
+ * no dot). The queue caps what one *group* holds (`webhookGroupOf`), so the
+ * tenant must be readable from the name, in every process.
+ */
+export const queueEndpointId = (tenantId: string, endpointId: string) =>
+  `${tenantId}.${endpointId}`;
+
+/** The queue's group of an endpoint: its tenant. A name with no dot (a delivery queued before the prefix) is its own group. */
+export const webhookGroupOf = (queueEndpoint: string) =>
+  queueEndpoint.split(".")[0] ?? queueEndpoint;
+
+/** The endpoint's own id out of the queue's name. */
+export const endpointIdOf = (queueEndpoint: string) => {
+  const dot = queueEndpoint.indexOf(".");
+  return dot === -1 ? queueEndpoint : queueEndpoint.slice(dot + 1);
+};
+
+/**
+ * The queue's caps (G2-03), per tenant (`webhookGroupOf`): a tenant whose
+ * endpoint floods, or answers slowly, holds at most `maxInFlight` requests in
+ * flight and `maxPending` deliveries; the other tenants' endpoints are claimed
+ * all the same. Every process passes the same ones. A refused delivery is
+ * reported by ids only (never a URL or a body).
+ */
+export const webhookQueueLimits = (
+  caps: { maxInFlight: number; maxPending: number },
+  log: (message: string) => void,
+): WebhookQueueLimits => ({
+  ...caps,
+  groupOf: webhookGroupOf,
+  onRefused: ({ event, group, maxPending }: RefusedDelivery) =>
+    log(
+      `webhooks: delivery ${event.id} refused, tenant ${group ?? "?"} holds ${maxPending}`,
+    ),
+});
+
+/**
+ * A tenant's endpoints for one event, queue-named; a test event reaches its
+ * one endpoint, whatever its types.
+ */
+export function queuedEndpoints(
+  event: ClavixWebhookEvent,
+  all: readonly DeliveryEndpoint[],
+): DeliveryEndpoint[] {
+  const named = (list: readonly DeliveryEndpoint[]) =>
+    list.map((endpoint) => ({
+      ...endpoint,
+      id: queueEndpointId(event.data.tenantId, endpoint.id),
+    }));
+  if (event.type !== TEST_EVENT_TYPE) return named(all);
+  return named(
+    all
+      .filter((endpoint) => endpoint.id === event.data.endpointId)
+      .map(({ types: _types, ...endpoint }) => endpoint),
+  );
+}
+
+/** An attempt as the attempt log keeps it: what the receiver answered, never the URL or a body. */
+export const attemptRecordOf = (
+  attempt: Attempt<ClavixWebhookEvent>,
+): AttemptRecord => ({
+  endpointId: endpointIdOf(attempt.endpoint),
+  eventId: attempt.event.id,
+  type: attempt.event.type,
+  attempt: attempt.attempt,
+  status: attempt.status,
+  error: attempt.error,
+  durationMs: attempt.durationMs,
+  delivered: attempt.delivered,
+  willRetry: attempt.willRetry,
+});
+
+/** The webhook event a bus event relays, `undefined` when it relays none. */
+export function relayedEventOf(
+  event: ClavixEvent,
+  now: () => Date,
+): ClavixWebhookEvent | undefined {
+  if (event.kind === "webhook") return event.event;
+  if (event.kind === "auth") return signedInWebhookEvent(event, now);
+  return undefined;
+}
+
+/** The `webhook.test` event sent to one endpoint. */
+export function testEventOf(
+  tenantId: string,
+  endpointId: string,
+  now: Date,
+): ClavixWebhookEvent {
+  const data: WebhookData = { tenantId, endpointId };
+  return {
+    id: crypto.randomUUID(),
+    type: TEST_EVENT_TYPE,
+    occurredAt: now,
+    data,
+  };
+}
