@@ -7,7 +7,7 @@ import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { createPartitionPurger } from "./partition-purger";
 import { warn } from "./runtime";
-import { domainsService, tenantsService } from "./tenancy";
+import { domainsService, tenantRetentionService } from "./tenancy";
 
 /**
  * The tenant-owned collections of the app (`isOwned`: `adminEvents`, the
@@ -33,7 +33,7 @@ export const createTenantPurge =
     partitions: PartitionPurger = createPartitionPurger(oauthDb),
   ) =>
   () =>
-    tenantsService.purge(
+    tenantRetentionService.purge(
       {
         // The custom domains are a platform collection (`domains`), emptied too.
         owned: [

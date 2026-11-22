@@ -34,7 +34,7 @@ import { type GqlResult, gqlBody } from "~/gql";
 import { jsonOf } from "~/json";
 import { defined } from "~/narrow";
 import { createFlow } from "~/oauth-flow";
-import { quietTenants } from "~/ports";
+import { quietSocial, quietTenants } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { SignInPolicyService } from "./sign-in-methods.service";
 
@@ -71,7 +71,12 @@ const tenants = new TenantsService(mongo.db.tenants, {
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policy = new SignInPolicyService(tenants, secretBox, () => {});
+const policy = new SignInPolicyService(
+  tenants,
+  quietSocial(),
+  secretBox,
+  () => {},
+);
 const SECRET = "gh-spec-secret-do-not-leak";
 
 interface Answer {

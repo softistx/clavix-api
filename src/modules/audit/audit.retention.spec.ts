@@ -4,7 +4,7 @@ import { adminEventReader } from "@/config/admin-events";
 import { authEventsService } from "@/config/audit";
 import { mongo } from "@/config/db";
 import { eventBus, eventFailures } from "@/config/events";
-import { tenantsService } from "@/config/tenancy";
+import { tenantRetentionService, tenantsService } from "@/config/tenancy";
 import { purgeAtOf } from "@/modules/tenants";
 import { defined } from "~/narrow";
 import { DAY, run, seed, useTenantPurgeHooks } from "~/tenant-purge";
@@ -42,7 +42,7 @@ const adminEvent = (tenantId: ObjectId | null, days: number) =>
     requestId: "r",
   });
 const deps = () => ({
-  targets: () => tenantsService.retentionTargets(),
+  targets: () => tenantRetentionService.retentionTargets(),
   deleteAuthBefore: (id: string, before: Date) =>
     authEventsService.deleteBefore(id, before),
   deleteAdminBefore: (id: string | null, before: Date) =>

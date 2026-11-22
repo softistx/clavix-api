@@ -3,6 +3,7 @@ import type { Tenant } from "./tenants.model";
 import type {
   PublicOrigin,
   RegisteredTenant,
+  TenantHostsOptions,
   TenantListOptions,
   TenantState,
 } from "./tenants.types";
@@ -94,3 +95,27 @@ export const listScopeOf = (options: TenantListOptions) =>
     options.state ?? null,
     options.ids !== undefined,
   ]);
+
+/**
+ * After a tenant write: drops the tenant's slug host and its custom hosts
+ * from the resolver's cache. Errors are logged and swallowed, the write
+ * stands.
+ */
+export async function dropHosts(
+  options: TenantHostsOptions,
+  tenant: Pick<Tenant, "slug" | "_id">,
+): Promise<void> {
+  const hosts = [hostOf(tenant.slug, options.domain)];
+  try {
+    hosts.push(...(await options.hostsOf(tenant._id)));
+  } catch (error) {
+    options.log(`tenants: hostsOf failed for ${hosts[0]}: ${reasonOf(error)}`);
+  }
+  try {
+    await options.onHostsChanged(hosts);
+  } catch (error) {
+    options.log(
+      `tenants: onHostsChanged failed for ${hosts.join(", ")}: ${reasonOf(error)}`,
+    );
+  }
+}

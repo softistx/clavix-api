@@ -214,7 +214,7 @@ tokens are the tenant's partition (`syncMongoStoresPartitioned` and `syncMongoIn
 (`src/config/users.ts`, wired in `src/server.ts`): both go through the tenant's own instance, so a
 user id or session of another tenant is unknown or anonymous. Relations, API keys and janus-kit are not
 partitioned: never use them for tenant users.
-Its files (A23): `users.tenant-janus.ts` (one tenant's `janus()` and the `TenantJanus` types),
+Its files (A23): `users.tenant-janus.ts` (the `TenantJanus` types and `buildTenantJanus`), `users.janus-config.ts` (one tenant's `janus()` options: passkeys, invitations and the invitation hooks),
 `users.issuers.ts` (`createTenantJanusIssuers`, its options), `users.social.ts` (the social apps and
 enterprise connections of a tenant), `users.sso.ts` (home-realm discovery, the callback's connection),
 `users.session.ts` (the cookie and session constants), `users.rp.ts` (rpId, origin), `users.schema.ts`
@@ -613,15 +613,19 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
 
 - Layout (A5): `tenants.model.ts`, `.plan.ts`, `.trash.ts`, `.hooks.ts`, `.rules.ts` (slug rules), `.utils.ts`
   (hosts, issuers, partitions, list filters, `stateOf`), `.errors.ts`, `.types.ts`, `.cli.ts`, the purge queue and
-  worker (`.purge-queue.ts`, `.purge-worker.ts`), and `tenants.service.ts`: one service per domain (owner,
-  2026-11-20), `TenantsService` (`config/tenancy.ts`: `tenantsService`), holding every business method: create and
-  `register` (script), the status flips, `update`, `setPlan`, `updateSignIn` / `updateOAuth`, `replaceSocial`,
-  `find` / `get` (trash included, a purging tenant is gone), `list`, `count`, `trash`, `restore`, and the purge
-  (`purgeDue`, `claimPurge`, `markPurged`, `purge`). Every write drops the tenant's hosts from the resolver's
-  cache. No split by action; the cap is per method (50 lines or more is a finding, 80 the hard cap); its spec
-  `tenants.service.spec.ts` sits beside it. `index.ts` is the import surface for other modules (the purge queue
-  and worker are imported by file in `server.ts` and `config/redis.ts`, so the barrel never loads the queue), and
-  `src/modules/services.ts` wires `tenants`.
+  worker (`.purge-queue.ts`, `.purge-worker.ts`), and the `services/` folder: one service per domain (owner,
+  2026-11-20), standalone, each built in `config/tenancy.ts` and called directly by its consumers, each with its
+  spec beside it. `TenantsService` (`tenantsService`) holds the business methods: create and `register`
+  (script), the status flips, `update`, `setPlan`, `updateSignIn` / `updateOAuth`, `find` / `get` (trash
+  included, a purging tenant is gone), `list`, `count`, `trash` and `restore`. `TenantSocialService`
+  (`tenantSocialService`) holds `replaceSocial` (`SignInPolicyService.resealSecrets`), and
+  `TenantRetentionService` (`tenantRetentionService`) holds `retentionTargets` (the audit retention) and the
+  purge (`purgeDue`, `claimPurge`, `markPurged`, `purge`). Every write drops the tenant's hosts from the
+  resolver's cache (`dropHosts` in `tenants.utils.ts`, the same three ports for the three services). No split by
+  action; the cap is per method (50 lines or more is a finding, 80 the hard cap). `index.ts` is the import surface
+  for other modules (the purge queue and worker are imported by file in `server.ts` and `config/redis.ts`, so
+  the barrel never loads the queue), and `src/modules/services.ts` wires `tenants`, `tenantSocial` and
+  `tenantRetention`.
 - **State**: `stateOf` = `active` | `suspended` | `deleted` (the trash), or `null` once the purge started.
   The resolver returns suspended and deleted tenants (`ResolvedTenant.status`); a caller that serves a
   tenant checks `isLive` (`tenancy/live.ts`: `requireLive`, `TENANT_SUSPENDED`, 403). Enforced on
@@ -639,7 +643,7 @@ A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`)
   `oauthPartitionedClients` by `partition`; domains are counted from `domainsService`. `assertWithinQuota`
   / `QuotaExceededError` (`QUOTA_EXCEEDED`, 409) is for the hard quotas, used by the creations of
   clients (A2) and domains (A4); MAU is a soft meter (`exceeded`), it blocks nothing.
-- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `TenantsService.purge`
+- **Trash and purge**: `deleteTenant` soft-deletes; `purgeAt` = `deletedAt` + 30 days. `TenantRetentionService.purge`
   claims (`purgeStartedAt`: it resolves nowhere, cannot be restored), purges the janus
   partition, the tenant-owned collections (`ownedPurgers`, by `isOwned`: `adminEvents` is the platform's
   record and stays), the roles and platform link (`access.removeTenant`), then `markPurged` leaves a

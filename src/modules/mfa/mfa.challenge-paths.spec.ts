@@ -27,6 +27,7 @@ import { clientHeaders } from "~/client-header";
 import { fetchDouble } from "~/fetch-double";
 import { type Answer, answerOf } from "~/gql-answer";
 import { memoryMailerOf } from "~/memory-mailer-of";
+import { quietSocial } from "~/ports";
 
 // The second-factor challenge on the sign-in paths mfa.spec does not walk
 // (a magic link, a social provider), its freshness window, a suspended
@@ -39,7 +40,12 @@ const origin = {
   domain: env.CLAVIX_DOMAIN,
   port: env.CLAVIX_PUBLIC_PORT,
 } as const;
-const policies = new SignInPolicyService(tenantsService, secretBox, () => {});
+const policies = new SignInPolicyService(
+  tenantsService,
+  quietSocial(),
+  secretBox,
+  () => {},
+);
 
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 const tenantOf = async (slug: string) => {

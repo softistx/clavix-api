@@ -27,7 +27,7 @@ import { gqlOf } from "~/gql";
 import { type Answer, answerOf } from "~/gql-answer";
 import { memoryMailerOf } from "~/memory-mailer-of";
 import { defined } from "~/narrow";
-import { testSecrets } from "~/ports";
+import { quietSocial, testSecrets } from "~/ports";
 
 const memory = memoryMailerOf(mailer);
 const app = createTestApp();
@@ -38,6 +38,7 @@ const origin = {
 } as const;
 const policies = new SignInPolicyService(
   tenantsService,
+  quietSocial(),
   testSecrets(),
   () => {},
 );

@@ -25,7 +25,7 @@ import { at } from "~/body";
 import { consoleRequestAs } from "~/console";
 import { type GqlResult, gqlBody } from "~/gql";
 import { defined, instance } from "~/narrow";
-import { quietTenants } from "~/ports";
+import { quietSocial, quietTenants } from "~/ports";
 import { secretContext } from "./sign-in-methods.secrets";
 import { SignInPolicyService } from "./sign-in-methods.service";
 import { socialProvidersOf } from "./sign-in-methods.social";
@@ -674,6 +674,7 @@ describe("concurrent changes", () => {
         now: () => new Date(),
         log: () => {},
       }),
+      quietSocial(),
       secretBox,
       () => {},
     );

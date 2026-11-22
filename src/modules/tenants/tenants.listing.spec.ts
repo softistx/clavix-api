@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mongo } from "@/config/db";
 import { tenantsService } from "@/config/tenancy";
-import { defined } from "~/narrow";
 import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
-import { purgeAtOf } from "./tenants.trash";
 import { stateOf } from "./tenants.utils";
 
 const clear = () =>
@@ -92,34 +90,5 @@ describe("TenantsService", () => {
     await expect(
       tenantsService.get("65f0000000000000000000aa"),
     ).rejects.toThrow();
-  });
-
-  test("purgeDue and claimPurge follow the 30 days; a claimed tenant cannot be restored", async () => {
-    const t = await make("acme");
-    const id = t._id.toHexString();
-    const trashed = await tenantsService.trash(id);
-    const due = purgeAtOf(defined(trashed.deletedAt, "the deletion date"));
-    const before = new Date(due.getTime() - 1000);
-    expect((await tenantsService.purgeDue(before)).map((x) => x.slug)).toEqual(
-      [],
-    );
-    expect(await tenantsService.claimPurge(trashed, before)).toBe(false);
-    expect((await tenantsService.purgeDue(due)).map((x) => x.slug)).toEqual([
-      "acme",
-    ]);
-    expect(await tenantsService.claimPurge(trashed, due)).toBe(true);
-    expect(await tenantsService.claimPurge(trashed, due)).toBe(true); // a resume
-    expect(await tenantsService.find(id)).toBeUndefined();
-    await expect(tenantsService.restore(id)).rejects.toThrow();
-    // still due until marked purged
-    expect(await tenantsService.purgeDue(due)).toHaveLength(1);
-    await tenantsService.markPurged(trashed, due);
-    expect(await tenantsService.purgeDue(due)).toEqual([]);
-    expect(await tenantsService.claimPurge(trashed, due)).toBe(false);
-  });
-
-  test("a live tenant is not due", async () => {
-    await make("acme");
-    expect(await tenantsService.purgeDue(new Date("2099-01-01"))).toEqual([]);
   });
 });

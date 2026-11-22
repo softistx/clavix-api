@@ -26,7 +26,7 @@ import { fieldOf } from "~/gql-field";
 import { jsonOf, tokenBody } from "~/json";
 import { parsed } from "~/narrow";
 import { deviceCodesBody, idTokenBody } from "~/oauth-bodies";
-import { quietOAuth, testSecrets } from "~/ports";
+import { quietOAuth, quietSocial, testSecrets } from "~/ports";
 import { createTenantParOff } from "~/tenant-par-off";
 import { ACR } from "./authentication-level";
 import { createClavixOAuthIssuers } from "./issuers";
@@ -67,6 +67,7 @@ const issuers = createClavixOAuthIssuers({
 const app = createTestApp({ oauth: issuers });
 const policies = new SignInPolicyService(
   tenantsService,
+  quietSocial(),
   testSecrets(),
   () => {},
 );

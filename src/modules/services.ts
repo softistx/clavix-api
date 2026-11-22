@@ -17,7 +17,12 @@ import { passkeysService } from "@/config/passkeys";
 import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { signInPolicyService } from "@/config/sign-in-policy";
-import { domainsService, tenantsService } from "@/config/tenancy";
+import {
+  domainsService,
+  tenantRetentionService,
+  tenantSocialService,
+  tenantsService,
+} from "@/config/tenancy";
 import { usageService } from "@/config/usage";
 import { usersService } from "@/config/users";
 import { webhooksService } from "@/config/webhooks-service";
@@ -49,6 +54,8 @@ export const services = () => ({
   roles: rolesService,
   signInPolicy: signInPolicyService,
   tenants: tenantsService,
+  tenantSocial: tenantSocialService,
+  tenantRetention: tenantRetentionService,
   usage: usageService,
   users: usersService,
   webhooks: webhooksService,

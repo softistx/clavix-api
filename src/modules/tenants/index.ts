@@ -2,6 +2,7 @@
 // (`config/redis.ts`, `server.ts`), so this barrel never loads the queue;
 // `tenants.console-resolver` by `console/modules/index.ts`.
 
+export * from "./services";
 export * from "./tenants.cli";
 export { parentOf } from "./tenants.console-parent";
 export * from "./tenants.errors";
@@ -17,7 +18,6 @@ export {
   type Quotas,
 } from "./tenants.plan";
 export { PLATFORM_TENANT_SLUG, slugProblem } from "./tenants.rules";
-export * from "./tenants.service";
 export { purgeAtOf } from "./tenants.trash";
 export type {
   OwnedCollectionPurger,

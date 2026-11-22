@@ -7,6 +7,7 @@ import { mongo } from "@/config/db";
 import {
   PLATFORM_TENANT_SLUG,
   type Tenant,
+  TenantSocialService,
   TenantsService,
 } from "@/modules/tenants";
 import { defined, instance } from "~/narrow";
@@ -53,7 +54,8 @@ function fakeTenants(slug = "acme") {
       };
       return state.tenant;
     }
-
+  }
+  class MemorySocial extends TenantSocialService {
     override async replaceSocial(
       _tenant: Tenant,
       social: SignInPolicy["social"],
@@ -66,13 +68,18 @@ function fakeTenants(slug = "acme") {
       return true;
     }
   }
+  const social = new MemorySocial(mongo.db.tenants, {
+    ...quietTenants,
+    now: () => new Date(),
+    log: () => {},
+  });
   const service = new MemoryTenants(mongo.db.tenants, {
     ...quietTenants,
     now: () => new Date(),
     log: () => {},
   });
   const id = () => state.tenant._id.toHexString();
-  return { state, id, service };
+  return { state, id, service, social };
 }
 
 const codeOf = async (run: () => Promise<unknown>) => {
@@ -86,7 +93,9 @@ const codeOf = async (run: () => Promise<unknown>) => {
 const setup = (slug?: string) => {
   const t = fakeTenants(slug);
   const logs: string[] = [];
-  const policy = new SignInPolicyService(t.service, box, (m) => logs.push(m));
+  const policy = new SignInPolicyService(t.service, t.social, box, (m) =>
+    logs.push(m),
+  );
   return { ...t, policy, logs };
 };
 
@@ -280,7 +289,7 @@ describe("resealSecrets", () => {
         ],
       },
     };
-    const policy = new SignInPolicyService(t.service, ring, () => {});
+    const policy = new SignInPolicyService(t.service, t.social, ring, () => {});
     expect(await policy.resealSecrets(owner)).toMatchObject({
       scanned: 2,
       current: 1,
@@ -294,7 +303,7 @@ describe("resealSecrets", () => {
   test("a tenant that is gone has nothing to seal", async () => {
     const t = fakeTenants();
     t.state.gone = true;
-    const policy = new SignInPolicyService(t.service, box, () => {});
+    const policy = new SignInPolicyService(t.service, t.social, box, () => {});
     expect(
       await policy.resealSecrets("65f0000000000000000000aa"),
     ).toMatchObject({

@@ -1,5 +1,9 @@
 import { OptimisticLockError } from "@softistx/mongo";
-import type { Tenant, TenantsService } from "@/modules/tenants";
+import type {
+  Tenant,
+  TenantSocialService,
+  TenantsService,
+} from "@/modules/tenants";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { badInput } from "@/shared/errors";
 import { refusal } from "./sign-in-methods.errors";
@@ -39,6 +43,7 @@ import { holdsSecret, sameValue, withSocial } from "./sign-in-methods.utils";
 export class SignInPolicyService {
   constructor(
     private readonly tenants: TenantsService,
+    private readonly social: TenantSocialService,
     private readonly box: SecretBox,
     private readonly log: (message: string) => void,
   ) {}
@@ -123,7 +128,7 @@ export class SignInPolicyService {
       counts,
     );
     if (pending > 0) {
-      const written = await this.tenants.replaceSocial(tenant, social);
+      const written = await this.social.replaceSocial(tenant, social);
       if (written) counts.resealed += pending;
       else counts.skipped += pending;
     }
