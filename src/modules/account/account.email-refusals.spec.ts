@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { JanusError } from "@softistx/janus";
+import { emailVerificationThrottled } from "@/modules/auth/auth.errors";
 import type { TenantJanus } from "@/modules/users";
 import { janusOver, signedAs } from "~/janus-double";
 import { contextOf, tenantStandIn } from "~/spec-context";
@@ -110,19 +111,38 @@ describe("requestEmailChange throttle", () => {
         verifyThrottle: {
           check: async (key) => {
             seen.push(key);
-            throw new Error("throttled");
+            throw emailVerificationThrottled(30);
           },
         },
       },
     });
-    await expect(
-      service(failing("TOKEN_UNKNOWN")).requestEmailChange(
-        throttled,
-        "a@b.test",
+    expect(
+      await codeOf(() =>
+        service(failing("TOKEN_UNKNOWN")).requestEmailChange(
+          throttled,
+          "a@b.test",
+        ),
       ),
-    ).rejects.toThrow("throttled");
+    ).toBe("EMAIL_VERIFICATION_THROTTLED");
     expect(seen).toEqual([
       { tenantId: "a".repeat(24), userId: "u1", ip: "203.0.113.7" },
     ]);
+  });
+});
+
+describe("a suspended tenant", () => {
+  const suspended = contextOf({
+    tenant: tenantStandIn({ tenantId: "a".repeat(24), status: "suspended" }),
+  });
+  const reader = () => service(failing("TOKEN_UNKNOWN"));
+
+  test("still answers the reads of currentUser", async () => {
+    expect(await reader().lockedFields(suspended)).toEqual([]);
+  });
+
+  test("refuses a write", async () => {
+    expect(
+      await codeOf(() => reader().requestEmailChange(suspended, "a@b.test")),
+    ).toBe("TENANT_SUSPENDED");
   });
 });

@@ -37,8 +37,14 @@ export class AccountService {
     if (auth === null || tenant === null) {
       throw fail("NOT_FOUND", "No such tenant", { status: 404 });
     }
-    requireLive(tenant);
     return { auth, tenant, tenantId: new ObjectId(tenant.tenantId) };
+  }
+
+  /** `tenantOf` for a write: a suspended tenant refuses it (the reads of `currentUser` keep answering). */
+  private async liveTenantOf(ctx: Context) {
+    const found = await this.tenantOf(ctx);
+    requireLive(found.tenant);
+    return found;
   }
 
   /** The signed-in user of the request, or UNAUTHENTICATED (401). */
@@ -80,7 +86,7 @@ export class AccountService {
     ctx: Context,
     input: Parameters<typeof cleanProfile>[0],
   ) {
-    const { auth, tenantId } = await this.tenantOf(ctx);
+    const { auth, tenantId } = await this.liveTenantOf(ctx);
     const session = await this.signedIn(auth, ctx.request);
     ctx.set.headers.set("cache-control", "no-store");
     const { name, ...fields } = input;
@@ -129,7 +135,7 @@ export class AccountService {
     ctx: Context,
     values: Parameters<typeof valueChangesOf>[0],
   ) {
-    const { auth, tenantId } = await this.tenantOf(ctx);
+    const { auth, tenantId } = await this.liveTenantOf(ctx);
     const user = await this.signedIn(auth, ctx.request);
     ctx.set.headers.set("cache-control", "no-store");
     const changes = valueChangesOf(values);
@@ -156,7 +162,7 @@ export class AccountService {
    * Whether somebody holds the address is only told when the link is redeemed.
    */
   async requestEmailChange(ctx: Context, email: string): Promise<true> {
-    const { auth, tenant } = await this.tenantOf(ctx);
+    const { auth, tenant } = await this.liveTenantOf(ctx);
     await requireFresh(ctx, FRESH_WITHIN);
     const user = await this.signedIn(auth, ctx.request);
     ctx.set.headers.set("cache-control", "no-store");
@@ -199,7 +205,7 @@ export class AccountService {
    * expired or stale token is one `EMAIL_CHANGE_INVALID`.
    */
   async confirmEmailChange(ctx: Context, token: string) {
-    const { auth, tenant, tenantId } = await this.tenantOf(ctx);
+    const { auth, tenant, tenantId } = await this.liveTenantOf(ctx);
     const session = await this.signedIn(auth, ctx.request);
     ctx.set.headers.set("cache-control", "no-store");
     const moved = await this.ports.exclusive(

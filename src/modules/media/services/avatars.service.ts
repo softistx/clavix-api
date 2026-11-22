@@ -4,6 +4,7 @@ import type { Context } from "@/http/context";
 import { currentOf } from "@/modules/passkeys";
 import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
+import { PICTURE_LOCKED_MESSAGE } from "../media.errors";
 import type { AvatarsPorts, AvatarTarget } from "../media.types";
 
 /**
@@ -49,11 +50,10 @@ export class AvatarsService {
     requireLive(tenant);
     const { user } = await currentOf(auth, ctx.request);
     if (await this.ports.pictureLocked(tenant.tenantId)) {
-      throw fail(
-        "PROFILE_FIELD_LOCKED",
-        "PICTURE is locked by the tenant: only an administrator changes it",
-        { status: 403, field: "PICTURE" },
-      );
+      throw fail("PROFILE_FIELD_LOCKED", PICTURE_LOCKED_MESSAGE, {
+        status: 403,
+        field: "PICTURE",
+      });
     }
     return this.remove({ tenantId: tenant.tenantId, userId: user.id, auth });
   }

@@ -8,6 +8,10 @@ export const codes = defineCodes("media", [
   "MEDIA_TOO_LARGE",
 ]);
 
+/** The refusal of a locked PICTURE, worded once for `/media` and `removeMyPicture`. */
+export const PICTURE_LOCKED_MESSAGE =
+  "PICTURE is locked by the tenant: only an administrator changes it";
+
 /** The statuses a media refusal is answered with. */
 export type AnswerStatus =
   | 400
@@ -43,8 +47,7 @@ const REFUSALS: ReadonlyMap<string, Refusal> = new Map([
     {
       code: "PROFILE_FIELD_LOCKED",
       status: 403,
-      message:
-        "PICTURE is locked by the tenant: only an administrator changes it",
+      message: PICTURE_LOCKED_MESSAGE,
     },
   ],
   ["not_found", { code: "NOT_FOUND", status: 404, message: "No such file" }],
