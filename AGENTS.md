@@ -585,11 +585,11 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 
 ## User attributes (`src/modules/attributes`, with its `attributes.console-*` files; `src/config/attributes.ts`)
 
-A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slice A1; the plan is
+A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices A1 and A2; the plan is
 `spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
-reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A2 to A5 add
-the stored values, the role links, the claims and the profile.
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A3 to A5 add
+the role links, the claims and the profile.
 - **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
   with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
   `values.service.ts`), `rules/`, `utils/`; the single-file roles (`attributes.model.ts`,

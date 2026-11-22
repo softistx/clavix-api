@@ -922,9 +922,9 @@ On `updateRole` or `deleteRole` of a role whose `managed` field is `true`: Clavi
 tenant and keeps it as it is. Nothing was written. Hide Edit and Delete on such a role; assigning
 it with `assignRole` still works. A tenant's own roles (`managed: false`) are not affected.
 
-### `ATTRIBUTE_*` codes on a user attribute
+### `ATTRIBUTE_*` codes on a user attribute and its values
 
-Every refusal on the attribute catalogue writes nothing.
+Every refusal on the attribute catalogue or on a user's values writes nothing.
 - `ATTRIBUTE_KEY_INVALID` (400): the key is not 2 to 64 characters of a lower-case letter, then lower-case letters, digits and `_`.
 - `ATTRIBUTE_KEY_RESERVED` (400): the key is a claim name tokens already carry (`email`, `roles`, `scope`...). Pick another.
 - `ATTRIBUTE_KEY_TAKEN` (409): the tenant has an attribute with that key, an archived one included. Restore it, or delete it for good to free the key.
@@ -953,7 +953,7 @@ Every refusal on the attribute catalogue writes nothing.
 `No such role`: the id names no role of this tenant (another tenant's id is not found either), or the
 role was deleted while `assignRole` ran. `No such resource`: `createRole` was given a `resourceId`
 that is not a resource of this tenant, or the resource was deleted at that moment. `No such user`:
-`assignRole` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
+`assignRole`, `setUserAttributeValues` or `userDataExport` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
 was written. List the roles, resources or users again and send an id from there. `deleteRole` and
 `unassignRole` never answer `NOT_FOUND`: they are repeatable and answer `false` when there is nothing
 to remove.
