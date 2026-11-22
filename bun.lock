@@ -14,8 +14,8 @@
         "@softistx/alxia-telemetry": "^0.10.0",
         "@softistx/graphql-scalars": "^0.8.0",
         "@softistx/graphql-validation": "^0.10.0",
-        "@softistx/graxia": "^0.15.0",
-        "@softistx/graxia-graphiql": "^0.3.0",
+        "@softistx/graxia": "^0.16.0",
+        "@softistx/graxia-graphiql": "^0.4.0",
         "@softistx/janus": "^0.80.0",
         "@softistx/janus-graphql": "^0.38.0",
         "@softistx/janus-mail": "^0.26.24",
@@ -320,9 +320,9 @@
 
     "@softistx/graphql-validation": ["@softistx/graphql-validation@0.10.0", "", { "peerDependencies": { "graphql": "^16.11.0 || ^17.0.0", "typescript": "^6.0.3 || ^7.0.0", "zod": ">=4.6.5 <5" }, "bin": { "nxgt-graphql-validation": "dist/cli.js" } }, "sha512-LulbRXKRAK/fBPG+Kjcz2WYsQohfD56OADZr4e5D/dpQu6GwYY4mOhzdy+kjJGHrYhbjKE9orE6JMrBWRIlJ7g=="],
 
-    "@softistx/graxia": ["@softistx/graxia@0.15.0", "", { "peerDependencies": { "@softistx/telemetry": "^0.5.0", "graphql": "^17.1.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/telemetry", "typescript"] }, "sha512-qcQgoydTyabEMtQ13d/yJpzEWuBVMGPnWbFVt6AFDyB4P1lIqlKOO+E7iPhwWg262FCL5me9Xmm0HmA3DKi+ug=="],
+    "@softistx/graxia": ["@softistx/graxia@0.16.0", "", { "peerDependencies": { "@softistx/telemetry": "^0.5.0", "graphql": "^17.1.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/telemetry", "typescript"] }, "sha512-yGaEenbv4HzJiGgjCFqLM2aeeiJZ9nR/D2EDRfwFYedy2Ivzmcf9j5HUlCA7RvjXUEXm7gcaj5XfbxuxDwzEmg=="],
 
-    "@softistx/graxia-graphiql": ["@softistx/graxia-graphiql@0.3.0", "", { "peerDependencies": { "@softistx/graxia": "^0.15.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["typescript"] }, "sha512-/WTBQosK41qWBrZ29pZ3kIF86aTzsxF32wC0e4d+mkUwnYKFmzf4mYjHVDfLqIs8IT5+BBAVP+G2L1BbTWf4TQ=="],
+    "@softistx/graxia-graphiql": ["@softistx/graxia-graphiql@0.4.0", "", { "peerDependencies": { "@softistx/graxia": "^0.16.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["typescript"] }, "sha512-29eXjGuP5cElTO+BaGsbqgh8xZuEYUvYI0zTcgGIediUdNFJp0CFi2/3+09h+U5UOLA51mBlAdgd2mECADXfrQ=="],
 
     "@softistx/janus": ["@softistx/janus@0.80.0", "", { "peerDependencies": { "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-rODlsKDEm9iexGBvG/w2dfqJzmHswHAtTXtGPY44jPOZsu9PxlfWo7wcrwtpf9G1QuBKora2Fb0BWf6CJ/ypRw=="],
 
