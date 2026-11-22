@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { roleShape } from "@/modules/roles";
 import type { AttributeDoc, AttributeFields } from "../attributes.types";
 
 /** The gap under which a move renumbers the family: two floats too close to split again. */
@@ -38,8 +39,18 @@ export function positionAt(
   return after - before < MIN_GAP ? null : (before + after) / 2;
 }
 
-/** What the console shows of an attribute, with how many values it holds. */
-export const shape = (attribute: AttributeDoc, valueCount: number) => ({
+/** One role an attribute is linked to, as the console shows it. */
+export interface RoleLinkView {
+  role: ReturnType<typeof roleShape>;
+  required: boolean;
+}
+
+/** What the console shows of an attribute, with how many values it holds and the roles it is linked to. */
+export const shape = (
+  attribute: AttributeDoc,
+  valueCount: number,
+  roles: readonly RoleLinkView[],
+) => ({
   id: attribute._id.toHexString(),
   key: attribute.key,
   family: attribute.family,
@@ -54,14 +65,20 @@ export const shape = (attribute: AttributeDoc, valueCount: number) => ({
   emissionScope: attribute.emission?.scope ?? null,
   archivedAt: attribute.archivedAt,
   valueCount,
-  // The role links are slice A3's: no attribute is linked to a role yet.
-  roles: [],
+  roles: [...roles],
   version: attribute.version,
 });
 
 /** What an admin event names: the attribute id and its tenant. */
 export const target = (id: string, tenantId: string) => ({
   type: "userAttribute",
+  id,
+  tenantId,
+});
+
+/** What an admin event names for a role link: the role id and its tenant. */
+export const roleTarget = (id: string, tenantId: string) => ({
+  type: "role",
   id,
   tenantId,
 });

@@ -5,7 +5,7 @@ import type {
   StoredValue,
   userAttributes,
 } from "./attributes.model";
-import type { AttributeDoc } from "./attributes.types";
+import type { AttributeDoc, HeldRoleLinks } from "./attributes.types";
 
 export type ValueDoc = ReadDocumentOf<typeof attributeValues>;
 
@@ -41,7 +41,17 @@ export interface ValuesOptions {
   values: TypedCollection<typeof attributeValues>;
   /** Read only: a write reads the attribute it sets. */
   attributes: TypedCollection<typeof userAttributes>;
+  /** Read only: the export hides a role attribute no held role links. */
+  roleLinks: HeldRoleLinks;
 }
+
+/**
+ * The section a save is about: the general one (attributes of family USER), or
+ * a role's, with the role's links (attribute id in hex, its `required`).
+ */
+export type SaveSection =
+  | { family: "USER" }
+  | { family: "ROLE"; links: ReadonlyMap<string, boolean> };
 
 /** What the console shows of one attribute for a user: the typed field that holds the value, the others null. */
 export interface ShownValue {

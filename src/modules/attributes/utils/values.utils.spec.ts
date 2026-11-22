@@ -3,7 +3,13 @@ import { ObjectId } from "mongodb";
 import type { AttributeType } from "../attributes.model";
 import type { AttributeDoc } from "../attributes.types";
 import type { ValueDoc } from "../values.types";
-import { byUser, matches, shown } from "./values.utils";
+import {
+  byUser,
+  isRequired,
+  matches,
+  sectionValueView,
+  shown,
+} from "./values.utils";
 
 const attribute = (type: AttributeType): AttributeDoc => {
   const _id = new ObjectId();
@@ -95,5 +101,29 @@ describe("byUser", () => {
     ]);
     expect(grouped.get("u1")?.map((v) => v.value)).toEqual(["x", "z"]);
     expect(grouped.get("u2")?.length).toBe(1);
+  });
+});
+
+describe("role sections", () => {
+  test("isRequired reads the attribute's flag in the general section and the link's in a role's", () => {
+    const a = { ...attribute("STRING"), required: true };
+    expect(isRequired(a, { family: "USER" })).toBe(true);
+    expect(isRequired(a, { family: "ROLE", links: new Map() })).toBe(false);
+    expect(
+      isRequired(a, { family: "ROLE", links: new Map([[a.id, true]]) }),
+    ).toBe(true);
+    expect(
+      isRequired(a, { family: "ROLE", links: new Map([[a.id, false]]) }),
+    ).toBe(false);
+  });
+
+  test("sectionValueView gives the link's required and the user's own value", () => {
+    const a = { ...attribute("STRING"), family: "ROLE" as const };
+    const held = [stored(a, "x"), stored(attribute("STRING"), "y")];
+    expect(sectionValueView(a, true, 3, held, []).attribute.required).toBe(
+      true,
+    );
+    expect(sectionValueView(a, true, 3, held, []).text).toBe("x");
+    expect(sectionValueView(a, false, 3, undefined, []).text).toBeNull();
   });
 });

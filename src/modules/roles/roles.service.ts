@@ -159,7 +159,7 @@ export class RolesService {
   }
 
   /**
-   * Deletes the role and its assignments; `false` when it was not there. A
+   * Deletes the role, its assignments and its attribute links; `false` when it was not there. A
    * managed role is refused (`ROLE_MANAGED`). The role goes first, then the
    * sweep, and the sweep runs on a repeat too: an `assign` that re-checks the
    * role after its write then sees it gone, in every ordering, and a run that
@@ -179,6 +179,8 @@ export class RolesService {
     const removed =
       (await this.rolesOf(tenantId).hardDeleteMany({ _id: id })) > 0;
     await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: id });
+    // The role's attribute links go too; the users' values stay, hidden.
+    await this.options.roleLinks.removeForRole(tenantId, id);
     return removed;
   }
 

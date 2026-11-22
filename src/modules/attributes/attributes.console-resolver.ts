@@ -1,5 +1,9 @@
 import { freshPerMutation } from "@softistx/alxia-graphql";
-import { attributesService, attributeValuesService } from "@/config/attributes";
+import {
+  attributesService,
+  attributeValuesService,
+  roleAttributesService,
+} from "@/config/attributes";
 import { refusing } from "@/console/modules/catalog-support";
 import { idArg } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
@@ -7,14 +11,15 @@ import type { Resolvers } from "@/generated/console/resolvers";
 import {
   changesOf,
   createInput,
+  sectionOf,
   shapeOne,
   shapes,
   tenantOf,
   updateInput,
 } from "./attributes.console-support";
 import { completeLoader, sectionsLoader } from "./attributes.data-loader";
-import { refuse, refuseCommon } from "./attributes.refusals";
-import { target } from "./utils";
+import { refuseCommon } from "./attributes.refusals";
+import { roleTarget, target } from "./utils";
 
 export {
   attributesAudits,
@@ -54,27 +59,25 @@ export const attributes: Resolvers = freshPerMutation({
     ) => {
       const tenant = await tenantOf(ctx, tenantId);
       idArg(userId, "userId");
-      if (section.roleId !== null && section.roleId !== undefined) {
-        // Role sections arrive with slice A3: no role section is held yet.
-        return refuse(
-          "ATTRIBUTE_ROLE_NOT_HELD",
-          "The user does not hold this role",
-          "section.roleId",
-        );
-      }
+      const roleId = section.roleId ?? null;
+      if (roleId !== null) idArg(roleId, "section.roleId");
       // The user is checked under its lock, so a concurrent `deleteUser`
       // (which sweeps the values under the same key) leaves no orphan value.
+      // A role section's role is checked held under it too, and its links
+      // read there: an `unassignRole` or `deleteRole` that wins the race
+      // leaves the value stored but hidden, as if the save had come first.
       const known = await ctx.exclusive(
         userKey(tenant.hex, userId),
         async () => {
           if ((await ctx.users.find(tenant.hex, userId)) === null) return false;
-          await refusing(() =>
+          await refusing(async () =>
             attributeValuesService.save(
               tenant.id,
               userId,
               changesOf(values),
               { kind: "admin", id: ctx.principal.userId },
               true,
+              await sectionOf(tenant.id, userId, roleId),
             ),
           );
           return true;
@@ -87,6 +90,61 @@ export const attributes: Resolvers = freshPerMutation({
         tenantId: tenant.hex,
       });
       return sectionsLoader(ctx, tenant.hex).load(userId);
+    },
+    assignRoleAttribute: async (
+      _,
+      { tenantId, roleId, attributeId, required },
+      ctx,
+    ) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      const linked = await refusing(() =>
+        roleAttributesService.assign(
+          tenant.id,
+          idArg(roleId, "roleId"),
+          idArg(attributeId, "attributeId"),
+          required ?? false,
+        ),
+      );
+      await ctx.audit("roleAttribute.assign", roleTarget(roleId, tenant.hex));
+      await ctx.audit("roleAttribute.assign", target(attributeId, tenant.hex));
+      return shapeOne(tenant.id, linked);
+    },
+    updateRoleAttribute: async (
+      _,
+      { tenantId, roleId, attributeId, required },
+      ctx,
+    ) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      const linked = await refusing(() =>
+        roleAttributesService.update(
+          tenant.id,
+          idArg(roleId, "roleId"),
+          idArg(attributeId, "attributeId"),
+          required,
+        ),
+      );
+      await ctx.audit("roleAttribute.update", roleTarget(roleId, tenant.hex));
+      await ctx.audit("roleAttribute.update", target(attributeId, tenant.hex));
+      return shapeOne(tenant.id, linked);
+    },
+    unassignRoleAttribute: async (
+      _,
+      { tenantId, roleId, attributeId },
+      ctx,
+    ) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      const removed = await roleAttributesService.unassign(
+        tenant.id,
+        idArg(roleId, "roleId"),
+        idArg(attributeId, "attributeId"),
+      );
+      // Recorded on a repeat too (it may be the event the first run missed).
+      await ctx.audit("roleAttribute.unassign", roleTarget(roleId, tenant.hex));
+      await ctx.audit(
+        "roleAttribute.unassign",
+        target(attributeId, tenant.hex),
+      );
+      return removed;
     },
     createUserAttribute: async (_, { tenantId, input }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);

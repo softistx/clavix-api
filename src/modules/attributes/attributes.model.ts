@@ -116,3 +116,32 @@ export const attributeValues = defineCollection({
   ],
   timestamps: true,
 });
+
+// The link between a role-family attribute and one precise role (user-attributes
+// plan, slice A3): a role is per tenant and per resource, so a link names the
+// role, never a role name. `required` is per link (the attribute's own flag is
+// user-family only). Tenant-owned (ADR-0006), purged with the tenant. The links
+// of a role go with the role, those of an attribute with its permanent delete;
+// the values stay (hidden at read and at emission).
+export const roleAttributes = defineCollection({
+  name: "roleAttributes",
+  schema: z.object({
+    _id: id(),
+    ...tenantField,
+    roleId: id(),
+    attributeId: id(),
+    required: z.boolean().default(false),
+  }),
+  indexes: [
+    {
+      key: { tenantId: 1, roleId: 1, attributeId: 1 },
+      unique: true,
+      name: "roleAttributes_role_attribute_unique",
+    },
+    {
+      key: { tenantId: 1, attributeId: 1 },
+      name: "roleAttributes_attribute",
+    },
+  ],
+  timestamps: true,
+});

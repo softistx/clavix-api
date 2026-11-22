@@ -3,16 +3,18 @@ import { ObjectId } from "mongodb";
 import { refuse, refuseCommon } from "../attributes.refusals";
 import type { AttributeDoc, AttributeValues } from "../attributes.types";
 import { canonicalValue, isEmpty, MAX_CHANGES, uniqueKeyOf } from "../rules";
-import { byPosition, byUser, matches } from "../utils";
+import { byPosition, byUser, isRequired, matches } from "../utils";
 import type {
   ExportedValue,
   PlannedWrite,
+  SaveSection,
   ValueActor,
   ValueChange,
   ValueDoc,
   ValuesOptions,
 } from "../values.types";
 
+const GENERAL = { family: "USER" } as const satisfies SaveSection;
 const TAKEN = "another user already holds this value";
 
 /**
@@ -150,18 +152,30 @@ export class AttributeValuesService implements AttributeValues {
     return byPosition(found.filter((a) => a.archivedAt === null));
   }
 
-  /** The users, among `userIds`, who lack a value of a required attribute of the general section. */
+  /**
+   * The users, among `userIds`, who lack a value of a required attribute: of
+   * the general section, or of a role section (a role the user holds, a live
+   * attribute, a required link). A role not held, an archived attribute or a
+   * removed link counts for nothing. Accounts are flagged, never blocked.
+   */
   async incomplete(
     tenantId: ObjectId,
     userIds: readonly string[],
   ): Promise<Set<string>> {
     const required = (await this.general(tenantId)).filter((a) => a.required);
-    if (required.length === 0) return new Set();
+    const roles = await this.options.roleLinks.sectionsOf(tenantId, userIds);
+    const needing = (userId: string) => [
+      ...required,
+      ...(roles.get(userId) ?? []).flatMap((section) =>
+        section.items.filter((item) => item.required).map((i) => i.attribute),
+      ),
+    ];
+    if (required.length === 0 && roles.size === 0) return new Set();
     const held = await this.ofUsers(tenantId, userIds);
     return new Set(
       userIds.filter((userId) => {
         const values = held.get(userId) ?? [];
-        return !required.every((a) =>
+        return !needing(userId).every((a) =>
           values.some(
             (v) =>
               v.attributeId.equals(a._id) && matches(v, a) && !isEmpty(v.value),
@@ -172,10 +186,12 @@ export class AttributeValuesService implements AttributeValues {
   }
 
   /**
-   * Sets and clears values of the general section for a user and returns the
-   * values the user holds afterwards. `enforceRequired` (the console's saves)
-   * refuses a clear of a required attribute; self-service never sets it.
-   * Nothing is written when any change is refused.
+   * Sets and clears values of one section for a user (the general one, or a
+   * role's, whose links the caller read under the user's lock) and returns
+   * every value the user holds afterwards. `enforceRequired` (the console's
+   * saves) refuses a clear of a required attribute (the link's flag in a role
+   * section); self-service never sets it. Nothing is written when any change
+   * is refused.
    */
   async save(
     tenantId: ObjectId,
@@ -183,6 +199,7 @@ export class AttributeValuesService implements AttributeValues {
     changes: readonly ValueChange[],
     actor: ValueActor,
     enforceRequired: boolean,
+    section: SaveSection = GENERAL,
   ): Promise<ValueDoc[]> {
     if (changes.length > MAX_CHANGES)
       refuseCommon(
@@ -197,6 +214,7 @@ export class AttributeValuesService implements AttributeValues {
       changes,
       stored,
       enforceRequired,
+      section,
     );
     await this.apply(tenantId, userId, planned, actor);
     return this.own(tenantId).findMany({ filter: { userId } });
@@ -209,11 +227,17 @@ export class AttributeValuesService implements AttributeValues {
     changes: readonly ValueChange[],
     stored: readonly ValueDoc[],
     enforceRequired: boolean,
+    section: SaveSection,
   ): Promise<PlannedWrite[]> {
     const planned: PlannedWrite[] = [];
     const seen = new Set<string>();
     for (const [index, change] of changes.entries()) {
-      const attribute = await this.target(tenantId, change.attributeId, index);
+      const attribute = await this.target(
+        tenantId,
+        change.attributeId,
+        index,
+        section,
+      );
       if (seen.has(change.attributeId))
         refuse(
           "ATTRIBUTE_VALUE_INVALID",
@@ -223,7 +247,7 @@ export class AttributeValuesService implements AttributeValues {
       seen.add(change.attributeId);
       const held = stored.find((v) => v.attributeId.equals(attribute._id));
       if (change.value === null) {
-        if (enforceRequired && attribute.required)
+        if (enforceRequired && isRequired(attribute, section))
           refuse(
             "ATTRIBUTE_REQUIRED",
             `"${attribute.key}" is required and cannot be cleared`,
@@ -247,11 +271,12 @@ export class AttributeValuesService implements AttributeValues {
     return planned;
   }
 
-  /** The attribute a change names: a live USER-family one of the tenant. */
+  /** The attribute a change names: a live one of the tenant, of the section's family and, for a role's, linked to the role. */
   private async target(
     tenantId: ObjectId,
     attributeId: string,
     index: number,
+    section: SaveSection,
   ): Promise<AttributeDoc> {
     const field = `values.${index}`;
     const found = ObjectId.isValid(attributeId)
@@ -261,10 +286,18 @@ export class AttributeValuesService implements AttributeValues {
       return refuseCommon("NOT_FOUND", "attribute not found", field);
     if (found.archivedAt !== null)
       return refuse("ATTRIBUTE_ARCHIVED", "the attribute is archived", field);
-    if (found.family !== "USER")
+    if (found.family !== section.family)
       return refuse(
         "ATTRIBUTE_FAMILY_MISMATCH",
-        "the attribute is not a general one",
+        section.family === "USER"
+          ? "the attribute is not a general one"
+          : "the attribute is not a role one",
+        field,
+      );
+    if (section.family === "ROLE" && !section.links.has(attributeId))
+      return refuse(
+        "ATTRIBUTE_FAMILY_MISMATCH",
+        "the attribute is not linked to this role",
         field,
       );
     return found;
@@ -376,18 +409,22 @@ export class AttributeValuesService implements AttributeValues {
         a,
       ]),
     );
+    const linking = await this.options.roleLinks.heldBy(tenantId, userId);
     return stored.flatMap((doc) => {
       const attribute = catalogue.get(doc.attributeId.toHexString());
       if (attribute === undefined) return [];
+      const roles = (linking.get(doc.attributeId.toHexString()) ?? []).map(
+        (role) => role.name,
+      );
+      // A role attribute shows while a held role links it; a user one always.
+      const unseen = attribute.family === "ROLE" && roles.length === 0;
       return [
         {
           key: attribute.key,
           label: attribute.label,
           hidden:
-            attribute.archivedAt !== null ||
-            attribute.family !== "USER" ||
-            !matches(doc, attribute),
-          roles: [],
+            attribute.archivedAt !== null || unseen || !matches(doc, attribute),
+          roles: attribute.family === "ROLE" ? roles : [],
           type: doc.type,
           value: doc.value,
           updatedAt: doc.updatedAt,
