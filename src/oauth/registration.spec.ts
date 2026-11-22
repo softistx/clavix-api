@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  ClientMetadataError,
   createClientMetadataFetcher,
   MCP_CLIENT_REDIRECT_URIS,
 } from "@softistx/janus-oauth";
@@ -110,7 +111,8 @@ describe("registrationOf: the metadata-document fetch", () => {
     );
     const outcome = await fetcher(CLIENT_ID, new Date()).then(
       () => "fetched",
-      (error: unknown) => (error instanceof Error ? error.name : "error"),
+      (error: unknown) =>
+        error instanceof ClientMetadataError ? error.reason : "other",
     );
     return { seen, outcome };
   };
@@ -127,14 +129,14 @@ describe("registrationOf: the metadata-document fetch", () => {
     ]) {
       const { seen, outcome } = await run([address]);
       expect(seen).toEqual([]);
-      expect(outcome).not.toBe("fetched");
+      expect(outcome).toBe("blocked_address");
     }
   });
 
   test("one private address among public ones refuses the whole name", async () => {
     const { seen, outcome } = await run(["93.184.216.34", "10.0.0.5"]);
     expect(seen).toEqual([]);
-    expect(outcome).not.toBe("fetched");
+    expect(outcome).toBe("blocked_address");
   });
 
   test("the transport is handed the checked addresses to connect to", async () => {

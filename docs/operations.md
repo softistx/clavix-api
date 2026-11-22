@@ -316,7 +316,7 @@ limited by its own pair of buckets (tenants with `metadataDocuments` on only). O
 
 **Metadata documents: what pins the fetch, and what is left.** The fetch is janus-oauth's own (`createClientMetadataFetcher`,
 no transport of ours): the host is resolved once, every address must be public unicast (loopback, private, link-local,
-unique-local, multicast and the other non-public ranges, v4 and v6, are refused, so are IP literals and local-use names), and
+unique-local, multicast and the other non-public ranges, v4 and v6, are refused, a host written as an IP literal is checked the same way, and local-use names are refused), and
 the connection goes to one of those checked addresses with the name kept for SNI, the certificate and `Host`. The name is
 not resolved a second time, so a host that answers with a public address for the check and a private one for the
 connection (DNS rebinding) is not reached. A redirect is refused, the port is 443, the body is capped (5 KB) and the whole
