@@ -1,0 +1,51 @@
+"""
+A standard profile field a tenant may lock. A locked field cannot be changed by
+the users themselves (their own `updateMyProfile`); the console admins still
+edit it.
+"""
+enum ProfileField {
+  NAME
+  GIVEN_NAME
+  FAMILY_NAME
+  NICKNAME
+  PHONE
+  PICTURE
+  LOCALE
+  ZONEINFO
+  BIRTHDATE
+  ADDRESS
+}
+
+"""
+The profile fields a tenant locks for its users' own edits. `version` rises on
+every change (0 while the tenant never set one): pass the one you read back to
+`updateProfilePolicy`. It is a document of its own: it never bumps the tenant's
+`version`.
+"""
+type ProfilePolicy {
+  tenantId: ID!
+  "The locked fields, in the order of the enum."
+  locked: [ProfileField!]!
+  version: Int!
+  "When the locks last changed; null while the tenant never set any."
+  updatedAt: DateTime
+}
+
+extend type Query {
+  "The tenant's profile locks (tenant viewer): nothing locked while it set none. NOT_FOUND for an unknown tenant."
+  profilePolicy(tenantId: ID!): ProfilePolicy!
+}
+
+extend type Mutation {
+  """
+  Replaces the tenant's locked profile fields (tenant admin), at the `version`
+  the caller read: a stale one is CONFLICT (409), so two admins never overwrite
+  each other. A repeat of the same list stores nothing. Errors: NOT_FOUND for an
+  unknown tenant.
+  """
+  updateProfilePolicy(
+    tenantId: ID!
+    locked: [ProfileField!]!
+    version: Int!
+  ): ProfilePolicy!
+}

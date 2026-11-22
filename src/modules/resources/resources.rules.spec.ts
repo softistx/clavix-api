@@ -51,8 +51,10 @@ describe("scope and resource names", () => {
     expect(scopeNameProblem('quo"te')).toContain("printable ASCII");
   });
 
-  test("isOidcScope knows the three standard scopes", () => {
+  test("isOidcScope knows the five standard scopes", () => {
     expect(OIDC_SCOPES.every(isOidcScope)).toBe(true);
+    expect(isOidcScope("phone")).toBe(true);
+    expect(isOidcScope("address")).toBe(true);
     expect(isOidcScope("read")).toBe(false);
   });
 

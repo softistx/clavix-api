@@ -17,8 +17,10 @@ nxgt-janus release says which.
   yes/no…) in a catalogue: key, label and description per language, unit, options, required,
   user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
   restored and deleted for good. The catalogue and the stored values come first (an admin sets a user's
-  values, the data export and the erase on deletion are in); role links, claims and the profile follow on
-  the same integration branch
+  values, the data export and the erase on deletion are in); the standard profile fields (name parts,
+  phone with an admin-proved flag, locale, zone, birthdate, address) and the tenant's locks on them are
+  in, released as claims by the `profile`, `phone` and `address` scopes; role links and the claims of
+  the attributes follow on the same integration branch
   ([#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,

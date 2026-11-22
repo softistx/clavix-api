@@ -14,6 +14,7 @@ export { branding } from "./branding/branding.model";
 export { clientPolicies } from "./client-policies/client-policies.model";
 export { connections } from "./connections/connections.model";
 export { domains } from "./domains/domains.model";
+export { profilePolicies } from "./profile/profile.model";
 export { detailTypes, resources, scopes } from "./resources/resources.model";
 export { roleAssignments, roles } from "./roles/roles.model";
 export { tenants } from "./tenants/tenants.model";
