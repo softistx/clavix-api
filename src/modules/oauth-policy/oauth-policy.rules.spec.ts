@@ -65,6 +65,32 @@ describe("applyAgentsInput", () => {
   });
 });
 
+describe("applyAgentsInput: wildcard hosts", () => {
+  test("refuses a wildcard over a public suffix, ICANN or private", () => {
+    for (const host of [
+      "*.co.uk",
+      "*.com.au",
+      "*.github.io",
+      "*.s3.amazonaws.com",
+    ]) {
+      expect(
+        problem(() => applyAgentsInput(agentsOff(), { allowHosts: [host] })),
+      ).toContain("public suffix");
+    }
+  });
+
+  test("keeps a wildcard under a registrable domain and a plain host on a suffix", () => {
+    const next = applyAgentsInput(agentsOff(), {
+      allowHosts: ["*.example.com", "*.team.co.uk", "me.github.io"],
+    });
+    expect(next.allowHosts).toEqual([
+      "*.example.com",
+      "*.team.co.uk",
+      "me.github.io",
+    ]);
+  });
+});
+
 describe("sameAgents", () => {
   test("compares the flags and the ordered lists", () => {
     const a: AgentsPolicy = {

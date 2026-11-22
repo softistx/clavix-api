@@ -3,6 +3,7 @@
 // would close a cycle through the tenants service), and
 // `oauth-policy.console-resolver` by `console/modules/index.ts`.
 
+export { wildcardOverSuffix } from "./oauth-policy.rules";
 export {
   type AgentsPolicy,
   agentsOff,

@@ -77,6 +77,28 @@ describe("client policies", () => {
     ).toBe(1);
   });
 
+  test("a rule stored before subjectAgents existed reads as subjectAgents off", async () => {
+    // Stored before the field (and its validator entry) existed: the validator
+    // only checks writes, so the old document is still there after `db:sync`.
+    await mongo.db.clientPolicies.raw.db.collection("clientPolicies").insertOne(
+      {
+        tenantId: tenant,
+        clientId: "svc-legacy",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        tokenExchange: {
+          targetResources: ["https://api.test/a"],
+          subjectClients: ["c-1"],
+          mode: "delegation",
+        },
+      },
+      { bypassDocumentValidation: true },
+    );
+    expect(await service.tokenExchange(tenant, "svc-legacy")).toEqual(rules());
+    const many = await service.tokenExchangeOf(tenant, ["svc-legacy"]);
+    expect(many.get("svc-legacy")?.subjectAgents).toBe(false);
+  });
+
   test("deleteForClient says whether there were rules", async () => {
     await service.setTokenExchange(tenant, "svc-del", rules());
     expect(await service.deleteForClient(tenant, "svc-del")).toBe(true);
