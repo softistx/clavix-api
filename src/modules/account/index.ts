@@ -4,4 +4,3 @@
 // builds the service.
 
 export { AccountService } from "./account.service";
-export type { AccountPorts } from "./account.types";
