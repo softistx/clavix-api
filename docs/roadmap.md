@@ -21,7 +21,7 @@ nxgt-janus release says which.
   that role's section, and hidden, never erased, when the user loses the role); the standard profile fields
   (name parts, phone with an admin-proved flag, locale, zone, birthdate, address) and the tenant's locks on
   them are in, released as claims by the `profile`, `phone` and `address` scopes; the claims of the
-  attributes follow on the same integration branch; a user's profile picture is stored through the media routes (PNG, JPEG or WebP up to 1 MiB, an own upload or an admin's, the `picture` claim, erased with the user)
+  attributes are in the access tokens (the ID token and userinfo wait on janus J1); a user's profile picture is stored through the media routes (PNG, JPEG or WebP up to 1 MiB, an own upload or an admin's, the `picture` claim, erased with the user)
   ([#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,

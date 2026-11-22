@@ -52,7 +52,7 @@ type UserAttribute {
   userEditable: Boolean!
   "Whether two users may not hold the same value. Only STRING and NUMBER."
   unique: Boolean!
-  "The scope whose token carries the value as a claim, or `null` when it is not emitted."
+  "The scope whose access token carries the value as a claim (the ID token and userinfo do not yet), or `null` when it is not emitted."
   emissionScope: String
   "When the attribute was archived, or `null` while it is live."
   archivedAt: DateTime

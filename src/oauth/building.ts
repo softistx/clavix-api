@@ -18,6 +18,7 @@ import {
 import { lifetimes } from "./lifetimes";
 import type {
   AgentCheckFor,
+  AttributesFor,
   AuthFor,
   ExchangeRulesFor,
   RolesFor,
@@ -37,6 +38,7 @@ export interface BuildDeps {
   oidc: ReturnType<typeof createOidcProvider>;
   clock: Clock;
   rolesFor: RolesFor;
+  attributesFor: AttributesFor;
   exchangeRulesFor: ExchangeRulesFor;
   agentCheckFor: AgentCheckFor;
   /** The listener of a tenant's OAuth events (D12, D14). */
@@ -61,6 +63,7 @@ export const buildIssuer =
     oidc,
     clock,
     rolesFor,
+    attributesFor,
     exchangeRulesFor,
     agentCheckFor,
     metadataTransport,
@@ -102,7 +105,7 @@ export const buildIssuer =
       accessTokens: {
         format: "jwt" as const,
         keys,
-        claims: accessTokenClaims(tenant, rolesFor),
+        claims: accessTokenClaims(tenant, rolesFor, attributesFor),
       },
       tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
       clock,

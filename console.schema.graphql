@@ -2647,7 +2647,7 @@ type UserAttribute {
   archivedAt: DateTime
   description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   """
-  The scope whose token carries the value as a claim, or `null` when it is not emitted.
+  The scope whose access token carries the value as a claim (the ID token and userinfo do not yet), or `null` when it is not emitted.
   """
   emissionScope: String
   family: AttributeFamily!
