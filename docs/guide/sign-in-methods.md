@@ -242,10 +242,16 @@ Every mutation is idempotent: the same call again changes nothing, and `version`
       id
       label
     }
+    signUp
   }
 }
-# { "methods": ["PASSKEY", "EMAIL_CODE"], "social": [{ "id": "github", "label": "GitHub" }] }
+# { "methods": ["PASSKEY", "EMAIL_CODE"], "social": [{ "id": "github", "label": "GitHub" }], "signUp": false }
 ```
+
+`signUp` is the tenant's sign-up mode, the flag the console's `Tenant.signUp` reads: `true` when
+strangers may create an account, `false` when only people the tenant already holds or invited may
+sign in. It is tenant-level and never depends on an address, so it reveals nothing about who has an
+account; a hosted page uses it to show or hide its "Create an account" link.
 
 Public, by host; an unknown host is `NOT_FOUND`. It lists only what is enabled, and never a client
 id or a secret. A provider whose secret was sealed under another master key is left out until its
