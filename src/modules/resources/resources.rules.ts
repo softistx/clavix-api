@@ -1,6 +1,8 @@
 import { CliInputError } from "@/shared/cli";
+import type { Translation } from "@/shared/translations";
 import { isOneOf, unique } from "@/shared/values";
-import { CatalogError } from "./resources.errors";
+import { refuse } from "./resources.errors";
+import { canonTranslations } from "./resources.translation-rules";
 import type { RegisterResourceInput, StoredScopeDoc } from "./resources.types";
 
 export const MAX_NAME = 100;
@@ -66,24 +68,12 @@ export function scopeNameProblem(name: string): string | null {
 export const sameUri = (a: string, b: string): boolean =>
   new URL(a).href === new URL(b).href;
 
-function refuse(message: string): never {
-  throw new CatalogError("BAD_USER_INPUT", message);
-}
-
 export function cleanClaims(claims: readonly string[] | undefined): string[] {
   const clean = unique((claims ?? []).map((claim) => claim.trim()));
   if (clean.length > MAX_CLAIMS || clean.some((c) => c.length > MAX_NAME)) {
     refuse(
       `a scope has at most ${MAX_CLAIMS} claims of ${MAX_NAME} characters`,
     );
-  }
-  return clean;
-}
-
-export function cleanText(text: string | undefined): string | undefined {
-  const clean = text?.trim();
-  if ((clean?.length ?? 0) > MAX_DESCRIPTION) {
-    refuse(`a description has at most ${MAX_DESCRIPTION} characters`);
   }
   return clean;
 }
@@ -132,12 +122,12 @@ export function checkScopeName(raw: string): string {
 /** Whether a stored scope is the very definition a repeated create asks for. */
 export function sameScopeDefinition(
   existing: StoredScopeDoc,
-  description: { fr: string; en: string },
+  description: readonly Translation[],
   claims: readonly string[],
 ): boolean {
   return (
-    existing.description.fr === description.fr &&
-    existing.description.en === description.en &&
+    JSON.stringify(canonTranslations(existing.description)) ===
+      JSON.stringify(canonTranslations(description)) &&
     existing.claims.length === claims.length &&
     existing.claims.every((claim) => claims.includes(claim))
   );

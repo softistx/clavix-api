@@ -5,6 +5,7 @@ import type {
   StoredDetailTypeDoc,
   StoredResourceDoc,
   StoredScopeDoc,
+  Texts,
   ValueDraft,
 } from "./resources.types";
 
@@ -74,20 +75,17 @@ export const detailTypeShape = (doc: StoredDetailTypeDoc) => ({
 
 export type ValueInput = {
   value: string;
-  label?: { fr?: string | null; en?: string | null } | null;
+  label?: Texts | null;
 };
 export const valueDraft = (input: ValueInput): ValueDraft => ({
   value: input.value,
-  label: {
-    fr: input.label?.fr ?? undefined,
-    en: input.label?.en ?? undefined,
-  },
+  label: input.label ?? undefined,
 });
 
 export type FieldInput = {
   key: string;
   kind: keyof typeof KIND_OF;
-  label?: { fr?: string | null; en?: string | null } | null;
+  label?: Texts | null;
   required?: boolean | null;
   min?: number | null;
   max?: number | null;
@@ -97,10 +95,7 @@ export type FieldInput = {
 export const fieldDraft = (input: FieldInput): FieldDraft => ({
   key: input.key,
   kind: KIND_OF[input.kind],
-  label: {
-    fr: input.label?.fr ?? undefined,
-    en: input.label?.en ?? undefined,
-  },
+  label: input.label ?? undefined,
   required: input.required ?? undefined,
   min: input.min ?? undefined,
   max: input.max ?? undefined,
@@ -128,17 +123,3 @@ export const resourceShape = (
   allowClientCredentials: resource.allowClientCredentials === true,
   createdAt: resource.createdAt,
 });
-
-/** A text in both languages as the service takes it: a language not sent stays `undefined`. */
-export const localised = (text: {
-  fr?: string | null;
-  en?: string | null;
-}) => ({
-  fr: text.fr ?? undefined,
-  en: text.en ?? undefined,
-});
-
-/** `localised`, but `undefined` for a text not sent at all. */
-export const localisedOrKeep = (
-  text: { fr?: string | null; en?: string | null } | null | undefined,
-) => (text === undefined || text === null ? undefined : localised(text));

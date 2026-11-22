@@ -699,9 +699,9 @@ input CreateConnectionInput {
 """At most 16 fields, 100 characters per label, 300 per description."""
 input CreateDetailTypeInput {
   actions: [DetailValueInput!]
-  description: LocalizedTextInput
+  description: [TranslationInput!]
   fields: [DetailFieldInput!]!
-  name: LocalizedTextInput!
+  name: [TranslationInput!]!
   resourceId: ID!
   """
   1 to 64 letters, digits, `_ . : -`, starting with a letter; unique in the tenant, never changes.
@@ -729,7 +729,7 @@ input CreateRoleInput {
 
 input CreateScopeInput {
   claims: [String!]
-  description: LocalizedTextInput
+  description: [TranslationInput!]
   name: String!
   """Leave out for a standard OpenID Connect scope."""
   resourceId: ID
@@ -780,7 +780,7 @@ scalar DateTime @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc3339")
 type DetailField {
   key: String!
   kind: DetailFieldKind!
-  label: LocalizedText!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   """Numbers: the highest value. A string list: the most items."""
   max: Float
   """Strings (and each item of a list): the longest text."""
@@ -798,7 +798,7 @@ input DetailFieldInput {
   """
   key: String!
   kind: DetailFieldKind!
-  label: LocalizedTextInput
+  label: [TranslationInput!]
   max: Float
   maxLength: Int
   min: Float
@@ -829,10 +829,10 @@ type DetailType {
   """The RFC 9396 `actions` the type allows; empty when it takes none."""
   actions: [DetailValue!]!
   createdAt: DateTime!
-  description: LocalizedText!
+  description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   fields: [DetailField!]!
   id: ID!
-  name: LocalizedText!
+  name: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   resourceId: ID!
   type: String!
   updatedAt: DateTime!
@@ -842,12 +842,12 @@ type DetailType {
 A value of an `enum` field or an action, with the words the consent page shows.
 """
 type DetailValue {
-  label: LocalizedText!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   value: String!
 }
 
 input DetailValueInput {
-  label: LocalizedTextInput
+  label: [TranslationInput!]
   value: String!
 }
 
@@ -985,17 +985,6 @@ scalar LocalTime
 
 """A BCP 47 language tag in canonical form, such as fr-FR."""
 scalar Locale @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc5646")
-
-"""A text in the languages the consent page speaks."""
-type LocalizedText {
-  en: String!
-  fr: String!
-}
-
-input LocalizedTextInput {
-  en: String
-  fr: String
-}
 
 """
 A signed 64-bit integer, as a decimal string (a safe-integer number is accepted as input).
@@ -1847,13 +1836,13 @@ scalar SafeInt
 
 """
 A scope of a tenant: what a client may ask for. The consent page shows its
-description in the viewer's language (French when empty in English, and the
-other way round; the name when both are empty).
+description in the viewer's language (`Accept-Language`, then its base
+language, then the first translation; the name when there is none).
 """
 type Scope {
   """The claims it opens."""
   claims: [String!]!
-  description: LocalizedText!
+  description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   id: ID!
   """
   The OAuth scope token. Unique in its resource (or among the standard scopes); never changes.
@@ -2096,6 +2085,25 @@ enum TokenExchangeMode {
   DELEGATION
 }
 
+"""
+A text in one language. A list of translations holds at most one text per
+locale; no language is built in.
+"""
+type Translation {
+  locale: Locale!
+  text: String!
+}
+
+"""
+A text to set in one language (a BCP 47 tag, `fr`, `en-CA`...). In a list, a
+write sets or replaces the locales it names and keeps the others; a blank
+`text` removes that locale.
+"""
+input TranslationInput {
+  locale: Locale!
+  text: String!
+}
+
 """A ULID: 26 characters of Crockford base32."""
 scalar ULID @specifiedBy(url: "https://github.com/ulid/spec")
 
@@ -2177,14 +2185,15 @@ input UpdateConnectionInput {
 }
 
 """
-Fields left out stay as they are; `fields` and `actions` replace the whole
-list (`actions: []` clears it). The type name and the resource never change.
+Fields left out stay as they are; `name` and `description` set or replace the
+locales they list and keep the others (a blank text removes a locale);
+`fields` and `actions` replace the whole list (`actions: []` clears it). The type name and the resource never change.
 """
 input UpdateDetailTypeInput {
   actions: [DetailValueInput!]
-  description: LocalizedTextInput
+  description: [TranslationInput!]
   fields: [DetailFieldInput!]
-  name: LocalizedTextInput
+  name: [TranslationInput!]
 }
 
 """
@@ -2206,11 +2215,13 @@ input UpdateRoleInput {
 }
 
 """
-Fields left out stay as they are. The name and the resource never change.
+Fields left out stay as they are; `description` sets or replaces the locales it
+lists and keeps the others (a blank text removes a locale). The name and the
+resource never change.
 """
 input UpdateScopeInput {
   claims: [String!]
-  description: LocalizedTextInput
+  description: [TranslationInput!]
 }
 
 """Fields left out stay as they are. The slug never changes."""

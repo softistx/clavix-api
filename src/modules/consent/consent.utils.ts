@@ -1,6 +1,5 @@
 import { fail } from "@/shared/errors";
 import { isRecord } from "@/shared/values";
-import { localeOf } from "./consent.scope-labels";
 import type { ConsentCtx, ServerCtx } from "./consent.types";
 
 /** One read per request, shared by the fields of a page (the texts of a tenant, say). */
@@ -57,6 +56,6 @@ export const requestOf = (ctx: unknown): Request => {
   throw fail("NOT_FOUND", "Not found", { status: 404 });
 };
 
-/** The locale a context's request asks for (`accept-language`). */
-export const localeOfCtx = (ctx: ConsentCtx) =>
-  localeOf(ctx.request?.headers.get("accept-language") ?? null);
+/** The languages a context's request asks for (its `accept-language` header). */
+export const acceptLanguageOf = (ctx: ConsentCtx) =>
+  ctx.request?.headers.get("accept-language") ?? null;

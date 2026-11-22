@@ -6,19 +6,19 @@ import type { DetailTypeDraft } from "./resources.types";
 
 const draft = (extra: Partial<DetailTypeDraft> = {}): DetailTypeDraft => ({
   type: " payment ",
-  name: { en: " Payment " },
+  name: [{ locale: "en", text: " Payment " }],
   fields: [
     {
       key: "amount",
       kind: "number",
-      label: { en: "Amount" },
+      label: [{ locale: "en", text: "Amount" }],
       required: true,
       min: 1,
     },
     {
       key: "currency",
       kind: "enum",
-      values: [{ value: "EUR", label: { fr: "Euro" } }],
+      values: [{ value: "EUR", label: [{ locale: "fr", text: "Euro" }] }],
     },
   ],
   actions: [{ value: "initiate" }],
@@ -26,25 +26,23 @@ const draft = (extra: Partial<DetailTypeDraft> = {}): DetailTypeDraft => ({
 });
 
 describe("cleanDetailType", () => {
-  test("trims the texts, fills a missing language with empty and keeps the bounds", () => {
+  test("trims the texts, leaves out a missing language and keeps the bounds", () => {
     const clean = cleanDetailType(draft());
     expect(clean.type).toBe("payment");
-    expect(clean.name).toEqual({ fr: "", en: "Payment" });
-    expect(clean.description).toEqual({ fr: "", en: "" });
+    expect(clean.name).toEqual([{ locale: "en", text: "Payment" }]);
+    expect(clean.description).toEqual([]);
     expect(clean.fields[0]).toEqual({
       key: "amount",
       kind: "number",
-      label: { fr: "", en: "Amount" },
+      label: [{ locale: "en", text: "Amount" }],
       required: true,
       min: 1,
     });
     expect(clean.fields[1]?.required).toBe(false);
     expect(clean.fields[1]?.values).toEqual([
-      { value: "EUR", label: { fr: "Euro", en: "" } },
+      { value: "EUR", label: [{ locale: "fr", text: "Euro" }] },
     ]);
-    expect(clean.actions).toEqual([
-      { value: "initiate", label: { fr: "", en: "" } },
-    ]);
+    expect(clean.actions).toEqual([{ value: "initiate", label: [] }]);
   });
 
   test("leaves actions out when the draft has none", () => {
@@ -54,22 +52,36 @@ describe("cleanDetailType", () => {
   });
 
   test("refuses a type with no name in any language", () => {
-    expect(() => cleanDetailType(draft({ name: {} }))).toThrow(/needs a name/);
+    expect(() =>
+      cleanDetailType(draft({ name: [{ locale: "en", text: "  " }] })),
+    ).toThrow(/needs a name/);
   });
 
   test("refuses an over-long label", () => {
     expect(() =>
-      cleanDetailType(draft({ name: { en: "x".repeat(MAX_LABEL + 1) } })),
+      cleanDetailType(
+        draft({ name: [{ locale: "en", text: "x".repeat(MAX_LABEL + 1) }] }),
+      ),
     ).toThrow(CatalogError);
   });
 });
 
 describe("canon", () => {
+  test("does not depend on the order of the translations", () => {
+    const fr = { locale: "fr", text: "Paiement" };
+    const en = { locale: "en", text: "Payment" };
+    expect(canon(cleanDetailType(draft({ name: [fr, en] })))).toBe(
+      canon(cleanDetailType(draft({ name: [en, fr] }))),
+    );
+  });
+
   test("is equal for equal definitions and differs on any change", () => {
     const a = cleanDetailType(draft());
     expect(canon(a)).toBe(canon(cleanDetailType(draft())));
     expect(canon(a)).not.toBe(
-      canon(cleanDetailType(draft({ name: { en: "Other" } }))),
+      canon(
+        cleanDetailType(draft({ name: [{ locale: "en", text: "Other" }] })),
+      ),
     );
     expect(canon(a)).not.toBe(
       canon(cleanDetailType(draft({ actions: undefined }))),

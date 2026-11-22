@@ -29,7 +29,10 @@ const service = new ResourcesService({
   findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
 });
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
-const text = (en: string) => ({ fr: en, en });
+const text = (en: string) => [
+  { locale: "fr", text: en },
+  { locale: "en", text: en },
+];
 
 const payment = (extra: Partial<DetailTypeInput> = {}): DetailTypeInput => ({
   type: "payment",

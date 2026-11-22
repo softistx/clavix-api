@@ -1,23 +1,30 @@
 import { describe, expect, test } from "bun:test";
+import type { ConsentValue } from "./consent.detail-format";
 import {
   type DetailTexts,
   detailsOf,
   reviewDetails,
 } from "./consent.detail-labels";
 
+// A text in French and English; a blank language is not written.
+const t = (fr: string, en: string) => [
+  ...(fr === "" ? [] : [{ locale: "fr", text: fr }]),
+  ...(en === "" ? [] : [{ locale: "en", text: en }]),
+];
+
 const texts: DetailTexts = [
   {
     type: "export",
-    name: { fr: "Export", en: "Export" },
-    description: { fr: "", en: "Export your data" },
+    name: t("Export", "Export"),
+    description: t("", "Export your data"),
     fields: [
       {
         key: "format",
         kind: "enum",
-        label: { fr: "Format", en: "Format" },
-        values: [{ value: "csv", label: { fr: "Tableur", en: "" } }],
+        label: t("Format", "Format"),
+        values: [{ value: "csv", label: t("Tableur", "") }],
       },
-      { key: "tags", kind: "string[]", label: { fr: "", en: "Tags" } },
+      { key: "tags", kind: "string[]", label: t("", "Tags") },
     ],
   },
 ];
@@ -46,17 +53,111 @@ describe("detailsOf", () => {
         title: "Export",
         description: "Export your data",
         rows: [
-          { label: "Format", value: "Tableur" },
-          { label: "Tags", value: "a, b" },
-          { label: "Identifier", value: "acct-1" },
-          { label: "Data", value: "x, y" },
+          {
+            kind: "FIELD",
+            key: "format",
+            label: "Format",
+            values: [{ kind: "TEXT", text: "Tableur" }],
+          },
+          {
+            kind: "FIELD",
+            key: "tags",
+            label: "Tags",
+            values: [
+              { kind: "TEXT", text: "a" },
+              { kind: "TEXT", text: "b" },
+            ],
+          },
+          {
+            kind: "IDENTIFIER",
+            key: null,
+            label: null,
+            values: [{ kind: "TEXT", text: "acct-1" }],
+          },
+          {
+            kind: "DATATYPES",
+            key: null,
+            label: null,
+            values: [
+              { kind: "TEXT", text: "x" },
+              { kind: "TEXT", text: "y" },
+            ],
+          },
         ],
       },
     ]);
-    expect(detailsOf(json, texts, "fr")[0]?.rows[3]).toEqual({
-      label: "Données",
-      value: "x, y",
-    });
+  });
+
+  test("the fixed rows carry codes, never words, whatever the language", () => {
+    const json = JSON.stringify([
+      { type: "export", identifier: "a", datatypes: ["x"] },
+    ]);
+    const kinds = (language: string | null) =>
+      detailsOf(json, texts, language)[0]?.rows.map((row) => row.kind);
+    expect(kinds("fr-CA")).toEqual(["IDENTIFIER", "DATATYPES"]);
+    expect(kinds("de")).toEqual(["IDENTIFIER", "DATATYPES"]);
+    expect(detailsOf(json, texts, null)[0]?.title).toBe("Export");
+    expect(detailsOf(json, texts, "fr")[0]?.rows[0]?.label).toBeNull();
+  });
+
+  test("booleans and numbers stay raw", () => {
+    const typed: DetailTexts = [
+      {
+        type: "pay",
+        name: t("Paiement", "Payment"),
+        description: [],
+        fields: [
+          { key: "ok", kind: "boolean", label: t("", "Ok") },
+          { key: "sum", kind: "number", label: t("", "Sum") },
+        ],
+      },
+    ];
+    const json = JSON.stringify([{ type: "pay", ok: true, sum: 1234.5 }]);
+    const values = (language: string) =>
+      detailsOf(json, typed, language)[0]?.rows.map((row) => row.values);
+    const raw: ConsentValue[][] = [
+      [{ kind: "BOOLEAN", boolean: true }],
+      [{ kind: "NUMBER", number: 1234.5 }],
+    ];
+    expect(values("en")).toEqual(raw);
+    expect(values("fr")).toEqual(raw);
+  });
+
+  test("locations are a row of their own, in order", () => {
+    const json = JSON.stringify([
+      { type: "export", locations: ["https://a.example", "https://b.example"] },
+    ]);
+    expect(detailsOf(json, texts, "en")[0]?.rows).toEqual([
+      {
+        kind: "LOCATIONS",
+        key: null,
+        label: null,
+        values: [
+          { kind: "TEXT", text: "https://a.example" },
+          { kind: "TEXT", text: "https://b.example" },
+        ],
+      },
+    ]);
+  });
+
+  test("an empty identifier, location or datatype is no value, and a row with none is dropped", () => {
+    const json = JSON.stringify([
+      {
+        type: "export",
+        identifier: "",
+        locations: [""],
+        datatypes: ["", "x"],
+        actions: [""],
+      },
+    ]);
+    expect(detailsOf(json, texts, "en")[0]?.rows).toEqual([
+      {
+        kind: "DATATYPES",
+        key: null,
+        label: null,
+        values: [{ kind: "TEXT", text: "x" }],
+      },
+    ]);
   });
 
   test("a field with nothing to show has no row", () => {
@@ -71,7 +172,14 @@ describe("detailsOf", () => {
         type: "gone",
         title: "gone",
         description: "",
-        rows: [{ label: "Actions", value: "go" }],
+        rows: [
+          {
+            kind: "ACTIONS",
+            key: null,
+            label: null,
+            values: [{ kind: "TEXT", text: "go" }],
+          },
+        ],
       },
     ]);
   });

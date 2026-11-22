@@ -1,5 +1,6 @@
 import { defineCollection, id, tenantField } from "@softistx/mongo";
 import { z } from "zod";
+import { translationsSchema } from "@/shared/translations";
 
 // A protected resource (an API) of a tenant, RFC 8707: `uri` is the audience of
 // the access tokens issued for it, `scopes` what a client may ask on it.
@@ -35,7 +36,7 @@ export const resources = defineCollection({
 export type StoredResource = typeof resources;
 
 // A scope of a tenant (ADR-0025): what a client may ask for, with the text the
-// consent page shows in French and English, the resource it belongs to (`null`
+// consent page shows, one translation per locale, the resource it belongs to (`null`
 // for a standard OpenID Connect scope such as `openid`) and the claims it
 // opens. The name is the OAuth scope token, unique in its resource (and among
 // the standard ones): an access token is for one resource (RFC 8707), so two
@@ -47,10 +48,7 @@ export const scopes = defineCollection({
     _id: id(),
     ...tenantField,
     name: z.string(),
-    description: z.object({
-      fr: z.string().default(""),
-      en: z.string().default(""),
-    }),
+    description: translationsSchema,
     resourceId: id().nullable().default(null),
     claims: z.array(z.string()).default([]),
   }),
@@ -64,10 +62,7 @@ export const scopes = defineCollection({
   timestamps: true,
 });
 
-const text = z.object({
-  fr: z.string().default(""),
-  en: z.string().default(""),
-});
+const text = translationsSchema;
 
 export const FIELD_KINDS = [
   "string",

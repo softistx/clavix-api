@@ -26,7 +26,7 @@ let resourceA = "";
 let resourceA2 = "";
 let resourceB = "";
 
-const TEXT = "fr en";
+const TEXT = "locale text";
 const TYPE = `id resourceId type name { ${TEXT} } description { ${TEXT} } createdAt updatedAt
   fields { key kind label { ${TEXT} } required min max maxLength values { value label { ${TEXT} } } }
   actions { value label { ${TEXT} } }`;
@@ -46,12 +46,21 @@ const RESOURCE = `query($tenantId: ID!, $id: ID!) {
 }`;
 const LIST = `query($tenantId: ID!) { resources(tenantId: $tenantId) { id detailTypes { type } } }`;
 
-const text = (en: string) => ({ fr: en, en });
+const text = (en: string) => [
+  { locale: "fr", text: en },
+  { locale: "en", text: en },
+];
 const payment = (extra: Record<string, unknown> = {}) => ({
   resourceId: resourceA,
   type: "payment",
-  name: { fr: "Paiement", en: "Payment" },
-  description: { fr: "Payer", en: "Pay someone" },
+  name: [
+    { locale: "fr", text: "Paiement" },
+    { locale: "en", text: "Payment" },
+  ],
+  description: [
+    { locale: "fr", text: "Payer" },
+    { locale: "en", text: "Pay someone" },
+  ],
   fields: [
     {
       key: "amount",
@@ -168,7 +177,10 @@ describe("createDetailType", () => {
     expect(type).toMatchObject({
       resourceId: resourceA,
       type: "payment",
-      name: { fr: "Paiement", en: "Payment" },
+      name: [
+        { locale: "fr", text: "Paiement" },
+        { locale: "en", text: "Payment" },
+      ],
       actions: [{ value: "initiate", label: text("Start") }],
     });
     expect(recordsOf(type["fields"]).map((f) => f["kind"])).toEqual([
@@ -218,7 +230,12 @@ describe("createDetailType", () => {
       codeOf(
         await admin(CREATE, {
           tenantId: tenantA,
-          input: payment({ name: { fr: "Autre", en: "Other" } }),
+          input: payment({
+            name: [
+              { locale: "fr", text: "Autre" },
+              { locale: "en", text: "Other" },
+            ],
+          }),
         }),
       ),
     ).toBe("CONFLICT");
@@ -272,11 +289,20 @@ describe("createDetailType", () => {
   test("labels and descriptions are bounded", async () => {
     const long = (n: number) => "x".repeat(n);
     const attempts: Record<string, unknown>[] = [
-      payment({ type: "long-name", name: { en: long(101) } }),
-      payment({ type: "long-desc", description: { fr: long(301) } }),
+      payment({ type: "long-name", name: [{ locale: "en", text: long(101) }] }),
+      payment({
+        type: "long-desc",
+        description: [{ locale: "fr", text: long(301) }],
+      }),
       payment({
         type: "long-field",
-        fields: [{ key: "a", kind: "STRING", label: { en: long(101) } }],
+        fields: [
+          {
+            key: "a",
+            kind: "STRING",
+            label: [{ locale: "en", text: long(101) }],
+          },
+        ],
       }),
       payment({
         type: "long-value",
@@ -284,13 +310,15 @@ describe("createDetailType", () => {
           {
             key: "a",
             kind: "ENUM",
-            values: [{ value: "v", label: { fr: long(101) } }],
+            values: [
+              { value: "v", label: [{ locale: "fr", text: long(101) }] },
+            ],
           },
         ],
       }),
       payment({
         type: "long-action",
-        actions: [{ value: "a", label: { en: long(101) } }],
+        actions: [{ value: "a", label: [{ locale: "en", text: long(101) }] }],
       }),
     ];
     for (const input of attempts) {
@@ -304,8 +332,8 @@ describe("createDetailType", () => {
       tenantA,
       payment({
         type: "at-limit",
-        name: { en: long(100) },
-        description: { en: long(300) },
+        name: [{ locale: "en", text: long(100) }],
+        description: [{ locale: "en", text: long(300) }],
       }),
     );
   });
@@ -364,7 +392,7 @@ describe("updateDetailType", () => {
         tenantId: tenantA,
         id,
         input: {
-          name: { en: "Payment order" },
+          name: [{ locale: "en", text: "Payment order" }],
           fields: [{ key: "amount", kind: "INTEGER", required: true, min: 1 }],
           actions: [],
         },
@@ -374,8 +402,14 @@ describe("updateDetailType", () => {
     expect(updated).toMatchObject({
       id,
       type: "payment",
-      name: { fr: "Paiement", en: "Payment order" },
-      description: { fr: "Payer", en: "Pay someone" },
+      name: [
+        { locale: "fr", text: "Paiement" },
+        { locale: "en", text: "Payment order" },
+      ],
+      description: [
+        { locale: "fr", text: "Payer" },
+        { locale: "en", text: "Pay someone" },
+      ],
       actions: [],
     });
     expect(updated["fields"]).toMatchObject([
@@ -396,7 +430,7 @@ describe("updateDetailType", () => {
         tenantId: tenantA,
         id,
         input: {
-          name: { en: "Payment order" },
+          name: [{ locale: "en", text: "Payment order" }],
           fields: [{ key: "amount", kind: "INTEGER", required: true, min: 1 }],
         },
       }),
@@ -413,8 +447,8 @@ describe("updateDetailType", () => {
     const id = await listIdOf("payment");
     for (const input of [
       { fields: [{ key: "type", kind: "STRING" }] },
-      { description: { en: "x".repeat(301) } },
-      { name: { fr: "x".repeat(101) } },
+      { description: [{ locale: "en", text: "x".repeat(301) }] },
+      { name: [{ locale: "fr", text: "x".repeat(101) }] },
     ]) {
       expect(
         codeOf(await admin(UPDATE, { tenantId: tenantA, id, input })),
@@ -555,7 +589,7 @@ describe("permissions and isolation", () => {
         await adminB(UPDATE, {
           tenantId: tenantB,
           id,
-          input: { name: { en: "Hijack" } },
+          input: { name: [{ locale: "en", text: "Hijack" }] },
         }),
       ),
     ).toBe("NOT_FOUND");

@@ -46,8 +46,8 @@ describe("the tenant purge guards", () => {
       await scopeToTenant(mongo.db.detailTypes, tenantId).create({
         resourceId: new ObjectId(),
         type: "payment",
-        name: { fr: "", en: "" },
-        description: { fr: "", en: "" },
+        name: [],
+        description: [],
         fields: [],
       });
     }

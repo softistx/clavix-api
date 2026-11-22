@@ -17,5 +17,10 @@ export class CatalogError extends Error {
   }
 }
 
+/** Refuses a write with `BAD_USER_INPUT` and a message the console may show. */
+export function refuse(message: string): never {
+  throw new CatalogError("BAD_USER_INPUT", message);
+}
+
 // The codes this module raises (the inventory: src/i18n/codes.ts).
 export const codes = defineCodes("resources", ["DETAIL_TYPE_IN_USE"]);

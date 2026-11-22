@@ -68,7 +68,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   - **D2, protocol endpoints**: the OAuth/OIDC routes (`src/oauth`, `mountOAuth`: authorize, token, PAR, device, JWKS, discovery,
     userinfo, registration) are plain Request/Response routes beside `/graphql`; they are RFC-defined and cannot be GraphQL.
   - **D8, a console face per module**: each console resolver lives in its owning module as role files (`<m>.console*`), not in a parallel tree.
-- Errors keep their UPPER_SNAKE values (D3, see Errors); the client header and `CLAVIX_REQUIRE_CLIENT_HEADER` are in "Same-origin guard and shutdown".
+- Hosted GraphQL enum values are UPPER_SNAKE (errors, `ConsentRowKind`, `ConsentValueKind`; D3, see Errors); the client header and `CLAVIX_REQUIRE_CLIENT_HEADER` are in "Same-origin guard and shutdown".
 - `src/oauth/` is the authorization server: one janus server per tenant (`createClavixOAuthIssuers`),
   mounted on the app by `mountOAuth`. Signing keys, end-user authentication, user claims and resources
   come in as ports (`SigningKeysFor`, `AuthFor`, `ClaimsFor`, `ResourcesFor`). The janus adapters
@@ -117,14 +117,14 @@ in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
 URL cannot be registered: it is built in, with the OpenID Connect scopes.
-- **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description { fr, en }`,
+- **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description` (a list of translations, `[{ locale, text }]`),
   `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
   have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
   or `email` (`resources.rules.ts`); it exists once a tenant describes it. `claims` is stored only.
 - **`ResourcesService`** (one service for resources, scopes and detail types: they are one domain, the cascade of a resource's delete and the scope and type lookups all cross them) is the one writer of scopes and the console's writer of resources
   (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
   (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are
-  bounded there (names 100 characters, descriptions 300, 50 claims; a client 20 redirect URIs).
+  bounded there (names 100 characters, descriptions 300, 50 claims, 30 locales per text; a client 20 redirect URIs). Texts are lists of `{ locale, text }`: migration `2026-11-21-translations` converts the stored `{ fr, en }` (the earlier `2026-11-13-scopes` still writes the frozen shape, past the validator).
 - **The fingerprint** comes from what `storedFor` reads (URIs and scope names, now from the
   `scopes` documents), so a scope added or removed in the console serves at once.
 - **Detail types** (`resources.compile*.ts`, `resources.detail-rules.ts`, README "Authorization details", RAR D1/D2, softistx/clavix-api#17 and #18):
@@ -135,7 +135,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
   hashes the definitions (`digestOf`) so an edit rebuilds the issuer, and `withScopes` keeps a resource
   that has types and no scope. `saveDetailType` is the writer (`createDetailType` and `updateDetailType` call it). `createDetailType` repeated with the same values on the same resource returns the stored type (the console records its event again, as `createResource` and `createScope` do); other values or another resource stay `CONFLICT`.
 - **A client opts in** (R3): `registerClient` and `ClientsService` take `detailTypes` (`authorizationDetailsTypes` on the janus record; `src/modules/clients/clients.detail-types.ts` judges it). Each name must be a stored type of the tenant (the `ClientDetailTypes` port, wired in `config/resources.ts`), the final client must require PAR (D3), whatever its grants (the hosted consent pages show the details since clavix-ui#10, so no tenant switch remains). A kept type that is no longer stored stays on the record and is refused by the issuer.
-- **The consent API shows details in words** (R4, D4/D5): `OAuthRequest.details` and `OAuthDeviceRequest.details` (`consent/consent.detail-labels.graphqls`) are built by the pure `detailsOf` (`consent/consent.detail-labels.ts`) from janus's `authorizationDetails` string and the tenant's `detailTypes` texts (`detailTextsFor` in `config/resources.ts`, read once per request like the scope texts, put on the context by `oauthContext`). A detail that cannot be fully described (type deleted, a key, action or enum value the type no longer defines) makes `detailsComplete` false (`reviewDetails`), and janus-oauth's `beforeApprove` hook (`ConsentService.beforeApprove`, `consent/consent.service.ts`, once per approval in both flows) refuses it with `invalid_authorization_details`, the request staying pending. Approval stays all or nothing: `beforeApprove` refuses any `authorizationDetails` selection with `invalid_authorization_details`, in both flows. `src/oauth/rar.spec.ts` is the end-to-end spec.
+- **The consent API shows details as typed rows** (R4, D4/D5): `OAuthRequest.details` and `OAuthDeviceRequest.details` (`consent/consent.detail-labels.graphqls`) are built by the pure `detailsOf` (`consent/consent.detail-labels.ts`) from janus's `authorizationDetails` string and the tenant's `detailTypes` texts (`detailTextsFor` in `config/resources.ts`, read once per request like the scope texts, put on the context by `oauthContext`). A detail that cannot be fully described (type deleted, a key, action or enum value the type no longer defines) makes `detailsComplete` false (`reviewDetails`), and janus-oauth's `beforeApprove` hook (`ConsentService.beforeApprove`, `consent/consent.service.ts`, once per approval in both flows) refuses it with `invalid_authorization_details`, the request staying pending. Approval stays all or nothing: `beforeApprove` refuses any `authorizationDetails` selection with `invalid_authorization_details`, in both flows. `src/oauth/rar.{consent,after,device,incomplete}.spec.ts` are the end-to-end specs, sharing `test/rar.ts` and `test/rar-tenant.ts`.
 - **Migration `2026-11-13-scopes`** moves the old `resources.scopes` strings to documents (empty
   texts); `resources.scopes` stays optional in the model for its `down`.
 - **Migration `2026-11-16-name-keys`** backfills `nameKey` on the `partitionedUsers` written before janus 0.66 (janus-mongo "Backfilling name keys"), which `userLookup`'s `namePrefix` reads; run `db:sync` first.
@@ -323,9 +323,9 @@ is wrapped (`ConsentService.approveOrDenyUnmet`; `consent/consent.unmet.ts`) and
 (`oauth/building.ts`) puts the grant's `acr`, `amr` and `auth_time` in the JWT, the ID token's values (janus 0.76).
 A recovery-code sign-in adds `rec` and `mfa` to the first factor's amr (RFC 8176), not `otp`: janus stores it on the session itself (@softistx/janus 0.77), and `src/modules/mfa/mfa.second-factor.spec.ts` asserts it. A passkey step-up needs no
 authenticator app with `passkeys.firstFactor` (janus 0.76). A scope's `label` is the tenant's description of it (`consent.scope-labels.ts`: the
-resource's scope, else the standard one; `Accept-Language` French else English, then the other
-language, then janus's label), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
-resolvers because janus-oauth's `scopeLabels` is one static map. Passkeys are the next section.
+resource's scope, else the standard one; `Accept-Language`, then its base language, then the first stored
+translation, then janus's label; `src/shared/translations.ts`: per asked language the exact locale, then its base language, then a sibling region (`fr` finds `fr-CA`)), set by our `OAuthRequest.scopes` and `OAuthConnectedApp.scopes`
+resolvers because janus-oauth's `scopeLabels` is one static map. No language is fixed in what the consent API returns, with no exception: the consent rows carry a stable `kind` (`LOCATIONS`, `ACTIONS`, `FIELD`, `IDENTIFIER`, `DATATYPES`) and typed values (`TEXT`, `NUMBER`, `BOOLEAN`), and clavix-ui words the fixed rows and formats numbers and booleans from its own catalogue; only a tenant's own texts (field and enum labels, type names) are picked by `Accept-Language`. Passkeys are the next section.
 
 ## Same-origin guard and shutdown
 
@@ -935,7 +935,7 @@ An error's `extensions.http.status` and `headers` (a throttle's `Retry-After`) a
 itself (`errorHttp`, on by default since 0.10: highest status wins, `http` is stripped from the body, `spec: true` ignores
 the status under `application/json`); no plugin of this API carries it. `useWithoutQuotedValues`
 (`src/http/coercion.ts`) scrubs the coercion errors in `onResultChunk` (streams) and `onResponse` (plain JSON). The console is
-`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 50 000 in `app.ts`: the UI's nested reads of stored lists cost more than graxia's default 5 000, and a refused document is a 200 with no `data`; `src/modules/resources/resources.cost.console.spec.ts`); `useInviteBudget` is
+`useConsole` (`onRequest` verifies the token, `onContext` adds the principal), with its own cost limit (`CONSOLE_MAX_COST`, 50 000 in `app.ts`: the UI's nested reads of stored lists cost more than graxia's default 5 000; a translation list holds up to 30 entries but is costed as 3 on purpose, with `@listSize(assumedSize: 3, requireOneSlicingArgument: false)` on each output translation list in `resources.console.graphqls`, so the nested Applications read stays under the limit, and a refused document is a 200 with no `data`; `src/modules/resources/resources.cost.console.spec.ts`); `useInviteBudget` is
 `fieldRateLimit`, whose 429 and `Retry-After` are graxia's. A client that sends a GET or a non-JSON POST sends
 `x-graphql-csrf: 1`. The JSON plugins match `application/json` and `application/graphql-response+json` (parameters
 ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. Unexpected resolver errors and janus 5xx errors go to the app's telemetry

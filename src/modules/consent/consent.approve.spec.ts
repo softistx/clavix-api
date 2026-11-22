@@ -211,7 +211,10 @@ describe("the consent screen's data", () => {
     if (acme === undefined) throw new Error("no tenant");
     await resourcesService.createScope(acme._id, {
       name: "email",
-      description: { fr: "Votre adresse e-mail", en: "Your email address" },
+      description: [
+        { locale: "en", text: "Your email address" },
+        { locale: "fr", text: "Votre adresse e-mail" },
+      ],
       resourceId: null,
       claims: [],
     });

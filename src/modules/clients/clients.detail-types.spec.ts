@@ -22,7 +22,10 @@ const PAY = "https://pay.example/api";
 const flow = createFlow();
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const ready = mongoClientDetailTypes(mongo.db.detailTypes);
-const text = (en: string) => ({ fr: en, en });
+const text = (en: string) => [
+  { locale: "fr", text: en },
+  { locale: "en", text: en },
+];
 const VERIFIER = "r".repeat(64);
 
 const register = (

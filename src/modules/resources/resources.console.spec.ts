@@ -22,7 +22,7 @@ const adminB = consoleAs("res-admin-b");
 let tenantA = "";
 let tenantB = "";
 
-const SCOPE = "id name description { fr en } resourceId claims";
+const SCOPE = "id name description { locale text } resourceId claims";
 const RESOURCE = `id uri name createdAt allowClientCredentials scopes { ${SCOPE} }`;
 const CREATE = `mutation($tenantId: ID!, $input: CreateResourceInput!) {
   createResource(tenantId: $tenantId, input: $input) { ${RESOURCE} }
@@ -208,7 +208,10 @@ describe("scopes", () => {
         input: {
           name: "orders:read",
           resourceId: api,
-          description: { fr: "Lire vos commandes", en: "Read your orders" },
+          description: [
+            { locale: "fr", text: "Lire vos commandes" },
+            { locale: "en", text: "Read your orders" },
+          ],
           claims: ["orders", "orders", " region "],
         },
       }),
@@ -217,7 +220,10 @@ describe("scopes", () => {
     expect(created).toMatchObject({
       name: "orders:read",
       resourceId: api,
-      description: { fr: "Lire vos commandes", en: "Read your orders" },
+      description: [
+        { locale: "fr", text: "Lire vos commandes" },
+        { locale: "en", text: "Read your orders" },
+      ],
       claims: ["orders", "region"],
     });
     read = created.id;
@@ -287,14 +293,17 @@ describe("scopes", () => {
     const standard = one(
       await admin(CREATE_SCOPE, {
         tenantId: tenantA,
-        input: { name: "profile", description: { en: "See your name" } },
+        input: {
+          name: "profile",
+          description: [{ locale: "en", text: "See your name" }],
+        },
       }),
       "createScope",
     );
     expect(standard).toMatchObject({
       name: "profile",
       resourceId: null,
-      description: { fr: "", en: "See your name" },
+      description: [{ locale: "en", text: "See your name" }],
       claims: [],
     });
     expect(
@@ -324,13 +333,18 @@ describe("scopes", () => {
       await admin(UPDATE_SCOPE, {
         tenantId: tenantA,
         id: read,
-        input: { description: { fr: "Consulter vos commandes" } },
+        input: {
+          description: [{ locale: "fr", text: "Consulter vos commandes" }],
+        },
       }),
       "updateScope",
     );
     expect(french).toMatchObject({
       name: "orders:read",
-      description: { fr: "Consulter vos commandes", en: "Read your orders" },
+      description: [
+        { locale: "fr", text: "Consulter vos commandes" },
+        { locale: "en", text: "Read your orders" },
+      ],
       claims: ["orders", "region"],
     });
     const claims = one(
@@ -342,7 +356,10 @@ describe("scopes", () => {
       "updateScope",
     );
     expect(claims).toMatchObject({
-      description: { fr: "Consulter vos commandes", en: "Read your orders" },
+      description: [
+        { locale: "fr", text: "Consulter vos commandes" },
+        { locale: "en", text: "Read your orders" },
+      ],
       claims: [],
     });
     expect(
@@ -379,7 +396,10 @@ describe("a repeat after a failed record", () => {
     const input = {
       name: "replay:read",
       resourceId: resource.id,
-      description: { fr: "Lire", en: "Read" },
+      description: [
+        { locale: "fr", text: "Lire" },
+        { locale: "en", text: "Read" },
+      ],
       claims: ["a"],
     };
     const scope = one(
@@ -625,7 +645,7 @@ describe("admin events", () => {
     await admin(UPDATE_SCOPE, {
       tenantId: tenantA,
       id: first.id,
-      input: { description: { en: "Read" } },
+      input: { description: [{ locale: "en", text: "Read" }] },
     });
     await admin(DELETE_SCOPE, { tenantId: tenantA, id: first.id });
     await admin(DELETE, { tenantId: tenantA, id: resource.id });
@@ -669,9 +689,11 @@ describe("limits", () => {
         tenantId: tenantA,
         input: { name: "limited", resourceId: created.id, ...input },
       });
-    expect(codeOf(await scope({ description: { fr: "x".repeat(301) } }))).toBe(
-      "BAD_USER_INPUT",
-    );
+    expect(
+      codeOf(
+        await scope({ description: [{ locale: "fr", text: "x".repeat(301) }] }),
+      ),
+    ).toBe("BAD_USER_INPUT");
     expect(
       codeOf(
         await scope({ claims: Array.from({ length: 51 }, (_, i) => `c${i}`) }),

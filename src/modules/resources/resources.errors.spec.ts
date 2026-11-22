@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CatalogError } from "./resources.errors";
+import { CatalogError, refuse } from "./resources.errors";
 
 describe("CatalogError", () => {
   test("is an Error named CatalogError, with its code and message", () => {
@@ -14,5 +14,14 @@ describe("CatalogError", () => {
     expect(new CatalogError("DETAIL_TYPE_IN_USE", "listed").code).toBe(
       "DETAIL_TYPE_IN_USE",
     );
+  });
+
+  test("refuse throws BAD_USER_INPUT with its message", () => {
+    expect(() => refuse("nope")).toThrow(CatalogError);
+    try {
+      refuse("nope");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "BAD_USER_INPUT", message: "nope" });
+    }
   });
 });

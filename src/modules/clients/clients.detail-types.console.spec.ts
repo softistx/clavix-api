@@ -78,7 +78,10 @@ describe("detail types on a client (R3)", () => {
       resource._id.toHexString(),
       {
         type: "payment",
-        name: { en: "Payment", fr: "Paiement" },
+        name: [
+          { locale: "en", text: "Payment" },
+          { locale: "fr", text: "Paiement" },
+        ],
         fields: [{ key: "amount", kind: "number" }],
       },
     );

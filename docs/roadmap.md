@@ -7,6 +7,12 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Translations as a list of locales** — scope descriptions and detail type texts are lists of
+  `{ locale, text }` (any BCP 47 language, no fixed French and English), a write sets or replaces
+  the locales it names, and the consent screen picks the viewer's `Accept-Language`, then its base
+  language, then the first stored translation. Breaking for the console UI
+  ([#484](https://github.com/softistx/clavix-api/issues/484)).
+
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
   the `<name>.<role>.ts` shape with the console's resolvers inside their owning module; errors go
@@ -120,7 +126,7 @@ nxgt-janus release says which.
   a tenant describes the authorization detail types of an API (a payment, a transfer) from the console;
   a client lists the types it may ask for (console and `clients:create --detail-types`, PAR required)
   and asks for them with a pushed request. Clavix checks each request against its type, and the consent
-  API shows every detail in words (`oauthRequest.details`, `oauthDeviceRequest.details`), refusing an
+  API shows every detail as typed rows (`oauthRequest.details`, `oauthDeviceRequest.details`), refusing an
   approval whose details cannot be fully described (`detailsComplete`, `invalid_authorization_details`).
 
 - **MCP agents** ([#18](https://github.com/softistx/clavix-api/issues/18)) — a tenant can opt in to

@@ -169,7 +169,7 @@ scalar CIDRv4 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4632")
 scalar CIDRv6 @specifiedBy(url: "https://www.rfc-editor.org/rfc/rfc4291")
 
 """
-One authorization detail (RFC 9396) of a pending request, in words: the type's name and description from the
+One authorization detail (RFC 9396) of a pending request, as typed rows: the type's name and description from the
 tenant's texts, and its rows. Never raw JSON. Approval allows every detail or none (D4).
 """
 type ConsentDetail {
@@ -187,11 +187,58 @@ type ConsentDetail {
 }
 
 """
-One line of an authorization detail: a label and its value, in the viewer's language.
+One line of an authorization detail: a stable `kind`, and its typed values (one per item of a list).
 """
 type ConsentDetailRow {
-  label: String!
-  value: String!
+  """The field's key when `kind` is `FIELD`, `null` otherwise."""
+  key: String
+  kind: ConsentRowKind!
+  """
+  The field's label in the viewer's language (`Accept-Language`, the key when the tenant wrote none); `null` unless `kind` is `FIELD`.
+  """
+  label: String
+  values: [ConsentDetailValue!]!
+}
+
+"""
+One value of a row, typed: `text` for a string (a tenant's own label in the viewer's language for an enum or an
+action), `number` for a number and `boolean` for a boolean. Exactly the member `kind` names is set. The page formats
+numbers and words booleans (yes / no) itself.
+"""
+type ConsentDetailValue {
+  boolean: Boolean
+  kind: ConsentValueKind!
+  number: Float
+  text: String
+}
+
+"""
+Which line of a detail block a row is. The page words the fixed ones from its own catalogue; the API sends no
+language of its own for them.
+"""
+enum ConsentRowKind {
+  """
+  The actions the detail asks for; each value is the type's label for it.
+  """
+  ACTIONS
+  """RFC 9396 `datatypes`."""
+  DATATYPES
+  """A field the tenant's type defines: `key` and `label` are its own."""
+  FIELD
+  """RFC 9396 `identifier`."""
+  IDENTIFIER
+  """The request's resource (RFC 9396 `locations`)."""
+  LOCATIONS
+}
+
+"""Which member of a `ConsentDetailValue` is set."""
+enum ConsentValueKind {
+  """`boolean` holds a yes or no the UI words."""
+  BOOLEAN
+  """`number` holds a number the UI formats."""
+  NUMBER
+  """`text` holds a label or a raw string."""
+  TEXT
 }
 
 """An ISO 3166-1 alpha-2 country code, such as FR."""
@@ -776,7 +823,7 @@ type OAuthDeviceRequest {
   """
   client: OAuthClient!
   """
-  The device's authorization details in words, one block each; empty when it asked for none.
+  The device's authorization details as typed rows, one block each; empty when it asked for none.
   """
   details: [ConsentDetail!]!
   """As `OAuthRequest.detailsComplete`."""
@@ -806,7 +853,7 @@ type OAuthRequest {
   """The application asking for access."""
   client: OAuthClient!
   """
-  The request's authorization details in words, one block each; empty when it asked for none.
+  The request's authorization details as typed rows, one block each; empty when it asked for none.
   """
   details: [ConsentDetail!]!
   """

@@ -30,7 +30,7 @@ const API = "https://api.svc-spec.example/v1";
 
 const pay = (extra: Partial<DetailTypeDraft> = {}): DetailTypeDraft => ({
   type: "payment",
-  name: { en: "Payment" },
+  name: [{ locale: "en", text: "Payment" }],
   fields: [{ key: "amount", kind: "number", required: true }],
   ...extra,
 });
@@ -139,19 +139,32 @@ describe("scopes", () => {
     const scope = await service.createScope(A, {
       name: "read",
       resourceId: resource._id.toHexString(),
-      description: { en: " Read " },
+      description: [{ locale: "en", text: " Read " }],
       claims: ["email", "email"],
     });
     expect(scope).toMatchObject({
       name: "read",
-      description: { fr: "", en: "Read" },
+      description: [{ locale: "en", text: "Read" }],
       claims: ["email"],
     });
     const updated = await service.updateScope(A, scope._id.toHexString(), {
-      description: { fr: "Lire" },
+      description: [{ locale: "fr", text: "Lire" }],
     });
-    expect(updated.description).toEqual({ fr: "Lire", en: "Read" });
+    expect(updated.description).toEqual([
+      { locale: "en", text: "Read" },
+      { locale: "fr", text: "Lire" },
+    ]);
     expect(updated.claims).toEqual(["email"]);
+    // A write sets the locales it names and keeps the others; blank removes one.
+    const replaced = await service.updateScope(A, scope._id.toHexString(), {
+      description: [
+        { locale: "en", text: "Read it" },
+        { locale: "fr", text: "  " },
+      ],
+    });
+    expect(replaced.description).toEqual([{ locale: "en", text: "Read it" }]);
+    const kept = await service.updateScope(A, scope._id.toHexString(), {});
+    expect(kept.description).toEqual([{ locale: "en", text: "Read it" }]);
   });
 
   test("only the standard scopes may have no resource", async () => {
@@ -176,7 +189,7 @@ describe("scopes", () => {
     const input = {
       name: "read",
       resourceId: resource._id.toHexString(),
-      description: { en: "Read" },
+      description: [{ locale: "en", text: "Read" }],
     };
     const first = await service.createScope(A, input);
     expect((await service.createScope(A, input))._id.equals(first._id)).toBe(
@@ -184,7 +197,10 @@ describe("scopes", () => {
     );
     expect(
       await refusal(
-        service.createScope(A, { ...input, description: { en: "Other" } }),
+        service.createScope(A, {
+          ...input,
+          description: [{ locale: "en", text: "Other" }],
+        }),
       ),
     ).toBe("CONFLICT");
   });
@@ -221,7 +237,11 @@ describe("detail types", () => {
     expect(again._id.equals(first._id)).toBe(true);
     expect(
       await refusal(
-        service.createDetailType(A, id, pay({ name: { en: "Other" } })),
+        service.createDetailType(
+          A,
+          id,
+          pay({ name: [{ locale: "en", text: "Other" }] }),
+        ),
       ),
     ).toBe("CONFLICT");
     expect(
@@ -242,9 +262,12 @@ describe("detail types", () => {
     const same = await service.updateDetailType(A, id, {});
     expect(same.updatedAt).toEqual(created.updatedAt);
     const changed = await service.updateDetailType(A, id, {
-      name: { fr: "Paiement" },
+      name: [{ locale: "fr", text: "Paiement" }],
     });
-    expect(changed.name).toEqual({ fr: "Paiement", en: "Payment" });
+    expect(changed.name).toEqual([
+      { locale: "en", text: "Payment" },
+      { locale: "fr", text: "Paiement" },
+    ]);
     expect(
       await refusal(
         service.updateDetailType(A, new ObjectId().toHexString(), {}),

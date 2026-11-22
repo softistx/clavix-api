@@ -4,8 +4,6 @@ import { detailTypeDoc, scopeDoc } from "~/resource-docs";
 import {
   detailTypeShape,
   fieldDraft,
-  localised,
-  localisedOrKeep,
   scopeShape,
   target,
   valueDraft,
@@ -27,46 +25,30 @@ describe("fieldDraft kinds", () => {
   });
 });
 
-describe("localised", () => {
-  test("a language not sent stays undefined", () => {
-    expect(localised({ fr: "a", en: null })).toEqual({
-      fr: "a",
-      en: undefined,
-    });
-    expect(localised({})).toEqual({ fr: undefined, en: undefined });
-  });
-
-  test("localisedOrKeep leaves a text not sent at all", () => {
-    expect(localisedOrKeep(null)).toBeUndefined();
-    expect(localisedOrKeep(undefined)).toBeUndefined();
-    expect(localisedOrKeep({ en: "b" })).toEqual({
-      fr: undefined,
-      en: "b",
-    });
-  });
-});
-
 describe("drafts", () => {
   test("a field draft maps the GraphQL kind to the stored one", () => {
     const draft = fieldDraft({
       key: "amount",
       kind: "STRING_LIST",
       min: 1,
-      values: [{ value: "a", label: { fr: "A" } }],
+      values: [{ value: "a", label: [{ locale: "fr", text: "A" }] }],
     });
     expect(draft.kind).toBe("string[]");
     expect(draft.min).toBe(1);
     expect(draft.max).toBeUndefined();
     expect(draft.values).toEqual([
-      { value: "a", label: { fr: "A", en: undefined } },
+      { value: "a", label: [{ locale: "fr", text: "A" }] },
     ]);
   });
 
-  test("a value draft without a label has empty languages", () => {
-    expect(valueDraft({ value: "x" }).label).toEqual({
-      fr: undefined,
-      en: undefined,
-    });
+  test("a label not sent stays undefined, one sent is passed on", () => {
+    expect(valueDraft({ value: "x" }).label).toBeUndefined();
+    expect(valueDraft({ value: "x", label: null }).label).toBeUndefined();
+    const label = [{ locale: "en", text: "X" }];
+    expect(valueDraft({ value: "x", label }).label).toEqual(label);
+    expect(fieldDraft({ key: "k", kind: "STRING", label }).label).toEqual(
+      label,
+    );
   });
 });
 

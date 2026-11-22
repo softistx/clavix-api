@@ -15,4 +15,4 @@ export {
 export { DPOP_ALGORITHMS } from "./resources.protected-document";
 export { OIDC_SCOPES } from "./resources.rules";
 export * from "./resources.service";
-export type { Description, RegisterResourceInput } from "./resources.types";
+export type { RegisterResourceInput } from "./resources.types";

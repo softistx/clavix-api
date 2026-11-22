@@ -27,14 +27,18 @@ import {
   checkScopeName,
   cleanClaims,
   cleanName,
-  cleanText,
   isOidcScope,
+  MAX_DESCRIPTION,
+  MAX_LABEL,
   OIDC_SCOPES,
   sameScopeDefinition,
 } from "./resources.rules";
+import {
+  cleanTranslations,
+  mergeTranslations,
+} from "./resources.translation-rules";
 import type {
   CompiledDetailTypes,
-  DescriptionInput,
   DetailTypeDraft,
   DetailTypeInput,
   DetailTypePatch,
@@ -45,6 +49,7 @@ import type {
   StoredDetailTypeDoc,
   StoredResourceDoc,
   StoredScopeDoc,
+  Texts,
 } from "./resources.types";
 
 type OwnResources = Scoped<typeof resources>;
@@ -214,10 +219,11 @@ export class ResourcesService {
       name,
       input.resourceId,
     );
-    const description = {
-      fr: cleanText(input.description?.fr) ?? "",
-      en: cleanText(input.description?.en) ?? "",
-    };
+    const description = cleanTranslations(
+      input.description,
+      MAX_DESCRIPTION,
+      "a description",
+    );
     const claims = cleanClaims(input.claims);
     const own = this.scopesOf(tenantId);
     try {
@@ -247,7 +253,7 @@ export class ResourcesService {
     tenantId: ObjectId,
     scopeId: string,
     input: {
-      description?: DescriptionInput | undefined;
+      description?: Texts | undefined;
       claims?: readonly string[] | undefined;
     },
   ): Promise<StoredScopeDoc> {
@@ -256,10 +262,12 @@ export class ResourcesService {
       throw new CatalogError("NOT_FOUND", "No such scope");
     }
     return this.scopesOf(tenantId).update(existing._id, {
-      description: {
-        fr: cleanText(input.description?.fr) ?? existing.description.fr,
-        en: cleanText(input.description?.en) ?? existing.description.en,
-      },
+      description: mergeTranslations(
+        existing.description,
+        input.description,
+        MAX_DESCRIPTION,
+        "a description",
+      ),
       claims:
         input.claims === undefined
           ? existing.claims
@@ -297,7 +305,7 @@ export class ResourcesService {
       try {
         await own.create({
           name,
-          description: { fr: "", en: "" },
+          description: [],
           resourceId: resource,
           claims: [],
         });
@@ -441,14 +449,13 @@ export class ResourcesService {
     }
     const next = cleanDetailType({
       type: existing.type,
-      name: {
-        fr: patch.name?.fr ?? existing.name.fr,
-        en: patch.name?.en ?? existing.name.en,
-      },
-      description: {
-        fr: patch.description?.fr ?? existing.description.fr,
-        en: patch.description?.en ?? existing.description.en,
-      },
+      name: mergeTranslations(existing.name, patch.name, MAX_LABEL, "a name"),
+      description: mergeTranslations(
+        existing.description,
+        patch.description,
+        MAX_DESCRIPTION,
+        "a description",
+      ),
       fields: patch.fields ?? existing.fields,
       actions: patch.actions ?? existing.actions,
     });

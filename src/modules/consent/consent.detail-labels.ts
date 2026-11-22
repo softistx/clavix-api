@@ -1,8 +1,10 @@
+import type { ConsentRowKind } from "@/generated/graphql/resolvers";
 import type { FieldKind } from "@/modules/resources";
+import type { Translation } from "@/shared/translations";
 import { isRecord } from "@/shared/values";
-import type { ConsentLocale } from "./consent.scope-labels";
+import { type ConsentValue, pick, valuesOf } from "./consent.detail-format";
 
-type Text = { fr: string; en: string };
+type Text = readonly Translation[];
 
 /** The words of one detail type of a tenant (D5): what the consent page shows of it. */
 export interface DetailText {
@@ -24,13 +26,19 @@ export type DetailTexts = readonly DetailText[];
 /** Reads the detail type texts of the tenant the request's host names (none for an unknown host). */
 export type DetailTextsFor = (request: Request) => Promise<DetailTexts>;
 
-/** One line of a detail block: a label and the value in words. */
+/**
+ * One line of a detail block. `kind` is a stable code the page words from its
+ * own catalogue (locations, actions, identifier, datatypes); a `field` row
+ * carries its `key` and the tenant's `label`. Values are typed, never worded.
+ */
 export interface ConsentRow {
-  label: string;
-  value: string;
+  kind: ConsentRowKind;
+  key: string | null;
+  label: string | null;
+  values: ConsentValue[];
 }
 
-/** One authorization detail of a pending request, in words (D5): never the raw JSON. */
+/** One authorization detail of a pending request as typed rows (D5): never the raw JSON. */
 export interface ConsentDetail {
   type: string;
   title: string;
@@ -38,7 +46,7 @@ export interface ConsentDetail {
   rows: ConsentRow[];
 }
 
-/** The details of a request in words, and whether every one is fully described. */
+/** The details of a request as typed rows, and whether every one is fully described. */
 export interface ConsentDetails {
   details: ConsentDetail[];
   /**
@@ -47,57 +55,6 @@ export interface ConsentDetails {
    * it no longer lists), or it is not a typed object. Approval is refused then.
    */
   complete: boolean;
-}
-
-const COMMON: Record<
-  "actions" | "identifier" | "datatypes" | "locations",
-  Text
-> = {
-  actions: { fr: "Actions", en: "Actions" },
-  locations: { fr: "Emplacement", en: "Location" },
-  identifier: { fr: "Identifiant", en: "Identifier" },
-  datatypes: { fr: "Données", en: "Data" },
-};
-const YES_NO: Record<ConsentLocale, [string, string]> = {
-  fr: ["Oui", "Non"],
-  en: ["Yes", "No"],
-};
-
-// The viewer's language, else the other one, else `fallback`.
-function pick(text: Text | undefined, locale: ConsentLocale, fallback = "") {
-  if (text === undefined) return fallback;
-  const other = locale === "fr" ? "en" : "fr";
-  return text[locale] !== ""
-    ? text[locale]
-    : text[other] !== ""
-      ? text[other]
-      : fallback;
-}
-
-function scalar(value: unknown, locale: ConsentLocale): string {
-  if (typeof value === "boolean") return YES_NO[locale][value ? 0 : 1];
-  if (typeof value === "number")
-    return new Intl.NumberFormat(locale).format(value);
-  return typeof value === "string" ? value : "";
-}
-
-function formatted(
-  value: unknown,
-  field: DetailText["fields"][number],
-  locale: ConsentLocale,
-): string {
-  const labelOf = (raw: string) =>
-    pick(field.values?.find((v) => v.value === raw)?.label, locale, raw);
-  if (Array.isArray(value)) {
-    return value
-      .map((item) =>
-        field.kind === "enum" ? labelOf(String(item)) : scalar(item, locale),
-      )
-      .join(", ");
-  }
-  return field.kind === "enum" && typeof value === "string"
-    ? labelOf(value)
-    : scalar(value, locale);
 }
 
 // RFC 9396 members the rows always show, whatever the type.
@@ -137,65 +94,70 @@ function isComplete(
 function describe(
   detail: Record<string, unknown>,
   text: DetailText | undefined,
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): ConsentDetail {
   const type = String(detail["type"]);
   const rows: ConsentRow[] = [];
-  const locations = detail["locations"];
-  if (Array.isArray(locations) && locations.length > 0) {
-    rows.push({
-      label: pick(COMMON.locations, locale),
-      value: locations.map(String).join(", "),
-    });
-  }
+  const row = (
+    kind: ConsentRowKind,
+    values: ConsentValue[],
+    key: string | null = null,
+    label: string | null = null,
+  ) => {
+    // An empty text is no value; a row left with none, or a value of a shape
+    // the kind does not allow, has no row.
+    const shown = values.filter((v) => v.kind !== "TEXT" || v.text !== "");
+    if (shown.length > 0) rows.push({ kind, key, label, values: shown });
+  };
+  const strings = (items: unknown): ConsentValue[] =>
+    Array.isArray(items)
+      ? items.map((item) => ({ kind: "TEXT", text: String(item) }))
+      : [];
+  row("LOCATIONS", strings(detail["locations"]));
   const actions = detail["actions"];
-  if (Array.isArray(actions) && actions.length > 0) {
-    rows.push({
-      label: pick(COMMON.actions, locale),
-      value: actions
-        .map((action) =>
-          pick(
+  row(
+    "ACTIONS",
+    Array.isArray(actions)
+      ? actions.map((action) => ({
+          kind: "TEXT",
+          text: pick(
             text?.actions?.find((a) => a.value === action)?.label,
-            locale,
+            acceptLanguage,
             String(action),
           ),
-        )
-        .join(", "),
-    });
-  }
+        }))
+      : [],
+  );
   for (const field of text?.fields ?? []) {
     const value = detail[field.key];
     if (value === undefined || value === null) continue;
-    const shown = formatted(value, field, locale);
-    // An empty list, or a value of a shape the kind does not allow, has no row.
-    if (shown === "") continue;
-    rows.push({ label: pick(field.label, locale, field.key), value: shown });
+    row(
+      "FIELD",
+      valuesOf(value, field, acceptLanguage),
+      field.key,
+      pick(field.label, acceptLanguage, field.key),
+    );
   }
   const identifier = detail["identifier"];
   if (typeof identifier === "string") {
-    rows.push({ label: pick(COMMON.identifier, locale), value: identifier });
+    row("IDENTIFIER", [{ kind: "TEXT", text: identifier }]);
   }
-  const datatypes = detail["datatypes"];
-  if (Array.isArray(datatypes) && datatypes.length > 0) {
-    rows.push({
-      label: pick(COMMON.datatypes, locale),
-      value: datatypes.map(String).join(", "),
-    });
-  }
+  row("DATATYPES", strings(detail["datatypes"]));
   return {
     type,
-    title: pick(text?.name, locale, type),
-    description: pick(text?.description, locale),
+    title: pick(text?.name, acceptLanguage, type),
+    description: pick(text?.description, acceptLanguage),
     rows,
   };
 }
 
 /**
  * The details of a pending request (janus's `authorizationDetails`, a JSON
- * array string) as blocks of label/value rows in the viewer's language (D5):
- * the type's name and description, then its locations and actions, its fields
- * by their labels (an enum by the value's label, a boolean as yes/no, a number
- * in the viewer's format) and the RFC 9396 `identifier` and `datatypes`. No
+ * array string) as blocks of rows with a stable kind and typed values (D5):
+ * the type's name and description (the tenant's words, in the viewer's
+ * language), then its locations and actions, its fields by the tenant's labels
+ * (an enum by the value's label; a boolean and a number stay raw for the page
+ * to word and format) and the RFC 9396 `identifier` and `datatypes`. No
  * raw JSON is shown. `complete` is false when a detail cannot be fully
  * described (a type the tenant no longer stores, a key, action or enum value
  * its definition no longer has, an entry that is not a typed object): what is
@@ -204,7 +166,7 @@ function describe(
 export function reviewDetails(
   authorizationDetails: string | null,
   texts: DetailTexts,
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): ConsentDetails {
   if (authorizationDetails === null) return { details: [], complete: true };
   let parsed: unknown;
@@ -222,17 +184,19 @@ export function reviewDetails(
     text: texts.find((text) => text.type === detail["type"]),
   }));
   return {
-    details: matches.map(({ detail, text }) => describe(detail, text, locale)),
+    details: matches.map(({ detail, text }) =>
+      describe(detail, text, acceptLanguage),
+    ),
     complete:
       typed.length === parsed.length &&
       matches.every(({ detail, text }) => isComplete(detail, text)),
   };
 }
 
-/** The details of a pending request in words (see `reviewDetails`). */
+/** The details of a pending request as typed rows (see `reviewDetails`). */
 export const detailsOf = (
   authorizationDetails: string | null,
   texts: DetailTexts,
-  locale: ConsentLocale,
+  acceptLanguage: string | null,
 ): ConsentDetail[] =>
-  reviewDetails(authorizationDetails, texts, locale).details;
+  reviewDetails(authorizationDetails, texts, acceptLanguage).details;

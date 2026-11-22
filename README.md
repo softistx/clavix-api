@@ -399,14 +399,17 @@ mutation {
     input: {
       name: "invoices:read"
       resourceId: "6732…"
-      description: { fr: "Lire vos factures", en: "Read your invoices" }
+      description: [
+        { locale: "en", text: "Read your invoices" }
+        { locale: "fr", text: "Lire vos factures" }
+      ]
     }
   ) {
     id
     name
     description {
-      fr
-      en
+      locale
+      text
     }
     resourceId
     claims
@@ -421,7 +424,9 @@ mutation {
   `profile` or `email`: this is how a tenant writes the consent text of those. `claims` is stored
   only; no claim is emitted from it yet.
 - **The consent page** shows a scope's `description` as its label, in the viewer's language
-  (`Accept-Language`: French, else English), then in the other language, then the scope's name.
+  (`Accept-Language`, then its base language, then the first stored translation), then the scope's name. A text is a list of
+  `{ locale, text }` (BCP 47 tags, at most 30): a write sets or replaces the locales it names and keeps the others, and a blank
+  text removes its locale.
 - **A change serves at once**: the scopes a resource offers are read on every OAuth request.
 - **Limits**: a name has at most 100 characters, a description 300, a scope 50 claims, a client 20
   redirect URIs and 50 detail types, a search 100 characters; more is `BAD_USER_INPUT`.
@@ -894,12 +899,12 @@ describes no type keeps refusing the parameter (`invalid_request`).
 
 A type is a **limited list of fields**, never a free JSON Schema (no patterns, bounded sizes):
 
-| Part      | Rule                                                                                                                                                                                               |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`    | the name, 1 to 64 characters (letters, digits, `_ . : -`); unique in the tenant, so two resources cannot both define `payment`                                                                     |
-| `fields`  | at most 16, each a `key` (64 characters; not `type`, `locations`, `actions`, `identifier`, `datatypes` or `privileges`), a `kind`, a `required` flag and the labels in French and English          |
-| kinds     | `string` (`maxLength`, default 256, up to 1024), `number` and `integer` (`min`, `max`), `boolean`, `enum` (1 to 50 `values`), `string[]` (`max` items, default 16, up to 64; `maxLength` per item) |
-| `actions` | optional: the RFC 9396 `actions` the type allows (1 to 50), each with its label                                                                                                                    |
+| Part      | Rule                                                                                                                                                                                                       |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`    | the name, 1 to 64 characters (letters, digits, `_ . : -`); unique in the tenant, so two resources cannot both define `payment`                                                                             |
+| `fields`  | at most 16, each a `key` (64 characters; not `type`, `locations`, `actions`, `identifier`, `datatypes` or `privileges`), a `kind`, a `required` flag and the labels as translations (`[{ locale, text }]`) |
+| kinds     | `string` (`maxLength`, default 256, up to 1024), `number` and `integer` (`min`, `max`), `boolean`, `enum` (1 to 50 `values`), `string[]` (`max` items, default 16, up to 64; `maxLength` per item)         |
+| `actions` | optional: the RFC 9396 `actions` the type allows (1 to 50), each with its label                                                                                                                            |
 
 Clavix compiles the list into a strict schema: a detail holds the `type`, an optional `locations`
 (at most the request's own resource), `identifier` and `datatypes`, the `actions` when the type lists
@@ -917,9 +922,9 @@ off on a client that lists types is refused too. Any other case is `BAD_USER_INP
 A type deleted by a race with the save stays on the list but is no longer served: its requests are
 `invalid_authorization_details`.
 
-**The consent API shows them in words** (R4). `oauthRequest.details` and `oauthDeviceRequest.details` give one block per
-detail, `{ type, title, description, rows: [{ label, value }] }`, from the tenant's texts in the viewer's language
-(`Accept-Language`: French, else English, else the other language when one is empty; see "Consent"). Approval stays all or nothing:
+**The consent API shows them as typed rows** (R4). `oauthRequest.details` and `oauthDeviceRequest.details` give one block per
+detail, `{ type, title, description, rows: [{ kind, key, label, values: [{ kind, text, number, boolean }] }] }`, from the tenant's texts in the viewer's language
+(`Accept-Language`, then its base language, then the first stored translation; see "Consent"). Approval stays all or nothing:
 `approveOAuthRequest` and `approveOAuthDeviceRequest` are called without an `authorizationDetails` selection, so the user allows every
 detail or denies. **Approval is refused when a detail cannot be fully described** (`detailsComplete`): `oauthRequest.detailsComplete` and
 `oauthDeviceRequest.detailsComplete` are `Boolean!`, false when a detail's type was deleted after the request, or the detail carries a key,
@@ -946,7 +951,10 @@ mutation {
     input: {
       resourceId: "6732…"
       type: "payment"
-      name: { en: "Payment", fr: "Paiement" }
+      name: [
+        { locale: "en", text: "Payment" }
+        { locale: "fr", text: "Paiement" }
+      ]
       fields: [
         {
           key: "amount"
@@ -954,16 +962,27 @@ mutation {
           required: true
           min: 0.01
           max: 1000
-          label: { en: "Amount", fr: "Montant" }
+          label: [
+            { locale: "en", text: "Amount" }
+            { locale: "fr", text: "Montant" }
+          ]
         }
         {
           key: "currency"
           kind: ENUM
           required: true
-          values: [{ value: "EUR", label: { en: "Euro", fr: "Euro" } }]
+          values: [{ value: "EUR", label: [{ locale: "en", text: "Euro" }] }]
         }
       ]
-      actions: [{ value: "initiate", label: { en: "Start", fr: "Lancer" } }]
+      actions: [
+        {
+          value: "initiate"
+          label: [
+            { locale: "en", text: "Start" }
+            { locale: "fr", text: "Lancer" }
+          ]
+        }
+      ]
     }
   ) {
     id
@@ -1117,13 +1136,20 @@ query Consent($id: ID!) {
     }
     detailsComplete # false: show Deny only, approval is refused (see "Authorization details")
     details {
-      # the authorization details (RFC 9396) in words: render every block
+      # the authorization details (RFC 9396) as typed rows: render every block
       type
       title
       description
       rows {
-        label
-        value
+        kind # LOCATIONS | ACTIONS | FIELD | IDENTIFIER | DATATYPES: word it from your own catalogue
+        key # the field's key, for kind FIELD
+        label # the tenant's field label, for kind FIELD
+        values {
+          kind # TEXT | NUMBER | BOOLEAN: exactly that member is set
+          text
+          number
+          boolean
+        }
       }
     }
   }
@@ -1162,8 +1188,8 @@ code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed 
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
 scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403) or `UNMET_AUTHENTICATION_REQUIREMENTS` (403, `extensions.missing`; see "Authentication level and step-up").
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
-  are the type's name and description in the viewer's language, `rows` its actions, fields, `identifier` and `datatypes` by label; an
-  enum shows its value's label, a boolean yes/no, a number in the viewer's format), `[]` when it asked for none. Never raw JSON: a field the
+  are the type's name and description in the viewer's language, `rows` its locations, actions, fields, `identifier` and `datatypes`: a stable `kind` (the page words the fixed ones from its own
+  catalogue) and typed `values`; an enum value is the tenant's label, a boolean and a number stay raw for the page to word and format), `[]` when it asked for none. Never raw JSON: a field the
   type does not define is not shown, and a type the tenant deleted shows its own name. `oauthDeviceRequest { details }` is the same for the
   device page. The tenant's texts are read once per request. Approval is all or nothing: show every block and call the approve mutation
   without `authorizationDetails`. `detailsComplete: Boolean!` (also on `oauthDeviceRequest`) is false when a detail cannot be fully described
