@@ -207,13 +207,15 @@ export async function completedAnswer(
   // `replaced`, a retried sign-in would not revoke. A failed revocation is
   // queued and retried (clavix-api #353); unqueued, the sign-in fails.
   if (done.replaced) {
+    // The erase is idempotent and runs first: a failed revocation must not
+    // leave the previous holder's attribute values on the new owner.
+    await eraseReplacedValues(tenantId, done.userId);
     await services().consent.revokeOnReplace(
       ctx,
       tenantId,
       done.userId,
       grantsRevokeQueue.current,
     );
-    await eraseReplacedValues(tenantId, done.userId);
   }
   // janus types the user as an id and a type only: read the profile.
   const user = await auth.findUser(done.userId);
