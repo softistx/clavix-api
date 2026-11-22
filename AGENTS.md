@@ -602,7 +602,7 @@ the stored values, the role links, the claims and the profile.
   standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
   (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `attributes.rules.ts`.
 - **The stored values are a port, `AttributeValues`** (`attributes.types.ts`), required and bound in
-  `src/config/attributes.ts`. Until A2 it is `noAttributeValues` (`src/config/no-ops.ts`): every count is 0,
+  `src/config/attributes.ts` (beside the required `clock`, from `config/runtime`, and the read-only `scopes` collection). Until A2 it is `noAttributeValues` (`src/config/no-ops.ts`): every count is 0,
   so `valueCount` reads 0 and no lock applies. With values, the type is locked
   (`ATTRIBUTE_TYPE_LOCKED`, checked again after the write), a removed option in use is refused
   (`ATTRIBUTE_OPTION_IN_USE`), `unique` over duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`), and the
