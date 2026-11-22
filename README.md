@@ -759,6 +759,9 @@ A confidential client (a service, an agent) trades a user's access token for ano
   `subjectClients` (at most 50 client ids whose tokens may be exchanged), `anySubjectClient`, and `subjectAgents`
   (the tokens of any agent of the tenant, a client that registered itself; a client that is no agent is not covered).
   `subjectAgents` may stand alone or beside `subjectClients`. The mode is always `delegation`.
+  `anySubjectClient` already covers every client, agents included: `subjectAgents` beside it is accepted and stored but
+  changes nothing. Without `anySubjectClient`, `subjectAgents: false` (or a rule stored before the field existed) never
+  covers an agent's token.
 - **The result** is a delegation: scopes only narrow, there is no refresh token, the token carries `act`
   (`{ sub, client_id }` of the caller, also in introspection), and it lives under the subject's grant: revoking the
   grant or deleting the subject client kills it. Another tenant's token is `invalid_grant`.
