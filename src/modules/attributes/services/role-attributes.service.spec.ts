@@ -421,4 +421,36 @@ describe("incomplete accounts", () => {
     await rolesService.assign(tenant, role.id, "inc-u5");
     expect([...(await values.incomplete(tenant, ["inc-u5"]))]).toEqual([]);
   });
+
+  test("a required general value and a required role value both count", async () => {
+    const general = await catalogue.create(tenant, {
+      key: "inc_general",
+      family: "USER",
+      type: "STRING",
+      label,
+      required: true,
+    });
+    const { role, attr } = await setup("inc_both");
+    await rolesService.assign(tenant, role.id, "inc-u6");
+    await values.save(tenant, "inc-u6", [set(general._id, "g")], admin, true);
+    expect([...(await values.incomplete(tenant, ["inc-u6"]))]).toEqual([
+      "inc-u6",
+    ]);
+    await saveSection("inc-u6", role._id, [set(attr._id, "r")]);
+    expect([...(await values.incomplete(tenant, ["inc-u6"]))]).toEqual([]);
+    await catalogue.archive(tenant, general.id);
+  });
+
+  test("two held roles that link the same attribute need one value", async () => {
+    const { role, attr } = await setup("inc_twice");
+    const second = await rolesService.create(tenant, { name: "inc-twice-2" });
+    await links.assign(tenant, second.id, attr._id.toHexString(), true);
+    await rolesService.assign(tenant, role.id, "inc-u7");
+    await rolesService.assign(tenant, second.id, "inc-u7");
+    expect([...(await values.incomplete(tenant, ["inc-u7"]))]).toEqual([
+      "inc-u7",
+    ]);
+    await saveSection("inc-u7", role._id, [set(attr._id, "once")]);
+    expect([...(await values.incomplete(tenant, ["inc-u7"]))]).toEqual([]);
+  });
 });
