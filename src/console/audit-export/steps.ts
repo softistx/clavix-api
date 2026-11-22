@@ -57,6 +57,18 @@ export async function authorize(
   }
   const params = parseParams(request.url);
   if (params instanceof Response) return params;
+  return await tenantAccess(deps, userId, params);
+}
+
+/**
+ * The tenant the caller may export from: the role first, then the tenant, then
+ * the export budget.
+ */
+async function tenantAccess(
+  deps: ConsoleDeps,
+  userId: string,
+  params: ExportParams,
+): Promise<Response | ExportAccess> {
   const { tenantId, log } = params;
 
   // The same rule as the GraphQL guard (`permitted`): the sign-in log of the
@@ -155,4 +167,27 @@ export function bodyOf(
         AUTH_COLUMNS,
         format,
       );
+}
+
+/** The headers of the download: its type, its file name, its range and whether it was cut. */
+export function exportHeaders(
+  access: ExportAccess,
+  start: Date,
+  now: Date,
+  truncated: boolean,
+): Record<string, string> {
+  const { tenant, params } = access;
+  const { log, format } = params;
+  const day = now.toISOString().slice(0, 10);
+  return {
+    "content-type":
+      format === "csv"
+        ? "text/csv; charset=utf-8"
+        : "application/x-ndjson; charset=utf-8",
+    "content-disposition": `attachment; filename="clavix-${log}-events-${tenant.slug}-${day}.${format}"`,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-clavix-export-from": start.toISOString(),
+    "x-clavix-export-truncated": String(truncated),
+  };
 }
