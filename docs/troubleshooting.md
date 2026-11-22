@@ -938,7 +938,9 @@ Every refusal on the attribute catalogue writes nothing.
 - `ATTRIBUTE_ARCHIVED` (409): an archived attribute cannot be updated or moved; restore it first.
 - `ATTRIBUTE_NOT_ARCHIVED` (409): `deleteUserAttribute` needs the attribute archived first.
 - `ATTRIBUTE_DELETE_UNCONFIRMED` (400): `confirmKey` is not the attribute's key.
-- `CONFLICT` on `updateUserAttribute`: the `version` is stale; read the attribute again and resend.
+- `CONFLICT` on `updateUserAttribute`: the `version` is stale (or another edit landed while a refused type change was being put back); read the attribute again and resend.
+- `NOT_FOUND` `No such attribute`: the id names no attribute of this tenant (another tenant's id is not found either).
+- `BAD_USER_INPUT` on an attribute: a label needs at least one language, a unit holds at most 20 characters, a list holds at most 100 options, and each option needs a key and a label; the message names the field.
 
 ### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
 

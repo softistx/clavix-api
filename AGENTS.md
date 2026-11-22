@@ -612,7 +612,7 @@ the stored values, the role links, the claims and the profile.
   gapped number: a move writes one document, and renumbers the family only when two neighbours are too
   close. Archive and restore are idempotent; the delete needs the archived attribute and its key as
   `confirmKey` (`ATTRIBUTE_NOT_ARCHIVED`, `ATTRIBUTE_DELETE_UNCONFIRMED`) and is true on a repeat.
-- **Refusals** go through `refuse` / `refuseCommon` (`attributes.errors.ts`: codes with their status);
+- **Refusals** go through `refuse` / `refuseCommon` (`attributes.refusals.ts`: the helpers and each code's status; `attributes.errors.ts`: the codes);
   the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
 - **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
   ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`.
