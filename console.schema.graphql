@@ -211,6 +211,17 @@ enum AttributeFamily {
 }
 
 """
+One attribute filter of the users list: a choice attribute with `options` (the
+user holds any of them), or a boolean attribute with `boolean`. Exactly one of
+the two, matching the attribute's type.
+"""
+input AttributeFilterInput {
+  attributeId: ID!
+  boolean: Boolean
+  options: [String!]
+}
+
+"""
 Which section a save is about: `roleId` null for the general section, else the
 role whose section is saved (the user must hold it).
 """
@@ -1970,8 +1981,16 @@ type Query {
   with it (any case; plain text, never a pattern); blank means no filter. Give
   one of the two: both is BAD_USER_INPUT (400). `totalCount` follows the same
   filter.
+  
+  `roleId` keeps the users who hold the role; `attributes` keeps those whose
+  value matches each filter (a choice or a boolean attribute, at most 5; a role
+  attribute counts only while a held role links it). Every condition must hold,
+  together with `emailPrefix` (at most 1 000 addresses may match the prefix, else
+  BAD_USER_INPUT). Filtered pages follow the creation order; their cursor is the
+  one the previous filtered page gave. A filter on an unknown, archived or
+  unfit attribute, or an invalid option, is BAD_USER_INPUT (400).
   """
-  users(after: String, email: String, emailPrefix: String, first: Int, tenantId: ID!): TenantUserPage!
+  users(after: String, attributes: [AttributeFilterInput!], email: String, emailPrefix: String, first: Int, roleId: ID, tenantId: ID!): TenantUserPage!
   """
   One endpoint of the tenant; null when there is none with this id or it belongs to another tenant. Needs `view` on the tenant.
   """
@@ -2647,7 +2666,7 @@ type UserAttribute {
   archivedAt: DateTime
   description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   """
-  The scope whose access token carries the value as a claim (the ID token and userinfo do not yet), or `null` when it is not emitted.
+  The scope whose access token, ID token and userinfo carry the value as a claim (it is also listed in `claims_supported`), or `null` when it is not emitted.
   """
   emissionScope: String
   family: AttributeFamily!

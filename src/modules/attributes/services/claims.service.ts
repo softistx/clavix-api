@@ -1,7 +1,7 @@
 import { scopeToTenant } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
 import type { ClaimsOptions, ClaimValue } from "../claims.types";
-import { claimsOf, roleApplies } from "../utils";
+import { claimsOf, claimTable, roleApplies } from "../utils";
 
 /**
  * The attribute claims of a token (user-attributes slice A6), read on every
@@ -42,6 +42,24 @@ export class AttributeClaimsService {
     if (values.length === 0) return {};
     const applying = await this.applying(tenantId, userId, audience);
     return claimsOf(emitted, values, applying);
+  }
+
+  /**
+   * The scope table of the tenant's live attributes: each emission scope to
+   * the claim keys it releases. Read on every discovery, userinfo and ID
+   * token, so a new or archived attribute shows at once (discovery itself is
+   * cached for a minute by the public documents).
+   */
+  async scopeClaims(
+    tenantId: ObjectId,
+  ): Promise<Record<string, readonly string[]>> {
+    const emitting = await scopeToTenant(
+      this.options.attributes,
+      tenantId,
+    ).findMany({
+      filter: { archivedAt: null, emission: { $ne: null } },
+    });
+    return claimTable(emitting);
   }
 
   /** The ids (hex) of the attributes a role the user holds links and that applies to the audience. */

@@ -7,10 +7,13 @@
 // `i18n/codes.ts`) and `attributes.console-resolver` (read by
 // `console/modules/lock-order.spec.ts`).
 
+export { RESERVED_CLAIMS } from "./rules";
 export {
   AttributeClaimsService,
   AttributesService,
   AttributeValuesService,
   RoleAttributesService,
+  UserFilterService,
 } from "./services";
-export { exportedView } from "./utils";
+export type { UserFilter } from "./user-filter.types";
+export { afterOf, exportedView, MAX_PREFIX_IDS } from "./utils";

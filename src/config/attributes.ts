@@ -4,8 +4,9 @@ import {
   AttributesService,
   AttributeValuesService,
   RoleAttributesService,
+  UserFilterService,
 } from "@/modules/attributes";
-import type { AttributesFor } from "@/oauth/ports";
+import type { AttributeScopesFor, AttributesFor } from "@/oauth/ports";
 import { mongo } from "./db";
 import { clock } from "./runtime";
 
@@ -42,7 +43,14 @@ export const attributesService = new AttributesService({
   clock,
 });
 
-/** The attribute claims of the access tokens (slice A6). */
+/** Which users match the role and attribute filters of the users list. */
+export const userFilterService = new UserFilterService({
+  attributes: mongo.db.userAttributes,
+  values: mongo.db.attributeValues,
+  links: mongo.db.roleAttributes,
+});
+
+/** The attribute claims of the tokens (slice A6). */
 export const attributeClaimsService = new AttributeClaimsService({
   values: mongo.db.attributeValues,
   attributes: mongo.db.userAttributes,
@@ -58,3 +66,6 @@ export const attributesFor: AttributesFor =
       scopes,
       audience,
     );
+
+export const attributeScopesFor: AttributeScopesFor = (tenant) => () =>
+  attributeClaimsService.scopeClaims(new ObjectId(tenant.tenantId));

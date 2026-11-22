@@ -16,6 +16,7 @@ import {
   createClavixOAuthIssuers,
 } from "@/oauth/issuers";
 import type {
+  AttributeScopesFor,
   AttributesFor,
   AuthFor,
   ClaimsFor,
@@ -42,6 +43,7 @@ const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 interface FlowOptions {
   rolesFor?: RolesFor;
   attributesFor?: AttributesFor;
+  attributeScopesFor?: AttributeScopesFor;
   /** What the `/register` route throttles with (none by default). */
   registerThrottle?: RegisterThrottle;
   /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
@@ -98,6 +100,9 @@ function issuersOf(
     ...(options.attributesFor === undefined
       ? {}
       : { attributesFor: options.attributesFor }),
+    ...(options.attributeScopesFor === undefined
+      ? {}
+      : { attributeScopesFor: options.attributeScopesFor }),
     ...(options.metadataTransport === undefined
       ? {}
       : { metadataTransport: options.metadataTransport }),

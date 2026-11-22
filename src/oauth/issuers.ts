@@ -13,6 +13,7 @@ import { buildIssuer, userinfoOf } from "./building";
 import { oidcProviderOf } from "./issuers-oidc";
 import type {
   AgentCheckFor,
+  AttributeScopesFor,
   AttributesFor,
   AuthFor,
   ClaimsFor,
@@ -52,11 +53,15 @@ export interface ClavixOAuthOptions {
    */
   rolesFor: RolesFor;
   /**
-   * The attribute claims (slice A6) of the JWT access tokens: the attributes
-   * whose emission scope the token holds. Not in the id_token and userinfo
-   * until janus-oidc declares per-tenant claims (nxgt-janus J1).
+   * The attribute claims (slice A6) of the JWT access tokens, the id_token and
+   * userinfo: the attributes whose emission scope the token holds.
    */
   attributesFor: AttributesFor;
+  /**
+   * The scope table of those claims, per tenant: it makes the id_token,
+   * userinfo and the discovery document's `claims_supported` carry them.
+   */
+  attributeScopesFor: AttributeScopesFor;
   /**
    * The token exchange rules of a tenant's clients (`clientPolicies`): a client
    * with none may not exchange tokens.

@@ -73,3 +73,23 @@ export function claimsOf(
   }
   return claims;
 }
+
+/**
+ * The scope table of the live attributes with an emission scope: each scope
+ * to the claim keys it releases (sorted, so the discovery document is
+ * stable). This is what an issuer's `scopeClaims` lists for the ID token,
+ * userinfo and `claims_supported`.
+ */
+export function claimTable(
+  attributes: readonly AttributeDoc[],
+): Record<string, readonly string[]> {
+  const table = new Map<string, string[]>();
+  for (const attribute of attributes) {
+    const scope = attribute.emission?.scope;
+    if (scope === undefined) continue;
+    table.set(scope, [...(table.get(scope) ?? []), attribute.key]);
+  }
+  return Object.fromEntries(
+    [...table].map(([scope, keys]) => [scope, keys.sort()]),
+  );
+}

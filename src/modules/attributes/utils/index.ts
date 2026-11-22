@@ -10,7 +10,7 @@ export {
   shape,
   target,
 } from "./attributes.utils";
-export { claimsOf, claimValue, roleApplies } from "./claims.utils";
+export { claimsOf, claimTable, claimValue, roleApplies } from "./claims.utils";
 export {
   distinctAttributes,
   distinctIds,
@@ -18,6 +18,19 @@ export {
   linksByAttribute,
   roleSections,
 } from "./role-attributes.utils";
+export {
+  afterOf,
+  cursorOf,
+  filterConditions,
+  filterIssue,
+  isFilterable,
+  linkedCondition,
+  MAX_FILTERS,
+  MAX_PREFIX_IDS,
+  matchPipeline,
+  roleCondition,
+  valueCondition,
+} from "./user-filter.utils";
 export {
   attributeValueView,
   byUser,

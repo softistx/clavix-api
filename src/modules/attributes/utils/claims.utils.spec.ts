@@ -4,7 +4,7 @@ import type { RoleDoc } from "@/modules/roles";
 import type { AttributeType } from "../attributes.model";
 import type { AttributeDoc } from "../attributes.types";
 import type { ValueDoc } from "../values.types";
-import { claimsOf, claimValue, roleApplies } from "./claims.utils";
+import { claimsOf, claimTable, claimValue, roleApplies } from "./claims.utils";
 
 const attribute = (
   type: AttributeType,
@@ -139,5 +139,23 @@ describe("claimsOf", () => {
 
   test("an attribute with no value is left out", () => {
     expect(claimsOf([attribute("BOOLEAN", "flag")], [], new Set())).toEqual({});
+  });
+});
+
+describe("claimTable", () => {
+  const on = (key: string, scope: string | null): AttributeDoc => ({
+    ...attribute("STRING", key),
+    emission: scope === null ? null : { scope },
+  });
+
+  test("lists each emission scope with its claim keys, sorted", () => {
+    expect(
+      claimTable([on("b", "read"), on("a", "read"), on("c", "profile")]),
+    ).toEqual({ read: ["a", "b"], profile: ["c"] });
+  });
+
+  test("an attribute with no emission scope is not listed", () => {
+    expect(claimTable([on("quiet", null)])).toEqual({});
+    expect(claimTable([])).toEqual({});
   });
 });
