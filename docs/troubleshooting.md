@@ -952,7 +952,7 @@ Every refusal on the attribute catalogue or on a user's values writes nothing.
 
 - `PROFILE_FIELD_INVALID` (400): `updateUser` refused a value; `field` names it (`phone`, `locale`,
   `zoneinfo`, `birthdate`, `nickname`, `address.country`...) and nothing was stored, the other fields
-  of the call included. A phone is E.164 (`+14165550123`, a `+`, then 8 to 15 digits; spaces and
+  of the call included. A phone is E.164 (`+14165550123`, a `+`, then 7 to 15 digits; spaces and
   dashes are dropped), a locale a BCP 47 tag (`fr-CA`), a zone an IANA name (`America/Toronto`), a
   birthdate a real `YYYY-MM-DD` between 1900 and today, a country two letters from ISO 3166-1, a
   nickname 1 to 100 characters. `setUserPhoneVerified` also answers it (field `phone`) for a user
