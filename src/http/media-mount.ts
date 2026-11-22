@@ -24,6 +24,8 @@ export interface MediaPorts {
   issuers: AvatarAccessPorts["issuers"];
   /** The janus instance of a tenant by id (a console caller's write). */
   janusOf: AvatarAccessPorts["janusOf"];
+  /** Whether the tenant locks the `PICTURE` field (a user's own upload is then refused). */
+  pictureLocked: AvatarAccessPorts["pictureLocked"];
   /** The upload budget, per user, client address and tenant. */
   throttle: AvatarThrottle;
 }
@@ -46,6 +48,7 @@ export function mountMedia(
   const access = new AvatarAccessService({
     issuers: ports.issuers,
     janusOf: ports.janusOf,
+    pictureLocked: ports.pictureLocked,
     admin,
   });
   return app.decorate({ avatarThrottle: throttle }).plugin(

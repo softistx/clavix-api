@@ -20,3 +20,11 @@ export interface AuthPorts {
 export type SignInDone = Awaited<
   ReturnType<TenantJanus["signInCode"]["confirm"]>
 >;
+
+/** The user of a session as the hosted resolvers hold it: the identity; the profile, the locks and the attributes are read by field (`account`). */
+export interface CurrentUserParent {
+  id: string;
+  email: string;
+  name: string | null;
+  emailVerified: boolean;
+}

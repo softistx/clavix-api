@@ -35,6 +35,7 @@ describe("attributes errors", () => {
       "ATTRIBUTE_VALUE_INVALID",
       "ATTRIBUTE_VALUE_TAKEN",
       "ATTRIBUTE_REQUIRED",
+      "ATTRIBUTE_NOT_EDITABLE",
     ]);
   });
 

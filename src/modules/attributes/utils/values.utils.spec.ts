@@ -7,6 +7,7 @@ import {
   byUser,
   isRequired,
   matches,
+  ownAttributeView,
   sectionValueView,
   shown,
 } from "./values.utils";
@@ -125,5 +126,25 @@ describe("role sections", () => {
     );
     expect(sectionValueView(a, true, 3, held, []).text).toBe("x");
     expect(sectionValueView(a, false, 3, undefined, []).text).toBeNull();
+  });
+});
+
+describe("ownAttributeView", () => {
+  test("names the attribute and puts the value in the field of its type", () => {
+    const a = { ...attribute("STRING"), required: true };
+    const view = ownAttributeView(a, stored(a, "hello"));
+    expect(view.attribute).toMatchObject({
+      id: a._id.toHexString(),
+      key: "k",
+      type: "STRING",
+      required: true,
+    });
+    expect(view.text).toBe("hello");
+    expect(view.options).toBeNull();
+  });
+
+  test("shows an attribute with no value empty", () => {
+    const view = ownAttributeView(attribute("NUMBER"), undefined);
+    expect(view.number).toBeNull();
   });
 });

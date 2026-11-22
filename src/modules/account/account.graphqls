@@ -1,0 +1,222 @@
+"""
+A standard profile field a tenant may lock. A locked field cannot be changed by
+the users themselves (`updateMyProfile` answers PROFILE_FIELD_LOCKED); only an
+administrator edits it.
+"""
+enum ProfileField {
+  NAME
+  GIVEN_NAME
+  FAMILY_NAME
+  NICKNAME
+  PHONE
+  PICTURE
+  LOCALE
+  ZONEINFO
+  BIRTHDATE
+  ADDRESS
+}
+
+"""
+The standard profile fields of the signed-in user. A field that is not set is
+null; the picture is its storage key, never a URL.
+"""
+type UserProfile {
+  givenName: String
+  familyName: String
+  nickname: String
+  phone: UserPhone
+  "A BCP 47 language tag, canonical (`fr-CA`)."
+  locale: String
+  "An IANA time zone name (`America/Toronto`)."
+  zoneinfo: String
+  "`YYYY-MM-DD`."
+  birthdate: String
+  address: UserAddress
+  "The key of the user's picture, or null. Never a URL."
+  pictureKey: String
+  "When the user record last changed."
+  updatedAt: DateTime!
+}
+
+"A phone number, E.164, and whether an administrator marked it proved (there is no SMS)."
+type UserPhone {
+  number: String!
+  verified: Boolean!
+}
+
+"A postal address; every part is optional."
+type UserAddress {
+  formatted: String
+  streetAddress: String
+  locality: String
+  region: String
+  postalCode: String
+  "ISO 3166-1 alpha-2, upper case."
+  country: String
+}
+
+"A postal address to store. A blank part is left out; an address with no part left is cleared."
+input AddressInput {
+  formatted: String
+  streetAddress: String
+  locality: String
+  region: String
+  postalCode: String
+  "ISO 3166-1 alpha-2."
+  country: String
+}
+
+"""
+What the signed-in user changes of their own profile. A field left out is kept;
+null (or a blank text) clears an optional one, the name cannot be cleared.
+"""
+input UpdateMyProfileInput {
+  "1 to 200 characters once trimmed."
+  name: String
+  "1 to 100 characters once trimmed."
+  givenName: String
+  "1 to 100 characters once trimmed."
+  familyName: String
+  "1 to 100 characters once trimmed."
+  nickname: String
+  "E.164 (`+14165550123`). A number that differs from the stored one starts unverified."
+  phone: String
+  "A BCP 47 language tag (stored canonical)."
+  locale: String
+  "An IANA time zone name."
+  zoneinfo: String
+  "`YYYY-MM-DD`, a real date that is not in the future."
+  birthdate: String
+  address: AddressInput
+}
+
+enum AttributeType {
+  STRING
+  TEXT
+  COLOR
+  NUMBER
+  DATE
+  DATETIME
+  TIME
+  SELECT
+  MULTI_SELECT
+  BOOLEAN
+}
+
+"A text in one language."
+type Translation {
+  locale: Locale!
+  text: String!
+}
+
+"One choice of a SELECT or MULTI_SELECT attribute."
+type MyAttributeOption {
+  key: String!
+  label: [Translation!]!
+}
+
+"A user attribute of the tenant's catalogue, as the signed-in user sees it."
+type AttributeDefinition {
+  id: ID!
+  key: String!
+  type: AttributeType!
+  label: [Translation!]!
+  description: [Translation!]!
+  "The unit a value is shown with (`kg`, `%`), or null."
+  unit: String
+  "The choices of a SELECT or MULTI_SELECT attribute, in order; empty for the other types."
+  options: [MyAttributeOption!]!
+  "Shown as required; a save is never blocked by it, an administrator is told what is missing."
+  required: Boolean!
+}
+
+"""
+An attribute the signed-in user may set themselves (family USER, live,
+`userEditable`) and the value they hold. Exactly the field of the attribute's
+type is set (`text` for STRING and TEXT, `color`, `number`, `date`, `dateTime`,
+`time`, `options` for SELECT and MULTI_SELECT, `boolean`); every field is null
+while the user holds no value.
+"""
+type MyAttribute {
+  attribute: AttributeDefinition!
+  text: String
+  color: HexColorCode
+  number: Float
+  boolean: Boolean
+  date: Date
+  dateTime: DateTime
+  time: LocalTime
+  "The keys of the chosen options (one for SELECT)."
+  options: [String!]
+}
+
+"""
+The value to set, through the one field of the attribute's type (`text` for
+STRING and TEXT, `color`, `number`, `date`, `dateTime`, `time`, `options` for
+SELECT and MULTI_SELECT, `boolean`).
+"""
+input MyAttributeSetInput @oneOf {
+  text: String
+  color: HexColorCode
+  number: Float
+  boolean: Boolean
+  date: Date
+  dateTime: DateTime
+  time: LocalTime
+  options: [String!]
+}
+
+"One change of a save: `value` null clears the attribute's value."
+input MyAttributeValueInput {
+  attributeId: ID!
+  value: MyAttributeSetInput
+}
+
+extend type CurrentUser {
+  "The standard profile fields."
+  profile: UserProfile!
+  "The profile fields the tenant locks: `updateMyProfile` refuses them."
+  lockedFields: [ProfileField!]!
+  "The attributes the user may set themselves, by position, with their values."
+  attributes: [MyAttribute!]!
+}
+
+extend type Mutation {
+  """
+  Changes the signed-in user's own profile fields and returns the user. A field
+  the tenant locks is PROFILE_FIELD_LOCKED (403, `field` names it) and nothing
+  is written; an invalid value is PROFILE_FIELD_INVALID (400); a changed phone
+  starts unverified. A repeat writes nothing. Errors: UNAUTHENTICATED (401),
+  TENANT_SUSPENDED (403), CONFLICT (409) when the user changed meanwhile.
+  """
+  updateMyProfile(input: UpdateMyProfileInput!): CurrentUser!
+  """
+  Sets and clears the signed-in user's own values of the attributes they may
+  edit, and returns those attributes. Never blocked by `required`. A bad value
+  writes nothing. Errors: ATTRIBUTE_NOT_EDITABLE (403, field `values.<i>`),
+  NOT_FOUND, ATTRIBUTE_ARCHIVED, ATTRIBUTE_FAMILY_MISMATCH,
+  ATTRIBUTE_VALUE_INVALID (400), ATTRIBUTE_VALUE_TAKEN (409), UNAUTHENTICATED
+  (401), TENANT_SUSPENDED (403).
+  """
+  setMyAttributeValues(values: [MyAttributeValueInput!]!): [MyAttribute!]!
+  """
+  Mails a link to the NEW address; nothing changes until `confirmEmailChange`
+  redeems it (hosted page `/account/email?token=...`, which must POST the token,
+  never confirm on GET). Needs a proof less than 10 minutes old: an older
+  session is STEP_UP_REQUIRED (403), so the page asks the user to sign in
+  again. Whether somebody holds the address is not told here. Errors:
+  UNAUTHENTICATED (401), STEP_UP_REQUIRED (403), TENANT_SUSPENDED (403),
+  BAD_USER_INPUT (400, the address is the current one or is malformed),
+  MAIL_THROTTLED and EMAIL_VERIFICATION_THROTTLED (429, `retryAfter` and `Retry-After`).
+  """
+  requestEmailChange(email: EmailAddress!): Boolean!
+  """
+  Redeems the token of a change link for a signed-in session: the account moves
+  to the address the link was sent to, which counts as verified, and the former
+  address is told. Password, second factor and sessions stay. Errors:
+  UNAUTHENTICATED (401), EMAIL_CHANGE_INVALID (400: unknown, spent, expired or
+  stale token), LOGIN_TAKEN (409: another account holds the address meanwhile;
+  the token is spent), CONFLICT (409), TENANT_SUSPENDED (403).
+  """
+  confirmEmailChange(token: String!): CurrentUser!
+}

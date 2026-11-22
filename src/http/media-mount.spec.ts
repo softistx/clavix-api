@@ -55,6 +55,7 @@ afterAll(async () => {
 
 interface Wiring {
   signedIn?: boolean;
+  pictureLocked?: boolean;
   throttle?: AvatarThrottle;
   admin?: (tenantId: string) => Promise<void>;
   setFails?: MediaRefusal;
@@ -83,6 +84,7 @@ function appOver(wiring: Wiring = {}) {
       },
       issuers: { forRequest: async () => auth },
       janusOf: async () => auth,
+      pictureLocked: async () => wiring.pictureLocked === true,
       throttle: wiring.throttle ?? { check: async () => {} },
     },
     async (_request, tenantId) => wiring.admin?.(tenantId),
@@ -136,6 +138,25 @@ suite("/media/avatar over S3", () => {
       errors: [{ extensions: { code: "UNAUTHENTICATED" } }],
     });
     expect((await objects()).length).toBe(before);
+  });
+
+  test("a locked picture refuses the user's own upload and an admin's still goes through", async () => {
+    const before = (await objects()).length;
+    const own = await put(appOver({ pictureLocked: true }).app, PNG);
+    expect(own.status).toBe(403);
+    expect(await own.json()).toMatchObject({
+      errors: [
+        { extensions: { code: "PROFILE_FIELD_LOCKED", field: "PICTURE" } },
+      ],
+    });
+    expect((await objects()).length).toBe(before);
+    const admin = await put(
+      appOver({ pictureLocked: true, admin: async () => {} }).app,
+      PNG,
+      "image/png",
+      `?tenantId=${"c".repeat(24)}&userId=u7`,
+    );
+    expect(admin.status).toBe(200);
   });
 
   test("a cross-site write is forbidden", async () => {

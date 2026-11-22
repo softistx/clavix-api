@@ -40,8 +40,11 @@ function janusWith(options: { avatar: boolean; setError?: Error }) {
   return { auth, calls };
 }
 
-const serviceOver = (auth: TenantJanus | null) =>
-  new AvatarsService({ issuers: { forRequest: async () => auth } });
+const serviceOver = (auth: TenantJanus | null, locked = false) =>
+  new AvatarsService({
+    issuers: { forRequest: async () => auth },
+    pictureLocked: async () => locked,
+  });
 
 const codeOf = (run: () => Promise<unknown>) =>
   run().then(
@@ -119,6 +122,15 @@ describe("AvatarsService.removeOwn", () => {
     const ctx = contextOf({ tenant: tenantStandIn() });
     expect(await serviceOver(auth).removeOwn(ctx)).toBe(true);
     expect(calls).toEqual(["remove"]);
+  });
+
+  test("a locked PICTURE refuses the removal and writes nothing", async () => {
+    const { auth, calls } = janusWith({ avatar: true });
+    const ctx = contextOf({ tenant: tenantStandIn() });
+    expect(await codeOf(() => serviceOver(auth, true).removeOwn(ctx))).toBe(
+      "PROFILE_FIELD_LOCKED",
+    );
+    expect(calls).toEqual([]);
   });
 
   test("a host that names no tenant is NOT_FOUND, a suspended tenant refused, a visitor UNAUTHENTICATED", async () => {

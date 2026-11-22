@@ -11,7 +11,9 @@ export {
   recordingSignIn,
   sourceOf,
 } from "./auth.events";
-export { drain, settled } from "./auth.outbox";
+export { afterAnswer, drain, settled } from "./auth.outbox";
 export { AuthService } from "./auth.service";
 export { createSignInThrottle, signInLimits } from "./auth.throttle";
+export type { AuthPorts } from "./auth.types";
+export { currentUserOf } from "./auth.utils";
 export { createVerificationThrottle } from "./auth.verification-throttle";

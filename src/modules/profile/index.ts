@@ -8,7 +8,7 @@
 // `profile.refusals` is re-exported for the users module.
 
 export { refuse, refuseCommon } from "./profile.refusals";
-export { cleanProfile } from "./profile.rules";
+export { checkUnlocked, cleanProfile } from "./profile.rules";
 export { ProfilePoliciesService } from "./profile.service";
 export type { ProfileChanges, ProfileView } from "./profile.types";
 export {

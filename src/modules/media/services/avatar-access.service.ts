@@ -49,6 +49,9 @@ export class AvatarAccessService {
     const current = await auth.authenticate(ctx.request);
     if (current === null) throw new MediaRefusal("unauthenticated");
     if (!isLive(tenant)) throw new MediaRefusal("forbidden");
+    if (await this.ports.pictureLocked(tenant.tenantId)) {
+      throw new MediaRefusal("locked");
+    }
     return { tenantId: tenant.tenantId, userId: current.user.id, auth };
   }
 }

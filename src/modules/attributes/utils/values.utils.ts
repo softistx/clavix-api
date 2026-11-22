@@ -99,6 +99,27 @@ export function attributeValueView(
   return { attribute: shape(attribute, valueCount, roles), ...fields };
 }
 
+/** An attribute a user may set themselves with the value they hold, as the hosted `MyAttribute`. */
+export function ownAttributeView(
+  attribute: AttributeDoc,
+  value: ValueDoc | undefined,
+) {
+  const { attributeId: _, ...fields } = shown(attribute, value);
+  return {
+    attribute: {
+      id: attribute._id.toHexString(),
+      key: attribute.key,
+      type: attribute.type,
+      label: attribute.label,
+      description: attribute.description,
+      unit: attribute.unit,
+      options: attribute.options,
+      required: attribute.required,
+    },
+    ...fields,
+  };
+}
+
 /** An exported value as the console's `ExportedAttributeValue`. */
 export const exportedView = (item: ExportedValue) => ({
   key: item.key,

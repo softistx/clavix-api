@@ -944,6 +944,7 @@ Every refusal on the attribute catalogue or on a user's values writes nothing.
 - `ATTRIBUTE_FAMILY_MISMATCH` (400): the attribute is not in the section being set (a ROLE attribute in the general section, a USER attribute in a role section, or a ROLE attribute the role does not link), or `assignRoleAttribute` was given a USER-family attribute.
 - `ATTRIBUTE_VALUE_TAKEN` (409): another user holds that value of a `unique` attribute (text compares in lower case).
 - `ATTRIBUTE_REQUIRED` (400): a console save cannot clear a required attribute's value.
+- `ATTRIBUTE_NOT_EDITABLE` (403): `setMyAttributeValues` named an attribute whose `userEditable` is off; only an administrator sets it (console `setUserAttributeValues`). `field` is `values.<i>`.
 - Values of a ROLE attribute vanished after `unassignRole` or `unassignRoleAttribute`: they are stored, only hidden (the export flags them `hidden`); assigning the role again, or linking the attribute again, shows them.
 - `NOT_FOUND` on `assignRoleAttribute`, `updateRoleAttribute`, `unassignRoleAttribute`: the role or attribute is unknown, or (`updateRoleAttribute`) the role is not linked to the attribute; `unassignRoleAttribute` answers `false` when there is no link.
 - `ATTRIBUTE_ROLE_NOT_HELD` (409): `section.roleId` is given and the user does not hold that role, or no such role exists. Assign the role to the user first (`assignRole`); a role the user lost is no longer a section.
@@ -960,7 +961,7 @@ Every refusal on the attribute catalogue or on a user's values writes nothing.
   nickname 1 to 100 characters. `setUserPhoneVerified` also answers it (field `phone`) for a user
   with no phone number: set the number first.
 - `PROFILE_FIELD_LOCKED` (403): the tenant's profile policy locks that field against the user's own
-  edits. Not raised yet: it arrives with the users' own profile edits. The console admin is not bound by locks; change them with `updateProfilePolicy`.
+  edits. Raised by `updateMyProfile`, `removeMyPicture` and the own `PUT /media/avatar` (field `PICTURE`). The console admin is not bound by locks; change them with `updateProfilePolicy`.
 - `CONFLICT` (409) on `updateUser`, `setUserPhoneVerified` or `updateProfilePolicy`: the user, or the
   policy, changed since it was read. Read it again (the policy's `version` comes from `profilePolicy`)
   and retry.
@@ -1123,3 +1124,7 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** the body is not a PNG, JPEG or WebP (the bytes are sniffed, the `content-type` header is not trusted): 415 `MEDIA_UNSUPPORTED_TYPE`; it is over 1 MiB: 413 `MEDIA_TOO_LARGE`; the user, address or tenant passed `CLAVIX_AVATAR_*`: 429 with `Retry-After`; no `CLAVIX_MEDIA_S3_*` is set (outside production), so the bucket is absent: 503. A key of another tenant is a 404.
 
 **Fix:** send a smaller PNG, JPEG or WebP, wait `Retry-After`, or set the `CLAVIX_MEDIA_S3_*` variables (docs/operations.md, "Profile pictures").
+
+## `EMAIL_CHANGE_INVALID`, `LOGIN_TAKEN`, `STEP_UP_REQUIRED` and `MAIL_THROTTLED` on an e-mail change
+
+`requestEmailChange` needs a sign-in proved less than 10 minutes ago: an older session is `STEP_UP_REQUIRED` (403), so the page asks the user to sign in again. The link goes to the new address; janus throttles the requests per address (`MAIL_THROTTLED`, 429, with `retryAfter`), and the API counts them per user, client address and tenant with the verification budget (`EMAIL_VERIFICATION_THROTTLED`, 429). `confirmEmailChange` refuses an unknown, spent, expired or stale token as `EMAIL_CHANGE_INVALID` (400): the user asks for a new link. When another account took the address meanwhile it is `LOGIN_TAKEN` (409) and the token is spent, so the user picks another address and asks again.

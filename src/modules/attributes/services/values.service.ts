@@ -3,7 +3,13 @@ import { ObjectId } from "mongodb";
 import { refuse, refuseCommon } from "../attributes.refusals";
 import type { AttributeDoc, AttributeValues } from "../attributes.types";
 import { canonicalValue, isEmpty, MAX_CHANGES, uniqueKeyOf } from "../rules";
-import { byPosition, byUser, isRequired, matches } from "../utils";
+import {
+  byPosition,
+  byUser,
+  isRequired,
+  matches,
+  ownAttributeView,
+} from "../utils";
 import type {
   ExportedValue,
   PlannedWrite,
@@ -150,6 +156,47 @@ export class AttributeValuesService implements AttributeValues {
       filter: { family: "USER" },
     });
     return byPosition(found.filter((a) => a.archivedAt === null));
+  }
+
+  /** The attributes the user may set themselves (live, general, `userEditable`), by position, with the values they hold. */
+  async editableOf(tenantId: ObjectId, userId: string) {
+    const [general, held] = await Promise.all([
+      this.general(tenantId),
+      this.ofUsers(tenantId, [userId]),
+    ]);
+    const mine = held.get(userId) ?? [];
+    return general
+      .filter((attribute) => attribute.userEditable)
+      .map((attribute) =>
+        ownAttributeView(
+          attribute,
+          mine.find((v) => v.attributeId.equals(attribute._id)),
+        ),
+      );
+  }
+
+  /**
+   * Refuses, before a user's own save, a change that names an attribute the
+   * user may not set (`ATTRIBUTE_NOT_EDITABLE`, field `values.<i>`). An id that
+   * names no live general attribute is left to `save` (not found, archived,
+   * family), so the answer for it does not depend on who asks.
+   */
+  async checkEditable(
+    tenantId: ObjectId,
+    changes: readonly ValueChange[],
+  ): Promise<void> {
+    const general = await this.general(tenantId);
+    for (const [index, change] of changes.entries()) {
+      const attribute = general.find(
+        (a) => a._id.toHexString() === change.attributeId,
+      );
+      if (attribute !== undefined && !attribute.userEditable)
+        refuse(
+          "ATTRIBUTE_NOT_EDITABLE",
+          `"${attribute.key}" is set by an administrator only`,
+          `values.${index}`,
+        );
+    }
   }
 
   /**
