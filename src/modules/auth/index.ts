@@ -1,6 +1,6 @@
 // The module's import surface (the hosted sign-in: e-mail code, magic link,
 // e-mail verification, sign-out). Imported by file: `auth.resolver`
-// (`modules/index.ts`), `auth.plugin` (`app.ts`, `http/schema.ts`),
+// (`modules/index.ts`), `auth.plugin` (`http/graphql-mount.ts`, `http/schema.ts`),
 // `auth.throttle` and `auth.verification-throttle` (`config/redis.ts`,
 // `config/redis-limits.ts`) and `auth.errors` (`i18n/codes.ts`), each loading
 // the config wiring or closing a cycle through this barrel.
