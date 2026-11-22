@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { attributeValuesService } from "@/config/attributes";
 import { rolesService } from "@/config/roles";
+import { clock } from "@/config/runtime";
 import type { ConsoleContext } from "@/console/context";
 import { exportedView } from "@/modules/attributes";
 import { fail } from "@/shared/errors";
@@ -26,7 +27,7 @@ export async function userDataExport(
     ctx.users.sessions(tenantId, userId),
   ]);
   return {
-    exportedAt: new Date(),
+    exportedAt: clock(),
     profile: shape(found, tenantId),
     attributes: values.map(exportedView),
     roles,

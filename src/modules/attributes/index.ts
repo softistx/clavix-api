@@ -6,11 +6,4 @@
 export { AttributesService } from "./attributes.service";
 export type { AttributeValues } from "./attributes.types";
 export { AttributeValuesService } from "./values.service";
-export type {
-  ExportedValue,
-  ValueActor,
-  ValueChange,
-  ValueDoc,
-  ValueInput,
-} from "./values.types";
 export { exportedView } from "./values.utils";

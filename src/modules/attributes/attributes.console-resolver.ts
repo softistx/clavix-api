@@ -62,20 +62,25 @@ export const attributes: Resolvers = freshPerMutation({
           "section.roleId",
         );
       }
-      if ((await ctx.users.find(tenant.hex, userId)) === null) {
-        return refuseCommon("NOT_FOUND", "No such user");
-      }
-      await ctx.exclusive(userKey(tenant.hex, userId), () =>
-        refusing(() =>
-          attributeValuesService.save(
-            tenant.id,
-            userId,
-            changesOf(values),
-            { kind: "admin", id: ctx.principal.userId },
-            true,
-          ),
-        ),
+      // The user is checked under its lock, so a concurrent `deleteUser`
+      // (which sweeps the values under the same key) leaves no orphan value.
+      const known = await ctx.exclusive(
+        userKey(tenant.hex, userId),
+        async () => {
+          if ((await ctx.users.find(tenant.hex, userId)) === null) return false;
+          await refusing(() =>
+            attributeValuesService.save(
+              tenant.id,
+              userId,
+              changesOf(values),
+              { kind: "admin", id: ctx.principal.userId },
+              true,
+            ),
+          );
+          return true;
+        },
       );
+      if (!known) return refuseCommon("NOT_FOUND", "No such user");
       await ctx.audit("user.setAttributes", {
         type: "user",
         id: userId,
