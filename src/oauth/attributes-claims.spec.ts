@@ -28,9 +28,7 @@ const admin = { kind: "admin", id: "admin-1" } as const;
 const label = [{ locale: "en", text: "Label" }];
 const flow = createFlow({ rolesFor, attributesFor });
 
-let tenant = new ObjectId();
-let doctor = new ObjectId();
-let badge = new ObjectId();
+let [tenant, doctor, badge] = [new ObjectId(), new ObjectId(), new ObjectId()];
 
 const tokenOf = async (resource: string | undefined, scope = "read") =>
   decodeJwt(
@@ -165,14 +163,12 @@ describe("the attribute claims of an access token", () => {
 
   test("an attribute with no emission scope, or archived, is never emitted", async () => {
     const claims = await tokenOf(X);
-    expect(claims["quiet"]).toBeUndefined();
-    expect(claims["old"]).toBeUndefined();
+    expect([claims["quiet"], claims["old"]]).toEqual([undefined, undefined]);
   });
 
   test("a role attribute is emitted for its resource only", async () => {
     expect((await tokenOf(X))["licence"]).toBe("L-42");
     expect((await tokenOf(Y))["licence"]).toBeUndefined();
-    // Another resource still gets the user attributes.
     expect((await tokenOf(Y))["nick"]).toBe("bob");
   });
 
@@ -199,7 +195,6 @@ describe("the attribute claims of an access token", () => {
     const claims = decodeJwt(body.access_token ?? "");
     expect(claims["licence"]).toBeUndefined();
     expect(claims["nick"]).toBe("bob");
-    // The role comes back: so does the claim, with its stored value.
     await rolesService.assign(tenant, doctor.toHexString(), USER);
     expect((await tokenOf(X))["licence"]).toBe("L-42");
   });

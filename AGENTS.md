@@ -630,7 +630,7 @@ the token claims, slices A4 and A5 the profile.
   first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
   tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
   social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.
-- **Claims** (slice A6, `AttributeClaimsService` in `services/claims.service.ts`, pure parts in
+- **Claims** (slice A6, `AttributeClaimsService` in `services/claims.service.ts`, which also reads the `resources` collection, pure parts in
   `utils/claims.utils.ts`): the `AttributesFor` port (`src/oauth/ports.ts`, required, bound in
   `src/config/attributes.ts`, passed through `createClavixOAuthIssuers` like `rolesFor`) gives the
   `accessTokens.claims` hook the attribute claims of a user; `accessTokenClaims` (`oauth/building-parts.ts`)
