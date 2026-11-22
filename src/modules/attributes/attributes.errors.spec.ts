@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { extensionCodeOf } from "@/shared/errors";
 import { propertyOf } from "@/shared/values";
-import { codes, refuse, refuseCommon } from "./attributes.errors";
+import { codes } from "./attributes.errors";
+import { refuse, refuseCommon } from "./attributes.refusals";
 
 const thrown = (run: () => never): unknown => {
   try {

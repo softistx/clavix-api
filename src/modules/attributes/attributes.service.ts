@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   ConflictError,
   OptimisticLockError,
@@ -10,7 +11,7 @@ import {
   OIDC_SCOPES,
 } from "@/modules/resources";
 import { isOneOf } from "@/shared/values";
-import { refuse, refuseCommon } from "./attributes.errors";
+import { refuse, refuseCommon } from "./attributes.refusals";
 import {
   checkBehaviour,
   cleanKey,
@@ -186,7 +187,7 @@ export class AttributesService {
     if (found.archivedAt !== null) this.archived();
     if (found.version !== version) refuseCommon("CONFLICT", STALE);
     const fields = await this.nextFields(tenantId, found, input);
-    if (JSON.stringify(fields) === JSON.stringify(fieldsOf(found))) {
+    if (isDeepStrictEqual(fields, fieldsOf(found))) {
       return found;
     }
     await this.checkLocks(tenantId, found, fields);

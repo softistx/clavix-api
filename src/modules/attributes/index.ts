@@ -3,6 +3,5 @@
 // `console/modules/index.ts`; the hosted API has no attributes resolver.
 // `config/attributes.ts` builds the service.
 
-export { codes } from "./attributes.errors";
 export { AttributesService } from "./attributes.service";
 export type { AttributeValues } from "./attributes.types";

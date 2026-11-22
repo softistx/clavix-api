@@ -6,8 +6,8 @@ import {
 } from "@/modules/resources";
 import type { Translation } from "@/shared/translations";
 import { unique } from "@/shared/values";
-import { refuse, refuseCommon } from "./attributes.errors";
 import type { AttributeOption, AttributeType } from "./attributes.model";
+import { refuse, refuseCommon } from "./attributes.refusals";
 import type { AttributeDoc, OptionDraft, Texts } from "./attributes.types";
 
 export const MAX_ATTRIBUTES = 100;
