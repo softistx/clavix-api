@@ -1088,8 +1088,8 @@ roles the user holds then. The `id_token` also carries the `email` and profile c
 `/userinfo`, and each emitted key is listed in the tenant's discovery `claims_supported` (the document is
 cached for a minute, so a new or archived attribute shows there within that time; the tokens follow at
 once). An attribute is emitted under its key when it is not archived, its emission scope is among the
-token's scopes, the user has a value of the attribute's current type and, for a role attribute, a held role that links it is tenant-wide or
-belongs to the resource the token is for (the `id_token` and userinfo have no resource: tenant-wide roles
+token's scopes, the user has a value of the attribute's current type and, for a role attribute, a held
+role that links it is tenant-wide or belongs to the resource the token is for (the `id_token` and userinfo have no resource: tenant-wide roles
 only). A choice is its option key (an array for a multiple choice), a
 date is `YYYY-MM-DD`, a date and time is RFC 3339, numbers and yes/no values are native. A
 `client_credentials` token carries none, and an attribute never overrides `roles` or another reserved
