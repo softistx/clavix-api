@@ -1,4 +1,5 @@
 import { agentClientsService } from "@/config/agent-clients";
+import { attributesService } from "@/config/attributes";
 import { authEventsService } from "@/config/audit";
 import { authService } from "@/config/auth";
 import { brandingService } from "@/config/branding";
@@ -37,6 +38,7 @@ import { webhooksService } from "@/config/webhooks-service";
 export const services = () => ({
   agents: agentClientsService,
   audit: authEventsService,
+  attributes: attributesService,
   auth: authService,
   branding: brandingService,
   clientPolicies: clientPoliciesService,

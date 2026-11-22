@@ -58,7 +58,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - **Cross-module imports go through the owning module's `index.ts`** (A24, A29). Every import of another module is `@/modules/<m>`, and a module's own files import each other relatively, never through their own barrel; a barrel exports only names another module (or its spec) imports. A deep import (`@/modules/<m>/<m>.<role>`) is allowed only for these, each in the module's `index.ts` header:
   - **the registries** load a role file by file so the barrel never loads it: `modules/index.ts` (the hosted `*.resolver.ts`), `console/modules/index.ts` (the `*.console-resolver.ts`), `http/graphql-mount.ts` and `http/schema.ts` (`auth.plugin`, `consent.plugin`, `consent.resolver`), and `modules/collections.ts` (the models registry, keyed as `mongo.db` exposes them);
   - **queues, workers and Redis throttles**, wired by `server.ts`, `config/redis.ts`, `config/redis-limits.ts` and `config/domains-job.ts` (a barrel would load Redis or the worker): `keys.queue`, `keys.worker`, `agents.prune-*`, `audit.retention-*`, `consent.queue`, `domains.recheck-*`, `tenants.purge-*`, `webhooks.secrets-prune-*`, `auth.throttle`, `auth.verification-throttle`, `consent.device-throttle`, `passkeys.throttle` (their limit configs, which the barrel cannot export without closing cycles through `config/redis.ts`);
-  - **leaf files** (one rule, A29): a file that imports no service, resolver or barrel of the app, only packages, `shared/` or other leaves (`.errors`, `.schema`, `.model`, `.challenge`), may be imported by file from another module. Importing one never loads the module's services, so it cannot close a cycle through the barrel. Used by `i18n/codes.ts` (the `.errors` of `auth`, `connections`, `consent`, `invitations`, `mfa`, `passkeys`), `admins.errors.ts` (`invitations.errors`), `auth.service.ts` (`mfa.challenge`), `events/types.ts` (`audit.model`), `tenancy/resolved-tenant.ts` and the tenants model and service (`sign-in-methods.schema`, `oauth-policy.schema`); generated code (`src/generated/`) is exempt, its type imports follow the schema;
+  - **leaf files** (one rule, A29): a file that imports no service, resolver or barrel of the app, only packages, `shared/` or other leaves (`.errors`, `.schema`, `.model`, `.challenge`), may be imported by file from another module. Importing one never loads the module's services, so it cannot close a cycle through the barrel. Used by `i18n/codes.ts` (the `.errors` of `attributes`, `auth`, `connections`, `consent`, `invitations`, `mfa`, `passkeys`; `attributes.errors` holds the codes only, its `refuse` helpers are in `attributes.refusals`), `admins.errors.ts` (`invitations.errors`), `auth.service.ts` (`mfa.challenge`), `events/types.ts` (`audit.model`), `tenancy/resolved-tenant.ts` and the tenants model and service (`sign-in-methods.schema`, `oauth-policy.schema`); generated code (`src/generated/`) is exempt, its type imports follow the schema;
   - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 6 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and the `services` folder (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `keys.reseal.spec.ts` and `test/connections-service.ts` take the connections `services` folder (specs only); `lock-order.spec.ts` takes `users.console-mutations`, a console-resolver part loaded by file like the registry's.
     `scripts/`, `load/` and `package.json` are not modules. Tests import fixtures as `~/<file>` (`test/`), never a relative path to `test/`.
 - **Named exceptions** (owner decisions D1, D2 and D8 of the alignment plan, not the RAR D1/D2 below; each is deliberate, not drift):
@@ -582,6 +582,40 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   wiring.
 - `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
   read a token's content; its request and code-flow steps are in `test/oauth-flow-steps.ts`).
+
+## User attributes (`src/modules/attributes`, with its `attributes.console-*` files; `src/config/attributes.ts`)
+
+A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slice A1; the plan is
+`spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
+purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A2 to A5 add
+the stored values, the role links, the claims and the profile.
+- **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
+  `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
+  and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
+  permanent delete frees it. A tenant has at most 100 attributes (`ATTRIBUTE_LIMIT`; a creation that lost
+  the race is taken back).
+- **Settings.** `family` (`USER` or `ROLE`), `type` (STRING, TEXT, COLOR, NUMBER, DATE, DATETIME, TIME,
+  SELECT, MULTI_SELECT, BOOLEAN), a label and a description as `[{ locale, text }]` lists (at least one
+  label language), a unit, options (SELECT and MULTI_SELECT only, 100 at most), `required` (USER family
+  only), `userEditable`, `unique` (STRING and NUMBER only) and `emissionScope` (a scope of the tenant or a
+  standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
+  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `attributes.rules.ts`.
+- **The stored values are a port, `AttributeValues`** (`attributes.types.ts`), required and bound in
+  `src/config/attributes.ts` (beside the required `clock`, from `config/runtime`, and the read-only `scopes` collection). Until A2 it is `noAttributeValues` (`src/config/no-ops.ts`): every count is 0,
+  so `valueCount` reads 0 and no lock applies. With values, the type is locked
+  (`ATTRIBUTE_TYPE_LOCKED`, checked again after the write), a removed option in use is refused
+  (`ATTRIBUTE_OPTION_IN_USE`), `unique` over duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`), and the
+  permanent delete removes the values first. `UserAttribute.roles` is `[]` until A3.
+- **Updates** send the `version` read (a stale one is `CONFLICT`); nothing is written when nothing
+  changes; an archived attribute is refused (`ATTRIBUTE_ARCHIVED`) until restored. `position` is a
+  gapped number: a move writes one document, and renumbers the family only when two neighbours are too
+  close. Archive and restore are idempotent; the delete needs the archived attribute and its key as
+  `confirmKey` (`ATTRIBUTE_NOT_ARCHIVED`, `ATTRIBUTE_DELETE_UNCONFIRMED`) and is true on a repeat.
+- **Refusals** go through `refuse` / `refuseCommon` (`attributes.refusals.ts`: the helpers and each code's status; `attributes.errors.ts`: the codes);
+  the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
+- **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
+  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`.
 
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)
 
