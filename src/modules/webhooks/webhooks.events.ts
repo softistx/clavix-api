@@ -1,6 +1,6 @@
 import type { UserEvent, UserEventType } from "@softistx/janus";
 import type { WebhookEvent } from "@softistx/janus-webhooks";
-import type { AuthEvent } from "@/events/types";
+import type { AuthEvent, ClavixEvent } from "@/events/types";
 
 // The event catalogue of the webhooks (D22): the 16 user events of janus that
 // Clavix can emit and its `session.signedIn`. `user.apiKeyCreated` and
@@ -95,4 +95,14 @@ export function signedInWebhookEvent(
     occurredAt: event.at ?? now(),
     data: { tenantId: event.tenantId, userId: event.userId },
   };
+}
+
+/** The webhook event a bus event relays, `undefined` when it relays none. */
+export function relayedEventOf(
+  event: ClavixEvent,
+  now: () => Date,
+): ClavixWebhookEvent | undefined {
+  if (event.kind === "webhook") return event.event;
+  if (event.kind === "auth") return signedInWebhookEvent(event, now);
+  return undefined;
 }

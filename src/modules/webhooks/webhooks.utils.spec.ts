@@ -13,7 +13,6 @@ import {
   endpointIdOf,
   queuedEndpoints,
   queueEndpointId,
-  relayedEventOf,
   testEventOf,
   webhookGroupOf,
   webhookQueueLimits,
@@ -178,49 +177,6 @@ describe("attemptRecordOf", () => {
       willRetry: true,
     });
     expect(JSON.stringify(record)).not.toContain("secret.example");
-  });
-});
-
-describe("relayedEventOf", () => {
-  const now = () => new Date("2026-11-22T10:00:00Z");
-
-  test("passes a webhook source event through", () => {
-    const event = testEventOf("t1", "e1", now());
-    expect(
-      relayedEventOf({ kind: "webhook", tenantId: "t1", event }, now),
-    ).toBe(event);
-  });
-
-  test("turns a successful sign-in into session.signedIn", () => {
-    const relayed = relayedEventOf(
-      {
-        kind: "auth",
-        tenantId: "t1",
-        type: "session.signIn",
-        outcome: "success",
-        userId: "u1",
-      },
-      now,
-    );
-    expect(relayed).toMatchObject({
-      type: "session.signedIn",
-      occurredAt: now(),
-      data: { tenantId: "t1", userId: "u1" },
-    });
-  });
-
-  test("relays no other auth event", () => {
-    expect(
-      relayedEventOf(
-        {
-          kind: "auth",
-          tenantId: "t1",
-          type: "session.signIn",
-          outcome: "failure",
-        },
-        now,
-      ),
-    ).toBeUndefined();
   });
 });
 

@@ -778,7 +778,7 @@ comparison is `domains.check.ts`.
 
 A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Layout (A6): `webhooks.model.ts` (both collections), `.errors.ts`, `.rules.ts` (input rules, the roll, `TEST_EVENT_TYPE`, `DISABLE_ACTOR`),
-  `.utils.ts` (the queue names and caps, the relayed and test events), `.types.ts`, `.events.ts`, `.notice.ts`, `.url-policy.ts`, `.delivery.ts`, the secrets-prune
+  `.utils.ts` (the queue names and caps, the endpoint naming, the attempt record, the test event), `.types.ts`, `.events.ts`, `.notice.ts`, `.url-policy.ts`, `.delivery.ts`, the secrets-prune
   files (`.secrets-prune.ts`, `.secrets-prune-queue.ts`, `.secrets-prune-worker.ts`), and `webhooks.service.ts`:
   one service per domain (owner, 2026-11-20) holding the endpoint methods (`listEndpoints`, `createEndpoint`,
   `rollSecret`, `deliveryEndpoints`, `resealSecrets`, `recordDelivered`, `recordGiveUp`, ...) and the attempt

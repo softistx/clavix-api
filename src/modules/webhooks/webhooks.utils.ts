@@ -4,13 +4,8 @@ import type {
   WebhookQueueLimits,
 } from "@softistx/janus-webhooks";
 import type { ObjectId } from "mongodb";
-import type { ClavixEvent } from "@/events/types";
 import type { WebhookEndpointParent } from "./webhooks.console-parent";
-import {
-  type ClavixWebhookEvent,
-  signedInWebhookEvent,
-  type WebhookData,
-} from "./webhooks.events";
+import type { ClavixWebhookEvent, WebhookData } from "./webhooks.events";
 import type { EndpointSecret } from "./webhooks.model";
 import { TEST_EVENT_TYPE } from "./webhooks.rules";
 import type {
@@ -180,16 +175,6 @@ export const attemptRecordOf = (
   delivered: attempt.delivered,
   willRetry: attempt.willRetry,
 });
-
-/** The webhook event a bus event relays, `undefined` when it relays none. */
-export function relayedEventOf(
-  event: ClavixEvent,
-  now: () => Date,
-): ClavixWebhookEvent | undefined {
-  if (event.kind === "webhook") return event.event;
-  if (event.kind === "auth") return signedInWebhookEvent(event, now);
-  return undefined;
-}
 
 /** The `webhook.test` event sent to one endpoint. */
 export function testEventOf(

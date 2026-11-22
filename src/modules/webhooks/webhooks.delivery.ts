@@ -8,14 +8,13 @@ import {
   webhooks,
 } from "@softistx/janus-webhooks";
 import type { ClavixEvent } from "@/events/types";
-import type { ClavixWebhookEvent } from "./webhooks.events";
+import { type ClavixWebhookEvent, relayedEventOf } from "./webhooks.events";
 import { TEST_EVENT_TYPE } from "./webhooks.rules";
 import type { WebhooksService } from "./webhooks.service";
 import {
   attemptRecordOf,
   endpointIdOf,
   queuedEndpoints,
-  relayedEventOf,
   testEventOf,
 } from "./webhooks.utils";
 
