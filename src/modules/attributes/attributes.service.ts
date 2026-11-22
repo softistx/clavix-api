@@ -309,10 +309,7 @@ export class AttributesService {
       written.type,
     );
     if (other === 0) return;
-    await this.own(tenantId).update(written._id, {
-      ...fieldsOf(before),
-      version: written.version,
-    });
+    await this.write(tenantId, written, fieldsOf(before));
     refuse(
       "ATTRIBUTE_TYPE_LOCKED",
       "the type cannot change while users hold a value",

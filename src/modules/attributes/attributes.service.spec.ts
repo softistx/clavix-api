@@ -19,12 +19,16 @@ const held = {
   options: 0,
   duplicates: 0,
   removed: [] as string[],
+  during: async () => {},
 };
 const values: AttributeValues = {
   count: async () => held.count,
   counts: async (_, ids) =>
     new Map(ids.map((id) => [id.toHexString(), held.count])),
-  countOtherType: async () => held.otherType,
+  countOtherType: async () => {
+    await held.during();
+    return held.otherType;
+  },
   countOptions: async () => held.options,
   countDuplicates: async () => held.duplicates,
   removeAll: async (_, id) => {
@@ -43,6 +47,7 @@ const reset = () => {
   held.options = 0;
   held.duplicates = 0;
   held.removed = [];
+  held.during = async () => {};
 };
 
 const code = async (run: () => Promise<unknown>) => {
@@ -302,6 +307,27 @@ describe("attributes catalogue", () => {
       await service.find(tenant, created._id.toHexString()),
     );
     expect(found.type).toBe("STRING");
+  });
+
+  test("a concurrent edit during the type put-back answers CONFLICT, not a raw error", async () => {
+    reset();
+    const created = await make("svc_race_lock");
+    const id = created._id;
+    held.otherType = 1;
+    held.during = async () => {
+      // Another edit lands after the write and before the put-back.
+      await mongo.db.userAttributes.updateOne(
+        { _id: id },
+        { $inc: { version: 1 } },
+      );
+    };
+    expect(
+      await code(() =>
+        service.update(tenant, id.toHexString(), created.version, {
+          type: "TEXT",
+        }),
+      ),
+    ).toBe("CONFLICT");
   });
 
   test("move writes one document, renumbers when the gap is gone, and refuses an archived one", async () => {
