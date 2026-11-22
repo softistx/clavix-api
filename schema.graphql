@@ -658,7 +658,7 @@ type Mutation {
   again. Whether somebody holds the address is not told here. Errors:
   UNAUTHENTICATED (401), STEP_UP_REQUIRED (403), TENANT_SUSPENDED (403),
   BAD_USER_INPUT (400, the address is the current one or is malformed),
-  MAIL_THROTTLED (429, `retryAfter` and `Retry-After`).
+  MAIL_THROTTLED and EMAIL_VERIFICATION_THROTTLED (429, `retryAfter` and `Retry-After`).
   """
   requestEmailChange(email: EmailAddress!): Boolean!
   """
