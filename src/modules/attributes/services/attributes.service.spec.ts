@@ -38,10 +38,16 @@ const values: AttributeValues = {
   },
 };
 const fixed = new Date("2026-01-02T03:04:05.000Z");
+const unlinked: string[] = [];
 const service = new AttributesService({
   attributes: mongo.db.userAttributes,
   scopes: mongo.db.scopes,
   values,
+  roleLinks: {
+    removeForAttribute: async (_, id) => {
+      unlinked.push(id.toHexString());
+    },
+  },
   clock: () => fixed,
 });
 
@@ -52,6 +58,7 @@ const reset = () => {
   held.duplicates = 0;
   held.unique = true;
   held.removed = [];
+  unlinked.length = 0;
   held.during = async () => {};
 };
 
@@ -394,7 +401,7 @@ describe("attributes catalogue", () => {
     expect((await service.restore(tenant, id)).version).toBe(restored.version);
   });
 
-  test("delete needs an archived attribute and its key, removes its values and frees the key; a repeat is true", async () => {
+  test("delete needs an archived attribute and its key, removes its values and role links and frees the key; a repeat is true", async () => {
     reset();
     const created = await make("svc_del");
     const id = created._id.toHexString();
@@ -407,6 +414,7 @@ describe("attributes catalogue", () => {
     );
     expect(await service.delete(tenant, id, "svc_del")).toBe(true);
     expect(held.removed).toEqual([id]);
+    expect(unlinked).toEqual([id]);
     expect(await service.find(tenant, id)).toBeUndefined();
     expect(await service.delete(tenant, id, "svc_del")).toBe(true);
     expect((await make("svc_del")).key).toBe("svc_del");

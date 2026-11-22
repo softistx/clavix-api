@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
-import { attributesService } from "@/config/attributes";
+import { attributesService, roleAttributesService } from "@/config/attributes";
+import { rolesService } from "@/config/roles";
 import type { ConsoleContext } from "@/console/context";
 import { liveTenant, tenantIdOf } from "@/console/modules/ids";
 import type {
@@ -7,13 +8,14 @@ import type {
   CreateUserAttributeInput,
   UpdateUserAttributeInput,
 } from "@/generated/console/resolvers";
+import { roleShape } from "@/modules/roles";
 import type {
   AttributeDoc,
   CreateAttributeInput,
   UpdateAttributeInput,
 } from "./attributes.types";
-import { shape } from "./utils";
-import type { ValueChange } from "./values.types";
+import { type RoleLinkView, shape } from "./utils";
+import type { SaveSection, ValueChange } from "./values.types";
 
 /** The tenant of the call (suspended included; the guard refuses its writes): the id as an ObjectId. */
 export async function tenantOf(ctx: ConsoleContext, given: string) {
@@ -22,16 +24,54 @@ export async function tenantOf(ctx: ConsoleContext, given: string) {
   return { hex, id: new ObjectId(hex) };
 }
 
-/** Several attributes at once: their value counts come from one query. */
-export async function shapes(tenantId: ObjectId, found: AttributeDoc[]) {
-  const counts = await attributesService.valueCounts(tenantId, found);
-  return found.map((attribute) =>
-    shape(attribute, counts.get(attribute._id.toHexString()) ?? 0),
+/**
+ * The roles each role attribute is linked to, by attribute id (hex), as the
+ * console shows them: one query for the links and their roles, one grouped
+ * count for the roles' members.
+ */
+export async function linkViews(
+  tenantId: ObjectId,
+  found: readonly AttributeDoc[],
+): Promise<Map<string, RoleLinkView[]>> {
+  const linked = await roleAttributesService.linksOf(tenantId, found);
+  const roles = new Map(
+    [...linked.values()]
+      .flat()
+      .map((link) => [link.role._id.toHexString(), link.role]),
+  );
+  const counts = await rolesService.memberCounts(tenantId, [...roles.values()]);
+  return new Map(
+    [...linked].map(([attributeId, links]) => [
+      attributeId,
+      links.map(({ role, required }) => ({
+        role: roleShape(role, counts.get(role._id.toHexString()) ?? 0),
+        required,
+      })),
+    ]),
   );
 }
 
-export const shapeOne = async (tenantId: ObjectId, attribute: AttributeDoc) =>
-  shape(attribute, await attributesService.valueCount(tenantId, attribute));
+/** Several attributes at once: their value counts and role links come from one query each. */
+export async function shapes(tenantId: ObjectId, found: AttributeDoc[]) {
+  const counts = await attributesService.valueCounts(tenantId, found);
+  const links = await linkViews(tenantId, found);
+  return found.map((attribute) =>
+    shape(
+      attribute,
+      counts.get(attribute._id.toHexString()) ?? 0,
+      links.get(attribute._id.toHexString()) ?? [],
+    ),
+  );
+}
+
+export async function shapeOne(tenantId: ObjectId, attribute: AttributeDoc) {
+  const links = await linkViews(tenantId, [attribute]);
+  return shape(
+    attribute,
+    await attributesService.valueCount(tenantId, attribute),
+    links.get(attribute._id.toHexString()) ?? [],
+  );
+}
 
 const orUndefined = <T>(value: T | null | undefined): T | undefined =>
   value ?? undefined;
@@ -79,3 +119,19 @@ export const changesOf = (
     attributeId,
     value: value ?? null,
   }));
+
+/**
+ * The section a save is about: the general one, or a role's, checked held
+ * (`ATTRIBUTE_ROLE_NOT_HELD`) with the role's links. Called under the user's lock.
+ */
+export async function sectionOf(
+  tenantId: ObjectId,
+  userId: string,
+  roleId: string | null | undefined,
+): Promise<SaveSection> {
+  if (roleId === null || roleId === undefined) return { family: "USER" };
+  return {
+    family: "ROLE",
+    links: await roleAttributesService.linksHeld(tenantId, userId, roleId),
+  };
+}

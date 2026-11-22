@@ -614,7 +614,7 @@ the role links, the claims and the profile.
   counts, `setUnique`, `removeAll`). With values, the type is locked (`ATTRIBUTE_TYPE_LOCKED`, checked
   again after the write), a removed option in use is refused (`ATTRIBUTE_OPTION_IN_USE`), `unique` over
   duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`; the flag is put back), and the permanent delete removes
-  the values first. `UserAttribute.roles` is `[]` until A3.
+  the values and the role links first. `UserAttribute.roles` lists the roles a ROLE attribute is linked to.
 - **Values** (`rules/values.rules.ts`, `utils/values.utils.ts`): a value is exactly the one typed field of its
   attribute (`text` for STRING and TEXT, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`,
   `time`, `options` for SELECT and MULTI_SELECT; the SDL input is `@oneOf`), canonicalised on write
@@ -623,12 +623,29 @@ the role links, the claims and the profile.
   Refusals: `ATTRIBUTE_VALUE_INVALID` (field `values.<i>`), `ATTRIBUTE_FAMILY_MISMATCH`,
   `ATTRIBUTE_VALUE_TAKEN` (a race on the unique index is rolled back by hand: no transactions),
   `ATTRIBUTE_REQUIRED` (the console refuses a clear of a required value; `TenantUser.attributesComplete`
-  reports the rest), `ATTRIBUTE_ROLE_NOT_HELD` (a `roleId` section, until A3). A save checks every change
+  reports the rest), `ATTRIBUTE_ROLE_NOT_HELD` (`section.roleId` names a role the user does not hold, or an unknown one). A save checks every change
   first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
   tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
   social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.
+- **Role attributes** (slice A3): the tenant-owned collection `roleAttributes` (`{tenantId, roleId,
+  attributeId, required}`, unique on the three ids, purged with the tenant) links a ROLE-family attribute
+  to one precise role, `required` for that role only. `RoleAttributesService`
+  (`services/role-attributes.service.ts`, built first in `src/config/attributes.ts`, it reads `roles` and
+  `roleAssignments` read-only) assigns (idempotent: a repeat sets `required`; a user-family attribute is
+  `ATTRIBUTE_FAMILY_MISMATCH`, an archived one `ATTRIBUTE_ARCHIVED`), updates, unassigns, and answers the
+  reads. A value is one per user and attribute, shared by every role that links it. **Hiding is computed,
+  never written**: `unassignRole`, `deleteRole` and an unassigned link delete nothing; a role section
+  shows only while a held role links the attribute, and the export flags the value `hidden` with
+  `roles` naming the held roles that link it. A `roleId` save reads the role's links under the user's
+  lock (`linksHeld`) and refuses an attribute the role does not link (`ATTRIBUTE_FAMILY_MISMATCH`); the
+  required flag is the link's. `assignRoleAttribute` re-checks the role and attribute after its write and
+  takes the link back when either is gone (a race with `deleteRole` or the permanent delete); `deleteRole`
+  (and the roles of a deleted resource) and the permanent attribute delete sweep their links through the
+  `RoleLinks` and `AttributeRoleLinks` ports.
 - **Console**: `setUserAttributeValues` (`edit`, audit `user.setAttributes`, under the user's lock only, rank
-  2 of `lock-order.spec.ts`), `TenantUser.attributes` and `attributesComplete` (per-request loaders in
+  2 of `lock-order.spec.ts`), `assignRoleAttribute`, `updateRoleAttribute` and `unassignRoleAttribute` (`edit`,
+  audit `roleAttribute.assign|update|unassign`, ids only, on the role and on the attribute; no lock: each
+  is idempotent and the race is closed inside the service), `TenantUser.attributes` and `attributesComplete` (per-request loaders in
   `attributes.data-loader.ts`), and `userDataExport` (`users.export.ts`, `edit`, recorded as `user.export`
   by an explicit `ctx.audit`, since `Audits` covers mutations only).
 - **Personal data (GDPR)**: the export holds the profile, every stored value (an archived attribute's or a
@@ -643,7 +660,7 @@ the role links, the claims and the profile.
 - **Refusals** go through `refuse` / `refuseCommon` (`attributes.refusals.ts`: the helpers and each code's status; `attributes.errors.ts`: the codes);
   the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
 - **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
-  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`, and on a user
+  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`, `roleAttribute.assign`, `.update`, `.unassign`, and on a user
   `user.setAttributes` and `user.export` (never a value).
 
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)

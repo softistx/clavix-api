@@ -8,6 +8,7 @@ import {
   MIN_GAP,
   positionAfter,
   positionAt,
+  roleTarget,
   STEP,
   shape,
   target,
@@ -69,9 +70,9 @@ describe("positions", () => {
 });
 
 describe("views", () => {
-  test("shape shows the attribute with its count and the role seam", () => {
+  test("shape shows the attribute with its count and its role links", () => {
     const attribute = stored("size", 1000);
-    expect(shape(attribute, 4)).toEqual({
+    expect(shape(attribute, 4, [])).toEqual({
       id: attribute._id.toHexString(),
       key: "size",
       family: "USER",
@@ -90,7 +91,8 @@ describe("views", () => {
       version: 3,
     });
     expect(
-      shape({ ...attribute, emission: { scope: "profile" } }, 0).emissionScope,
+      shape({ ...attribute, emission: { scope: "profile" } }, 0, [])
+        .emissionScope,
     ).toBe("profile");
   });
 
@@ -98,6 +100,11 @@ describe("views", () => {
     expect(target("a", "t")).toEqual({
       type: "userAttribute",
       id: "a",
+      tenantId: "t",
+    });
+    expect(roleTarget("r", "t")).toEqual({
+      type: "role",
+      id: "r",
       tenantId: "t",
     });
     const attribute = stored("x", 1);

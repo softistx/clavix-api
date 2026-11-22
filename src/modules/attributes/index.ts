@@ -7,5 +7,9 @@
 // `i18n/codes.ts`) and `attributes.console-resolver` (read by
 // `console/modules/lock-order.spec.ts`).
 
-export { AttributesService, AttributeValuesService } from "./services";
+export {
+  AttributesService,
+  AttributeValuesService,
+  RoleAttributesService,
+} from "./services";
 export { exportedView } from "./utils";

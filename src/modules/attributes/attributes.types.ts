@@ -1,14 +1,45 @@
 import type { NewOf, ReadDocumentOf, TypedCollection } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
 import type { scopes } from "@/modules/resources";
+import type { RoleDoc } from "@/modules/roles";
 import type { Translation } from "@/shared/translations";
 import type {
   AttributeFamily,
   AttributeType,
+  roleAttributes,
   userAttributes,
 } from "./attributes.model";
 
 export type AttributeDoc = ReadDocumentOf<typeof userAttributes>;
+export type RoleAttributeDoc = ReadDocumentOf<typeof roleAttributes>;
+
+/**
+ * What the catalogue asks of the role links (slice A3): they go with the
+ * attribute's permanent delete. Required and bound in `src/config/attributes.ts`
+ * to `RoleAttributesService`.
+ */
+export interface AttributeRoleLinks {
+  /** Removes every role link of the attribute. Idempotent. */
+  removeForAttribute(tenantId: ObjectId, attributeId: ObjectId): Promise<void>;
+}
+
+/** What the values ask of the role links: which attributes the roles a user holds link, for the export's hiding. */
+export interface HeldRoleLinks {
+  /** The roles the user holds that are linked to each attribute, by attribute id (hex); every link counts, archived attributes included. */
+  heldBy(tenantId: ObjectId, userId: string): Promise<Map<string, RoleDoc[]>>;
+}
+
+/** One role of a user and the live role attributes it links, by position. */
+export interface RoleSection {
+  role: RoleDoc;
+  items: { attribute: AttributeDoc; required: boolean }[];
+}
+
+/** One role link of an attribute, with its role. */
+export interface RoleLink {
+  role: RoleDoc;
+  required: boolean;
+}
 
 /**
  * What the catalogue asks of the stored values (slice A2 owns them): how many
@@ -57,6 +88,8 @@ export interface AttributesOptions {
   /** Read only: an emission names a scope of the tenant. */
   scopes: TypedCollection<typeof scopes>;
   values: AttributeValues;
+  /** The role links, cleared with a permanent delete. */
+  roleLinks: AttributeRoleLinks;
   /** The process's clock, passed in (never read from the system here). */
   clock: () => Date;
 }

@@ -24,6 +24,7 @@ afterAll(async () => {
     await mongo.db.roles.raw.deleteMany({ tenantId });
     await mongo.db.roleAssignments.raw.deleteMany({ tenantId });
     await mongo.db.resources.raw.deleteMany({ tenantId });
+    await mongo.db.roleAttributes.raw.deleteMany({ tenantId });
   }
 });
 
@@ -150,7 +151,18 @@ describe("roles", () => {
     ).toEqual(["svc-scoped", "svc-wide"]);
     expect(await rolesService.claimRoles(tenant, "nobody", null)).toEqual([]);
     // Deleting the resource's roles removes the scoped one and its assignment.
+    const link = await scopeToTenant(mongo.db.roleAttributes, tenant).create({
+      roleId: scoped._id,
+      attributeId: new ObjectId(),
+      required: false,
+    });
     const removed = await rolesService.deleteForResource(tenant, resource._id);
+    // The role's attribute links go with it.
+    expect(
+      await mongo.db.roleAttributes.raw.countDocuments({
+        _id: link._id,
+      }),
+    ).toBe(0);
     expect(removed.map((r) => r.name)).toEqual(["svc-scoped"]);
     expect(
       await rolesService.claimRoles(

@@ -198,9 +198,8 @@ enum AttributeFamily {
 }
 
 """
-Which section a save is about: `roleId` null for the general section. A role
-section needs the role links (a later release): a `roleId` is refused with
-ATTRIBUTE_ROLE_NOT_HELD until then.
+Which section a save is about: `roleId` null for the general section, else the
+role whose section is saved (the user must hold it).
 """
 input AttributeSectionInput {
   roleId: ID
@@ -1023,7 +1022,7 @@ type ExportedAttributeValue {
   date: Date
   dateTime: DateTime
   """
-  True when the user does not see the value (its attribute is archived, or its type changed).
+  True when the user does not see the value (its attribute is archived, its type changed, or no role the user holds links it).
   """
   hidden: Boolean!
   key: String!
@@ -1031,7 +1030,7 @@ type ExportedAttributeValue {
   number: Float
   options: [String!] @listSize(assumedSize: 20, requireOneSlicingArgument: false)
   """
-  The names of the roles whose section holds the attribute; empty for the general section.
+  The names of the held roles whose section holds the attribute; empty for the general section.
   """
   roles: [String!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
   text: String
@@ -1214,6 +1213,13 @@ type Mutation {
   already holds it. Errors: NOT_FOUND for an unknown role or user.
   """
   assignRole(roleId: ID!, tenantId: ID!, userId: ID!): Boolean!
+  """
+  Links a role-family attribute to one role, `required` for that role only
+  (tenant admin), and returns the attribute. Idempotent: a repeat sets
+  `required`. Errors: NOT_FOUND (role or attribute), ATTRIBUTE_FAMILY_MISMATCH
+  (400, a user-family attribute) and ATTRIBUTE_ARCHIVED (409).
+  """
+  assignRoleAttribute(attributeId: ID!, required: Boolean = false, roleId: ID!, tenantId: ID!): UserAttribute!
   """
   Gives a member another role (tenant owner). Idempotent. Errors: NOT_FOUND for
   a user who is not a member, LAST_OWNER (409) when it would leave the tenant
@@ -1476,11 +1482,13 @@ type Mutation {
   """
   Sets and clears a user's values in one section (tenant admin) and returns
   the sections as they stand. A bad value writes nothing. Required attributes
-  cannot be cleared here. Errors: NOT_FOUND (user, or attribute at
-  `values.<i>`), ATTRIBUTE_ARCHIVED, ATTRIBUTE_FAMILY_MISMATCH,
+  (the role link's flag in a role section) cannot be cleared here. Errors:
+  NOT_FOUND (user, or attribute at `values.<i>`), ATTRIBUTE_ARCHIVED,
+  ATTRIBUTE_FAMILY_MISMATCH (400, field `values.<i>`: a role attribute in the
+  general section, a user attribute or one not linked to the role in a role's),
   ATTRIBUTE_VALUE_INVALID (400, field `values.<i>`), ATTRIBUTE_REQUIRED (400),
   ATTRIBUTE_VALUE_TAKEN (409, a `unique` attribute) and ATTRIBUTE_ROLE_NOT_HELD
-  (409, a `roleId` is given).
+  (409, field `section.roleId`: the user does not hold the role).
   """
   setUserAttributeValues(section: AttributeSectionInput!, tenantId: ID!, userId: ID!, values: [AttributeValueInput!]!): UserAttributeSections!
   """
@@ -1498,6 +1506,11 @@ type Mutation {
   Takes the role from the user (tenant admin). True when it was held, false on a repeat.
   """
   unassignRole(roleId: ID!, tenantId: ID!, userId: ID!): Boolean!
+  """
+  Removes the link (tenant admin); `true` when there was one. The users' values
+  stay stored and hidden: nothing else is written. Idempotent.
+  """
+  unassignRoleAttribute(attributeId: ID!, roleId: ID!, tenantId: ID!): Boolean!
   """
   Sets the tenant's brand. Needs `edit` on the tenant. A theme that fails AA
   is refused with BRANDING_CONTRAST (422, `extensions.failures`); a bad value
@@ -1542,6 +1555,10 @@ type Mutation {
   Changes a role's name or description (tenant admin). Errors: NOT_FOUND, CONFLICT, BAD_USER_INPUT, ROLE_MANAGED (403) for a managed role.
   """
   updateRole(id: ID!, input: UpdateRoleInput!, tenantId: ID!): TenantRole!
+  """
+  Changes the `required` flag of a link (tenant admin) and returns the attribute. Errors: NOT_FOUND (role, attribute, or no such link).
+  """
+  updateRoleAttribute(attributeId: ID!, required: Boolean!, roleId: ID!, tenantId: ID!): UserAttribute!
   updateScope(id: ID!, input: UpdateScopeInput!, tenantId: ID!): Scope!
   """
   Turns methods on or off; a type left out keeps its value. Needs edit on the
@@ -1986,16 +2003,23 @@ enum Role {
 }
 
 """
-The link between an attribute and a role (family `ROLE` attributes): a user
-holds the attribute when it holds the role. Always empty until the role links
-ship.
+The link between a role-family attribute and one precise role (a role is per
+tenant and per resource): a user shows the attribute while it holds the role.
+`required` is this role's own flag: a console save cannot clear the value in
+the role's section. Removing the role (or the link) hides the values without
+deleting them; they show again when the link comes back.
 """
 type RoleAttributeLink {
   required: Boolean!
   role: TenantRole!
 }
 
-"""The values of one role's attributes, for a user who holds the role."""
+"""
+The values of one role's attributes, for a user who holds the role. Each
+attribute's `required` is the role link's. One value per user and attribute
+whatever the number of roles: two roles that link the same attribute show the
+same value.
+"""
 type RoleAttributeSection {
   role: TenantRole!
   values: [AttributeValue!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
@@ -2533,7 +2557,9 @@ type UserAttribute {
   """
   options: [UserAttributeOption!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
   required: Boolean!
-  """The roles the attribute is linked to (family `ROLE`)."""
+  """
+  The roles the attribute is linked to (family `ROLE`), by role name; empty for a user attribute.
+  """
   roles: [RoleAttributeLink!]! @listSize(assumedSize: 10, requireOneSlicingArgument: false)
   type: AttributeType!
   """Whether two users may not hold the same value. Only STRING and NUMBER."""
@@ -2568,8 +2594,9 @@ input UserAttributeOptionInput {
 
 """
 What a user holds, by section: `general` is every live attribute of family
-`USER`, by position; `roles` has one section per held role that is linked to
-attributes (empty until the role links ship).
+`USER`, by position; `roles` has one section per held role (by name) that is
+linked to live attributes. The values of an archived attribute, of a role no
+longer held or whose link was removed are not shown (they stay stored).
 """
 type UserAttributeSections {
   general: [AttributeValue!]! @listSize(assumedSize: 100, requireOneSlicingArgument: false)

@@ -1,7 +1,12 @@
 import type { AttributeType, StoredValue } from "../attributes.model";
 import type { AttributeDoc } from "../attributes.types";
-import type { ExportedValue, ShownValue, ValueDoc } from "../values.types";
-import { shape } from "./attributes.utils";
+import type {
+  ExportedValue,
+  SaveSection,
+  ShownValue,
+  ValueDoc,
+} from "../values.types";
+import { type RoleLinkView, shape } from "./attributes.utils";
 
 const NONE = {
   text: null,
@@ -17,6 +22,15 @@ const NONE = {
 /** A stored value matches its attribute while the type it was written under is the attribute's (risk 3). */
 export const matches = (value: ValueDoc, attribute: AttributeDoc): boolean =>
   value.type === attribute.type;
+
+/** Whether a save may not clear the attribute: its own flag in the general section, the link's in a role's. */
+export const isRequired = (
+  attribute: AttributeDoc,
+  section: SaveSection,
+): boolean =>
+  section.family === "ROLE"
+    ? (section.links.get(attribute._id.toHexString()) ?? false)
+    : attribute.required;
 
 /** The stored values grouped by user id. */
 export function byUser(found: readonly ValueDoc[]): Map<string, ValueDoc[]> {
@@ -79,9 +93,10 @@ export function attributeValueView(
   attribute: AttributeDoc,
   valueCount: number,
   value: ValueDoc | undefined,
+  roles: readonly RoleLinkView[],
 ) {
   const { attributeId: _, ...fields } = shown(attribute, value);
-  return { attribute: shape(attribute, valueCount), ...fields };
+  return { attribute: shape(attribute, valueCount, roles), ...fields };
 }
 
 /** An exported value as the console's `ExportedAttributeValue`. */
@@ -93,3 +108,22 @@ export const exportedView = (item: ExportedValue) => ({
   updatedAt: item.updatedAt,
   ...valueFields(item.type, item.value),
 });
+
+/**
+ * One attribute of a section for a user: the stored value among `held` (the
+ * user's values) of the attribute, with the `required` the section gives it
+ * (the attribute's own in the general section, the link's in a role's).
+ */
+export const sectionValueView = (
+  attribute: AttributeDoc,
+  required: boolean,
+  valueCount: number,
+  held: readonly ValueDoc[] | undefined,
+  roles: readonly RoleLinkView[],
+) =>
+  attributeValueView(
+    { ...attribute, required },
+    valueCount,
+    held?.find((v) => v.attributeId.equals(attribute._id)),
+    roles,
+  );
