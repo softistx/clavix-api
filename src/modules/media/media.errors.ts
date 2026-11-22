@@ -31,6 +31,8 @@ interface Refusal {
   readonly code: ErrorCode;
   readonly status: AnswerStatus;
   readonly message: string;
+  /** The profile field a refusal names, in the error's extensions. */
+  readonly field?: string;
 }
 
 // Each way the routes turn a request away, as the API's own code (the media
@@ -48,6 +50,7 @@ const REFUSALS: ReadonlyMap<string, Refusal> = new Map([
       code: "PROFILE_FIELD_LOCKED",
       status: 403,
       message: PICTURE_LOCKED_MESSAGE,
+      field: "PICTURE",
     },
   ],
   ["not_found", { code: "NOT_FOUND", status: 404, message: "No such file" }],
@@ -105,11 +108,19 @@ const MALFORMED: Refusal = {
 
 /** What a media refusal is answered with: the API's own `{ errors }` body, never cached, `Retry-After` for a throttle. */
 export function answerOf(refusal: MediaRefusal) {
-  const { code, status, message } = REFUSALS.get(refusal.code) ?? MALFORMED;
+  const { code, status, message, field } =
+    REFUSALS.get(refusal.code) ?? MALFORMED;
   const retryAfter = refusal.details.retryAfter;
   return {
     status,
-    body: { errors: [{ message, extensions: { code } }] },
+    body: {
+      errors: [
+        {
+          message,
+          extensions: field === undefined ? { code } : { code, field },
+        },
+      ],
+    },
     headers: {
       "cache-control": "no-store",
       ...(retryAfter === undefined

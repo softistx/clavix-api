@@ -145,7 +145,9 @@ suite("/media/avatar over S3", () => {
     const own = await put(appOver({ pictureLocked: true }).app, PNG);
     expect(own.status).toBe(403);
     expect(await own.json()).toMatchObject({
-      errors: [{ extensions: { code: "PROFILE_FIELD_LOCKED" } }],
+      errors: [
+        { extensions: { code: "PROFILE_FIELD_LOCKED", field: "PICTURE" } },
+      ],
     });
     expect((await objects()).length).toBe(before);
     const admin = await put(
