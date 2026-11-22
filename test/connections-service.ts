@@ -19,13 +19,20 @@ export const connectionsHarness = () => {
     crypto.getRandomValues(new Uint8Array(32)),
     "connection-secrets",
   );
-  const state = {
+  const state: {
+    clock: Date;
+    txt: TxtAnswer;
+    linked: number;
+    asked: string[];
+    logged: string[];
+    advertised: Map<string, boolean | Error>;
+  } = {
     clock: new Date("2026-11-18T12:00:00Z"),
-    txt: { kind: "none" } as TxtAnswer,
+    txt: { kind: "none" },
     linked: 0,
-    asked: [] as string[],
-    logged: [] as string[],
-    advertised: new Map<string, boolean | Error>(),
+    asked: [],
+    logged: [],
+    advertised: new Map(),
   };
   const service = new ConnectionsService(collection, box, {
     txt: {

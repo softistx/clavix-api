@@ -33,7 +33,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - **Modules**: `src/modules/<m>/` holds one subject, both faces (hosted and console), in
   `<m>.<role>.ts` files (each when the module needs it): `<m>.graphqls`, `<m>.model.ts`, `<m>.errors.ts` (+ spec),
   `<m>.rules.ts`, `<m>.utils.ts` (the shapes, input mapping and every helper of the module), ONE `<m>.service.ts` per domain
-  (no split by action; it may pass 250 lines, but a method stays under 50 lines), resolvers
+  (no split by action; it may pass 250 lines, but a method stays under 50 lines; a module whose service would pass the 250-line file cap may split it by part into `services/` behind one factory service and its helpers into `utils/`, as connections does, #368), resolvers
   `<m>.resolver.ts` split `-queries` / `-mutations` / `-support` / `-guards` when they grow, `<m>.data-loader.ts`,
   and `index.ts`, the only entry other modules import. Other files stay under 250 lines, a function under 80. No helper function at the top of a
   service, resolver or data-loader (it goes to `<m>.utils.ts`). Ports and clocks are passed
