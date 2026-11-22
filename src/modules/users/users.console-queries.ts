@@ -2,7 +2,7 @@ import { JanusError } from "@softistx/janus";
 import { idArg, liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { badInput } from "@/shared/errors";
-import { filteredUsers } from "./users.console-filter";
+import { filteredUsers } from "./users.console-support";
 import { userDataExport } from "./users.export";
 import { grantShape, shape, target } from "./users.utils";
 
