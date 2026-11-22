@@ -4,9 +4,9 @@ import {
   type OidcScopeClaims,
   type OidcSubject,
 } from "@softistx/janus-oidc";
+import { RESERVED_CLAIMS } from "@/modules/attributes";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { SUPPORTED_ACR } from "./authentication-level";
-import { omitReserved } from "./building-parts";
 import type {
   AttributeScopesFor,
   AttributesFor,
@@ -43,6 +43,14 @@ async function withExtras(
   return { ...omitReserved(attributes), ...own, roles };
 }
 
+const RESERVED: ReadonlySet<string> = new Set(RESERVED_CLAIMS);
+
+/** The claims without the names an attribute may never take (a catalogue refuses them at creation; this keeps a token valid whatever the data). */
+const omitReserved = (claims: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(claims).filter(([name]) => !RESERVED.has(name)),
+  );
+
 /** `openid` releases nothing else (`sub` aside), so roles go with every OpenID Connect token. */
 const BASE_SCOPE_CLAIMS: OidcScopeClaims = { openid: ["roles"] };
 
@@ -51,7 +59,8 @@ export function scopeClaimsOf(
   attributes: Readonly<Record<string, readonly string[]>>,
 ): OidcScopeClaims {
   const table: Record<string, readonly string[]> = { ...BASE_SCOPE_CLAIMS };
-  for (const [scope, keys] of Object.entries(attributes)) {
+  for (const [scope, listed] of Object.entries(attributes)) {
+    const keys = listed.filter((key) => !RESERVED.has(key));
     table[scope] = [...new Set([...(table[scope] ?? []), ...keys])];
   }
   return table;

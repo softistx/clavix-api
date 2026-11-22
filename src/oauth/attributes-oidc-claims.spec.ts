@@ -28,6 +28,17 @@ const admin = { kind: "admin", id: "admin-1" } as const;
 const label = [{ locale: "en", text: "Label" }];
 const flow = createFlow({ rolesFor, attributesFor, attributeScopesFor });
 
+// A catalogue that drifted: it hands over names the server owns.
+const drifted = createFlow({
+  rolesFor,
+  attributesFor: () => async () => ({
+    roles: ["evil"],
+    email: "evil@attrs.test",
+    nonce: "evil",
+  }),
+  attributeScopesFor,
+});
+
 let tenant = new ObjectId();
 
 const create = (
@@ -62,6 +73,7 @@ const stringsOf = (document: Record<string, unknown>, key: string) =>
   parsed(z.array(z.string()), document[key]);
 
 beforeAll(async () => {
+  await drifted.setUp("attrs-drift", []);
   tenant = new ObjectId((await flow.setUp(SLUG, [API])).tenantId);
   await save((await create("nick"))._id, "bob", USER);
   await save((await create("quiet", "USER", null))._id, "hidden", USER);
@@ -181,6 +193,26 @@ describe("the attribute claims of the id_token and userinfo", () => {
       userId: RESOURCE_USER,
     });
     expect(decodeJwt(tokens.id_token ?? "")["badge"]).toBeUndefined();
+  });
+});
+
+describe("a claim the server owns", () => {
+  test("is never overridden by an attribute in the id_token or userinfo", async () => {
+    const tokens = await drifted.tokensOf("attrs-drift", `openid ${SCOPE}`, {
+      userId: USER,
+    });
+    const claims = decodeJwt(tokens.id_token ?? "");
+    expect(claims["roles"]).toEqual([]);
+    expect(claims["nonce"]).not.toBe("evil");
+    expect(claims["email"]).not.toBe("evil@attrs.test");
+    const response = await drifted.get(
+      "attrs-drift",
+      "/userinfo",
+      `Bearer ${tokens.access_token}`,
+    );
+    const body = await jsonOf(response, recordBody);
+    expect(body["roles"]).toEqual([]);
+    expect(body["email"]).not.toBe("evil@attrs.test");
   });
 });
 

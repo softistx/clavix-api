@@ -16,6 +16,13 @@ describe("scopeClaimsOf", () => {
     });
   });
 
+  test("a reserved claim name is never released by an attribute scope", () => {
+    expect(scopeClaimsOf({ read: ["nonce", "email", "nick"] })).toEqual({
+      openid: ["roles"],
+      read: ["nick"],
+    });
+  });
+
   test("a tenant with no attribute scope keeps the base table", () => {
     expect(scopeClaimsOf({})).toEqual({ openid: ["roles"] });
   });

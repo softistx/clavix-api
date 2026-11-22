@@ -79,7 +79,7 @@ const grantClaims = ({
 const RESERVED: ReadonlySet<string> = new Set(RESERVED_ACCESS_TOKEN_CLAIMS);
 
 /** The claims without the names the server owns (a catalogue refuses them at creation; this keeps a token valid whatever the data). */
-export const omitReserved = (claims: Record<string, unknown>) =>
+const omitReserved = (claims: Record<string, unknown>) =>
   Object.fromEntries(
     Object.entries(claims).filter(([name]) => !RESERVED.has(name)),
   );

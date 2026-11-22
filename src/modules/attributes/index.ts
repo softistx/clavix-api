@@ -7,6 +7,7 @@
 // `i18n/codes.ts`) and `attributes.console-resolver` (read by
 // `console/modules/lock-order.spec.ts`).
 
+export { RESERVED_CLAIMS } from "./rules";
 export {
   AttributeClaimsService,
   AttributesService,
