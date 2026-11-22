@@ -41,6 +41,8 @@ export const REDIRECT = "https://app.example/callback";
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
 interface FlowOptions {
+  /** The user's own claims (the user's e-mail by default). */
+  claimsFor?: ClaimsFor;
   rolesFor?: RolesFor;
   attributesFor?: AttributesFor;
   attributeScopesFor?: AttributeScopesFor;
@@ -89,7 +91,7 @@ function issuersOf(
     db: oauthDb,
     signingKeysFor,
     authFor,
-    claimsFor,
+    claimsFor: options.claimsFor ?? claimsFor,
     resourcesFor,
     exchangeRulesFor,
     agentCheckFor,
