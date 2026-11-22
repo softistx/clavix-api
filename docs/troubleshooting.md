@@ -900,7 +900,7 @@ passkeys off, and `PASSKEY_THROTTLED` (429) that the address or tenant is over t
 
 **`/authorize` or `/par` with a metadata-document `client_id`**: 429 `temporarily_unavailable` past `CLAVIX_METADATA_IP_LIMIT` or `CLAVIX_METADATA_TENANT_LIMIT` (wait `Retry-After`); 403 `access_denied` when the tenant is at its `agents` quota and the client is not recorded yet. **A metadata document on a non-standard port is refused** (`port_not_allowed` in the server logs only): the `client_id` URL names a port outside `CLAVIX_METADATA_PORTS` (default `443`, a URL without a port is on 443); serve the document on 443, or list the port.
 
-**An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` or `METADATA` agent recorded more than 7 days ago that holds no standing grant (admin event `agent.prune`, actor `system:agents:prune`). The client registers again if it needs to. A `METADATA` agent is recorded again at its next use. The job runs only with `REDIS_URL`.
+**An agent disappeared from the console**: the daily clean-up deletes a `DYNAMIC` or `METADATA` agent that holds no standing grant, 7 days after it was recorded, or 24 hours when it never had a grant (admin event `agent.prune`, actor `system:agents:prune`). A client that waits more than a day before its first authorization registers again. A `METADATA` agent is recorded again at its next use. The job runs only with `REDIS_URL`.
 
 **`updateClient`, `rotateClientSecret` or `setClientTokenExchange` answers `NOT_FOUND` on an agent**: an agent, `DYNAMIC` (it registered itself) or `METADATA` (described by its document), is read-only in the console, whatever its id looks like; only `client`, `clients` and `deleteClient` apply to it. To change one, register a console client instead.
 
