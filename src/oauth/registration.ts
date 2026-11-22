@@ -5,7 +5,7 @@ import {
   type OAuthRegistration,
   redirectUriProblem,
 } from "@softistx/janus-oauth";
-import type { AgentsPolicy } from "@/modules/oauth-policy";
+import { type AgentsPolicy, wildcardOverSuffix } from "@/modules/oauth-policy";
 import { unique } from "@/shared/values";
 
 /**
@@ -53,7 +53,9 @@ export function registrationOf(
       ? {
           allowHosts: unique([
             ...MCP_METADATA_DOCUMENT_HOSTS,
-            ...agents.allowHosts,
+            // A wildcard over a public suffix stored before the console refused
+            // it is not honoured either.
+            ...agents.allowHosts.filter((host) => !wildcardOverSuffix(host)),
           ]),
           // The document's URL names the port the server connects to, and an
           // anonymous caller chose it (janus-oauth 0.26): the HTTPS port only.

@@ -314,6 +314,25 @@ reload Caddy with the new file, or the path never reaches the api.
 limited by its own pair of buckets (tenants with `metadataDocuments` on only). Only the MCP hosts and the tenant's
 `allowHosts` are fetched.
 
+**Metadata documents: what pins the fetch, and what is left.** The fetch is janus-oauth's own (`createClientMetadataFetcher`,
+no transport of ours): the host is resolved once, every address must be public unicast (loopback, private, link-local,
+unique-local, multicast and the other non-public ranges, v4 and v6, are refused, a host written as an IP literal is checked the same way, and local-use names are refused), and
+the connection goes to one of those checked addresses with the name kept for SNI, the certificate and `Host`. The name is
+not resolved a second time, so a host that answers with a public address for the check and a private one for the
+connection (DNS rebinding) is not reached. A redirect is refused, the port is 443, the body is capped (5 KB) and the whole
+fetch is timed (3 s). A wildcard `allowHosts` entry over a public suffix (`*.co.uk`, `*.github.io`) is refused in the
+console and ignored if it was stored before.
+
+Residual risks, none of them closed by code here:
+- The check trusts the host's system resolver. A poisoned or hostile resolver can choose which public address a name gets;
+  it cannot make the fetch reach a private one.
+- Public means "not in the ranges janus-oauth lists". A range reserved later is allowed until janus-oauth lists it
+  (bump `@softistx/janus-oauth`).
+- An allowed host serves what it likes within the 5 KB cap: allow only hosts the tenant trusts, and prefer exact names to
+  a wildcard.
+- For defence in depth the API's network egress should itself refuse the private, loopback and link-local ranges (and the
+  cloud metadata address `169.254.169.254`), so one missed range is still not reachable.
+
 | Variable (`CLAVIX_METADATA_…`)           | Default  | Counts requests per       |
 | ---------------------------------------- | -------- | ------------------------- |
 | `IP_LIMIT` / `IP_WINDOW_SECONDS`         | 30 / 60  | client address and tenant |
