@@ -3,9 +3,8 @@ import { requireFresh } from "@softistx/janus-graphql";
 import { ObjectId } from "mongodb";
 import { userKey } from "@/console/modules/user-key";
 import type { Context } from "@/http/context";
-import { afterAnswer } from "@/modules/auth/auth.outbox";
-import { currentUserOf } from "@/modules/auth/auth.utils";
-import { FRESH_WITHIN } from "@/modules/mfa/mfa.utils";
+import { afterAnswer, currentUserOf } from "@/modules/auth";
+import { FRESH_WITHIN } from "@/modules/mfa";
 import {
   checkUnlocked,
   cleanProfile,
@@ -17,16 +16,7 @@ import { badInput, fail, refuseCommon } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import { emailChangeInvalid } from "./account.errors";
 import type { AccountPorts } from "./account.types";
-import { cleanName, valueChangesOf } from "./account.utils";
-
-/** The janus refusals of a change token: one `EMAIL_CHANGE_INVALID`, the page offers a new request. */
-const TOKEN_REFUSALS = new Set([
-  "TOKEN_UNKNOWN",
-  "TOKEN_SPENT",
-  "TOKEN_EXPIRED",
-  "TOKEN_STALE",
-  "USER_INACTIVE",
-]);
+import { cleanName, TOKEN_REFUSALS, valueChangesOf } from "./account.utils";
 
 /**
  * The signed-in user's own account, for the hosted pages of the tenant the

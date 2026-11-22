@@ -1,6 +1,6 @@
 import type { Exclusive } from "@/console/exclusive";
 import type { AttributeValuesService } from "@/modules/attributes";
-import type { AuthPorts } from "@/modules/auth/auth.types";
+import type { AuthPorts } from "@/modules/auth";
 import type { ProfilePoliciesService } from "@/modules/profile";
 
 /** What `AccountService` is built over: the tenants' janus instances and mail, the locks and the values. */

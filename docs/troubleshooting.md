@@ -1124,3 +1124,7 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** the body is not a PNG, JPEG or WebP (the bytes are sniffed, the `content-type` header is not trusted): 415 `MEDIA_UNSUPPORTED_TYPE`; it is over 1 MiB: 413 `MEDIA_TOO_LARGE`; the user, address or tenant passed `CLAVIX_AVATAR_*`: 429 with `Retry-After`; no `CLAVIX_MEDIA_S3_*` is set (outside production), so the bucket is absent: 503. A key of another tenant is a 404.
 
 **Fix:** send a smaller PNG, JPEG or WebP, wait `Retry-After`, or set the `CLAVIX_MEDIA_S3_*` variables (docs/operations.md, "Profile pictures").
+
+## `EMAIL_CHANGE_INVALID`, `LOGIN_TAKEN`, `STEP_UP_REQUIRED` and `MAIL_THROTTLED` on an e-mail change
+
+`requestEmailChange` needs a sign-in proved less than 10 minutes ago: an older session is `STEP_UP_REQUIRED` (403), so the page asks the user to sign in again. The link goes to the new address; janus throttles the requests (`MAIL_THROTTLED`, 429, with `retryAfter`). `confirmEmailChange` refuses an unknown, spent, expired or stale token as `EMAIL_CHANGE_INVALID` (400): the user asks for a new link. When another account took the address meanwhile it is `LOGIN_TAKEN` (409) and the token is spent, so the user picks another address and asks again.
