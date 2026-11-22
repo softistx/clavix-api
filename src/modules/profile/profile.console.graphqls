@@ -49,3 +49,66 @@ extend type Mutation {
     version: Int!
   ): ProfilePolicy!
 }
+
+"""
+The standard profile fields of a user. A field that is not set is null; the
+picture is its storage key, never a URL.
+"""
+type UserProfile {
+  givenName: String
+  familyName: String
+  nickname: String
+  phone: UserPhone
+  "A BCP 47 language tag, canonical (`fr-CA`)."
+  locale: String
+  "An IANA time zone name (`America/Toronto`)."
+  zoneinfo: String
+  "`YYYY-MM-DD`."
+  birthdate: String
+  address: UserAddress
+  "The key of the user's picture, or null. Never a URL."
+  pictureKey: String
+  "When the user record last changed."
+  updatedAt: DateTime!
+}
+
+"A phone number, E.164, and whether a console admin marked it proved (no SMS)."
+type UserPhone {
+  number: String!
+  verified: Boolean!
+}
+
+"A postal address; every part is optional."
+type UserAddress {
+  formatted: String
+  streetAddress: String
+  locality: String
+  region: String
+  postalCode: String
+  "ISO 3166-1 alpha-2, upper case."
+  country: String
+}
+
+"A postal address to store. A blank part is left out; an address with no part left is cleared."
+input AddressInput {
+  formatted: String
+  streetAddress: String
+  locality: String
+  region: String
+  postalCode: String
+  "ISO 3166-1 alpha-2."
+  country: String
+}
+
+extend type Mutation {
+  """
+  Marks the user's address verified or not (tenant admin), touching nothing
+  else: no session, password or second factor changes. Idempotent. Errors:
+  NOT_FOUND for an unknown user.
+  """
+  setUserEmailVerified(
+    tenantId: ID!
+    userId: ID!
+    verified: Boolean!
+  ): TenantUser!
+}
