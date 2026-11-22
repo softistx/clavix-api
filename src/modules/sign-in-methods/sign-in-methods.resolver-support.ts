@@ -115,7 +115,7 @@ export async function hostedMethods({
   signUp,
   tenantId,
 }: ResolvedTenant) {
-  const { connections } = services();
+  const { connections, connectionSources } = services();
   const list = await connections.list(tenantId);
   return {
     signUp,
@@ -132,7 +132,7 @@ export async function hostedMethods({
           (doc) =>
             doc.enabled &&
             doc.showButton &&
-            connections.isOffered(tenantId, doc),
+            connectionSources.isOffered(tenantId, doc),
         )
         .map((doc) => ({ id: doc.connectionId, label: doc.name })),
     ],
@@ -150,11 +150,11 @@ export async function requireOfferedProvider(
 ): Promise<void> {
   const offered = offeredSocial(tenant.signIn, secretBox.opens);
   if (offered.some((entry) => entry.provider === provider)) return;
-  const { connections } = services();
+  const { connections, connectionSources } = services();
   const connection = await connections.find(tenant.tenantId, provider);
   if (
     connection === undefined ||
-    !connections.isOffered(tenant.tenantId, connection)
+    !connectionSources.isOffered(tenant.tenantId, connection)
   ) {
     throw methodDisabled("this provider");
   }

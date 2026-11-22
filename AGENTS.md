@@ -33,7 +33,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - **Modules**: `src/modules/<m>/` holds one subject, both faces (hosted and console), in
   `<m>.<role>.ts` files (each when the module needs it): `<m>.graphqls`, `<m>.model.ts`, `<m>.errors.ts` (+ spec),
   `<m>.rules.ts`, `<m>.utils.ts` (the shapes, input mapping and every helper of the module), ONE `<m>.service.ts` per domain
-  (no split by action; it may pass 250 lines, but a method stays under 50 lines; a module whose service would pass the 250-line file cap may split it by part into `services/` behind one factory service and its helpers into `utils/`, as connections does, #368), resolvers
+  (no split by action; it may pass 250 lines, but a method stays under 50 lines), resolvers
   `<m>.resolver.ts` split `-queries` / `-mutations` / `-support` / `-guards` when they grow, `<m>.data-loader.ts`,
   and `index.ts`, the only entry other modules import. Other files stay under 250 lines, a function under 80. No helper function at the top of a
   service, resolver or data-loader (it goes to `<m>.utils.ts`). Ports and clocks are passed
@@ -59,7 +59,7 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
   - **the registries** load a role file by file so the barrel never loads it: `modules/index.ts` (the hosted `*.resolver.ts`), `console/modules/index.ts` (the `*.console-resolver.ts`), `http/graphql-mount.ts` and `http/schema.ts` (`auth.plugin`, `consent.plugin`, `consent.resolver`), and `modules/collections.ts` (the models registry, keyed as `mongo.db` exposes them);
   - **queues, workers and Redis throttles**, wired by `server.ts`, `config/redis.ts`, `config/redis-limits.ts` and `config/domains-job.ts` (a barrel would load Redis or the worker): `keys.queue`, `keys.worker`, `agents.prune-*`, `audit.retention-*`, `consent.queue`, `domains.recheck-*`, `tenants.purge-*`, `webhooks.secrets-prune-*`, `auth.throttle`, `auth.verification-throttle`, `consent.device-throttle`, `passkeys.throttle` (their limit configs, which the barrel cannot export without closing cycles through `config/redis.ts`);
   - **leaf files** (one rule, A29): a file that imports no service, resolver or barrel of the app, only packages, `shared/` or other leaves (`.errors`, `.schema`, `.model`, `.challenge`), may be imported by file from another module. Importing one never loads the module's services, so it cannot close a cycle through the barrel. Used by `i18n/codes.ts` (the `.errors` of `auth`, `connections`, `consent`, `invitations`, `mfa`, `passkeys`), `admins.errors.ts` (`invitations.errors`), `auth.service.ts` (`mfa.challenge`), `events/types.ts` (`audit.model`), `tenancy/resolved-tenant.ts` and the tenants model and service (`sign-in-methods.schema`, `oauth-policy.schema`); generated code (`src/generated/`) is exempt, its type imports follow the schema;
-  - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 6 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and `services/connections.service` (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `lock-order.spec.ts` takes `users.console-mutations`, a console-resolver part loaded by file like the registry's.
+  - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 6 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and the `services` folder (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `lock-order.spec.ts` takes `users.console-mutations`, a console-resolver part loaded by file like the registry's.
     `scripts/`, `load/` and `package.json` are not modules. Tests import fixtures as `~/<file>` (`test/`), never a relative path to `test/`.
 - **Named exceptions** (owner decisions D1, D2 and D8 of the alignment plan, not the RAR D1/D2 below; each is deliberate, not drift):
   - **D1, two schemas**: the hosted `/graphql` (cookie, tenant from the Host) and the console `/console/graphql` (bearer or DPoP JWT of the
@@ -834,20 +834,15 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 
 ## Enterprise OIDC connections (`src/modules/connections`, console side folded in by A15: `connections.console.graphqls`, `connections.console-resolver.ts` with its `-queries`, `-mutations`, `-guards`, `-support`; `src/config/connections.ts`)
 
-- Layout (A4): `connections.resolver.ts` (+ `.resolver-support.ts`), `.errors.ts`, `.rules.ts`,
-  `.types.ts`, `.record.ts`, `.integrity.ts` (the blockers: domains free, accounts unlinked, domain claimable),
-  `.discovery.ts`, `.sso-gate.ts`, `services/` and `utils/`. `services/` holds one service per part of the domain
-  (#368): `records.service.ts` (the reads and the record's own writes), `domains.service.ts` (claim, verify, remove),
-  `secrets.service.ts` (set, reseal) and `sources.service.ts` (the janus source, the single-sign-on and jit gates, the
-  specs-only seams), and `connections.service.ts`, `ConnectionsService`, the factory that builds them and the single
-  entry point other modules call (every file at most 250 lines; the 2026-11-20 "no facade" line gave way to the
-  250-line cap of the file); each has its `.service.spec.ts` beside it, over the `connectionsHarness` of
-  `test/connections-service.ts`. `utils/` holds `record` (the stored record's helpers), `inputs` (the console inputs as
-  the service takes them), `shape` (a connection as the console shows it), `enums` and `console`, each with its spec.
-  `index.ts` is the import surface for other modules, and
-  `src/modules/services.ts` wires `connections` (D10; the service stays built in `src/config/connections.ts`, which
-  holds the specs-only seams, so `services()` returns the process-wide instance until a consumer needs a per-request
-  one: D10 follow-up). Deep imports allowed: `src/config/connections.ts` (the wiring that builds the service) and
+- Layout (A4): `connections.resolver.ts` (+ `.resolver-support.ts`), `.errors.ts`, `.rules.ts`, `.utils.ts`,
+  `.types.ts`, `.record.ts`, `.discovery.ts`, `.sso-gate.ts`, `.integrity.ts`, `utils/` and `services/`: the domain's services
+  (owner, 2026-11-20, no facade), `ConnectionRecordsService` (`records.service.ts`), `ConnectionDomainsService`,
+  `ConnectionSecretsService` and `ConnectionSourcesService`, each built on its own in `src/config/connections.ts`,
+  called directly by its consumers, with its spec beside it (the 80-line cap per method holds, and pure parts go to
+  `.rules.ts` / `.utils.ts` / `.errors.ts`). `index.ts` is the import surface for other modules, and
+  `src/modules/services.ts` wires `connections` (the records) and `connectionSources` (D10; the services stay built in
+  `src/config/connections.ts`, and `ConnectionSourcesService` holds the specs-only seams, so `services()` returns the
+  process-wide instances until a consumer needs a per-request one: D10 follow-up). Deep imports allowed: `src/config/connections.ts` (the wiring that builds the service) and
   `src/i18n/codes.ts` (the code inventory). `modules/index.ts` imports `connections.resolver.ts` by file, because the
   barrel would close an import cycle with the config wiring.
 - A tenant registers upstream OIDC identity providers (F1 of M4, Part of #19). `connections` is
@@ -860,7 +855,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `checkConnection:` TypeError becomes `BAD_USER_INPUT` with the field names, no values. Ids `google`,
   `github`, `microsoft` are refused (they are the static apps). `emailTrust` offers `claimAndDomain`
   and `domain` only. `upstreamMfa.acr` is enforced (D6): it becomes the connection's `stepUp.acrValues`, so an ID token without that `acr` is `SOCIAL_STEP_UP_UNMET`.
-- `ConnectionsService.sourceOf(tenantId)` is the janus `ConnectionSource`; `users.social.ts` wires it as
+- `ConnectionSourcesService.sourceOf(tenantId)` is the janus `ConnectionSource`; `users.social.ts` wires it as
   `social.resolveProvider` through `oidcConnections` (one redirect URI per connection:
   `<issuer>/sign-in/social/<id>/callback`, the hosted UI's callback route). Every tenant's janus instance carries it, so the static-social
   gate in `sign-in-methods` also checks the tenant's offered providers.
@@ -870,7 +865,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
 - Quota `connections` (free 1, pro 5, enterprise unlimited; `tenants.plan.ts`, usage, console `Quotas`).
   A connection with linked users is not deleted (`CONNECTION_IN_USE`).
 - **IdP mix-up (RFC 9207, nxgt-janus#979, G2-05)**: the record's `requireIssParameter` is stored as `requireIss`
-  (`services/records.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
+  (`records.service.ts`): pinned at create, and again when the issuer changes, from the issuer's metadata
   (`advertisesIss`, janus's `advertisesIssParameter`; unreadable means not pinned; connections created before are not backfilled, the library still requires `iss`
   whenever the metadata advertises it). Each connection has its own redirect URI
   (`ssoCallbackUrlOf(issuer, id)`: janus-social's function form, nxgt-janus#975), and `socialResolvers`'s
@@ -882,7 +877,7 @@ A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
   `<issuer>/sign-in/social/<id>/callback` with each identity provider.
 - Admin events: `connection.create|update|setSecret|delete|addDomain|verifyDomain|removeDomain`.
 - **Home-realm discovery and sign-in (F2)**: hosted `hostedHomeRealm(email)` (`modules/connections`) names the one
-  enabled connection owning the address's verified domain (`ownerOf` in `services/sources.service.ts`: two claimants answer none), else null; it
+  enabled connection owning the address's verified domain (`ownerOf` in `sources.service.ts`: two claimants answer none), else null; it
   spends its own `homeRealmThrottle` (IP and tenant; `socialSignInStart` spends `ssoStartThrottle`: `sign-in-methods.sso-throttle.ts`,
   `CLAVIX_SSO_*`, refusal `MAIL_THROTTLED`), never the mail-sending `signInThrottle` (#328: a flood of lookups must not close
   a tenant's sign-in codes), and is `no-store`. The federated sign-in is janus's

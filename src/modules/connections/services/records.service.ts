@@ -28,7 +28,10 @@ export class ConnectionRecordsService {
   constructor(
     private readonly collection: TypedCollection<typeof connections>,
     private readonly box: SecretBox,
-    private readonly options: ConnectionsOptions,
+    private readonly options: Pick<
+      ConnectionsOptions,
+      "links" | "advertisesIss"
+    >,
   ) {}
 
   scoped(tenantId: string): ConnectionsScope {

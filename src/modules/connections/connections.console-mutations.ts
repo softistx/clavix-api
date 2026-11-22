@@ -1,4 +1,8 @@
-import { connectionsService as connections } from "@/config/connections";
+import {
+  connectionDomainsService as domains,
+  connectionRecordsService as records,
+  connectionSecretsService as secrets,
+} from "@/config/connections";
 import { tenantsService } from "@/config/tenancy";
 import { catalogTenant } from "@/console/modules/catalog-support";
 import { issuerFor } from "@/console/modules/issuer";
@@ -21,7 +25,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
       stored === undefined ? 0 : effectiveQuotas(stored).connections;
     const created = await ctx.exclusive(connectionsKey(tenant), () =>
       refusing(() =>
-        connections.create(tenant._id.toHexString(), createOf(input), quota),
+        records.create(tenant._id.toHexString(), createOf(input), quota),
       ),
     );
     await ctx.audit(
@@ -34,7 +38,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenant = await catalogTenant(ctx, tenantId);
     const updated = await ctx.exclusive(connectionsKey(tenant), () =>
       refusing(() =>
-        connections.update(tenant._id.toHexString(), id, patchOf(input)),
+        records.update(tenant._id.toHexString(), id, patchOf(input)),
       ),
     );
     await ctx.audit("connection.update", connectionTarget(tenant._id, id));
@@ -44,7 +48,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenant = await catalogTenant(ctx, tenantId);
     const updated = await ctx.exclusive(connectionsKey(tenant), () =>
       refusing(() =>
-        connections.setSecret(tenant._id.toHexString(), id, clientSecret),
+        secrets.setSecret(tenant._id.toHexString(), id, clientSecret),
       ),
     );
     await ctx.audit("connection.setSecret", connectionTarget(tenant._id, id));
@@ -53,7 +57,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
   deleteConnection: async (_, { tenantId, id }, ctx) => {
     const tenant = await catalogTenant(ctx, tenantId);
     const removed = await ctx.exclusive(connectionsKey(tenant), () =>
-      refusing(() => connections.delete(tenant._id.toHexString(), id)),
+      refusing(() => records.delete(tenant._id.toHexString(), id)),
     );
     // Recorded on a repeat too (it may be the event the first run missed).
     await ctx.audit("connection.delete", connectionTarget(tenant._id, id));
@@ -62,9 +66,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
   addConnectionDomain: async (_, { tenantId, id, domain }, ctx) => {
     const tenant = await catalogTenant(ctx, tenantId);
     const updated = await ctx.exclusive(connectionsKey(tenant), () =>
-      refusing(() =>
-        connections.addDomain(tenant._id.toHexString(), id, domain),
-      ),
+      refusing(() => domains.addDomain(tenant._id.toHexString(), id, domain)),
     );
     await ctx.audit("connection.addDomain", connectionTarget(tenant._id, id));
     return connectionShape(updated, await issuerFor(tenant));
@@ -73,7 +75,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenant = await catalogTenant(ctx, tenantId);
     const checked = await ctx.exclusive(connectionsKey(tenant), () =>
       refusing(() =>
-        connections.verifyDomain(tenant._id.toHexString(), id, domain),
+        domains.verifyDomain(tenant._id.toHexString(), id, domain),
       ),
     );
     await ctx.audit(
@@ -89,7 +91,7 @@ export const connectionMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenant = await catalogTenant(ctx, tenantId);
     const updated = await ctx.exclusive(connectionsKey(tenant), () =>
       refusing(() =>
-        connections.removeDomain(tenant._id.toHexString(), id, domain),
+        domains.removeDomain(tenant._id.toHexString(), id, domain),
       ),
     );
     await ctx.audit(

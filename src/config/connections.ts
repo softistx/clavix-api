@@ -6,7 +6,12 @@ import {
   discoverIssuer,
   type IssuerChecker,
 } from "@/modules/connections/connections.discovery";
-import { ConnectionsService } from "@/modules/connections/services/connections.service";
+import {
+  ConnectionDomainsService,
+  ConnectionRecordsService,
+  ConnectionSecretsService,
+  ConnectionSourcesService,
+} from "@/modules/connections/services";
 import { systemTxtResolver } from "@/modules/domains";
 import { hostOf } from "@/modules/tenants";
 import { socialOf } from "@/modules/users";
@@ -47,17 +52,32 @@ const advertisesIss = (issuer: string) =>
     redirectUri: "https://clavix.invalid/sign-in/sso/callback",
   }).advertisesIssParameter({ issuer });
 
-/** The enterprise OIDC connections of the tenants. The collection is tenant-owned: only this wiring and its module reach it. */
-export const connectionsService = new ConnectionsService(
+/** The connection records of the tenants (reads, create, update, delete). The collection is tenant-owned: only this wiring and its module reach it. */
+export const connectionRecordsService = new ConnectionRecordsService(
   mongo.db.connections,
   connectionSecretBox,
-  {
-    txt: systemTxtResolver(),
-    links: linkCount,
-    advertisesIss,
-    now: clock,
-    log: warn,
-  },
+  { links: linkCount, advertisesIss },
+);
+
+/** The domains a connection claims and their TXT verification. */
+export const connectionDomainsService = new ConnectionDomainsService(
+  connectionRecordsService,
+  connectionSecretBox,
+  { txt: systemTxtResolver(), now: clock },
+);
+
+/** The sealed client secrets: replacement and re-sealing under a new key. */
+export const connectionSecretsService = new ConnectionSecretsService(
+  connectionRecordsService,
+  connectionSecretBox,
+  warn,
+);
+
+/** The janus connection source, the home-realm lookups and the SSO gate. */
+export const connectionSourcesService = new ConnectionSourcesService(
+  connectionRecordsService,
+  connectionSecretBox,
+  warn,
 );
 
 /** Reads an issuer's discovery document for the console's check (the network). */

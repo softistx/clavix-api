@@ -13,7 +13,7 @@ export class ConnectionDomainsService {
   constructor(
     private readonly records: ConnectionRecordsService,
     private readonly box: SecretBox,
-    private readonly options: ConnectionsOptions,
+    private readonly options: Pick<ConnectionsOptions, "txt" | "now">,
   ) {}
 
   /** Claims a domain: normalised by janus, a TXT token minted, not verified yet. */

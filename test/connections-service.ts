@@ -2,13 +2,18 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { ConnectionError } from "@/modules/connections/connections.errors";
 import type { ConnectionInput } from "@/modules/connections/connections.types";
-import { ConnectionsService } from "@/modules/connections/services";
+import {
+  ConnectionDomainsService,
+  ConnectionRecordsService,
+  ConnectionSecretsService,
+  ConnectionSourcesService,
+} from "@/modules/connections/services";
 import type { TxtAnswer } from "@/modules/domains";
 import { createSecretBox } from "@/modules/sign-in-methods";
 import { QuotaExceededError } from "@/modules/usage";
 
 /**
- * A `ConnectionsService` over the test database with its ports under the
+ * The connections services over the test database with their ports under the
  * spec's hand: the clock, the TXT answer, the linked-account count and the
  * issuers that advertise `iss`. `reset` (run after each test) puts them back
  * and empties the collection.
@@ -34,22 +39,26 @@ export const connectionsHarness = () => {
     logged: [],
     advertised: new Map(),
   };
-  const service = new ConnectionsService(collection, box, {
-    txt: {
-      resolveTxt: async (name) => {
-        state.asked.push(name);
-        return state.txt;
-      },
-    },
+  const log = (message: string) => state.logged.push(message);
+  const records = new ConnectionRecordsService(collection, box, {
     links: async () => state.linked,
     advertisesIss: async (issuer) => {
       const answer = state.advertised.get(issuer) ?? false;
       if (answer instanceof Error) throw answer;
       return answer;
     },
-    now: () => state.clock,
-    log: (message) => state.logged.push(message),
   });
+  const domains = new ConnectionDomainsService(records, box, {
+    txt: {
+      resolveTxt: async (name) => {
+        state.asked.push(name);
+        return state.txt;
+      },
+    },
+    now: () => state.clock,
+  });
+  const secrets = new ConnectionSecretsService(records, box, log);
+  const sources = new ConnectionSourcesService(records, box, log);
   const input = (over: Partial<ConnectionInput> = {}): ConnectionInput => ({
     id: "acme",
     name: "Acme SSO",
@@ -74,11 +83,11 @@ export const connectionsHarness = () => {
     id = "acme",
     domain = "acme.test",
   ) => {
-    const added = await service.addDomain(tenantId, id, domain);
+    const added = await domains.addDomain(tenantId, id, domain);
     const [entry] = added.domains;
     if (entry === undefined) throw new Error("the claimed domain is missing");
     state.txt = { kind: "records", values: [entry.txtToken] };
-    return service.verifyDomain(tenantId, id, domain);
+    return domains.verifyDomain(tenantId, id, domain);
   };
   const reset = async () => {
     state.clock = new Date("2026-11-18T12:00:00Z");
@@ -93,7 +102,10 @@ export const connectionsHarness = () => {
     collection,
     box,
     state,
-    service,
+    records,
+    domains,
+    secrets,
+    sources,
     input,
     codeOf,
     verified,

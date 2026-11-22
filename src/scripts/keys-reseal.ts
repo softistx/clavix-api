@@ -1,4 +1,4 @@
-import { connectionsService } from "@/config/connections";
+import { connectionSecretsService } from "@/config/connections";
 import { closeMongo, connectMongo, mongo } from "@/config/db";
 import { masterKeys } from "@/config/keys";
 import { redis } from "@/config/redis";
@@ -42,7 +42,7 @@ try {
     secretStores: {
       webhookSecrets: (tenantId) => webhooksService.resealSecrets(tenantId),
       connectionSecrets: (tenantId) =>
-        connectionsService.resealSecrets(tenantId),
+        connectionSecretsService.resealSecrets(tenantId),
       socialSecrets: (tenantId) => signInPolicyService.resealSecrets(tenantId),
     },
   });

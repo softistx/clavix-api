@@ -8,16 +8,17 @@ import {
   assertUnlinked,
 } from "./connections.integrity";
 
-const { collection, service, input, codeOf, reset, A } = connectionsHarness();
+const { collection, domains, records, input, codeOf, reset, A } =
+  connectionsHarness();
 
 afterEach(reset);
 
 describe("assertDomainsFree", () => {
   test("two enabled connections never hold one domain: switching one on is refused", async () => {
-    await service.create(A, input(), null);
-    await service.addDomain(A, "acme", "acme.test");
-    await service.update(A, "acme", { enabled: false });
-    await service.create(A, input({ id: "other" }), null);
+    await records.create(A, input(), null);
+    await domains.addDomain(A, "acme", "acme.test");
+    await records.update(A, "acme", { enabled: false });
+    await records.create(A, input({ id: "other" }), null);
     await collection.raw.updateOne(
       { connectionId: "other" },
       {
@@ -33,13 +34,13 @@ describe("assertDomainsFree", () => {
         },
       },
     );
-    expect(await codeOf(service.update(A, "acme", { enabled: true }))).toBe(
+    expect(await codeOf(records.update(A, "acme", { enabled: true }))).toBe(
       "DOMAIN_TAKEN",
     );
   });
 
   test("no domain, or only the connection's own, is free", async () => {
-    const created = await service.create(A, input(), null);
+    const created = await records.create(A, input(), null);
     const scoped = scopeToTenant(collection, created.tenantId);
     await assertDomainsFree(scoped, created, []);
     await assertDomainsFree(scoped, created, ["acme.test"]);
@@ -57,15 +58,15 @@ describe("assertUnlinked", () => {
 
 describe("assertClaimable", () => {
   test("a domain on the connection is a conflict, one on another is taken", async () => {
-    await service.create(A, input(), null);
-    const added = await service.addDomain(A, "acme", "acme.test");
+    await records.create(A, input(), null);
+    const added = await domains.addDomain(A, "acme", "acme.test");
     const current = defined(added, "the connection");
     const scoped = scopeToTenant(collection, current.tenantId);
     expect(await codeOf(assertClaimable(scoped, current, "acme.test"))).toBe(
       "CONFLICT",
     );
     const other = defined(
-      await service.create(A, input({ id: "other" }), null),
+      await records.create(A, input({ id: "other" }), null),
       "the other",
     );
     expect(await codeOf(assertClaimable(scoped, other, "acme.test"))).toBe(

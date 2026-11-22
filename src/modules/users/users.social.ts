@@ -15,7 +15,7 @@ import type { SecretBox } from "@/modules/sign-in-methods";
 import { callbackUrlOf, socialProvidersOf } from "@/modules/sign-in-methods";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 
-/** Where a tenant's enterprise OIDC connections are read (`ConnectionsService`). */
+/** Where a tenant's enterprise OIDC connections are read (`ConnectionSourcesService`). */
 export interface ConnectionsOf {
   sourceOf(tenantId: string): ConnectionSource;
   /** The host resolver of the guard's address check; `undefined`: janus's own (DNS). */

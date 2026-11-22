@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { StoreFailure } from "@softistx/janus";
 import { mintWebhookSecret } from "@softistx/janus-webhooks";
 import { mongo } from "@/config/db";
-import { ConnectionsService } from "@/modules/connections";
+import {
+  ConnectionRecordsService,
+  ConnectionSecretsService,
+} from "@/modules/connections/services";
 import {
   createSecretBox,
   emptySecretResealCounts,
@@ -58,21 +61,20 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
       mint: mintWebhookSecret,
     },
   );
-  const connections = new ConnectionsService(
+  const connections = new ConnectionRecordsService(
     mongo.db.connections,
     boxes.connections,
-    {
-      txt: { resolveTxt: async () => ({ kind: "none" }) },
-      links: async () => 0,
-      advertisesIss: async () => false,
-      log,
-      now: () => new Date(),
-    },
+    { links: async () => 0, advertisesIss: async () => false },
+  );
+  const connectionSecrets = new ConnectionSecretsService(
+    connections,
+    boxes.connections,
+    log,
   );
   const policy = new SignInPolicyService(tenants, boxes.social, log);
   const secretStores: ResealDeps["secretStores"] = {
     webhookSecrets: (tenantId) => webhooks.resealSecrets(tenantId),
-    connectionSecrets: (tenantId) => connections.resealSecrets(tenantId),
+    connectionSecrets: (tenantId) => connectionSecrets.resealSecrets(tenantId),
     socialSecrets: (tenantId) => policy.resealSecrets(tenantId),
   };
   return { tenants, boxes, webhooks, connections, policy, secretStores };

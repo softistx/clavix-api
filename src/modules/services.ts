@@ -4,7 +4,10 @@ import { authService } from "@/config/auth";
 import { brandingService } from "@/config/branding";
 import { clientPoliciesService } from "@/config/client-policies";
 import { clientsService } from "@/config/clients";
-import { connectionsService } from "@/config/connections";
+import {
+  connectionRecordsService,
+  connectionSourcesService,
+} from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { invitationsService } from "@/config/invitations";
 import { keysService } from "@/config/keys";
@@ -33,7 +36,8 @@ export const services = () => ({
   branding: brandingService,
   clientPolicies: clientPoliciesService,
   clients: clientsService,
-  connections: connectionsService,
+  connectionSources: connectionSourcesService,
+  connections: connectionRecordsService,
   consent: consentService,
   domains: domainsService,
   invitations: invitationsService,
