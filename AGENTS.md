@@ -550,7 +550,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 - **Console** (`roles` module): reads `onTenant("view")`, writes `onTenant("edit")`; audit actions
   `role.create|update|delete|assign|unassign` (assign and unassign record the role and the user). `deleteRole`
   and `unassignRole` are idempotent; `assignRole` needs a user of the tenant's pool (`NOT_FOUND` else).
-  `deleteRole` removes the assignments first, `deleteUser` and `deleteResource` remove theirs (a retry
+  `deleteRole` removes the assignments first, then the role's attribute links (the `RoleLinks` port, bound in `config/roles.ts`), `deleteUser` and `deleteResource` remove theirs (a retry
   finishes a half run). `assignRole` (check the user, write) and `deleteUser` (delete, sweep) run under
   `ctx.exclusive(userKey(tenant, user))` (`console/modules/user-key.ts`), so no assignment outlives its
   user; `disableUser` (platform users) and the `clavix` invitation accept hooks (`userLock`) take it too. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
@@ -585,16 +585,16 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 
 ## User attributes (`src/modules/attributes`, with its `attributes.console-*` files; `src/config/attributes.ts`)
 
-A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices A1 and A2; the plan is
+A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices A1 to A3; the plan is
 `spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
-reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A3 to A5 add
-the role links, the claims and the profile.
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A4 and A5 add
+the claims and the profile.
 - **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
   with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
-  `values.service.ts`), `rules/`, `utils/`; the single-file roles (`attributes.model.ts`,
+  `values.service.ts`, `role-attributes.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`); the single-file roles (`attributes.model.ts`,
   `attributes.errors.ts`, `attributes.refusals.ts`, `attributes.data-loader.ts`, the console files and the
-  `*.types.ts`) stay at the root. Files import each other relatively and through these barrels.
+  `*.types.ts`, `role-attributes.types.ts`) stay at the root; the SDL is three files (`attributes`, `attributes.values`, `attributes.roles` `.console.graphqls`). Files import each other relatively and through these barrels.
 - **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
   `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
   and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
