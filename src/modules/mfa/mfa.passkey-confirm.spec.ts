@@ -19,7 +19,7 @@ import { clientHeaders } from "~/client-header";
 import { type Answer, answerOf } from "~/gql-answer";
 import { memoryMailerOf } from "~/memory-mailer-of";
 import { defined } from "~/narrow";
-import { testSecrets } from "~/ports";
+import { quietSocial, testSecrets } from "~/ports";
 
 // `confirmSecondFactorWithPasskey` (clavix-api#293): the hosted second-factor
 // page answers a `SecondFactorChallenge` with a passkey bound to it.
@@ -33,6 +33,7 @@ const origin = {
 } as const;
 const policies = new SignInPolicyService(
   tenantsService,
+  quietSocial(),
   testSecrets(),
   () => {},
 );

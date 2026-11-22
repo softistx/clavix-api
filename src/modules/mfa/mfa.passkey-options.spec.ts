@@ -20,7 +20,7 @@ import { clientHeaders } from "~/client-header";
 import { gqlOf } from "~/gql";
 import { type Answer, answerOf } from "~/gql-answer";
 import { memoryMailerOf } from "~/memory-mailer-of";
-import { testSecrets } from "~/ports";
+import { quietSocial, testSecrets } from "~/ports";
 
 // `requestSecondFactorPasskeyOptions` (clavix-api#371): a page that keeps only the
 // challenge reads the passkey options again, with no attempt counted.
@@ -34,6 +34,7 @@ const origin = {
 } as const;
 const policies = new SignInPolicyService(
   tenantsService,
+  quietSocial(),
   testSecrets(),
   () => {},
 );

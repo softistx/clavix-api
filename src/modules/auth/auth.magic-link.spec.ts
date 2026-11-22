@@ -20,7 +20,7 @@ import { clientHeaders } from "~/client-header";
 import { gqlOf } from "~/gql";
 import { type Answer, answerOf } from "~/gql-answer";
 import { memoryMailerOf } from "~/memory-mailer-of";
-import { quietTenants } from "~/ports";
+import { quietSocial, quietTenants } from "~/ports";
 import { settled } from "./auth.outbox";
 
 // Magic link is the tenant's choice, off until it turns it on (its sign-in
@@ -38,7 +38,12 @@ const service = new TenantsService(mongo.db.tenants, {
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policy = new SignInPolicyService(service, secretBox, () => {});
+const policy = new SignInPolicyService(
+  service,
+  quietSocial(),
+  secretBox,
+  () => {},
+);
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 
 async function gql(

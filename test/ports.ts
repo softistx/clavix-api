@@ -1,3 +1,4 @@
+import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { noInvitationHooks, noThrottle, noUserThrottle } from "@/config/no-ops";
 import type { AgentKindsOf, AgentsReader } from "@/modules/clients";
@@ -7,6 +8,7 @@ import {
   type TenantKeys,
 } from "@/modules/keys";
 import { createSecretBox } from "@/modules/sign-in-methods";
+import { TenantSocialService } from "@/modules/tenants";
 import type { ConnectionsOf, InvitationHooks } from "@/modules/users";
 import { buildTenantJanus, ephemeralSecondFactorKeys } from "@/modules/users";
 import type { DomainDirectory } from "@/tenancy/resolver";
@@ -25,6 +27,14 @@ export const quietTenants = {
   hostsOf: (): string[] => [],
   onCreated: () => {},
 };
+
+/** `TenantSocialService` on the wired tenants collection: no cache to tell. */
+export const quietSocial = () =>
+  new TenantSocialService(mongo.db.tenants, {
+    ...quietTenants,
+    now: () => new Date(),
+    log: () => {},
+  });
 
 /** `DomainsService`: no cache to tell, no slug host, no admin event recorded. */
 export const quietDomains = {

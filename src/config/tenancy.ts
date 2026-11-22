@@ -1,7 +1,12 @@
 import type { TypedCollection } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
 import type { PublicOrigin, tenants } from "@/modules/tenants";
-import { hostOf, TenantsService } from "@/modules/tenants";
+import {
+  hostOf,
+  TenantRetentionService,
+  TenantSocialService,
+  TenantsService,
+} from "@/modules/tenants";
 import { createTenantResolver, type DomainDirectory } from "@/tenancy/resolver";
 import {
   noTenantCache,
@@ -52,15 +57,28 @@ export function createTenancy({
     domains,
     lookupById: (id) => tenants.findById(id, { withDeleted: true }),
   });
-  const tenantsService = new TenantsService(tenants, {
+  const hosts = {
     domain: config.domain,
-    onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
+    onHostsChanged: (changed: string[]) => tenantResolver.invalidate(changed),
     log,
-    now: clock,
     hostsOf,
+  };
+  const tenantsService = new TenantsService(tenants, {
+    ...hosts,
+    now: clock,
     onCreated,
   });
-  return { tenantResolver, tenantsService };
+  const tenantSocialService = new TenantSocialService(tenants, {
+    ...hosts,
+    now: clock,
+  });
+  const tenantRetentionService = new TenantRetentionService(tenants, hosts);
+  return {
+    tenantResolver,
+    tenantsService,
+    tenantSocialService,
+    tenantRetentionService,
+  };
 }
 
 // The cache behind the resolver: Redis when REDIS_URL is set, none otherwise.
@@ -87,7 +105,12 @@ export const domainsService = createDomainsService({
   },
 });
 
-export const { tenantResolver, tenantsService } = createTenancy({
+export const {
+  tenantResolver,
+  tenantsService,
+  tenantSocialService,
+  tenantRetentionService,
+} = createTenancy({
   tenants: mongo.db.tenants,
   // The first signing key, and the platform link (the console's permissions).
   onCreated: async (tenantId) => {

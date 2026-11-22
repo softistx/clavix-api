@@ -16,7 +16,7 @@ import { TenantsService } from "@/modules/tenants";
 import { secondFactorKeysOf } from "@/modules/users";
 import { WebhooksService } from "@/modules/webhooks";
 import { clearDatabase } from "~/db";
-import { quietKeys, quietTenants } from "~/ports";
+import { quietKeys, quietSocial, quietTenants } from "~/ports";
 import { createKeyGenerations } from "./keys.generations";
 import { resealAllTenants } from "./keys.reseal";
 import { resealSecondFactorOf } from "./keys.second-factor-reseal";
@@ -45,6 +45,7 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
     log,
     now: () => new Date(),
   });
+  const social = quietSocial();
   const boxes = {
     social: createSecretBox(ring),
     webhooks: createSecretBox(ring, "webhook-secrets"),
@@ -71,13 +72,21 @@ const storesUnder = (ring: Ring, log: (message: string) => void = quiet) => {
     boxes.connections,
     log,
   );
-  const policy = new SignInPolicyService(tenants, boxes.social, log);
+  const policy = new SignInPolicyService(tenants, social, boxes.social, log);
   const secretStores: ResealDeps["secretStores"] = {
     webhookSecrets: (tenantId) => webhooks.resealSecrets(tenantId),
     connectionSecrets: (tenantId) => connectionSecrets.resealSecrets(tenantId),
     socialSecrets: (tenantId) => policy.resealSecrets(tenantId),
   };
-  return { tenants, boxes, webhooks, connections, policy, secretStores };
+  return {
+    tenants,
+    social,
+    boxes,
+    webhooks,
+    connections,
+    policy,
+    secretStores,
+  };
 };
 
 /** The real second-factor pass under a keyring. */
@@ -445,11 +454,11 @@ describe("every sealed store follows the rotation (clavix-api#329)", () => {
 
   test("a tenant changed since it was read is not overwritten (skipped)", async () => {
     const { liveId } = await seed([oldKey]);
-    const { tenants, policy } = storesUnder([newKey, oldKey]);
+    const { tenants, social, policy } = storesUnder([newKey, oldKey]);
     const stale = await tenants.anyById(liveId);
     if (stale === undefined) throw new Error("no tenant");
     await policy.updateMfa(liveId, { totp: true });
-    expect(await tenants.replaceSocial(stale, [])).toBe(false);
+    expect(await social.replaceSocial(stale, [])).toBe(false);
     expect((await tenants.anyById(liveId))?.signIn.social).toHaveLength(1);
   });
 });

@@ -20,7 +20,7 @@ import { at } from "~/body";
 import { clientHeaders } from "~/client-header";
 import { gqlOf } from "~/gql";
 import { memoryMailerOf } from "~/memory-mailer-of";
-import { quietTenants } from "~/ports";
+import { quietSocial, quietTenants } from "~/ports";
 
 // Each hosted sign-in source writes exactly one event (D12, D14), and a
 // recorder that is down never fails the sign-in (D13).
@@ -37,7 +37,12 @@ const service = new TenantsService(mongo.db.tenants, {
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policy = new SignInPolicyService(service, secretBox, () => {});
+const policy = new SignInPolicyService(
+  service,
+  quietSocial(),
+  secretBox,
+  () => {},
+);
 const url = (slug: string) => `${issuerOf(slug, origin)}/graphql`;
 
 async function gql(

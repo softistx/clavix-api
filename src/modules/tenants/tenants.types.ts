@@ -38,6 +38,16 @@ export interface TenantsServiceOptions {
   log: (message: string) => void;
 }
 
+/** What a tenant write needs to drop the tenant's hosts from the resolver's cache (`dropHosts`). */
+export type TenantHostsOptions = Pick<
+  TenantsServiceOptions,
+  "domain" | "onHostsChanged" | "hostsOf" | "log"
+>;
+
+/** The ports of the services that write a tenant beside `TenantsService`: the hosts' cache and the clock. */
+export type TenantWriterOptions = TenantHostsOptions &
+  Pick<TenantsServiceOptions, "now">;
+
 /** Where a tenant stands for the console: `deleted` is the trash. */
 export type TenantState = "active" | "suspended" | "deleted";
 

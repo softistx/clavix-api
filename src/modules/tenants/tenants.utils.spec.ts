@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { tenantDoc } from "~/tenant-doc";
 import {
+  dropHosts,
   escapeRegex,
   hostOf,
   issuerOf,
@@ -105,4 +106,39 @@ test("listScopeOf binds a cursor to its search", () => {
   expect(listScopeOf({ first: 5, ids: [] })).not.toBe(
     listScopeOf({ first: 5 }),
   );
+});
+
+test("dropHosts drops the slug host and the custom hosts; a failing port is logged and the other still runs", async () => {
+  const dropped: string[][] = [];
+  const logged: string[] = [];
+  const tenant = { slug: "acme", _id: new ObjectId() };
+  await dropHosts(
+    {
+      domain: "clavix.test",
+      hostsOf: () => ["acme.example"],
+      onHostsChanged: (hosts) => {
+        dropped.push(hosts);
+      },
+      log: (message) => logged.push(message),
+    },
+    tenant,
+  );
+  expect(dropped).toEqual([["acme.clavix.test", "acme.example"]]);
+  await dropHosts(
+    {
+      domain: "clavix.test",
+      hostsOf: () => {
+        throw new Error("store down");
+      },
+      onHostsChanged: (hosts) => {
+        dropped.push(hosts);
+      },
+      log: (message) => logged.push(message),
+    },
+    tenant,
+  );
+  expect(dropped[1]).toEqual(["acme.clavix.test"]);
+  expect(logged).toEqual([
+    "tenants: hostsOf failed for acme.clavix.test: store down",
+  ]);
 });

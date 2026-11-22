@@ -8,8 +8,8 @@ import {
   InvalidSlugError,
   PlatformTenantProtectedError,
   SlugTakenError,
-} from "./tenants.errors";
-import { PLATFORM_TENANT_SLUG } from "./tenants.rules";
+} from "../tenants.errors";
+import { PLATFORM_TENANT_SLUG } from "../tenants.rules";
 import { TenantsService } from "./tenants.service";
 
 // The wired collection: it carries the slug hooks (src/config/db.ts).

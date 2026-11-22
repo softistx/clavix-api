@@ -2,14 +2,14 @@ import { enforceRetention, type RetentionReport } from "@/modules/audit";
 import { adminEventReader } from "./admin-events";
 import { authEventsService } from "./audit";
 import { warn } from "./runtime";
-import { tenantsService } from "./tenancy";
+import { tenantRetentionService } from "./tenancy";
 
 /** The daily audit retention over the real stores (D16). */
 export const createAuditRetention =
   (now: () => Date) => (): Promise<RetentionReport> =>
     enforceRetention(
       {
-        targets: () => tenantsService.retentionTargets(),
+        targets: () => tenantRetentionService.retentionTargets(),
         deleteAuthBefore: (tenantId, before) =>
           authEventsService.deleteBefore(tenantId, before),
         deleteAdminBefore: (tenantId, before) =>

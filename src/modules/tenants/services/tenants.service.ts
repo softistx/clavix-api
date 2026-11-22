@@ -13,21 +13,18 @@ import {
   PlatformTenantProtectedError,
   SlugTakenError,
   TenantInputError,
-} from "./tenants.errors";
-import type { Tenant, tenants } from "./tenants.model";
-import { type PlanId, QUOTA_KEYS, type QuotaOverrides } from "./tenants.plan";
-import { PLATFORM_TENANT_SLUG, slugProblem } from "./tenants.rules";
-import { purgeCutoff } from "./tenants.trash";
+} from "../tenants.errors";
+import type { Tenant, tenants } from "../tenants.model";
+import { type PlanId, QUOTA_KEYS, type QuotaOverrides } from "../tenants.plan";
+import { PLATFORM_TENANT_SLUG, slugProblem } from "../tenants.rules";
 import type {
-  PurgeDeps,
-  PurgeReport,
   RegisteredTenant,
   RegisterTenantInput,
   TenantListOptions,
   TenantsServiceOptions,
-} from "./tenants.types";
+} from "../tenants.types";
 import {
-  hostOf,
+  dropHosts,
   listFilterOf,
   listScopeOf,
   objectIdsOf,
@@ -35,7 +32,7 @@ import {
   reasonOf,
   registeredOf,
   stateOf,
-} from "./tenants.utils";
+} from "../tenants.utils";
 
 type TenantId = IdOf<typeof tenants> | string;
 
@@ -46,25 +43,13 @@ type TenantId = IdOf<typeof tenants> | string;
  * changes. Every write drops the tenant's hosts from the resolver's cache.
  */
 export class TenantsService {
-  private readonly domain: string;
-  private readonly onHostsChanged: (hosts: string[]) => void | Promise<void>;
-  private readonly hostsOf: (
-    tenantId: ObjectId,
-  ) => string[] | Promise<string[]>;
-  private readonly onCreated: (tenantId: string) => void | Promise<void>;
-  private readonly log: (message: string) => void;
-  private readonly now: () => Date;
+  private readonly options: TenantsServiceOptions;
 
   constructor(
     private readonly collection: TypedCollection<typeof tenants>,
     options: TenantsServiceOptions,
   ) {
-    this.domain = options.domain;
-    this.onHostsChanged = options.onHostsChanged;
-    this.hostsOf = options.hostsOf;
-    this.onCreated = options.onCreated;
-    this.log = options.log;
-    this.now = options.now;
+    this.options = options;
   }
 
   async create(input: {
@@ -99,9 +84,11 @@ export class TenantsService {
     await this.changed(created);
     const tenantId = partitionOf(created._id);
     try {
-      await this.onCreated(tenantId);
+      await this.options.onCreated(tenantId);
     } catch (error) {
-      this.log(`tenants: onCreated failed for ${tenantId}: ${reasonOf(error)}`);
+      this.options.log(
+        `tenants: onCreated failed for ${tenantId}: ${reasonOf(error)}`,
+      );
     }
     return created;
   }
@@ -161,18 +148,6 @@ export class TenantsService {
   async allIds(): Promise<string[]> {
     const all = await this.collection.findMany({ withDeleted: true });
     return all.map((tenant) => partitionOf(tenant._id));
-  }
-
-  /**
-   * Every tenant with its plan, the suspended, the trashed and the purged
-   * included: their logs follow the plan until the retention ends (D16).
-   */
-  async retentionTargets(): Promise<{ id: string; plan: PlanId }[]> {
-    const all = await this.collection.findMany({ withDeleted: true });
-    return all.map((tenant) => ({
-      id: partitionOf(tenant._id),
-      plan: tenant.plan,
-    }));
   }
 
   /** The active tenants with these ids (hex); an unknown, suspended or deleted one is left out. */
@@ -353,7 +328,7 @@ export class TenantsService {
         purgeStartedAt: { $exists: false },
       },
       {
-        $set: { deletedAt: null, updatedAt: this.now() },
+        $set: { deletedAt: null, updatedAt: this.options.now() },
         $inc: { version: 1 },
       },
     );
@@ -361,107 +336,6 @@ export class TenantsService {
     const restored = await this.collection.getById(tenant._id);
     await this.changed(restored);
     return restored;
-  }
-
-  /**
-   * Replaces the social apps of the tenant read as `tenant` (`keys:reseal`:
-   * the same apps, their secrets sealed under the new key). The trash is
-   * written too, which the typed API refuses, so that a restored tenant still
-   * opens its secrets: hence the driver's own write, guarded by the version
-   * read. `false` when the tenant changed meanwhile (nothing is written).
-   */
-  async replaceSocial(
-    tenant: Tenant,
-    social: Tenant["signIn"]["social"],
-  ): Promise<boolean> {
-    const result = await this.collection.raw.updateOne(
-      { _id: tenant._id, version: tenant.version },
-      {
-        $set: { "signIn.social": social, updatedAt: this.now() },
-        $inc: { version: 1 },
-      },
-    );
-    if (result.matchedCount === 0) return false;
-    await this.changed(tenant);
-    return true;
-  }
-
-  /** The tenants whose 30 days are over at `now`, a purge left unfinished included. */
-  purgeDue(now: Date): Promise<Tenant[]> {
-    return this.collection.findMany({
-      filter: {
-        deletedAt: { $lte: purgeCutoff(now) },
-        purgedAt: { $exists: false },
-      },
-      withDeleted: true,
-    });
-  }
-
-  /**
-   * Claims the tenant for the purge: from here it resolves nowhere and cannot
-   * be restored. `false` when it is not in the trash, not due at `now`, or
-   * already purged; claiming again an unfinished purge is `true` (a resume).
-   */
-  async claimPurge(tenant: Tenant, now: Date): Promise<boolean> {
-    const result = await this.collection.raw.updateOne(
-      {
-        _id: tenant._id,
-        deletedAt: { $ne: null, $lte: purgeCutoff(now) },
-        purgedAt: { $exists: false },
-      },
-      { $set: { purgeStartedAt: now }, $inc: { version: 1 } },
-    );
-    if (result.matchedCount === 0) return false;
-    await this.changed(tenant);
-    return true;
-  }
-
-  /**
-   * Ends a purge: what stays is the tombstone (the slug, `deletedAt`,
-   * `purgedAt`), which keeps the slug reserved for ever through the unique
-   * index. The name goes with the data.
-   */
-  async markPurged(tenant: Tenant, now: Date): Promise<void> {
-    await this.collection.raw.updateOne(
-      { _id: tenant._id, purgeStartedAt: { $exists: true } },
-      {
-        $set: { purgedAt: now, name: "", signUp: false, quotaOverrides: {} },
-        $inc: { version: 1 },
-      },
-    );
-  }
-
-  /**
-   * Purges the tenants whose 30 days of trash are over at `now`. Each tenant:
-   * claimed (it resolves nowhere and cannot be restored from then on), its
-   * partition, its tenant-owned collections and its memberships removed, then
-   * the tombstone (`slug`, `deletedAt`, `purgedAt`) keeps the slug reserved. A
-   * tenant that fails is left claimed and resumed by the next run; the others
-   * go on. Refuses a tenant before its `purgeAt` (`claimPurge` says no).
-   */
-  async purge(deps: PurgeDeps, now: Date): Promise<PurgeReport> {
-    const log = deps.log;
-    const report: PurgeReport = { purged: [], failed: [] };
-    for (const tenant of await this.purgeDue(now)) {
-      const id = tenant._id.toHexString();
-      try {
-        if (!(await this.claimPurge(tenant, now))) continue;
-        const counts = await deps.partitions.purgePartition(id);
-        log(
-          `tenants: purged the partition of ${id}: ${JSON.stringify(counts)}`,
-        );
-        for (const owned of deps.owned) await owned.deleteOwnedBy(tenant._id);
-        await deps.memberships.removeTenant(id);
-        await this.markPurged(tenant, now);
-        report.purged.push(id);
-      } catch (error) {
-        report.failed.push(id);
-        log(
-          `tenants: purge of ${id} stopped, the next run resumes it: ${reasonOf(error)}`,
-        );
-      }
-    }
-    return report;
   }
 
   // The version read is the version expected: a write that raced ours is not
@@ -507,24 +381,8 @@ export class TenantsService {
     }
   }
 
-  /**
-   * After a tenant write: drops the tenant's slug host and its custom hosts
-   * from the resolver's cache. Errors are logged and swallowed, the write
-   * stands.
-   */
-  private async changed(tenant: Pick<Tenant, "slug" | "_id">): Promise<void> {
-    const hosts = [hostOf(tenant.slug, this.domain)];
-    try {
-      hosts.push(...(await this.hostsOf(tenant._id)));
-    } catch (error) {
-      this.log(`tenants: hostsOf failed for ${hosts[0]}: ${reasonOf(error)}`);
-    }
-    try {
-      await this.onHostsChanged(hosts);
-    } catch (error) {
-      this.log(
-        `tenants: onHostsChanged failed for ${hosts.join(", ")}: ${reasonOf(error)}`,
-      );
-    }
+  /** After a tenant write: the hosts it touched leave the resolver's cache (`dropHosts`). */
+  private changed(tenant: Pick<Tenant, "slug" | "_id">): Promise<void> {
+    return dropHosts(this.options, tenant);
   }
 }

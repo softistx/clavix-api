@@ -5,10 +5,10 @@ import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerClient } from "@/modules/clients";
 import { quietTenants } from "~/ports";
+import { TenantsService } from "./services";
 import { parseTenantArgs } from "./tenants.cli";
 import { TenantInputError } from "./tenants.errors";
 import { PLATFORM_TENANT_SLUG, RESERVED_SLUGS } from "./tenants.rules";
-import { TenantsService } from "./tenants.service";
 import { partitionOf } from "./tenants.utils";
 
 const collection = mongo.db.tenants;

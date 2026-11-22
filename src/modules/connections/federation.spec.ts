@@ -45,6 +45,7 @@ import { memoryMailerOf } from "~/memory-mailer-of";
 import {
   noCustomDomains,
   quietOAuth,
+  quietSocial,
   quietTenants,
   testSecrets,
 } from "~/ports";
@@ -83,7 +84,12 @@ const tenants = new TenantsService(mongo.db.tenants, {
   log: () => {},
   onHostsChanged: (hosts) => tenantResolver.invalidate(hosts),
 });
-const policies = new SignInPolicyService(tenants, testSecrets(), () => {});
+const policies = new SignInPolicyService(
+  tenants,
+  quietSocial(),
+  testSecrets(),
+  () => {},
+);
 // One recording throttle per budget: which one an operation spends is the point (G2-10).
 type Who = { tenantId: string; ip: string | undefined };
 const checks: Who[] = [];
