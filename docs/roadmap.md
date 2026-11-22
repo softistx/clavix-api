@@ -67,10 +67,12 @@ nxgt-janus release says which.
 ## Later
 
 **Follow-ups**
+
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
 **Authorization authoring**
+
 - Roles, permissions and relations defined per tenant in the console, as the vocabulary
   the access rules refer to.
 

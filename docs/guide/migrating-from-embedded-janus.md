@@ -17,6 +17,7 @@ released package. **Not built** means it does not exist yet; every such item is 
 | The API trusts the app's own session or token.             | The API verifies the JWT access token (ES256 by default) Clavix signed, with the tenant's public keys.                                       |
 
 Facts to hold on to (all Built, see the clavix-api README):
+
 - **One tenant per application**. The tenant's issuer is
   `https://<slug>.<CLAVIX_DOMAIN>` (plus `:CLAVIX_PUBLIC_PORT` when set). It serves its own
   `/.well-known/openid-configuration`, `/jwks.json`, `/authorize`, `/token`, `/revoke`,
@@ -53,6 +54,7 @@ The output is JSON (`created`, `clientId`, `issuer`, `redirectUris`, `type`, and
 `clientSecret` is **printed once**: copy it into the application's secret store at once, because
 janus keeps only its SHA-256. Re-running is idempotent on the client id and prints
 `clientSecret: null`; `--rotate-secret` mints another.
+
 - **Redirect URIs** are matched exactly (janus's rules: HTTPS, no fragment, loopback `http`
   allowed). List every environment's callback with a repeated `--redirect-uri`.
 - A browser-only app registers a public client (omit `--confidential`): PKCE `S256` only, no
@@ -66,6 +68,7 @@ Full flag table: "OAuth clients" in the [README](../../README.md#oauth-clients).
 ## 2. The redirect flow
 
 The flow is the authorization code grant with PKCE (`S256`), on the tenant's issuer:
+
 1. The app redirects the browser to the tenant's `/authorize` with `response_type=code`,
    `client_id`, `redirect_uri`, `scope=openid email profile`, `state`, `nonce` and
    `code_challenge` (S256).
@@ -152,6 +155,7 @@ alxia()
 package's guide ([`packages/clavix/docs`](https://github.com/softistx/alxia/tree/develop/packages/clavix/docs)).
 
 Constraints to know before relying on it:
+
 - **The token's `aud` must contain the API's identifier, and that identifier is a Clavix
   resource.** Register it with
   `bun run resources:create --tenant <slug> --uri <api audience> --scope <scope>` (or `createResource` in the console API). Sign-in itself works without one (a request with no `resource` is
@@ -170,6 +174,7 @@ Constraints to know before relying on it:
 
 Clavix users have their own ids and `sub`; **nothing maps an old janus id to a Clavix `sub` for
 you.** What exists:
+
 - **With the preset (3a)**, the app's janus links the account on its own: the first time a
   visitor signs in through Clavix, `social.complete` looks for a janus user of the app with the
   same e-mail. If the Clavix ID token says the e-mail is verified **and** the app's user had
@@ -228,6 +233,7 @@ MFA, step-up and social federation (Google, GitHub, enterprise OIDC connections)
 ## Gaps
 
 For the Clavix maintainers to decide or file an issue on clavix-api, nothing here is invented to cover it:
+
 1. **No user import.** No script, GraphQL operation or file format loads existing users into a
    tenant. Needed: a bulk create that keeps the e-mail (verified) and returns old id to new
    `sub`, so an application can fill its mapping without waiting for each first sign-in.
