@@ -1,4 +1,5 @@
 import { redirectUriProblem } from "@softistx/janus-oauth";
+import { parse } from "tldts";
 import { unique } from "@/shared/values";
 import { AgentsInputError } from "./oauth-policy.errors";
 import type { AgentsPolicy } from "./oauth-policy.schema";
@@ -12,6 +13,16 @@ export const MAX_REDIRECT_URI = 2000;
 // document is served from), at most 253 characters. No scheme, port or path.
 const HOST =
   /^(?=.{1,253}$)(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * Whether `host` is `*.` over a public suffix (`*.co.uk`, `*.github.io`): such
+ * a wildcard would let anyone who registers under the suffix serve a client
+ * document. The list is the Public Suffix List (ICANN and private sections),
+ * through tldts; a name with no registrable domain is a suffix itself.
+ */
+export const wildcardOverSuffix = (host: string) =>
+  host.startsWith("*.") &&
+  parse(host.slice(2), { allowPrivateDomains: true }).domain === null;
 
 /**
  * The agents policy after `input`: the lists are checked and cleaned (a
@@ -58,6 +69,11 @@ export function applyAgentsInput(
       if (!HOST.test(host)) {
         throw new AgentsInputError(
           `host "${host.slice(0, 80)}" must be a DNS name, with no scheme, port or path`,
+        );
+      }
+      if (wildcardOverSuffix(host)) {
+        throw new AgentsInputError(
+          `host "${host.slice(0, 80)}" is a wildcard over a public suffix; name a registrable domain (e.g. *.example.com)`,
         );
       }
     }

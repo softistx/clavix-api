@@ -7,6 +7,7 @@ Find the message you see, then read when it appears, why, and the fix.
 - [`BRANDING_CONTRAST` on `updateBranding`](#branding_contrast-on-updatebranding)
 - [`BAD_USER_INPUT` field `css`: "the theme's CSS is not safe"](#bad_user_input-field-css-the-themes-css-is-not-safe)
 - [`FORBIDDEN` and `NOT_FOUND` on `/graphql`](#forbidden-and-not_found-on-graphql)
+- [`protectedResourceMetadata` is `null` on a resource](#protectedresourcemetadata-is-null-on-a-resource)
 - [`BAD_USER_INPUT` "invalid_authorization_details" on `approveOAuthRequest` / `approveOAuthDeviceRequest`](#bad_user_input-invalid_authorization_details-on-approveoauthrequest--approveoauthdevicerequest)
 
 ## `temporarily_unavailable`: the issuer has no signing key yet
@@ -827,6 +828,19 @@ dies with the subject's grant.
 
 **`BAD_USER_INPUT` on `setClientTokenExchange`**: `anySubjectClient` with `subjectClients`, or no client, no `subjectAgents` and no `anySubjectClient`, more
 than 20 targets or 50 clients, a target that is not a resource of the tenant, or a public client.
+
+## `protectedResourceMetadata` is `null` on a resource
+
+**When:** `resources` or `resource` (console API, or `clavix-cli resources`) shows a resource with
+`protectedResourceMetadata: null`, while its `scopes` and `metadataUrl` are there.
+
+**Why:** the RFC 9728 document is built from the resolved tenant (its issuer and DPoP policy). When the tenant's
+host does not resolve (the slug and `CLAVIX_TENANT_DOMAIN` give no host a tenant answers on, or the tenant is
+suspended or being deleted), the documents come back `null`, never an error; the rest of the resource is still
+served. The tenant is resolved once per request, however many resources the list holds.
+
+**Fix:** check that `<slug>.<CLAVIX_TENANT_DOMAIN>` is the tenant's host (`tenants:show <slug>`) and that the tenant is
+active, then read the resource again.
 
 ## Device authorization refusals
 
