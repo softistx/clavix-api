@@ -7,6 +7,18 @@ nxgt-janus release says which.
 
 ## Now
 
+- **User attributes** — tenants get the standard OIDC profile on every user (given and family name,
+  nickname, phone with an admin-set verified flag, picture, locale, time zone, birthdate, address),
+  each released under its standard claim, and a catalogue of their own attributes. An attribute
+  applies to users or to a role, has a stable key that is its claim name, a type, translated texts and
+  options, and can be emitted as a claim under a scope, be editable by the user, or be unique. Role
+  attributes are assigned per role; removing the role hides their values instead of deleting them.
+  Users edit their own profile and change their e-mail from the hosted account, a tenant can lock
+  profile fields, the users list filters by role and attribute, and the user's data export and erasure
+  cover every value. Access tokens carry the emitted attributes first; the ID token and userinfo follow
+  once nxgt-janus ships per-issuer scope claims
+  ([#509](https://github.com/softistx/clavix-api/issues/509)).
+
 - **Translations as a list of locales** — scope descriptions and detail type texts are lists of
   `{ locale, text }` (any BCP 47 language, no fixed French and English), a write sets or replaces
   the locales it names, and the consent screen picks the viewer's `Accept-Language`, then its base
