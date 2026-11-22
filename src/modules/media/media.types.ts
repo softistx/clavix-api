@@ -18,10 +18,14 @@ export interface AvatarAccessPorts {
    * throws the media refusal that says why not (no console: `not_found`).
    */
   admin(request: Request, tenantId: string): Promise<void>;
+  /** Whether the tenant locks the `PICTURE` profile field for its users' self-service. */
+  pictureLocked(tenantId: string): Promise<boolean>;
 }
 
 /** What `AvatarsService` is built over. */
 export interface AvatarsPorts {
   /** The janus instance of the request's host; `null` for a host that names no tenant. */
   issuers: { forRequest(request: Request): Promise<TenantJanus | null> };
+  /** Whether the tenant locks the `PICTURE` profile field for its users' self-service. */
+  pictureLocked(tenantId: string): Promise<boolean>;
 }

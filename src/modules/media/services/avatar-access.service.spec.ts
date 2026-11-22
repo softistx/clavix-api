@@ -16,6 +16,7 @@ interface Options {
   own?: TenantJanus | null;
   byId?: TenantJanus | null;
   admin?: () => Promise<void>;
+  locked?: boolean;
 }
 
 function serviceOver(options: Options = {}) {
@@ -28,6 +29,7 @@ function serviceOver(options: Options = {}) {
     issuers: { forRequest: async () => own },
     janusOf: async () =>
       options.byId === undefined ? janusOver() : options.byId,
+    pictureLocked: async () => options.locked === true,
     admin: async (_request, tenantId) => {
       asked.push(tenantId);
       await options.admin?.();
@@ -109,6 +111,23 @@ describe("AvatarAccessService: the signed-in user's own picture", () => {
         ),
       ),
     ).toBe("forbidden");
+  });
+});
+
+describe("AvatarAccessService: the PICTURE lock", () => {
+  test("refuses the user's own upload as locked", async () => {
+    const { service, ctxOf } = serviceOver({ locked: true });
+    expect(
+      await refusalOf(() =>
+        service.targetOf(ctxOf("https://acme.example/media/avatar")),
+      ),
+    ).toBe("locked");
+  });
+
+  test("does not stop an admin's write", async () => {
+    const { service, ctxOf } = serviceOver({ locked: true });
+    const url = `https://acme.example/media/avatar?tenantId=${TENANT_ID}&userId=u7`;
+    expect(await service.targetOf(ctxOf(url))).toMatchObject({ userId: "u7" });
   });
 });
 

@@ -38,6 +38,15 @@ const REFUSALS: ReadonlyMap<string, Refusal> = new Map([
     { code: "UNAUTHENTICATED", status: 401, message: "Not signed in" },
   ],
   ["forbidden", { code: "FORBIDDEN", status: 403, message: "Not allowed" }],
+  [
+    "locked",
+    {
+      code: "PROFILE_FIELD_LOCKED",
+      status: 403,
+      message:
+        "PICTURE is locked by the tenant: only an administrator changes it",
+    },
+  ],
   ["not_found", { code: "NOT_FOUND", status: 404, message: "No such file" }],
   [
     "conflict",

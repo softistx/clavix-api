@@ -80,6 +80,18 @@ describe("requestEmailChange", () => {
     );
   });
 
+  test("an address another account already holds still gets its link and changes nothing: LOGIN_TAKEN comes at confirm", async () => {
+    const me = await signedIn(SLUG);
+    const holder = await signedIn(SLUG);
+    const { answer, mails } = await ask(me, holder.user.email);
+    expect(answer.status).toBe(200);
+    expect(answer.data).toEqual({ requestEmailChange: true });
+    expect(mails).toHaveLength(1);
+    expect((await (await janusOf(SLUG)).findUser(me.user.id))?.email).toBe(
+      me.user.email,
+    );
+  });
+
   test("is 401 anonymous and STEP_UP_REQUIRED (403) on a session older than ten minutes", async () => {
     expect(codeOf(await gql(SLUG, REQUEST, { email: fresh() }))).toBe(
       "UNAUTHENTICATED",

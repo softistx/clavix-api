@@ -160,6 +160,14 @@ export class AccountService {
     await requireFresh(ctx, FRESH_WITHIN);
     const user = await this.signedIn(auth, ctx.request);
     ctx.set.headers.set("cache-control", "no-store");
+    // The mail budget of `requestEmailVerification` (same kind of mail to a
+    // signed-in user), counted per user, client address and tenant, on top of
+    // janus's per-address limit.
+    await ctx.verifyThrottle.check({
+      tenantId: tenant.tenantId,
+      userId: user.id,
+      ip: ctx.ip,
+    });
     const issued = await this.issued(auth, user, email);
     const mail = this.ports.mailOf(tenant);
     afterAnswer(async () => {
@@ -198,6 +206,7 @@ export class AccountService {
       userKey(tenantId.toHexString(), session.id),
       () => this.redeemed(auth, token),
     );
+    // Temporary, until @softistx/janus#1054: janus cannot refuse a token that is not the caller's before spending it.
     if (moved.id !== session.id) return currentUserOf(session);
     const mail = this.ports.mailOf(tenant);
     afterAnswer(async () => {
