@@ -14,8 +14,13 @@ import type {
   CreateAttributeInput,
   UpdateAttributeInput,
 } from "./attributes.types";
-import { type RoleLinkView, shape } from "./utils";
-import type { SaveSection, ValueChange } from "./values.types";
+import {
+  distinctAttributes,
+  type RoleLinkView,
+  sectionValueView,
+  shape,
+} from "./utils";
+import type { SaveSection, ValueChange, ValueDoc } from "./values.types";
 
 /** The tenant of the call (suspended included; the guard refuses its writes): the id as an ObjectId. */
 export async function tenantOf(ctx: ConsoleContext, given: string) {
@@ -134,4 +139,40 @@ export async function sectionOf(
     family: "ROLE",
     links: await roleAttributesService.linksHeld(tenantId, userId, roleId),
   };
+}
+
+/** The role sections of a page of users, by user id (see `sectionsLoader`). */
+export async function roleSectionsOf(
+  tenant: ObjectId,
+  userIds: readonly string[],
+  held: ReadonlyMap<string, ValueDoc[]>,
+) {
+  const sections = await roleAttributesService.sectionsOf(tenant, userIds);
+  const all = [...sections.values()].flat();
+  const attributes = distinctAttributes(
+    all.flatMap((section) => section.items.map((item) => item.attribute)),
+  );
+  const counts = await attributesService.valueCounts(tenant, attributes);
+  const links = await linkViews(tenant, attributes);
+  const members = await rolesService.memberCounts(
+    tenant,
+    all.map((section) => section.role),
+  );
+  return new Map(
+    [...sections].map(([userId, own]) => [
+      userId,
+      own.map(({ role, items }) => ({
+        role: roleShape(role, members.get(role._id.toHexString()) ?? 0),
+        values: items.map(({ attribute, required }) =>
+          sectionValueView(
+            attribute,
+            required,
+            counts.get(attribute._id.toHexString()) ?? 0,
+            held.get(userId),
+            links.get(attribute._id.toHexString()) ?? [],
+          ),
+        ),
+      })),
+    ]),
+  );
 }

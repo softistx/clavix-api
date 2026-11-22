@@ -1,53 +1,10 @@
 import { oncePerRequest } from "@softistx/alxia-graphql";
 import DataLoader from "dataloader";
 import { ObjectId } from "mongodb";
-import {
-  attributesService,
-  attributeValuesService,
-  roleAttributesService,
-} from "@/config/attributes";
-import { rolesService } from "@/config/roles";
+import { attributesService, attributeValuesService } from "@/config/attributes";
 import type { ConsoleContext } from "@/console/context";
-import { roleShape } from "@/modules/roles";
-import { linkViews } from "./attributes.console-support";
-import { distinctAttributes, sectionValueView } from "./utils";
-import type { ValueDoc } from "./values.types";
-
-/** The role sections of a page of users, by user id (see `sectionsLoader`). */
-async function roleSectionsOf(
-  tenant: ObjectId,
-  userIds: readonly string[],
-  held: ReadonlyMap<string, ValueDoc[]>,
-) {
-  const sections = await roleAttributesService.sectionsOf(tenant, userIds);
-  const all = [...sections.values()].flat();
-  const attributes = distinctAttributes(
-    all.flatMap((section) => section.items.map((item) => item.attribute)),
-  );
-  const counts = await attributesService.valueCounts(tenant, attributes);
-  const links = await linkViews(tenant, attributes);
-  const members = await rolesService.memberCounts(
-    tenant,
-    all.map((section) => section.role),
-  );
-  return new Map(
-    [...sections].map(([userId, own]) => [
-      userId,
-      own.map(({ role, items }) => ({
-        role: roleShape(role, members.get(role._id.toHexString()) ?? 0),
-        values: items.map(({ attribute, required }) =>
-          sectionValueView(
-            attribute,
-            required,
-            counts.get(attribute._id.toHexString()) ?? 0,
-            held.get(userId),
-            links.get(attribute._id.toHexString()) ?? [],
-          ),
-        ),
-      })),
-    ]),
-  );
-}
+import { roleSectionsOf } from "./attributes.console-support";
+import { sectionValueView } from "./utils";
 
 /**
  * `TenantUser.attributes` of one tenant, batched per request: the attributes,
