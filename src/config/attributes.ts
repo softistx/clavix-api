@@ -4,6 +4,7 @@ import {
   AttributesService,
   AttributeValuesService,
   RoleAttributesService,
+  UserFilterService,
 } from "@/modules/attributes";
 import type { AttributesFor } from "@/oauth/ports";
 import { mongo } from "./db";
@@ -40,6 +41,13 @@ export const attributesService = new AttributesService({
   values: attributeValuesService,
   roleLinks: roleAttributesService,
   clock,
+});
+
+/** Which users match the role and attribute filters of the users list. */
+export const userFilterService = new UserFilterService({
+  attributes: mongo.db.userAttributes,
+  values: mongo.db.attributeValues,
+  links: mongo.db.roleAttributes,
 });
 
 /** The attribute claims of the access tokens (slice A6). */

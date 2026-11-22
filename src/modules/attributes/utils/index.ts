@@ -19,6 +19,19 @@ export {
   roleSections,
 } from "./role-attributes.utils";
 export {
+  afterOf,
+  cursorOf,
+  filterConditions,
+  filterIssue,
+  isFilterable,
+  linkedCondition,
+  MAX_FILTERS,
+  MAX_PREFIX_IDS,
+  matchPipeline,
+  roleCondition,
+  valueCondition,
+} from "./user-filter.utils";
+export {
   attributeValueView,
   byUser,
   exportedView,

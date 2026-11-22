@@ -593,9 +593,9 @@ reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true
 the token claims, slices A4 and A5 the profile.
 - **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
   with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
-  `values.service.ts`, `role-attributes.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`); the single-file roles (`attributes.model.ts`,
+  `values.service.ts`, `role-attributes.service.ts`, `user-filter.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`, `user-filter.utils.ts`); the single-file roles (`attributes.model.ts`,
   `attributes.errors.ts`, `attributes.refusals.ts`, `attributes.data-loader.ts`, the console files and the
-  `*.types.ts`, `role-attributes.types.ts`) stay at the root; the SDL is three files (`attributes`, `attributes.values`, `attributes.roles` `.console.graphqls`). Files import each other relatively and through these barrels.
+  `*.types.ts`, `role-attributes.types.ts`, `user-filter.types.ts`) stay at the root; the SDL is three files (`attributes`, `attributes.values`, `attributes.roles` `.console.graphqls`). Files import each other relatively and through these barrels.
 - **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
   `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
   and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
@@ -680,6 +680,17 @@ the token claims, slices A4 and A5 the profile.
 - **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
   ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`, `roleAttribute.assign`, `.update`, `.unassign`, and on a user
   `user.setAttributes` and `user.export` (never a value).
+- **Users list filters (A8)**: `users(roleId, attributes)` keeps the users that satisfy every condition (AND),
+  with `emailPrefix` as one more (the janus ids of the prefix, at most `MAX_PREFIX_IDS` = 1 000, else
+  `BAD_USER_INPUT`). At most `MAX_FILTERS` = 5 attribute filters, each a SELECT, MULTI_SELECT (`options`, any of
+  them) or BOOLEAN (`boolean`) live attribute; any other filter is `BAD_USER_INPUT`. A value counts under the
+  type it was written with (risk 3), and a role attribute's only while a held role links it. `UserFilterService`
+  reads `userAttributes` and `roleAttributes` through `scopeToTenant` and runs one `.raw` aggregation over
+  `attributeValues` with a `$unionWith` over `roleAssignments` (the roles module's collection, named by string,
+  read only); the tenant is put in every condition's match by hand, as for the counts. A filtered page follows
+  the creation order and its cursor is `f1.<userId>` (the unfiltered list keeps janus's cursor); a user the
+  directory no longer knows is left out of the page but still counted. The resolver side is in
+  `users.console-support.ts` (`filteredUsers`).
 
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)
 
