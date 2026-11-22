@@ -71,8 +71,8 @@ if (redis !== undefined) {
     domainRecheckDeps(consoleDeps.directory.findUser),
     redis.queues.domainRecheck,
   );
-  // Daily, the agents that registered themselves and still have no grant after
-  // 7 days are deleted (D10).
+  // Daily, the agents with no standing grant are deleted: after 24 hours when
+  // they never got one, after 7 days otherwise (D10).
   startAgentsPrune(createAgentsPrune(clock), redis.queues.agentsPrune, warn);
   // Daily, the sign-in log and the console activity are cut at each tenant's
   // plan retention, the platform's own events at 400 days (D16).

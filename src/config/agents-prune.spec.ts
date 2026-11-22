@@ -68,7 +68,9 @@ afterAll(async () => {
 describe("createAgentsPrune over the real stores", () => {
   test("deletes the old agents with no standing grant, closes their tokens, spares the rest", async () => {
     const old = await agent("prn-a", idA, "Old", 8);
-    const young = await agent("prn-a", idA, "Young", 6);
+    const young = await agent("prn-a", idA, "Young", 0.5);
+    const unusedDay = await agent("prn-a", idA, "Unused 2 days", 2);
+    const usedYoung = await agent("prn-a", idA, "Used then revoked", 3);
     const used = await agent("prn-a", idA, "Used", 30);
     const revoked = await agent("prn-a", idA, "Revoked", 30);
     const otherTenant = await agent("prn-b", idB, "B old", 30);
@@ -90,6 +92,8 @@ describe("createAgentsPrune over the real stores", () => {
     await grant("prn-g-used", used, null);
     await grant("prn-g-revoked", revoked, null);
     await store.revokeGrant("prn-g-revoked", t);
+    await grant("prn-g-young", usedYoung, null);
+    await store.revokeGrant("prn-g-young", t);
     await grant("prn-g-old", old, null);
     await store.revokeGrant("prn-g-old", t);
     await store.insertAccessToken({
@@ -105,7 +109,7 @@ describe("createAgentsPrune over the real stores", () => {
     });
 
     const report = await createAgentsPrune(() => NOW)();
-    expect(report).toEqual({ pruned: 4, failed: 0 });
+    expect(report).toEqual({ pruned: 5, failed: 0 });
     expect(await agentClientsService.has(idA, document)).toBe(false);
 
     expect(await store.findClient(old)).toBeNull();
@@ -115,7 +119,12 @@ describe("createAgentsPrune over the real stores", () => {
     ).toBeInstanceOf(Date);
     expect(await store.findClient(revoked)).toBeNull();
 
+    // Never used and past 24 hours: pruned; younger than that: kept.
+    expect(await store.findClient(unusedDay)).toBeNull();
     expect(await store.findClient(young)).not.toBeNull();
+    // Used once (its grant revoked): the 7 days apply.
+    expect(await store.findClient(usedYoung)).not.toBeNull();
+    expect(await agentClientsService.has(idA, usedYoung)).toBe(true);
     expect(await store.findClient(used)).not.toBeNull();
     expect(await agentClientsService.has(idA, used)).toBe(true);
     // The other tenant's agent is old and unused: pruned in its own right.
@@ -125,7 +134,7 @@ describe("createAgentsPrune over the real stores", () => {
       .find({ action: "agent.prune" })
       .toArray();
     expect(events.map((e) => e["target"].id).sort()).toEqual(
-      [old, otherTenant, revoked, document].sort(),
+      [old, otherTenant, revoked, document, unusedDay].sort(),
     );
     expect(events.every((e) => e["actor"] === "system:agents:prune")).toBe(
       true,

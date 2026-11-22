@@ -2,6 +2,7 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import {
   agentPruneEventInput,
+  type GrantState,
   type PruneReport,
   pruneAgents,
 } from "@/modules/agents";
@@ -17,8 +18,11 @@ import { tenantsService } from "./tenancy";
 
 const PAGE = 100;
 
-/** Whether any grant of the client stands (is not revoked), read page by page in the tenant's partition. */
-async function hasStandingGrant(tenantId: string, clientId: string) {
+/** Whether a grant of the client stands, only revoked ones exist, or none ever did (never used); read page by page in the tenant's partition. */
+async function grantState(
+  tenantId: string,
+  clientId: string,
+): Promise<GrantState> {
   const store = createMongoOAuth(oauthDb, {
     partition: partitionOf(new ObjectId(tenantId)),
   });
@@ -26,15 +30,17 @@ async function hasStandingGrant(tenantId: string, clientId: string) {
     throw new Error("the OAuth store has no listClientGrants()");
   }
   let cursor: string | undefined;
+  let state: GrantState = "none";
   do {
     const page = await store.listClientGrants(clientId, {
       cursor,
       limit: PAGE,
     });
-    if (page.items.some((grant) => grant.revokedAt === null)) return true;
+    if (page.items.some((grant) => grant.revokedAt === null)) return "standing";
+    if (page.items.length > 0) state = "revoked";
     cursor = page.nextCursor ?? undefined;
   } while (cursor !== undefined);
-  return false;
+  return state;
 }
 
 /**
@@ -49,7 +55,7 @@ export const createAgentsPrune =
         tenantIds: () => tenantsService.activeIds(),
         candidates: (tenantId, before) =>
           agentClientsService.registeredBefore(tenantId, before),
-        hasStandingGrant,
+        grantState,
         // The console's clients lock: serializes the check and the delete with console client writes
         // (consent approval does not take it, so a grant made in between is revoked with the agent).
         locked: (tenantId, work) =>

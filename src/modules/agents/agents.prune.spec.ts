@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { AGENT_GRACE_DAYS, type PruneDeps, pruneAgents } from "./agents.prune";
+import {
+  AGENT_GRACE_DAYS,
+  AGENT_UNUSED_GRACE_HOURS,
+  type GrantState,
+  type PruneDeps,
+  pruneAgents,
+} from "./agents.prune";
 import { agentPruneEventInput, PRUNE_ACTOR } from "./agents.prune-events";
 import { startAgentsPrune } from "./agents.prune-worker";
 
@@ -19,7 +25,7 @@ function deps(over: Partial<PruneDeps> = {}) {
       state.asked.push(before);
       return ["a", "b"];
     },
-    hasStandingGrant: async () => false,
+    grantState: async () => "none",
     locked: async (_t, work) => work(),
     remove: async (t, c) => {
       state.removed.push(`${t}/${c}`);
@@ -33,11 +39,34 @@ function deps(over: Partial<PruneDeps> = {}) {
 }
 
 describe("pruneAgents", () => {
-  test("asks for agents registered before now minus 7 days", async () => {
+  test("asks for agents registered before now minus 24 hours, then before now minus 7 days", async () => {
     const { full, state } = deps();
     await pruneAgents(full, NOW);
     expect(AGENT_GRACE_DAYS).toBe(7);
-    expect(state.asked[0]?.getTime()).toBe(NOW.getTime() - 7 * DAY);
+    expect(AGENT_UNUSED_GRACE_HOURS).toBe(24);
+    expect(state.asked.map((d) => d.getTime())).toEqual([
+      NOW.getTime() - DAY,
+      NOW.getTime() - 7 * DAY,
+    ]);
+  });
+
+  test("an agent that was used (all grants revoked) keeps the 7 days, an unused one does not", async () => {
+    const states: Record<string, GrantState> = { a: "revoked", b: "none" };
+    const { full, state } = deps({
+      candidates: async (_t, before) =>
+        before.getTime() === NOW.getTime() - DAY ? ["a", "b"] : [],
+      grantState: async (_t, c) => states[c] ?? "none",
+    });
+    expect(await pruneAgents(full, NOW)).toEqual({ pruned: 1, failed: 0 });
+    expect(state.removed).toEqual(["t1/b"]);
+  });
+
+  test("a used agent past 7 days is pruned once its grants are all revoked", async () => {
+    const { full, state } = deps({
+      grantState: async () => "revoked",
+    });
+    expect(await pruneAgents(full, NOW)).toEqual({ pruned: 2, failed: 0 });
+    expect(state.removed).toEqual(["t1/a", "t1/b"]);
   });
 
   test("deletes the agents with no standing grant and records one event each", async () => {
@@ -49,7 +78,7 @@ describe("pruneAgents", () => {
 
   test("keeps an agent that has a standing grant", async () => {
     const { full, state } = deps({
-      hasStandingGrant: async (_t, c) => c === "a",
+      grantState: async (_t, c) => (c === "a" ? "standing" : "none"),
     });
     expect(await pruneAgents(full, NOW)).toEqual({ pruned: 1, failed: 0 });
     expect(state.removed).toEqual(["t1/b"]);
@@ -86,9 +115,9 @@ describe("pruneAgents", () => {
           steps.push("unlock");
         }
       },
-      hasStandingGrant: async (_t, c) => {
+      grantState: async (_t, c) => {
         steps.push(`grant ${c}`);
-        return false;
+        return "none";
       },
       remove: async (_t, c) => {
         steps.push(`remove ${c}`);
