@@ -13,5 +13,7 @@ export {
   AttributesService,
   AttributeValuesService,
   RoleAttributesService,
+  UserFilterService,
 } from "./services";
-export { exportedView } from "./utils";
+export type { UserFilter } from "./user-filter.types";
+export { afterOf, exportedView, MAX_PREFIX_IDS } from "./utils";

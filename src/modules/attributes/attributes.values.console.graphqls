@@ -112,3 +112,14 @@ extend type Mutation {
     values: [AttributeValueInput!]!
   ): UserAttributeSections!
 }
+
+"""
+One attribute filter of the users list: a choice attribute with `options` (the
+user holds any of them), or a boolean attribute with `boolean`. Exactly one of
+the two, matching the attribute's type.
+"""
+input AttributeFilterInput {
+  attributeId: ID!
+  options: [String!]
+  boolean: Boolean
+}
