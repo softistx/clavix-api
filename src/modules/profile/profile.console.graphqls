@@ -102,11 +102,12 @@ input AddressInput {
 
 extend type Mutation {
   """
-  Marks the user's address verified or not (tenant admin), touching nothing
-  else: no session, password or second factor changes. Idempotent. Errors:
-  NOT_FOUND for an unknown user.
+  Marks the user's phone number proved or not (tenant admin): the only way a
+  phone becomes verified, there is no SMS. Touches nothing else. Idempotent.
+  Errors: PROFILE_FIELD_INVALID (400) when the user has no phone, NOT_FOUND
+  for an unknown user, CONFLICT (409) when the user changed meanwhile.
   """
-  setUserEmailVerified(
+  setUserPhoneVerified(
     tenantId: ID!
     userId: ID!
     verified: Boolean!
