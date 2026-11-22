@@ -4,7 +4,7 @@ import {
   syncMongoStoresPartitioned,
 } from "@softistx/janus-mongo";
 import { syncMongoOAuthPartitioned } from "@softistx/janus-oauth-mongo";
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo, mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 
 // A deployment step: brings every collection's validator and indexes to what
@@ -12,6 +12,7 @@ import { oauthDb } from "@/config/oauth-db";
 // which the app itself should not hold. The janus OAuth collections and the
 // janus user stores (one partition per tenant) are synced beside the app's own.
 try {
+  await connectMongo();
   console.log(
     JSON.stringify(
       {
@@ -26,5 +27,5 @@ try {
     ),
   );
 } finally {
-  await mongo.close();
+  await closeMongo();
 }

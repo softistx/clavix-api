@@ -15,6 +15,7 @@ import { createAgentsPrune } from "./config/agents-prune";
 import { appPorts } from "./config/app-ports";
 import { createAuditRetention } from "./config/audit-retention";
 import { createConsoleDeps } from "./config/console";
+import { connectMongo } from "./config/db";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
 import { createGrantsRevoke } from "./config/grants-revoke";
@@ -31,6 +32,10 @@ import { createWebhookSecretsPrune, webhookDelivery } from "./config/webhooks";
 
 // Longest wait for a sign-in code mail in flight when the server stops.
 const MAIL_DRAIN_MS = 10_000;
+
+// MongoDB opens at start (a bad URI or an unreachable server stops the boot, as
+// the health check expects), not at import.
+await connectMongo();
 
 // Every active tenant has a key before the first request (a tenant seeded by a
 // migration included), then the hourly rotation runs on the Redis queue; with

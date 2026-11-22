@@ -1,6 +1,6 @@
 import { access } from "@/config/access";
 import { adminEventRecorder } from "@/config/admin-events";
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo } from "@/config/db";
 import { env } from "@/config/env";
 import { exclusive } from "@/config/exclusive";
 import { invitationsOf } from "@/config/invitations";
@@ -28,6 +28,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
+  await connectMongo();
   const input = parseOperatorArgs(args);
   const tenant = await tenantResolver.resolveHost(
     `${PLATFORM_TENANT_SLUG}.${env.CLAVIX_DOMAIN}`,
@@ -57,6 +58,6 @@ try {
   console.error(`operators:grant: ${error.message}\n\n${OPERATORS_USAGE}`);
   process.exitCode = 1;
 } finally {
-  await mongo.close();
+  await closeMongo();
   await redis?.close();
 }
