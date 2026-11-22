@@ -376,3 +376,49 @@ describe("role sections and hiding", () => {
     ).toBe("ATTRIBUTE_REQUIRED");
   });
 });
+
+describe("incomplete accounts", () => {
+  const setup = async (key: string) => {
+    const role = await rolesService.create(tenant, { name: `${key}-role` });
+    const attr = await roleAttribute(key);
+    await links.assign(tenant, role.id, attr._id.toHexString(), true);
+    return { role, attr };
+  };
+
+  test("a held role with a required link and no value is incomplete", async () => {
+    const { role } = await setup("inc_none");
+    await rolesService.assign(tenant, role.id, "inc-u1");
+    expect([...(await values.incomplete(tenant, ["inc-u1"]))]).toEqual([
+      "inc-u1",
+    ]);
+  });
+
+  test("a value set makes the user complete", async () => {
+    const { role, attr } = await setup("inc_set");
+    await rolesService.assign(tenant, role.id, "inc-u2");
+    await rolesService.assign(tenant, role.id, "inc-u3");
+    await saveSection("inc-u2", role._id, [set(attr._id, "x")]);
+    const missing = await values.incomplete(tenant, ["inc-u2", "inc-u3"]);
+    expect([...missing]).toEqual(["inc-u3"]);
+  });
+
+  test("a role the user does not hold is ignored", async () => {
+    await setup("inc_notheld");
+    expect([...(await values.incomplete(tenant, ["inc-nobody"]))]).toEqual([]);
+  });
+
+  test("an archived attribute is ignored", async () => {
+    const { role, attr } = await setup("inc_arch");
+    await rolesService.assign(tenant, role.id, "inc-u4");
+    await catalogue.archive(tenant, attr._id.toHexString());
+    expect([...(await values.incomplete(tenant, ["inc-u4"]))]).toEqual([]);
+  });
+
+  test("an optional link is ignored", async () => {
+    const role = await rolesService.create(tenant, { name: "inc-opt-role" });
+    const attr = await roleAttribute("inc_opt");
+    await links.assign(tenant, role.id, attr._id.toHexString(), false);
+    await rolesService.assign(tenant, role.id, "inc-u5");
+    expect([...(await values.incomplete(tenant, ["inc-u5"]))]).toEqual([]);
+  });
+});

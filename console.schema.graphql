@@ -2273,7 +2273,7 @@ type TenantUser {
   """
   attributes: UserAttributeSections!
   """
-  False while the user lacks a value of a live required attribute of the general section (tenant viewer).
+  False while the user lacks a value of a live required attribute: of the general section, or of a role section (a held role, a required link). Accounts are flagged, never blocked (tenant viewer).
   """
   attributesComplete: Boolean!
   createdAt: DateTime!

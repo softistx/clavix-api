@@ -28,18 +28,6 @@ type UserAttributeOption {
 }
 
 """
-The link between a role-family attribute and one precise role (a role is per
-tenant and per resource): a user shows the attribute while it holds the role.
-`required` is this role's own flag: a console save cannot clear the value in
-the role's section. Removing the role (or the link) hides the values without
-deleting them; they show again when the link comes back.
-"""
-type RoleAttributeLink {
-  role: TenantRole!
-  required: Boolean!
-}
-
-"""
 An extra field of the tenant's users (family `USER`) or of the holders of some
 roles (family `ROLE`). The `key` is the claim name and never changes; it stays
 taken while the attribute is archived, and only the permanent delete frees it.
@@ -117,113 +105,6 @@ input UpdateUserAttributeInput {
   emissionScope: String
 }
 
-"""
-One attribute of a user's section and the value the user holds. Exactly the
-field of the attribute's type is set (`text` for STRING and TEXT, `color`,
-`number`, `date`, `dateTime`, `time`, `options` for SELECT and MULTI_SELECT,
-`boolean`); every field is `null` while the user holds no value.
-"""
-type AttributeValue {
-  attribute: UserAttribute!
-  text: String
-  color: HexColorCode
-  number: Float
-  boolean: Boolean
-  date: Date
-  dateTime: DateTime
-  time: LocalTime
-  "The keys of the chosen options (one for SELECT)."
-  options: [String!]
-    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
-}
-
-"""
-The values of one role's attributes, for a user who holds the role. Each
-attribute's `required` is the role link's. One value per user and attribute
-whatever the number of roles: two roles that link the same attribute show the
-same value.
-"""
-type RoleAttributeSection {
-  role: TenantRole!
-  values: [AttributeValue!]!
-    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
-}
-
-"""
-What a user holds, by section: `general` is every live attribute of family
-`USER`, by position; `roles` has one section per held role (by name) that is
-linked to live attributes. The values of an archived attribute, of a role no
-longer held or whose link was removed are not shown (they stay stored).
-"""
-type UserAttributeSections {
-  general: [AttributeValue!]!
-    @listSize(assumedSize: 100, requireOneSlicingArgument: false)
-  roles: [RoleAttributeSection!]!
-    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
-}
-
-extend type TenantUser {
-  "The user's attribute values by section, hidden ones left out (tenant viewer)."
-  attributes: UserAttributeSections!
-  "False while the user lacks a value of a live required attribute of the general section (tenant viewer)."
-  attributesComplete: Boolean!
-}
-
-"""
-Which section a save is about: `roleId` null for the general section, else the
-role whose section is saved (the user must hold it).
-"""
-input AttributeSectionInput {
-  roleId: ID
-}
-
-"""
-The value to set, through the one field of the attribute's type (`text` for
-STRING and TEXT, `color`, `number`, `date`, `dateTime`, `time`, `options` for
-SELECT and MULTI_SELECT, `boolean`).
-"""
-input AttributeValueSetInput @oneOf {
-  text: String
-  color: HexColorCode
-  number: Float
-  boolean: Boolean
-  date: Date
-  dateTime: DateTime
-  time: LocalTime
-  options: [String!]
-}
-
-"One change of a save: `value` null clears the attribute's value."
-input AttributeValueInput {
-  attributeId: ID!
-  value: AttributeValueSetInput
-}
-
-"""
-One attribute value in a user's data export, hidden ones included (an archived
-attribute, a value written under another type). Exactly the field of the
-attribute's type is set.
-"""
-type ExportedAttributeValue {
-  key: String!
-  label: [Translation!]!
-    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
-  "True when the user does not see the value (its attribute is archived, its type changed, or no role the user holds links it)."
-  hidden: Boolean!
-  "The names of the held roles whose section holds the attribute; empty for the general section."
-  roles: [String!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
-  text: String
-  color: HexColorCode
-  number: Float
-  boolean: Boolean
-  date: Date
-  dateTime: DateTime
-  time: LocalTime
-  options: [String!]
-    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
-  updatedAt: DateTime!
-}
-
 extend type Query {
   "The tenant's attributes by position (tenant viewer), the live ones or, with `archived`, the archived ones. All families unless `family` is given."
   userAttributes(
@@ -272,45 +153,4 @@ extend type Mutation {
   gone. Errors: ATTRIBUTE_NOT_ARCHIVED (409), ATTRIBUTE_DELETE_UNCONFIRMED (400).
   """
   deleteUserAttribute(tenantId: ID!, id: ID!, confirmKey: String!): Boolean!
-  """
-  Sets and clears a user's values in one section (tenant admin) and returns
-  the sections as they stand. A bad value writes nothing. Required attributes
-  (the role link's flag in a role section) cannot be cleared here. Errors:
-  NOT_FOUND (user, or attribute at `values.<i>`), ATTRIBUTE_ARCHIVED,
-  ATTRIBUTE_FAMILY_MISMATCH (400, field `values.<i>`: a role attribute in the
-  general section, a user attribute or one not linked to the role in a role's),
-  ATTRIBUTE_VALUE_INVALID (400, field `values.<i>`), ATTRIBUTE_REQUIRED (400),
-  ATTRIBUTE_VALUE_TAKEN (409, a `unique` attribute) and ATTRIBUTE_ROLE_NOT_HELD
-  (409, field `section.roleId`: the user does not hold the role).
-  """
-  setUserAttributeValues(
-    tenantId: ID!
-    userId: ID!
-    section: AttributeSectionInput!
-    values: [AttributeValueInput!]!
-  ): UserAttributeSections!
-  """
-  Links a role-family attribute to one role, `required` for that role only
-  (tenant admin), and returns the attribute. Idempotent: a repeat sets
-  `required`. Errors: NOT_FOUND (role or attribute), ATTRIBUTE_FAMILY_MISMATCH
-  (400, a user-family attribute) and ATTRIBUTE_ARCHIVED (409).
-  """
-  assignRoleAttribute(
-    tenantId: ID!
-    roleId: ID!
-    attributeId: ID!
-    required: Boolean = false
-  ): UserAttribute!
-  "Changes the `required` flag of a link (tenant admin) and returns the attribute. Errors: NOT_FOUND (role, attribute, or no such link)."
-  updateRoleAttribute(
-    tenantId: ID!
-    roleId: ID!
-    attributeId: ID!
-    required: Boolean!
-  ): UserAttribute!
-  """
-  Removes the link (tenant admin); `true` when there was one. The users' values
-  stay stored and hidden: nothing else is written. Idempotent.
-  """
-  unassignRoleAttribute(tenantId: ID!, roleId: ID!, attributeId: ID!): Boolean!
 }

@@ -620,10 +620,12 @@ the role links, the claims and the profile.
   `time`, `options` for SELECT and MULTI_SELECT; the SDL input is `@oneOf`), canonicalised on write
   (NFC-trimmed text, lower-cased hex colour, `-0` as `0`, UTC-midnight dates, `HH:mm:ss` times, SELECT as a
   one-item array). `uniqueKey` is the lower-cased text or the number, set only on a `unique` attribute.
+  The SDL is split by role: `attributes.console.graphqls` (catalogue), `attributes.values.console.graphqls` (values, sections,
+  `attributesComplete`, the export) and `attributes.roles.console.graphqls` (role links).
   Refusals: `ATTRIBUTE_VALUE_INVALID` (field `values.<i>`), `ATTRIBUTE_FAMILY_MISMATCH`,
   `ATTRIBUTE_VALUE_TAKEN` (a race on the unique index is rolled back by hand: no transactions),
   `ATTRIBUTE_REQUIRED` (the console refuses a clear of a required value; `TenantUser.attributesComplete`
-  reports the rest), `ATTRIBUTE_ROLE_NOT_HELD` (`section.roleId` names a role the user does not hold, or an unknown one). A save checks every change
+  reports the rest: a missing value of a required general attribute, or of a required link of a held role; a role not held or an archived attribute counts for nothing), `ATTRIBUTE_ROLE_NOT_HELD` (`section.roleId` names a role the user does not hold, or an unknown one). A save checks every change
   first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
   tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
   social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.

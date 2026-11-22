@@ -27,6 +27,11 @@ export interface AttributeRoleLinks {
 export interface HeldRoleLinks {
   /** The roles the user holds that are linked to each attribute, by attribute id (hex); every link counts, archived attributes included. */
   heldBy(tenantId: ObjectId, userId: string): Promise<Map<string, RoleDoc[]>>;
+  /** The role sections (held roles with the live role attributes they link, the link's `required`) of each user, by user id; a user with none is absent. */
+  sectionsOf(
+    tenantId: ObjectId,
+    userIds: readonly string[],
+  ): Promise<Map<string, RoleSection[]>>;
 }
 
 /** One role of a user and the live role attributes it links, by position. */

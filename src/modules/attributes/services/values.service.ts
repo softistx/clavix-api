@@ -152,18 +152,30 @@ export class AttributeValuesService implements AttributeValues {
     return byPosition(found.filter((a) => a.archivedAt === null));
   }
 
-  /** The users, among `userIds`, who lack a value of a required attribute of the general section. */
+  /**
+   * The users, among `userIds`, who lack a value of a required attribute: of
+   * the general section, or of a role section (a role the user holds, a live
+   * attribute, a required link). A role not held, an archived attribute or a
+   * removed link counts for nothing. Accounts are flagged, never blocked.
+   */
   async incomplete(
     tenantId: ObjectId,
     userIds: readonly string[],
   ): Promise<Set<string>> {
     const required = (await this.general(tenantId)).filter((a) => a.required);
-    if (required.length === 0) return new Set();
+    const roles = await this.options.roleLinks.sectionsOf(tenantId, userIds);
+    const needing = (userId: string) => [
+      ...required,
+      ...(roles.get(userId) ?? []).flatMap((section) =>
+        section.items.filter((item) => item.required).map((i) => i.attribute),
+      ),
+    ];
+    if (required.length === 0 && roles.size === 0) return new Set();
     const held = await this.ofUsers(tenantId, userIds);
     return new Set(
       userIds.filter((userId) => {
         const values = held.get(userId) ?? [];
-        return !required.every((a) =>
+        return !needing(userId).every((a) =>
           values.some(
             (v) =>
               v.attributeId.equals(a._id) && matches(v, a) && !isEmpty(v.value),
