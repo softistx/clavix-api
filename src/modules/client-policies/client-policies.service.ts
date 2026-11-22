@@ -4,9 +4,10 @@ import {
   type TypedCollection,
 } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
-import type {
-  clientPolicies,
-  TokenExchangeRules,
+import {
+  type clientPolicies,
+  type TokenExchangeRules,
+  tokenExchangeRulesSchema,
 } from "./client-policies.model";
 
 /**
@@ -28,7 +29,11 @@ export class ClientPoliciesService {
     clientId: string,
   ): Promise<TokenExchangeRules | null> {
     const found = await this.scoped(tenantId).findFirst({ clientId });
-    return found?.tokenExchange ?? null;
+    // Parsed on read: a rule stored before `subjectAgents` existed has no
+    // such field, and the schema's default makes it `false`.
+    return found?.tokenExchange
+      ? tokenExchangeRulesSchema.parse(found.tokenExchange)
+      : null;
   }
 
   /** The token exchange rules of these clients, by client id (a client with none is absent). One read. */
@@ -42,7 +47,9 @@ export class ClientPoliciesService {
     });
     return new Map(
       found.flatMap((doc) =>
-        doc.tokenExchange === null ? [] : [[doc.clientId, doc.tokenExchange]],
+        doc.tokenExchange === null
+          ? []
+          : [[doc.clientId, tokenExchangeRulesSchema.parse(doc.tokenExchange)]],
       ),
     );
   }
