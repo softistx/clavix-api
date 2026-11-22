@@ -1,8 +1,11 @@
 import type { CodegenConfig } from "@graphql-codegen/cli";
-import { clientCodegenScalars, codegenScalars } from "@nxgt/graphql-scalars";
+import {
+  clientCodegenScalars,
+  codegenScalars,
+} from "@softistx/graphql-scalars";
 
 // `bun run generate` writes, from every src/**/*.graphqls and the SDL of
-// @nxgt/graphql-scalars and @constraint (generated/graphql/):
+// @softistx/graphql-scalars and @constraint (generated/graphql/):
 // (The console API's SDL, under src/console/ and in the modules' `*.console.graphqls`, is apart: codegen.console.ts.)
 // - src/generated/graphql/resolvers.ts: the schema's types and `Resolvers`,
 //   whose context is the app's own (`Context`, src/http/context.ts). A module
@@ -36,8 +39,8 @@ const config: CodegenConfig = {
       },
     },
     "src/generated/graphql/zod.ts": {
-      plugins: ["@nxgt/graphql-codegen-zod"],
-      config: { scalarSchemas: "@nxgt/graphql-scalars" },
+      plugins: ["@softistx/graphql-codegen-zod"],
+      config: { scalarSchemas: "@softistx/graphql-scalars" },
     },
     "test/generated/graphql/": {
       documents: [
