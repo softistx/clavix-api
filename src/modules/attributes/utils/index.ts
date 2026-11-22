@@ -10,7 +10,7 @@ export {
   shape,
   target,
 } from "./attributes.utils";
-export { claimsOf, claimValue, roleApplies } from "./claims.utils";
+export { claimsOf, claimTable, claimValue, roleApplies } from "./claims.utils";
 export {
   distinctAttributes,
   distinctIds,
