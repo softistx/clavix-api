@@ -126,7 +126,17 @@ describe("setUserAttributeValues", () => {
     const recorded = await events();
     expect(recorded.map((e) => e.action)).toEqual(["user.setAttributes"]);
     expect(recorded[0]?.target).toEqual({ type: "user", id: userA });
-    expect(JSON.stringify(recorded)).not.toContain("99");
+    expect(Object.keys(recorded[0] ?? {}).sort()).toEqual(
+      [
+        "_id",
+        "action",
+        "actor",
+        "at",
+        "requestId",
+        "target",
+        "tenantId",
+      ].sort(),
+    );
   });
 });
 
