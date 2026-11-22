@@ -1,4 +1,5 @@
 import type { OidcClaims } from "@softistx/janus-oidc";
+import { pictureUrl } from "@/modules/media/media.utils";
 import { profileOf, standardClaims } from "@/modules/profile";
 import type { AuthFor, ClaimsFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
@@ -29,12 +30,16 @@ export function createTenantAuth(options: TenantJanusOptions) {
   const claimsFor: ClaimsFor = (tenant) => async (subject) => {
     const user = await (await forTenant(tenant))?.findUser(subject.id);
     if (user === null || user === undefined) return {}; // not in this tenant's pool: nothing to release
+    const profile = profileOf(user);
     const claims: OidcClaims = {
       email: user.email,
       email_verified: user.emailVerified,
       ...(user.name === undefined ? {} : { name: user.name }),
       // janus-oidc releases each by scope: `profile`, `phone`, `address`.
-      ...standardClaims(profileOf(user)),
+      ...standardClaims(profile),
+      ...(profile.pictureKey === null
+        ? {}
+        : { picture: pictureUrl(tenant.issuer, profile.pictureKey) }),
     };
     return claims;
   };

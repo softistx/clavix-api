@@ -1115,3 +1115,11 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** the API refuses it before parsing, so no resolver runs. Every first-party caller sends the header (clavix-ui sends `clavix-ui`).
 
 **Fix:** add `x-clavix-client: <your client name>` (any non-empty value) to the request, or leave the flag `false` until the caller is updated.
+
+## Profile pictures: 415 `MEDIA_UNSUPPORTED_TYPE`, 413 `MEDIA_TOO_LARGE`, 503 on `/media/avatar`
+
+**When:** `PUT /media/avatar` is refused, or `GET /media/avatar/<key>` answers 503.
+
+**Why:** the body is not a PNG, JPEG or WebP (the bytes are sniffed, the `content-type` header is not trusted): 415 `MEDIA_UNSUPPORTED_TYPE`; it is over 1 MiB: 413 `MEDIA_TOO_LARGE`; the user, address or tenant passed `CLAVIX_AVATAR_*`: 429 with `Retry-After`; no `CLAVIX_MEDIA_S3_*` is set (outside production), so the bucket is absent: 503. A key of another tenant is a 404.
+
+**Fix:** send a smaller PNG, JPEG or WebP, wait `Retry-After`, or set the `CLAVIX_MEDIA_S3_*` variables (docs/operations.md, "Profile pictures").

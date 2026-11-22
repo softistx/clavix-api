@@ -4,6 +4,7 @@ import type { OwnedCollectionPurger, PartitionPurger } from "@/modules/tenants";
 import { isOwned } from "@/tenancy/owned";
 import { access } from "./access";
 import { mongo } from "./db";
+import { avatarObjects } from "./media-objects";
 import { oauthDb } from "./oauth-db";
 import { createPartitionPurger } from "./partition-purger";
 import { warn } from "./runtime";
@@ -41,6 +42,11 @@ export const createTenantPurge =
           {
             name: "domains",
             deleteOwnedBy: (id) => domainsService.deleteOwnedBy(id),
+          },
+          // The pictures are bucket objects, under the tenant's folder.
+          {
+            name: "avatars",
+            deleteOwnedBy: (id) => avatarObjects.purgeTenant(id.toHexString()),
           },
         ],
         memberships: access,

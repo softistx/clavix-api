@@ -1,5 +1,6 @@
 import type { UserEvent, UserEventListener } from "@softistx/janus";
 import type { AuthEventType } from "@/modules/audit";
+import type { AvatarObjectsService } from "@/modules/media";
 import { userWebhookEvent } from "@/modules/webhooks";
 import type { EventBus } from "./bus";
 
@@ -19,11 +20,22 @@ const TYPES: Partial<Record<UserEvent["type"], AuthEventType>> = {
  * janus's `events` listener of one tenant: every event goes to the bus as a
  * webhook candidate (D22), and the events of D14 as auth events,
  * tagged with the tenant the instance belongs to (so one tenant's instance can
- * never write into another's log). A janus event carries no address.
+ * never write into another's log). A janus event carries no address. The
+ * former picture object of an avatar change is removed here.
  */
 export const janusListener =
-  (tenantId: string, bus: Pick<EventBus, "emit">): UserEventListener =>
+  (
+    tenantId: string,
+    bus: Pick<EventBus, "emit">,
+    avatars: Pick<AvatarObjectsService, "removeFormer">,
+  ): UserEventListener =>
   async (event) => {
+    // A changed or removed picture leaves its former object behind (best effort).
+    if (
+      event.type === "user.avatarChanged" ||
+      event.type === "user.avatarRemoved"
+    )
+      await avatars.removeFormer(tenantId, event.formerAvatarId ?? null);
     // Every user event is a candidate webhook (D22), ids only.
     await bus.emit({
       kind: "webhook",

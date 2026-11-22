@@ -9,6 +9,7 @@ import { connectionSourcesService } from "./connections";
 import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { masterKeys, secretBox } from "./keys";
+import { avatarObjects } from "./media-objects";
 import { noInvitationHooks } from "./no-ops";
 import { oauthDb } from "./oauth-db";
 import { warn } from "./runtime";
@@ -40,7 +41,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     secondFactorKeys: secondFactorKeysOf(masterKeys),
     secrets: secretBox,
     connections: connectionSourcesService,
-    events: (tenant) => janusListener(tenant.tenantId, eventBus),
+    events: (tenant) => janusListener(tenant.tenantId, eventBus, avatarObjects),
     invitationHooks: (tenant) =>
       tenant.slug === PLATFORM_TENANT_SLUG
         ? adminHooks(tenant)

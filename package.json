@@ -32,6 +32,7 @@
     "@softistx/alxia": "^0.28.0",
     "@softistx/alxia-env": "^0.6.0",
     "@softistx/alxia-graphql": "^0.19.0",
+    "@softistx/alxia-media": "^0.12.0",
     "@softistx/alxia-telemetry": "^0.10.0",
     "@softistx/graphql-scalars": "^0.8.0",
     "@softistx/graphql-validation": "^0.10.0",

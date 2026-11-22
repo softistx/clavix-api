@@ -210,6 +210,9 @@ export async function completedAnswer(
     // The erase is idempotent and runs first: a failed revocation must not
     // leave the previous holder's attribute values on the new owner.
     await eraseReplacedValues(tenantId, done.userId);
+    // Their picture goes too: the janus removal fires the event that
+    // deletes the object.
+    await services().avatars.remove({ tenantId, userId: done.userId, auth });
     await services().consent.revokeOnReplace(
       ctx,
       tenantId,

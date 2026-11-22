@@ -152,6 +152,7 @@ describe("the lock order", () => {
       users: {
         setActive: async (_t: string, id: string, active: boolean) =>
           userOf(id, active),
+        find: async (_t: string, id: string) => userOf(id, true),
         delete: async () => true,
       },
       access: {

@@ -6,6 +6,9 @@ export const CONSOLE_PATH = "/console/graphql";
 /** The audit export's path (D17), on the console host beside the GraphQL one. */
 export const CONSOLE_EXPORT_PATH = "/console/audit/export";
 
+/** The picture upload a console caller makes for a user (`PUT`, over the media routes; the DPoP proof names it). */
+export const CONSOLE_AVATAR_PATH = "/media/avatar";
+
 /** The id of the console's OAuth client in the `clavix` tenant. */
 export const CONSOLE_CLIENT_ID = "console";
 

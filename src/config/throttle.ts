@@ -3,6 +3,7 @@ import {
   createVerificationThrottle,
 } from "@/modules/auth";
 import { createDeviceThrottle } from "@/modules/consent";
+import { createAvatarThrottle } from "@/modules/media";
 import { createPasskeyThrottle } from "@/modules/passkeys";
 import {
   createHomeRealmThrottle,
@@ -36,6 +37,10 @@ export const deviceThrottle =
   redis === undefined
     ? noUserThrottle
     : createDeviceThrottle(redis.limits, warn);
+export const avatarThrottle =
+  redis === undefined
+    ? noUserThrottle
+    : createAvatarThrottle(redis.limits, warn);
 export const registerThrottle =
   redis === undefined ? noThrottle : createRegisterThrottle(redis.limits, warn);
 export const metadataThrottle =

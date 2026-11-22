@@ -573,6 +573,14 @@ type Mutation {
   """
   registerPasskey(challenge: String!, name: String!, response: String!): Passkey!
   """
+  Removes the signed-in user's profile picture: true when this call removed
+  one, false when there was none. The picture is uploaded with
+  `PUT /media/avatar` (a PNG, JPEG or WebP of at most 1 MiB, as the raw body),
+  never through GraphQL; the answer is its key. The `picture` claim of the
+  user's tokens is the picture's URL.
+  """
+  removeMyPicture: Boolean!
+  """
   Removes one of the user's passkeys: true when this call removed it, false for
   one that is not theirs or not there. Needs a session that signed in within ten
   minutes (STEP_UP_REQUIRED, 403).
