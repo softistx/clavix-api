@@ -33,7 +33,7 @@ jobs:
           node-version: "24"
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       # mongod, for the in-memory replica set of test/setup.ts: its version
       # follows mongodb-memory-server-core, so the key follows the lockfile.
       - id: binaries
