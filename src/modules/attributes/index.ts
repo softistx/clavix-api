@@ -8,6 +8,7 @@
 // `console/modules/lock-order.spec.ts`).
 
 export {
+  AttributeClaimsService,
   AttributesService,
   AttributeValuesService,
   RoleAttributesService,
