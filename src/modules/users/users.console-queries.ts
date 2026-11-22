@@ -2,6 +2,7 @@ import { JanusError } from "@softistx/janus";
 import { idArg, liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { badInput } from "@/shared/errors";
+import { filteredUsers } from "./users.console-filter";
 import { userDataExport } from "./users.export";
 import { grantShape, shape, target } from "./users.utils";
 
@@ -12,7 +13,7 @@ const MAX_LOOKUP = 20;
 export const userQueries: NonNullable<Resolvers["Query"]> = {
   users: async (
     _,
-    { tenantId: given, after, first, email, emailPrefix },
+    { tenantId: given, after, first, email, emailPrefix, roleId, attributes },
     ctx,
   ) => {
     const tenantId = tenantIdOf(given);
@@ -24,6 +25,20 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
       throw badInput("The prefix is too long");
     }
     await liveTenant(ctx.directory, tenantId);
+    const narrowed = (attributes?.length ?? 0) > 0 || (roleId ?? null) !== null;
+    if (narrowed && email !== null && email !== undefined) {
+      throw badInput(
+        "Give either email or role and attribute filters, not both",
+      );
+    }
+    if (narrowed) {
+      return filteredUsers(
+        ctx,
+        tenantId,
+        { roleId, attributes },
+        { prefix, after, first },
+      );
+    }
     if (email !== null && email !== undefined) {
       const found = await ctx.users.findByEmail(tenantId, email);
       return {

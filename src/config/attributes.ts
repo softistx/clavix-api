@@ -2,6 +2,7 @@ import {
   AttributesService,
   AttributeValuesService,
   RoleAttributesService,
+  UserFilterService,
 } from "@/modules/attributes";
 import { mongo } from "./db";
 import { clock } from "./runtime";
@@ -37,4 +38,11 @@ export const attributesService = new AttributesService({
   values: attributeValuesService,
   roleLinks: roleAttributesService,
   clock,
+});
+
+/** Which users match the role and attribute filters of the users list. */
+export const userFilterService = new UserFilterService({
+  attributes: mongo.db.userAttributes,
+  values: mongo.db.attributeValues,
+  links: mongo.db.roleAttributes,
 });
