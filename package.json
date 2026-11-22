@@ -38,7 +38,7 @@
     "@softistx/graxia": "^0.16.0",
     "@softistx/graxia-graphiql": "^0.4.0",
     "@softistx/janus": "^0.80.0",
-    "@softistx/janus-graphql": "^0.38.0",
+    "@softistx/janus-graphql": "^0.38.1",
     "@softistx/janus-mail": "^0.26.24",
     "@softistx/janus-mongo": "^0.33.0",
     "@softistx/janus-oauth": "^0.28.0",
