@@ -88,7 +88,7 @@ otherwise; `ratioSampler(0.1)` in production), `config/telemetry.ts` installs it
 `@softistx/alxia-telemetry` to `use` first, with `createApp({ telemetry })` to swap it in a spec. A second middleware resolves the tenant
 (the memoised `ctx.tenant()`) and runs the rest under `withAttributes` of `clavix.tenant.id` and `clavix.tenant.plan` (`ResolvedTenant.plan`,
 `telemetry/tenant.ts`); `/healthz`, `/readyz` and `/internal/*` are neither traced nor resolved. `buildTenantJanus` returns
-`instrumentJanus(...)`; `createClavixOAuthIssuers` passes `instrument` (`instrumentOAuth`, tenant attributes via `tenantAttributes`; spec `src/oauth/telemetry.spec.ts`); the MongoDB command spans (`instrumentDatabase`, `server.ts`) need `monitorCommands`, set in `db.ts` only
+`instrumentJanus(...)`; `createClavixOAuthIssuers` passes `instrument` (`instrumentOAuth`, tenant attributes via `tenantAttributes`; spec `src/oauth/telemetry.spec.ts`); the MongoDB command spans (`instrumentDatabase`, `server.ts`) need `monitorCommands`, set in `db.ts` only. `db.ts` wires an unconnected driver client: importing config (the schema printer) opens no connection, the driver connects on the first command, and `connectMongo()` (memoised) is called where a bad URI must stop the start (`server.ts`, the scripts, `test/setup.ts`); `closeMongo()` ends it. `MONGO_URI` is required in production and defaults to a local URI elsewhere
 with an endpoint. **Never written:** tokens, codes, secrets, e-mails, logins, IPs: `createBase` passes `clientAddress: false`
 to `@softistx/alxia-telemetry` (>= 0.10.0), so the server span leaves `client.address` off. A new attribute is
 added to `tenantAttributes` or to the span that owns it, never from a request body. Spec: `telemetry/telemetry.spec.ts`.

@@ -1,4 +1,4 @@
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo } from "@/config/db";
 import { env } from "@/config/env";
 import { redis } from "@/config/redis";
 import { tenantsService } from "@/config/tenancy";
@@ -21,6 +21,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
+  await connectMongo();
   const result = await tenantsService.register(parseTenantArgs(args));
   console.log(
     JSON.stringify(
@@ -41,6 +42,6 @@ try {
   console.error(`tenants:create: ${error.message}\n\n${USAGE}`);
   process.exitCode = 1;
 } finally {
-  await mongo.close();
+  await closeMongo();
   await redis?.close();
 }

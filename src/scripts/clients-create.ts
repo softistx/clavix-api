@@ -1,4 +1,4 @@
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo } from "@/config/db";
 import { env } from "@/config/env";
 import { oauthDb } from "@/config/oauth-db";
 import { redis } from "@/config/redis";
@@ -22,6 +22,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
+  await connectMongo();
   const result = await registerClient(
     {
       db: oauthDb,
@@ -53,6 +54,6 @@ try {
   console.error(`clients:create: ${error.message}\n\n${USAGE}`);
   process.exitCode = 1;
 } finally {
-  await mongo.close();
+  await closeMongo();
   await redis?.close();
 }

@@ -17,8 +17,13 @@ export const coreEnv = () => {
   return {
     PORT: z.coerce.number().default(3000),
     // mongodb:// or mongodb+srv://, with the database in its path. Transactions
-    // need a replica set.
-    MONGO_URI: z.string().regex(/^mongodb(\+srv)?:\/\//, "not a MongoDB URI"),
+    // need a replica set. Required in production; a local one elsewhere, so
+    // that code that never queries (`schema:print`) needs no variable. The
+    // connection opens on first use (src/config/db.ts).
+    MONGO_URI: inProduction(
+      z.string().regex(/^mongodb(\+srv)?:\/\//, "not a MongoDB URI"),
+      "mongodb://localhost:27017/clavix",
+    ),
     // The Redis the tenant cache lives in. Required in production; unset
     // elsewhere, there is no cache (src/config/redis.ts).
     REDIS_URL: optionalOutsideProduction(redisUrl),

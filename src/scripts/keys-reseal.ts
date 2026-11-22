@@ -1,5 +1,5 @@
 import { connectionsService } from "@/config/connections";
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo, mongo } from "@/config/db";
 import { masterKeys } from "@/config/keys";
 import { redis } from "@/config/redis";
 import { warn } from "@/config/runtime";
@@ -29,6 +29,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
+  await connectMongo();
   const report = await resealAllTenants({
     db: mongo.db,
     masterKeys,
@@ -53,6 +54,6 @@ try {
   }
   process.exitCode = resealExitCode(report);
 } finally {
-  await mongo.close();
+  await closeMongo();
   await redis?.close();
 }

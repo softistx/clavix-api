@@ -1,4 +1,4 @@
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo } from "@/config/db";
 import { redis } from "@/config/redis";
 import { registerStoredResource } from "@/config/resources";
 import { parseResourceArgs, USAGE } from "@/modules/resources";
@@ -17,6 +17,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
+  await connectMongo();
   const input = parseResourceArgs(args);
   const result = await registerStoredResource(input);
   console.log(JSON.stringify(result, null, 2));
@@ -25,6 +26,6 @@ try {
   console.error(`resources:create: ${error.message}\n\n${USAGE}`);
   process.exitCode = 1;
 } finally {
-  await mongo.close();
+  await closeMongo();
   await redis?.close();
 }
