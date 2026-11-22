@@ -19,13 +19,7 @@ export type {
   AvatarsPorts,
   AvatarTarget,
 } from "./media.types";
-export {
-  adminQueryOf,
-  avatarObjectKey,
-  crossSite,
-  pictureUrl,
-  tenantFolder,
-} from "./media.utils";
+export { tenantFolder } from "./media.utils";
 export { AvatarAccessService } from "./services/avatar-access.service";
 export { AvatarsService } from "./services/avatars.service";
 export { AvatarObjectsService } from "./services/objects.service";
