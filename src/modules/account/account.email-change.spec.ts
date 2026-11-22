@@ -166,4 +166,19 @@ describe("confirmEmailChange", () => {
       "UNAUTHENTICATED",
     );
   });
+
+  test("a token of another account is a bearer proof: it moves its owner, the session answers its own user", async () => {
+    const owner = await signedIn(SLUG);
+    const other = await signedIn(SLUG);
+    const target = fresh();
+    const { token } = await ask(owner, target);
+    const done = await gql(SLUG, CONFIRM, { token }, other.cookie);
+    await settled();
+    expect(done.data).toMatchObject({
+      confirmEmailChange: { id: other.user.id, email: other.user.email },
+    });
+    expect((await (await janusOf(SLUG)).findUser(owner.user.id))?.email).toBe(
+      target,
+    );
+  });
 });
