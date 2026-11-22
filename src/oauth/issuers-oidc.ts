@@ -51,8 +51,36 @@ const omitReserved = (claims: Record<string, unknown>) =>
     Object.entries(claims).filter(([name]) => !RESERVED.has(name)),
   );
 
-/** `openid` releases nothing else (`sub` aside), so roles go with every OpenID Connect token. */
-const BASE_SCOPE_CLAIMS: OidcScopeClaims = { openid: ["roles"] };
+/**
+ * Temporary, until softistx/janus#1049: janus replaces a standard scope's list
+ * with the tenant's table, so a table naming `profile`, `email`, `address` or
+ * `phone` would stop releasing `name`, `picture`, `email`... Clavix seeds the
+ * table with janus's standard lists and adds the attribute keys to them.
+ * `openid` releases nothing else (`sub` aside), so roles go with every OpenID
+ * Connect token.
+ */
+const BASE_SCOPE_CLAIMS: OidcScopeClaims = {
+  openid: ["roles"],
+  profile: [
+    "name",
+    "family_name",
+    "given_name",
+    "middle_name",
+    "nickname",
+    "preferred_username",
+    "profile",
+    "picture",
+    "website",
+    "gender",
+    "birthdate",
+    "zoneinfo",
+    "locale",
+    "updated_at",
+  ],
+  email: ["email", "email_verified"],
+  address: ["address"],
+  phone: ["phone_number", "phone_number_verified"],
+};
 
 /** The base table with the attribute scopes added: a scope listed in both releases both lists. */
 export function scopeClaimsOf(

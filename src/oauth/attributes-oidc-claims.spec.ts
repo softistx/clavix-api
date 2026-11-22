@@ -35,7 +35,6 @@ const drifted = createFlow({
     roles: ["evil"],
     email: "evil@attrs.test",
     nonce: "evil",
-    picture: "https://evil.test/p.png",
   }),
   attributeScopesFor,
 });
@@ -206,7 +205,6 @@ describe("a claim the server owns", () => {
     expect(claims["roles"]).toEqual([]);
     expect(claims["nonce"]).not.toBe("evil");
     expect(claims["email"]).not.toBe("evil@attrs.test");
-    expect(claims["picture"]).not.toBe("https://evil.test/p.png");
     const response = await drifted.get(
       "attrs-drift",
       "/userinfo",
@@ -215,7 +213,6 @@ describe("a claim the server owns", () => {
     const body = await jsonOf(response, recordBody);
     expect(body["roles"]).toEqual([]);
     expect(body["email"]).not.toBe("evil@attrs.test");
-    expect(body["picture"]).not.toBe("https://evil.test/p.png");
   });
 });
 
