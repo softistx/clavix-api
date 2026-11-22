@@ -1,10 +1,12 @@
 import { ObjectId } from "mongodb";
 import { attributeValuesService } from "@/config/attributes";
 import { rolesService } from "@/config/roles";
+import { clock } from "@/config/runtime";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { refusing } from "@/modules/admins";
+import { cleanProfile } from "@/modules/profile";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { badInput, fail } from "@/shared/errors";
 import { setActive } from "./users.console-support";
@@ -55,14 +57,38 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   updateUser: async (_, { tenantId: given, userId, input }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
-    const name = input.name.trim();
-    if (name === "" || [...name].length > MAX_NAME) {
+    const { name: nameInput, ...fields } = input;
+    const name = nameInput?.trim();
+    if (name !== undefined && (name === "" || [...name].length > MAX_NAME)) {
       throw badInput("The name must be 1 to 200 characters");
     }
+    const changes = {
+      ...cleanProfile(fields, clock()),
+      ...(name === undefined ? {} : { name }),
+    };
     await liveTenant(ctx.directory, tenantId);
-    const user = await ctx.users.rename(tenantId, userId, name);
+    // One user's writes are serialised (the read, the checks and the
+    // version-checked write of the same user never interleave in-process).
+    const user = await ctx.exclusive(userKey(tenantId, userId), () =>
+      ctx.users.update(tenantId, userId, changes),
+    );
     if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
     await ctx.audit("user.update", target("user", userId, tenantId));
+    return shape(user, tenantId);
+  },
+  setUserPhoneVerified: async (
+    _,
+    { tenantId: given, userId, verified },
+    ctx,
+  ) => {
+    const tenantId = tenantIdOf(given);
+    idArg(userId, "userId");
+    await liveTenant(ctx.directory, tenantId);
+    const user = await ctx.exclusive(userKey(tenantId, userId), () =>
+      ctx.users.setPhoneVerified(tenantId, userId, verified),
+    );
+    if (user === null) throw fail("NOT_FOUND", "No such user", { status: 404 });
+    await ctx.audit("user.setPhoneVerified", target("user", userId, tenantId));
     return shape(user, tenantId);
   },
   disableUser: (_, { tenantId, userId }, ctx) =>

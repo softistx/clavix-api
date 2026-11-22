@@ -42,6 +42,11 @@ import {
   oauthPolicyGuards,
 } from "@/modules/oauth-policy/oauth-policy.console-resolver";
 import {
+  profile,
+  profileAudits,
+  profileGuards,
+} from "@/modules/profile/profile.console-resolver";
+import {
   resources,
   resourcesAudits,
   resourcesGuards,
@@ -89,6 +94,7 @@ export const resolvers: Resolvers = mergeResolvers([
   resources,
   roles,
   attributes,
+  profile,
   tenants,
   users,
   webhooks,
@@ -104,6 +110,7 @@ export const guards: Guards = {
   ...resourcesGuards,
   ...rolesGuards,
   ...attributesGuards,
+  ...profileGuards,
   ...tenantsGuards,
   ...signInMethodsGuards,
   ...oauthPolicyGuards,
@@ -120,6 +127,7 @@ export const audits: Audits = {
   ...resourcesAudits,
   ...rolesAudits,
   ...attributesAudits,
+  ...profileAudits,
   ...tenantsAudits,
   ...signInMethodsAudits,
   ...oauthPolicyAudits,

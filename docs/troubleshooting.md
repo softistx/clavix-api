@@ -950,6 +950,23 @@ Every refusal on the attribute catalogue or on a user's values writes nothing.
 - `BAD_USER_INPUT` on `setUserAttributeValues`: more than 100 changes in one call.
 - `BAD_USER_INPUT` on an attribute: a label needs at least one language, a unit holds at most 20 characters, a list holds at most 100 options, each option needs a label and a key of 1 to 63 characters (lower-case letters, digits, `_`, `-`) that no other option uses, options belong only to SELECT and MULTI_SELECT attributes, and `required` is for USER-family attributes only; the message names the field.
 
+### `PROFILE_FIELD_INVALID` (400) and `PROFILE_FIELD_LOCKED` (403) on a user's profile
+
+- `PROFILE_FIELD_INVALID` (400): `updateUser` refused a value; `field` names it (`phone`, `locale`,
+  `zoneinfo`, `birthdate`, `nickname`, `address.country`...) and nothing was stored, the other fields
+  of the call included. A phone is E.164 (`+14165550123`, a `+`, then 7 to 15 digits; spaces and
+  dashes are dropped), a locale a BCP 47 tag (`fr-CA`), a zone an IANA name (`America/Toronto`), a
+  birthdate a real `YYYY-MM-DD` between 1900 and today, a country two letters from ISO 3166-1, a
+  nickname 1 to 100 characters. `setUserPhoneVerified` also answers it (field `phone`) for a user
+  with no phone number: set the number first.
+- `PROFILE_FIELD_LOCKED` (403): the tenant's profile policy locks that field against the user's own
+  edits. Not raised yet: it arrives with the users' own profile edits. The console admin is not bound by locks; change them with `updateProfilePolicy`.
+- `CONFLICT` (409) on `updateUser`, `setUserPhoneVerified` or `updateProfilePolicy`: the user, or the
+  policy, changed since it was read. Read it again (the policy's `version` comes from `profilePolicy`)
+  and retry.
+- A phone number that shows `verified: false` after an edit is expected: a different number always
+  starts unverified, and only `setUserPhoneVerified` proves one (Clavix sends no SMS).
+
 ### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
 
 `No such role`: the id names no role of this tenant (another tenant's id is not found either), or the

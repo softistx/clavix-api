@@ -8,6 +8,7 @@ import { codes as domains } from "@/modules/domains";
 import { codes as invitations } from "@/modules/invitations/invitations.errors";
 import { codes as mfa } from "@/modules/mfa/mfa.errors";
 import { codes as passkeys } from "@/modules/passkeys/passkeys.errors";
+import { codes as profile } from "@/modules/profile/profile.errors";
 import { codes as resources } from "@/modules/resources";
 import { codes as roles } from "@/modules/roles";
 import { codes as signInMethods } from "@/modules/sign-in-methods";
@@ -39,6 +40,7 @@ export const groups = [
   invitations,
   mfa,
   passkeys,
+  profile,
   resources,
   roles,
   signInMethods,

@@ -1,4 +1,5 @@
 import type { OidcClaims } from "@softistx/janus-oidc";
+import { profileOf, standardClaims } from "@/modules/profile";
 import type { AuthFor, ClaimsFor } from "@/oauth/ports";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import {
@@ -32,6 +33,8 @@ export function createTenantAuth(options: TenantJanusOptions) {
       email: user.email,
       email_verified: user.emailVerified,
       ...(user.name === undefined ? {} : { name: user.name }),
+      // janus-oidc releases each by scope: `profile`, `phone`, `address`.
+      ...standardClaims(profileOf(user)),
     };
     return claims;
   };

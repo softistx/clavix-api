@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { emptyProfile } from "@/modules/profile";
 import { grantShape, shape, target, view } from "./users.utils";
 
 const createdAt = new Date("2026-01-01T00:00:00Z");
@@ -9,6 +10,7 @@ const record = {
   emailVerified: true,
   active: true,
   createdAt,
+  profile: emptyProfile(createdAt),
 };
 
 describe("view", () => {

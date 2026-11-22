@@ -67,10 +67,18 @@ const authFor: AuthFor = (tenant) => {
 // The fake user pool: every claim the tenant knows, whatever the scopes.
 const claimsFor: ClaimsFor = (tenant) => async (subject) => ({
   name: `Name of ${tenant.slug}`,
+  given_name: "Jane",
   family_name: "Doe",
+  nickname: "JD",
+  locale: "fr-CA",
+  zoneinfo: "America/Toronto",
+  birthdate: "1990-12-10",
+  updated_at: 1_700_000_000,
   email: `${subject.id}@${tenant.slug}.test`,
   email_verified: true,
   phone_number: "+15550100",
+  phone_number_verified: true,
+  address: { country: "CA", locality: "Montreal" },
 });
 
 const issuers = createClavixOAuthIssuers({
@@ -318,9 +326,39 @@ describe("userinfo", () => {
       sub: "user-acme",
       roles: [],
       name: "Name of acme",
+      given_name: "Jane",
       family_name: "Doe",
+      nickname: "JD",
+      locale: "fr-CA",
+      zoneinfo: "America/Toronto",
+      birthdate: "1990-12-10",
+      updated_at: 1_700_000_000,
       email: "user-acme@acme.test",
       email_verified: true,
+    });
+  });
+
+  test("phone releases the number and its verified flag, address the address", async () => {
+    const phone = await tokensOf("acme", "openid phone");
+    expect(
+      await (
+        await get("acme", "/userinfo", `Bearer ${phone.access_token}`)
+      ).json(),
+    ).toEqual({
+      sub: "user-acme",
+      roles: [],
+      phone_number: "+15550100",
+      phone_number_verified: true,
+    });
+    const address = await tokensOf("acme", "openid address");
+    expect(
+      await (
+        await get("acme", "/userinfo", `Bearer ${address.access_token}`)
+      ).json(),
+    ).toEqual({
+      sub: "user-acme",
+      roles: [],
+      address: { country: "CA", locality: "Montreal" },
     });
   });
 

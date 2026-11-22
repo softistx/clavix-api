@@ -1,5 +1,6 @@
 import type { OAuthGrants } from "@softistx/janus-oauth";
 import type { TenantInvitations } from "@/modules/invitations";
+import type { ProfileView } from "@/modules/profile";
 import type { TenantJanus } from "./users.tenant-janus";
 
 /** Where `UsersService` reaches a tenant's pool; `null` for a tenant that is gone or suspended. */
@@ -18,4 +19,5 @@ export interface TenantUserParent {
   emailVerified: boolean;
   active: boolean;
   createdAt: Date;
+  profile: ProfileView;
 }

@@ -6,6 +6,12 @@ import type {
   UserSecondFactorView,
 } from "@/console/context";
 import { TenantUnavailableError, userScope } from "@/modules/invitations";
+import {
+  type ProfileChanges,
+  patchOf,
+  refuse,
+  refuseCommon,
+} from "@/modules/profile";
 import { gone } from "./users.errors";
 import type { TenantJanus } from "./users.tenant-janus";
 import type { UsersSource } from "./users.types";
@@ -61,6 +67,12 @@ export class UsersService implements ConsoleUsers {
     } catch (error) {
       if (error instanceof JanusError && error.code === "NOT_FOUND") {
         return null;
+      }
+      if (error instanceof JanusError && error.code === "VERSION_CONFLICT") {
+        refuseCommon(
+          "CONFLICT",
+          "The user changed meanwhile; read it and try again",
+        );
       }
       throw error;
     }
@@ -141,10 +153,29 @@ export class UsersService implements ConsoleUsers {
     });
   }
 
-  rename(tenantId: string, id: string, name: string) {
-    return this.writing(tenantId, id, async (auth, user) =>
-      view(user.name === name ? user : await auth.update(user, { name })),
-    );
+  update(tenantId: string, id: string, changes: ProfileChanges) {
+    return this.writing(tenantId, id, async (auth, user) => {
+      const patch = patchOf(changes, user);
+      if (Object.keys(patch).length === 0) return view(user);
+      return view(await auth.update(user, patch, { ifVersion: user.version }));
+    });
+  }
+
+  setPhoneVerified(tenantId: string, id: string, verified: boolean) {
+    return this.writing(tenantId, id, async (auth, user) => {
+      if (user.phone === null || user.phone === undefined) {
+        refuse(
+          "PROFILE_FIELD_INVALID",
+          "The user has no phone number",
+          "phone",
+        );
+      }
+      if (user.phone.verified === verified) return view(user);
+      const phone = { number: user.phone.number, verified };
+      return view(
+        await auth.update(user, { phone }, { ifVersion: user.version }),
+      );
+    });
   }
 
   async delete(tenantId: string, id: string) {
