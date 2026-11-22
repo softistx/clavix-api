@@ -642,9 +642,15 @@ the token claims, slices A4 and A5 the profile.
   MULTI_SELECT), a DATE is `YYYY-MM-DD`, a DATETIME is RFC 3339, NUMBER and BOOLEAN are native. A
   `client_credentials` token carries none; a reserved key is dropped and `roles`, `auth_time`, `acr` and
   `amr` win over an attribute claim. 100 STRING values weigh under 8 KiB (spec), so TEXT stays emittable.
-  **Access tokens only until nxgt-janus J1**: the ID token and userinfo cannot declare per-tenant claims
-  yet (janus-oidc's `scopeClaims` is a fixed table), so they carry none. Specs: `claims.service.spec.ts`,
-  `claims.utils.spec.ts`, `oauth/building-parts.spec.ts`, `oauth/attributes-claims.spec.ts`.
+  **ID token and userinfo too** (janus-oidc 0.5 `scopeClaims` as a function): the `AttributeScopesFor` port
+  (same wiring) gives `oidcProviderOf` (`oauth/issuers-oidc.ts`) the tenant's scope table (emission scope to
+  claim keys, `AttributeClaimsService.scopeClaims`, `claimTable`), unioned with `openid: [roles]`. Janus asks
+  it on every discovery document, userinfo request and ID token, so the claims are released by their scope and
+  listed in `claims_supported`; it is one small tenant-scoped read, uncached (the discovery document itself is
+  cached for 60 s by `withPublicDocuments`, which bounds how late a new attribute shows there). The `claims`
+  hook adds `attributesFor(tenant)(sub, scopes, null)` under the user's own claims and `roles`, reserved
+  keys dropped. Specs: `claims.service.spec.ts`, `claims.utils.spec.ts`, `oauth/building-parts.spec.ts`,
+  `oauth/attributes-claims.spec.ts`, `oauth/attributes-oidc-claims.spec.ts`, `oauth/issuers-oidc.spec.ts`.
 - **Role attributes** (slice A3): the tenant-owned collection `roleAttributes` (`{tenantId, roleId,
   attributeId, required}`, unique on the three ids, purged with the tenant) links a ROLE-family attribute
   to one precise role, `required` for that role only. `RoleAttributesService`

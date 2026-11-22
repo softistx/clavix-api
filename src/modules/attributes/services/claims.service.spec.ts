@@ -120,6 +120,28 @@ describe("what a token carries", () => {
   });
 });
 
+describe("the scope table", () => {
+  test("lists the live attributes by emission scope, and follows an archive", async () => {
+    const table = await make("tabled");
+    const quiet = await make("untabled", "STRING", { emissionScope: null });
+    expect(await claims.scopeClaims(tenant)).toMatchObject({
+      read: expect.arrayContaining(["tabled"]),
+    });
+    expect((await claims.scopeClaims(tenant))["read"]).not.toContain(
+      "untabled",
+    );
+    await catalogue.archive(tenant, table.id);
+    expect((await claims.scopeClaims(tenant))["read"] ?? []).not.toContain(
+      "tabled",
+    );
+    await catalogue.archive(tenant, quiet.id);
+  });
+
+  test("another tenant's attributes are never listed", async () => {
+    expect(await claims.scopeClaims(other)).toEqual({});
+  });
+});
+
 describe("a role attribute", () => {
   test("is emitted by a tenant-wide role for every audience, by a resource role for its own", async () => {
     const wideAttr = await roleAttribute("wide");

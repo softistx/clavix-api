@@ -7,6 +7,7 @@ export {
   MAX_ATTRIBUTES,
   MAX_DESCRIPTION,
   mergedLabel,
+  RESERVED_CLAIMS,
   removedOptionKeys,
 } from "./attributes.rules";
 export {
