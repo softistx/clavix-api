@@ -149,11 +149,9 @@ describe("update and setPhoneVerified", () => {
     const updates: { patch: unknown; options: unknown }[] = [];
     const users = serviceOver(withPhone(true), updates);
     await users.update("t", "1", { phone: "+14165550123" });
-    expect(updates[0]?.patch).toEqual({
-      phone: { number: "+14165550123", verified: true },
-    });
     await users.update("t", "1", {});
-    expect(updates).toHaveLength(1);
+    await users.update("t", "1", { name: "Ada" });
+    expect(updates).toHaveLength(0);
   });
 
   test("update maps a janus VERSION_CONFLICT to CONFLICT, an unknown user to null", async () => {

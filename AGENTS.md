@@ -119,8 +119,8 @@ cache version, so a script-registered resource serves at once, no restart. A ten
 URL cannot be registered: it is built in, with the OpenID Connect scopes.
 - **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description` (a list of translations, `[{ locale, text }]`),
   `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
-  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
-  or `email` (`resources.rules.ts`); it exists once a tenant describes it. `claims` is stored only.
+  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`,
+  `email`, `phone` or `address` (`resources.rules.ts`); it exists once a tenant describes it. `claims` is stored only.
 - **`ResourcesService`** (one service for resources, scopes and detail types: they are one domain, the cascade of a resource's delete and the scope and type lookups all cross them) is the one writer of scopes and the console's writer of resources
   (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
   (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are

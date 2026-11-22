@@ -11,17 +11,10 @@ import type {
   ProfilePolicyView,
 } from "../profile.types";
 import { sortedLocks } from "../rules";
+import { versionOf } from "../utils";
 
 const STALE =
   "The profile locks were changed meanwhile; read them and try again";
-
-/**
- * The version a caller sees: one past the stored one, so that a stored document
- * is never at 0, the version of "nothing stored yet" (a stored `version` starts
- * at 0 too, and two first writes must not be mistaken for one write after the
- * other).
- */
-const versionOf = (stored: number): number => stored + 1;
 
 /**
  * A tenant's profile locks (user-attributes slice A4). Every method takes the

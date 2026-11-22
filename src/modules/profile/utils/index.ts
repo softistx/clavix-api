@@ -7,4 +7,5 @@ export {
   policyShape,
   profileOf,
   standardClaims,
+  versionOf,
 } from "./profile.utils";

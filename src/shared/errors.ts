@@ -63,3 +63,13 @@ export function fail(
 /** A malformed input: `BAD_USER_INPUT`, 400, with the field when the refusal is about one. */
 export const badInput = (message: string, field?: string) =>
   fail("BAD_USER_INPUT", message, { status: 400, field });
+
+/** A refusal with a common code (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`) and its status, for a module with no code of its own for it. */
+export function refuseCommon(
+  code: Extract<ErrorCode, "NOT_FOUND" | "CONFLICT" | "BAD_USER_INPUT">,
+  message: string,
+  field?: string,
+): never {
+  const status = { NOT_FOUND: 404, CONFLICT: 409, BAD_USER_INPUT: 400 }[code];
+  throw fail(code, message, { status, field });
+}

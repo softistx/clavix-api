@@ -958,7 +958,7 @@ Every refusal on the attribute catalogue or on a user's values writes nothing.
   nickname 1 to 100 characters. `setUserPhoneVerified` also answers it (field `phone`) for a user
   with no phone number: set the number first.
 - `PROFILE_FIELD_LOCKED` (403): the tenant's profile policy locks that field against the user's own
-  edits. The console admin is not bound by locks; change them with `updateProfilePolicy`.
+  edits. Not raised yet: it arrives with the users' own profile edits. The console admin is not bound by locks; change them with `updateProfilePolicy`.
 - `CONFLICT` (409) on `updateUser`, `setUserPhoneVerified` or `updateProfilePolicy`: the user, or the
   policy, changed since it was read. Read it again (the policy's `version` comes from `profilePolicy`)
   and retry.

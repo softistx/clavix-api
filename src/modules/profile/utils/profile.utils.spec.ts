@@ -7,6 +7,7 @@ import {
   policyShape,
   profileOf,
   standardClaims,
+  versionOf,
 } from "./profile.utils";
 
 const at = new Date("2026-01-01T00:00:00Z");
@@ -54,10 +55,7 @@ describe("patchOf", () => {
   test("passes the fields on and resolves the phone against the stored one", () => {
     const current = { phone: { number: "+14165550123", verified: true } };
     expect(patchOf({ nickname: "Ad", phone: "+14165550123" }, current)).toEqual(
-      {
-        nickname: "Ad",
-        phone: { number: "+14165550123", verified: true },
-      },
+      { nickname: "Ad" },
     );
     expect(patchOf({ phone: "+14165550199" }, current)).toEqual({
       phone: { number: "+14165550199", verified: false },
@@ -144,5 +142,49 @@ describe("policyShape", () => {
       version: 2,
       updatedAt: at,
     });
+  });
+});
+
+describe("patchOf with the user's current values", () => {
+  const current = {
+    name: "Ada",
+    givenName: "Ada",
+    phone: { number: "+14165550123", verified: true },
+    address: { country: "CA", locality: "Montreal" },
+  };
+
+  test("keeps only the fields that differ, so a repeat is an empty patch", () => {
+    expect(
+      patchOf(
+        {
+          name: "Ada",
+          givenName: "Ada",
+          familyName: null,
+          phone: "+14165550123",
+          address: { locality: "Montreal", country: "CA" },
+        },
+        current,
+      ),
+    ).toEqual({});
+    expect(patchOf({ givenName: "Eve", nickname: "E" }, current)).toEqual({
+      givenName: "Eve",
+      nickname: "E",
+    });
+  });
+
+  test("a changed address or number is kept, a new number unverified", () => {
+    expect(patchOf({ address: { country: "FR" } }, current)).toEqual({
+      address: { country: "FR" },
+    });
+    expect(patchOf({ phone: "+14165550177" }, current)).toEqual({
+      phone: { number: "+14165550177", verified: false },
+    });
+  });
+});
+
+describe("versionOf", () => {
+  test("is one past the stored version, so a stored document is never at 0", () => {
+    expect(versionOf(0)).toBe(1);
+    expect(versionOf(4)).toBe(5);
   });
 });

@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { attributeValuesService } from "@/config/attributes";
 import { rolesService } from "@/config/roles";
+import { clock } from "@/config/runtime";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
@@ -62,7 +63,7 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
       throw badInput("The name must be 1 to 200 characters");
     }
     const changes = {
-      ...cleanProfile(fields, new Date()),
+      ...cleanProfile(fields, clock()),
       ...(name === undefined ? {} : { name }),
     };
     await liveTenant(ctx.directory, tenantId);

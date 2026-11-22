@@ -55,16 +55,54 @@ export const nextPhone = (
   };
 };
 
-/** The janus patch of a checked change, over the user it applies to (the phone keeps its flag when its number is unchanged). */
+/** Two stored values are the same when both are unset or equal (objects field by field, an unset field being absent). */
+const sameValue = (a: unknown, b: unknown): boolean => {
+  if ((a === null || a === undefined) && (b === null || b === undefined)) {
+    return true;
+  }
+  if (
+    typeof a === "object" &&
+    typeof b === "object" &&
+    a !== null &&
+    b !== null
+  ) {
+    const left = Object.entries(a).filter(
+      ([, v]) => v !== null && v !== undefined,
+    );
+    const right = Object.entries(b).filter(
+      ([, v]) => v !== null && v !== undefined,
+    );
+    return (
+      left.length === right.length &&
+      left.every(([key, value]) =>
+        sameValue(value, Object.fromEntries(right)[key]),
+      )
+    );
+  }
+  return a === b;
+};
+
+/**
+ * The janus patch of a checked change, over the user it applies to: only the
+ * fields that really differ (a repeat writes nothing, so `updatedAt` and the
+ * version stay put), the phone keeping its flag when its number is unchanged.
+ */
 export const patchOf = (
   changes: ProfileChanges,
-  current: Pick<ProfileSource, "phone">,
+  current: Pick<ProfileSource, "phone"> & {
+    readonly name?: string | undefined;
+  } & Partial<ProfileSource>,
 ) => {
   const { phone, ...rest } = changes;
-  return {
+  const wanted = {
     ...rest,
     ...(phone === undefined ? {} : { phone: nextPhone(current.phone, phone) }),
   };
+  return Object.fromEntries(
+    Object.entries(wanted).filter(
+      ([key, value]) => !sameValue(value, Reflect.get(current, key)),
+    ),
+  );
 };
 
 /**
@@ -117,3 +155,11 @@ export const policyShape = (policy: ProfilePolicyView) => ({
   version: policy.version,
   updatedAt: policy.updatedAt,
 });
+
+/**
+ * The version a caller sees: one past the stored one, so that a stored document
+ * is never at 0, the version of "nothing stored yet" (a stored `version` starts
+ * at 0 too, and two first writes must not be mistaken for one write after the
+ * other).
+ */
+export const versionOf = (stored: number): number => stored + 1;
