@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { badInput, extensionCodeOf, fail } from "./errors";
+import { badInput, extensionCodeOf, fail, refuseCommon } from "./errors";
 
 test("a refusal carries its code and message", () => {
   const error = fail("NOT_FOUND", "No such tenant");
@@ -75,4 +75,21 @@ test("extensionCodeOf is undefined when the value carries no code", () => {
   expect(extensionCodeOf({ extensions: null })).toBeUndefined();
   expect(extensionCodeOf(null)).toBeUndefined();
   expect(extensionCodeOf("text")).toBeUndefined();
+});
+
+test("refuseCommon throws the common code with its status and field", () => {
+  for (const [code, status] of [
+    ["NOT_FOUND", 404],
+    ["CONFLICT", 409],
+    ["BAD_USER_INPUT", 400],
+  ] as const) {
+    let thrown: unknown;
+    try {
+      refuseCommon(code, "m", "f");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({ extensions: { code } });
+    expect(thrown).toMatchObject({ extensions: { http: { status } } });
+  }
 });

@@ -93,6 +93,8 @@ const allowed = [
   "src/modules/branding/",
   "src/modules/attributes/",
   "src/config/attributes.ts",
+  "src/modules/profile/",
+  "src/config/profile.ts",
   "src/modules/roles/",
   "src/config/roles.ts",
   "src/config/branding.ts",

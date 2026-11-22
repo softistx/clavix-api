@@ -212,6 +212,7 @@ const MUTATIONS = (tenant: string, user: string) => [
   `revokeUserSessions(tenantId: "${tenant}", userId: "${user}")`,
   `revokeUserSession(tenantId: "${tenant}", userId: "${user}", sessionId: "s")`,
   `setUserEmailVerified(tenantId: "${tenant}", userId: "${user}", verified: true) { id }`,
+  `setUserPhoneVerified(tenantId: "${tenant}", userId: "${user}", verified: true) { id }`,
   `revokeGrant(tenantId: "${tenant}", userId: "${user}", grantId: "g")`,
   `resetUserSecondFactor(tenantId: "${tenant}", userId: "${user}") { id }`,
 ];
@@ -1302,15 +1303,26 @@ describe("a user's attribute values: export and erase", () => {
     await rolesService.assign(tenant(), role._id.toHexString(), subject);
     await seedGrant(slugA, subject, "grant-export");
     await sessionsOf(slugA, subject);
+    await asConsole(
+      ownA,
+      `mutation { updateUser(tenantId: "${tenantA}", userId: "${subject}", input: { givenName: "Exported", phone: "+14165550123" }) { id } }`,
+    );
     await mongo.db.adminEvents.raw.deleteMany({});
     const answer = await asConsole(
       ownA,
-      `{ userDataExport(tenantId: "${tenantA}", userId: "${subject}") { profile { id email } attributes { key hidden text } roles { role } grants { id } sessions { id } } }`,
+      `{ userDataExport(tenantId: "${tenantA}", userId: "${subject}") { profile { id email profile { givenName phone { number verified } } } attributes { key hidden text } roles { role } grants { id } sessions { id } } }`,
     );
     expect(answer.errors).toBeUndefined();
     expect(answer.data).toMatchObject({
       userDataExport: {
-        profile: { id: subject, email: "export@end.test" },
+        profile: {
+          id: subject,
+          email: "export@end.test",
+          profile: {
+            givenName: "Exported",
+            phone: { number: "+14165550123", verified: false },
+          },
+        },
         attributes: [
           { key: "exp_live", hidden: false, text: "kept" },
           { key: "exp_old", hidden: true, text: "archived-secret" },

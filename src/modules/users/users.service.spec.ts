@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { JanusError } from "@softistx/janus";
 import type { TenantInvitations } from "@/modules/invitations";
 import { TenantUnavailableError } from "@/modules/invitations";
 import { acmeJanus } from "~/acme-janus";
@@ -98,5 +99,111 @@ describe("lookup", () => {
       "2",
     ]);
     expect(calls).toHaveLength(3);
+  });
+});
+
+describe("update and setPhoneVerified", () => {
+  const withPhone = (verified: boolean) => ({
+    ...poolUser("1", "ada@x.test", "Ada"),
+    phone: { number: "+14165550123", verified },
+  });
+  const serviceOver = (
+    user: ReturnType<typeof poolUser>,
+    updates: { patch: unknown; options: unknown }[],
+    failWith?: JanusError,
+  ) => {
+    const auth: TenantJanus = {
+      ...acmeJanus(),
+      findUser: async () => user,
+      update: async (_user, patch, options) => {
+        if (failWith !== undefined) throw failWith;
+        updates.push({ patch, options });
+        return { ...user, ...patch, version: user.version + 1 };
+      },
+    };
+    return new UsersService({
+      janusOf: async () => auth,
+      grantsOf: async () => null,
+      invitationsOf: () => {
+        throw new Error("unused");
+      },
+    });
+  };
+
+  test("update writes the patch at the version it read", async () => {
+    const updates: { patch: unknown; options: unknown }[] = [];
+    const users = serviceOver(withPhone(true), updates);
+    await users.update("t", "1", { givenName: "Ada", phone: "+14165550177" });
+    expect(updates).toEqual([
+      {
+        patch: {
+          givenName: "Ada",
+          phone: { number: "+14165550177", verified: false },
+        },
+        options: { ifVersion: 1 },
+      },
+    ]);
+  });
+
+  test("update keeps the flag of an unchanged number and writes nothing for no change", async () => {
+    const updates: { patch: unknown; options: unknown }[] = [];
+    const users = serviceOver(withPhone(true), updates);
+    await users.update("t", "1", { phone: "+14165550123" });
+    await users.update("t", "1", {});
+    await users.update("t", "1", { name: "Ada" });
+    expect(updates).toHaveLength(0);
+  });
+
+  test("update maps a janus VERSION_CONFLICT to CONFLICT, an unknown user to null", async () => {
+    const conflict = Object.assign(new JanusError("stale"), {
+      code: "VERSION_CONFLICT",
+    });
+    await expect(
+      serviceOver(withPhone(true), [], conflict).update("t", "1", {
+        givenName: "x",
+      }),
+    ).rejects.toMatchObject({ extensions: { code: "CONFLICT" } });
+    expect(
+      await new UsersService({
+        janusOf: async () => ({ ...acmeJanus(), findUser: async () => null }),
+        grantsOf: async () => null,
+        invitationsOf: () => {
+          throw new Error("unused");
+        },
+      }).update("t", "9", { givenName: "x" }),
+    ).toBeNull();
+  });
+
+  test("setPhoneVerified flips the flag, keeps the number, and writes nothing on a repeat", async () => {
+    const updates: { patch: unknown; options: unknown }[] = [];
+    await serviceOver(withPhone(false), updates).setPhoneVerified(
+      "t",
+      "1",
+      true,
+    );
+    expect(updates).toEqual([
+      {
+        patch: { phone: { number: "+14165550123", verified: true } },
+        options: { ifVersion: 1 },
+      },
+    ]);
+    await serviceOver(withPhone(true), updates).setPhoneVerified(
+      "t",
+      "1",
+      true,
+    );
+    expect(updates).toHaveLength(1);
+  });
+
+  test("setPhoneVerified on a user with no phone is PROFILE_FIELD_INVALID", async () => {
+    await expect(
+      serviceOver(poolUser("1", "a@x.test", "A"), []).setPhoneVerified(
+        "t",
+        "1",
+        true,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "PROFILE_FIELD_INVALID" },
+    });
   });
 });

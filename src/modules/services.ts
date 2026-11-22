@@ -15,6 +15,7 @@ import { keysService } from "@/config/keys";
 import { mfaService } from "@/config/mfa";
 import { oauthPolicyService } from "@/config/oauth-policy";
 import { passkeysService } from "@/config/passkeys";
+import { profilePoliciesService } from "@/config/profile";
 import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { signInPolicyService } from "@/config/sign-in-policy";
@@ -52,6 +53,7 @@ export const services = () => ({
   mfa: mfaService,
   oauthPolicy: oauthPolicyService,
   passkeys: passkeysService,
+  profilePolicies: profilePoliciesService,
   resources: resourcesService,
   roles: rolesService,
   signInPolicy: signInPolicyService,

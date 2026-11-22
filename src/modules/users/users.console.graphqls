@@ -9,8 +9,9 @@ type TenantUser {
   createdAt: DateTime!
   "Whether the user holds a TOTP second factor (tenant viewer). Never the secret or the codes."
   secondFactor: UserSecondFactor!
+  "The standard profile fields (OpenID Connect Core 5.1); a field not set is null."
+  profile: UserProfile!
 }
-
 """
 Everything the console holds about one user, for a data-access (GDPR) request:
 their profile, the values of their attributes (hidden ones included, flagged),
@@ -99,10 +100,30 @@ type UserLookupResult {
   name: String
 }
 
-"What a tenant admin may change on a user. The e-mail address is not editable; its verified flag is `setUserEmailVerified`."
+"""
+What a tenant admin may change on a user: the name and the standard profile
+fields. The e-mail address is not editable; its verified flag is
+`setUserEmailVerified`, the phone's `setUserPhoneVerified`. A field left out is
+kept; null (or a blank text) clears a profile field.
+"""
 input UpdateUserInput {
-  "The display name: 1 to 200 characters once trimmed."
-  name: String!
+  "The display name: 1 to 200 characters once trimmed. Left out or null keeps it."
+  name: String
+  "1 to 100 characters once trimmed."
+  givenName: String
+  "1 to 100 characters once trimmed."
+  familyName: String
+  "1 to 100 characters once trimmed."
+  nickname: String
+  "E.164 (`+14165550123`). A number that differs from the stored one starts unverified."
+  phone: String
+  "A BCP 47 language tag (stored canonical)."
+  locale: String
+  "An IANA time zone name."
+  zoneinfo: String
+  "`YYYY-MM-DD`, a real date that is not in the future."
+  birthdate: String
+  address: AddressInput
 }
 
 extend type Query {
@@ -171,8 +192,12 @@ extend type Mutation {
   "Revokes a pending invitation of the tenant (tenant admin). True also when there is none."
   revokeInvitation(tenantId: ID!, invitationId: ID!): Boolean!
   """
-  Renames a user (tenant admin). Errors: BAD_USER_INPUT (400) for a name that is
-  empty once trimmed or over 200 characters, NOT_FOUND for an unknown user.
+  Updates a user's name and standard profile fields (tenant admin); the tenant's
+  locks bind the user's own edits, not this one. Errors: BAD_USER_INPUT (400) for
+  a name that is empty once trimmed or over 200 characters,
+  PROFILE_FIELD_INVALID (400, with the field) for a malformed phone, locale,
+  zoneinfo, birthdate, country or text, NOT_FOUND for an unknown user, CONFLICT
+  (409) when the user changed meanwhile.
   The e-mail address and the verified flag are not editable.
   """
   updateUser(tenantId: ID!, userId: ID!, input: UpdateUserInput!): TenantUser!

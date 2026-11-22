@@ -163,6 +163,42 @@ describe("one user pool per tenant", () => {
   });
 });
 
+describe("the standard profile claims", () => {
+  test("claimsFor releases the profile, the phone with the admin's flag and the address, per user", async () => {
+    const acme = await tenantOf("acme");
+    const auth = await janusOf("acme");
+    const user = await auth.create({ email: "claims@example.test" });
+    expect(
+      await claimsFor(acme)({ id: user.id }, ["profile"]),
+    ).not.toHaveProperty("phone_number");
+    await auth.update(user, {
+      givenName: "Ada",
+      locale: "fr-CA",
+      phone: { number: "+14165550123", verified: true },
+      address: { country: "CA", locality: "Montreal" },
+    });
+    expect(await claimsFor(acme)({ id: user.id }, ["profile"])).toMatchObject({
+      email: "claims@example.test",
+      given_name: "Ada",
+      locale: "fr-CA",
+      phone_number: "+14165550123",
+      phone_number_verified: true,
+      address: { country: "CA", locality: "Montreal" },
+      updated_at: expect.any(Number),
+    });
+    const fresh = defined(await auth.findUser(user.id));
+    await auth.update(fresh, {
+      phone: { number: "+14165550123", verified: false },
+    });
+    expect(await claimsFor(acme)({ id: user.id }, ["phone"])).toMatchObject({
+      phone_number_verified: false,
+    });
+    expect(
+      await claimsFor(await tenantOf("globex"))({ id: user.id }, ["profile"]),
+    ).toEqual({});
+  });
+});
+
 describe("sessions", () => {
   test("the cookie is host-only: __Host- prefix, no Domain, Secure, SameSite=Lax", () => {
     const header = sessions["acme"]?.header ?? "";

@@ -18,8 +18,10 @@ nxgt-janus release says which.
   user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
   restored and deleted for good. The catalogue and the stored values come first (an admin sets a user's
   values, the data export and the erase on deletion are in; a role attribute is linked to a role, filled in
-  that role's section, and hidden, never erased, when the user loses the role); claims and the profile follow on
-  the same integration branch
+  that role's section, and hidden, never erased, when the user loses the role); the standard profile fields
+  (name parts, phone with an admin-proved flag, locale, zone, birthdate, address) and the tenant's locks on
+  them are in, released as claims by the `profile`, `phone` and `address` scopes; the claims of the
+  attributes follow on the same integration branch
   ([#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,

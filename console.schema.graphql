@@ -123,6 +123,19 @@ directive @stream(
   label: String
 ) on FIELD
 
+"""
+A postal address to store. A blank part is left out; an address with no part left is cleared.
+"""
+input AddressInput {
+  """ISO 3166-1 alpha-2."""
+  country: String
+  formatted: String
+  locality: String
+  postalCode: String
+  region: String
+  streetAddress: String
+}
+
 """What a console admin did (ADR-0037): one recorded action."""
 type AdminEvent {
   """The action, `<noun>.<verb>`."""
@@ -1509,6 +1522,13 @@ type Mutation {
   """
   setUserEmailVerified(tenantId: ID!, userId: ID!, verified: Boolean!): TenantUser!
   """
+  Marks the user's phone number proved or not (tenant admin): the only way a
+  phone becomes verified, there is no SMS. Touches nothing else. Idempotent.
+  Errors: PROFILE_FIELD_INVALID (400) when the user has no phone, NOT_FOUND
+  for an unknown user, CONFLICT (409) when the user changed meanwhile.
+  """
+  setUserPhoneVerified(tenantId: ID!, userId: ID!, verified: Boolean!): TenantUser!
+  """
   Suspends a tenant (ADR-0039). Needs `edit` on the platform. Idempotent.
   Errors: NOT_FOUND, PLATFORM_TENANT_PROTECTED (409) for the `clavix` tenant.
   """
@@ -1561,6 +1581,13 @@ type Mutation {
   the change again).
   """
   updateOAuthPolicy(input: OAuthPolicyInput!, tenantId: ID!): OAuthPolicy!
+  """
+  Replaces the tenant's locked profile fields (tenant admin), at the `version`
+  the caller read: a stale one is CONFLICT (409), so two admins never overwrite
+  each other. A repeat of the same list stores nothing. Errors: NOT_FOUND for an
+  unknown tenant.
+  """
+  updateProfilePolicy(locked: [ProfileField!]!, tenantId: ID!, version: Int!): ProfilePolicy!
   updateResource(id: ID!, input: UpdateResourceInput!, tenantId: ID!): Resource!
   """
   Changes a role's name or description (tenant admin). Errors: NOT_FOUND, CONFLICT, BAD_USER_INPUT, ROLE_MANAGED (403) for a managed role.
@@ -1592,8 +1619,12 @@ type Mutation {
   """
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
   """
-  Renames a user (tenant admin). Errors: BAD_USER_INPUT (400) for a name that is
-  empty once trimmed or over 200 characters, NOT_FOUND for an unknown user.
+  Updates a user's name and standard profile fields (tenant admin); the tenant's
+  locks bind the user's own edits, not this one. Errors: BAD_USER_INPUT (400) for
+  a name that is empty once trimmed or over 200 characters,
+  PROFILE_FIELD_INVALID (400, with the field) for a malformed phone, locale,
+  zoneinfo, birthdate, country or text, NOT_FOUND for an unknown user, CONFLICT
+  (409) when the user changed meanwhile.
   The e-mail address and the verified flag are not editable.
   """
   updateUser(input: UpdateUserInput!, tenantId: ID!, userId: ID!): TenantUser!
@@ -1746,6 +1777,39 @@ scalar PositiveFloat
 """An integer from 1 to 2147483647."""
 scalar PositiveInt
 
+"""
+A standard profile field a tenant may lock. A locked field cannot be changed by
+the users themselves (their own `updateMyProfile`); the console admins still
+edit it.
+"""
+enum ProfileField {
+  ADDRESS
+  BIRTHDATE
+  FAMILY_NAME
+  GIVEN_NAME
+  LOCALE
+  NAME
+  NICKNAME
+  PHONE
+  PICTURE
+  ZONEINFO
+}
+
+"""
+The profile fields a tenant locks for its users' own edits. `version` rises on
+every change (0 while the tenant never set one): pass the one you read back to
+`updateProfilePolicy`. It is a document of its own: it never bumps the tenant's
+`version`.
+"""
+type ProfilePolicy {
+  """The locked fields, in the order of the enum."""
+  locked: [ProfileField!]!
+  tenantId: ID!
+  """When the locks last changed; null while the tenant never set any."""
+  updatedAt: DateTime
+  version: Int!
+}
+
 type Query {
   """
   One console event of a tenant by id (tenant viewer). `null` for an unknown
@@ -1823,6 +1887,10 @@ type Query {
   The platform operators (platform viewer): the users holding a role on the platform itself. Owners first, one entry per user with their strongest role; an account that is gone is left out.
   """
   platformOperators: [TenantMember!]!
+  """
+  The tenant's profile locks (tenant viewer): nothing locked while it set none. NOT_FOUND for an unknown tenant.
+  """
+  profilePolicy(tenantId: ID!): ProfilePolicy!
   resource(id: ID!, tenantId: ID!): Resource
   """Needs `view` on the tenant."""
   resources(tenantId: ID!): [Resource!]!
@@ -2301,6 +2369,10 @@ type TenantUser {
   id: ID!
   name: String
   """
+  The standard profile fields (OpenID Connect Core 5.1); a field not set is null.
+  """
+  profile: UserProfile!
+  """
   Whether the user holds a TOTP second factor (tenant viewer). Never the secret or the codes.
   """
   secondFactor: UserSecondFactor!
@@ -2503,11 +2575,33 @@ input UpdateUserAttributeInput {
 }
 
 """
-What a tenant admin may change on a user. The e-mail address is not editable; its verified flag is `setUserEmailVerified`.
+What a tenant admin may change on a user: the name and the standard profile
+fields. The e-mail address is not editable; its verified flag is
+`setUserEmailVerified`, the phone's `setUserPhoneVerified`. A field left out is
+kept; null (or a blank text) clears a profile field.
 """
 input UpdateUserInput {
-  """The display name: 1 to 200 characters once trimmed."""
-  name: String!
+  address: AddressInput
+  """`YYYY-MM-DD`, a real date that is not in the future."""
+  birthdate: String
+  """1 to 100 characters once trimmed."""
+  familyName: String
+  """1 to 100 characters once trimmed."""
+  givenName: String
+  """A BCP 47 language tag (stored canonical)."""
+  locale: String
+  """
+  The display name: 1 to 200 characters once trimmed. Left out or null keeps it.
+  """
+  name: String
+  """1 to 100 characters once trimmed."""
+  nickname: String
+  """
+  E.164 (`+14165550123`). A number that differs from the stored one starts unverified.
+  """
+  phone: String
+  """An IANA time zone name."""
+  zoneinfo: String
 }
 
 """Fields left out stay as they are."""
@@ -2549,6 +2643,17 @@ type UsageMeter {
   """The quota that applies; `null` means no limit."""
   quota: Int
   used: Int!
+}
+
+"""A postal address; every part is optional."""
+type UserAddress {
+  """ISO 3166-1 alpha-2, upper case."""
+  country: String
+  formatted: String
+  locality: String
+  postalCode: String
+  region: String
+  streetAddress: String
 }
 
 """
@@ -2670,6 +2775,36 @@ type UserLookupResult {
   email: EmailAddress!
   id: ID!
   name: String
+}
+
+"""
+A phone number, E.164, and whether a console admin marked it proved (no SMS).
+"""
+type UserPhone {
+  number: String!
+  verified: Boolean!
+}
+
+"""
+The standard profile fields of a user. A field that is not set is null; the
+picture is its storage key, never a URL.
+"""
+type UserProfile {
+  address: UserAddress
+  """`YYYY-MM-DD`."""
+  birthdate: String
+  familyName: String
+  givenName: String
+  """A BCP 47 language tag, canonical (`fr-CA`)."""
+  locale: String
+  nickname: String
+  phone: UserPhone
+  """The key of the user's picture, or null. Never a URL."""
+  pictureKey: String
+  """When the user record last changed."""
+  updatedAt: DateTime!
+  """An IANA time zone name (`America/Toronto`)."""
+  zoneinfo: String
 }
 
 """A user's TOTP second factor, as an admin may know it."""

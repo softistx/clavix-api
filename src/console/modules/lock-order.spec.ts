@@ -8,6 +8,7 @@ import {
 } from "@/modules/admins";
 import { attributes } from "@/modules/attributes/attributes.console-resolver";
 import { adminScope } from "@/modules/invitations";
+import { emptyProfile } from "@/modules/profile";
 import { keepOwners } from "@/modules/users";
 import { userMutations } from "@/modules/users/users.console-mutations";
 import { withMembers } from "~/members";
@@ -129,6 +130,7 @@ describe("the lock order", () => {
     emailVerified: true,
     active,
     createdAt: new Date(0),
+    profile: emptyProfile(new Date(0)),
   });
   const consoleCtx = (exclusive: ConsoleContext["exclusive"]) =>
     withMembers({
