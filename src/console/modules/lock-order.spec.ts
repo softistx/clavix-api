@@ -1,14 +1,17 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { attributesService, attributeValuesService } from "@/config/attributes";
 import { rolesService } from "@/config/roles";
 import {
   adminInvitationHooks,
   membersKey,
   PLATFORM_OWNERS_KEY,
 } from "@/modules/admins";
+import { attributes } from "@/modules/attributes/attributes.console-resolver";
 import { adminScope } from "@/modules/invitations";
 import { keepOwners } from "@/modules/users";
 import { userMutations } from "@/modules/users/users.console-mutations";
 import { withMembers } from "~/members";
+import { defined } from "~/narrow";
 import { callResolver } from "~/resolver-call";
 import type { ConsoleContext } from "../context";
 import { createExclusive, type Exclusive } from "../exclusive";
@@ -174,13 +177,50 @@ describe("the lock order", () => {
     expectOrdered(taken);
   });
 
+  test("setUserAttributeValues takes the user key alone", async () => {
+    const { exclusive, taken } = recording();
+    const save = spyOn(attributeValuesService, "save").mockResolvedValue([]);
+    const general = spyOn(attributeValuesService, "general").mockResolvedValue(
+      [],
+    );
+    const held = spyOn(attributeValuesService, "ofUsers").mockResolvedValue(
+      new Map(),
+    );
+    const counts = spyOn(attributesService, "valueCounts").mockResolvedValue(
+      new Map(),
+    );
+    try {
+      const set = defined(attributes.Mutation?.setUserAttributeValues);
+      await callResolver(
+        set,
+        {},
+        { ...args, section: {}, values: [] },
+        withMembers({
+          exclusive,
+          audit: async () => {},
+          directory: consoleCtx(exclusive).directory,
+          users: { find: async (_t: string, id: string) => userOf(id, true) },
+        }),
+      );
+    } finally {
+      for (const spy of [save, general, held, counts]) spy.mockRestore();
+    }
+    expect(taken.map((t) => t.key)).toEqual([userKey(PLATFORM_ID, "u")]);
+    expectOrdered(taken);
+  });
+
   test("deleteUser takes the same user key as the invitation hooks", async () => {
     const { exclusive, taken } = recording();
     const rm = spyOn(rolesService, "removeUser").mockResolvedValue(0);
+    const erase = spyOn(attributeValuesService, "removeUser").mockResolvedValue(
+      0,
+    );
     try {
       await remove(consoleCtx(exclusive));
+      expect(erase).toHaveBeenCalledTimes(1);
     } finally {
       rm.mockRestore();
+      erase.mockRestore();
     }
     const hooksLocks = recording();
     await acceptAdmin(hooksLocks.exclusive);

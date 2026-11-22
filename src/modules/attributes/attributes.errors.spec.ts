@@ -30,6 +30,11 @@ describe("attributes errors", () => {
       "ATTRIBUTE_ARCHIVED",
       "ATTRIBUTE_NOT_ARCHIVED",
       "ATTRIBUTE_DELETE_UNCONFIRMED",
+      "ATTRIBUTE_FAMILY_MISMATCH",
+      "ATTRIBUTE_ROLE_NOT_HELD",
+      "ATTRIBUTE_VALUE_INVALID",
+      "ATTRIBUTE_VALUE_TAKEN",
+      "ATTRIBUTE_REQUIRED",
     ]);
   });
 

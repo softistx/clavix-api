@@ -601,12 +601,33 @@ the stored values, the role links, the claims and the profile.
   only), `userEditable`, `unique` (STRING and NUMBER only) and `emissionScope` (a scope of the tenant or a
   standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
   (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `attributes.rules.ts`.
-- **The stored values are a port, `AttributeValues`** (`attributes.types.ts`), required and bound in
-  `src/config/attributes.ts` (beside the required `clock`, from `config/runtime`, and the read-only `scopes` collection). Until A2 it is `noAttributeValues` (`src/config/no-ops.ts`): every count is 0,
-  so `valueCount` reads 0 and no lock applies. With values, the type is locked
-  (`ATTRIBUTE_TYPE_LOCKED`, checked again after the write), a removed option in use is refused
-  (`ATTRIBUTE_OPTION_IN_USE`), `unique` over duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`), and the
-  permanent delete removes the values first. `UserAttribute.roles` is `[]` until A3.
+- **The stored values** (slice A2) are the tenant-owned collection `attributeValues` (`attributes.model.ts`: one
+  document per user and attribute, unique on `{tenantId, userId, attributeId}`, a partial unique index
+  on `uniqueKey` for `unique` attributes; purged with the tenant, in the allow list of
+  `tenancy/guards.spec.ts`), reached only through `AttributeValuesService` (`values.service.ts`, built in
+  `src/config/attributes.ts` before `AttributesService`, which takes it as its `AttributeValues` port:
+  counts, `setUnique`, `removeAll`). With values, the type is locked (`ATTRIBUTE_TYPE_LOCKED`, checked
+  again after the write), a removed option in use is refused (`ATTRIBUTE_OPTION_IN_USE`), `unique` over
+  duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`; the flag is put back), and the permanent delete removes
+  the values first. `UserAttribute.roles` is `[]` until A3.
+- **Values** (`values.rules.ts`, `values.utils.ts`): a value is exactly the one typed field of its
+  attribute (`text` for STRING and TEXT, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`,
+  `time`, `options` for SELECT and MULTI_SELECT; the SDL input is `@oneOf`), canonicalised on write
+  (NFC-trimmed text, lower-cased hex colour, `-0` as `0`, UTC-midnight dates, `HH:mm:ss` times, SELECT as a
+  one-item array). `uniqueKey` is the lower-cased text or the number, set only on a `unique` attribute.
+  Refusals: `ATTRIBUTE_VALUE_INVALID` (field `values.<i>`), `ATTRIBUTE_FAMILY_MISMATCH`,
+  `ATTRIBUTE_VALUE_TAKEN` (a race on the unique index is rolled back by hand: no transactions),
+  `ATTRIBUTE_REQUIRED` (the console refuses a clear of a required value; `TenantUser.attributesComplete`
+  reports the rest), `ATTRIBUTE_ROLE_NOT_HELD` (a `roleId` section, until A3). A save checks every change
+  first and writes nothing when one is refused; at most 100 changes.
+- **Console**: `setUserAttributeValues` (`edit`, audit `user.setAttributes`, under the user's lock only, rank
+  2 of `lock-order.spec.ts`), `TenantUser.attributes` and `attributesComplete` (per-request loaders in
+  `attributes.data-loader.ts`), and `userDataExport` (`users.export.ts`, `edit`, recorded as `user.export`
+  by an explicit `ctx.audit`, since `Audits` covers mutations only).
+- **Personal data (GDPR)**: the export holds the profile, every stored value (an archived attribute's or a
+  changed type's flagged `hidden`), the roles (`RolesService.personalDataOf`), the grants and the sessions.
+  A user's values are erased with `deleteUser` and when a social sign-in replaces an unverified holder
+  (`completedAnswer`); a tenant purge removes them with the collection.
 - **Updates** send the `version` read (a stale one is `CONFLICT`); nothing is written when nothing
   changes; an archived attribute is refused (`ATTRIBUTE_ARCHIVED`) until restored. `position` is a
   gapped number: a move writes one document, and renumbers the family only when two neighbours are too
@@ -615,7 +636,8 @@ the stored values, the role links, the claims and the profile.
 - **Refusals** go through `refuse` / `refuseCommon` (`attributes.refusals.ts`: the helpers and each code's status; `attributes.errors.ts`: the codes);
   the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
 - **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
-  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`.
+  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`, and on a user
+  `user.setAttributes` and `user.export` (never a value).
 
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)
 

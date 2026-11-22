@@ -194,6 +194,8 @@ export class AttributesService {
     const written = await this.write(tenantId, found, fields);
     if (fields.type !== found.type)
       await this.keepTypeLock(tenantId, found, written);
+    if (fields.unique !== found.unique)
+      return this.keepUnique(tenantId, found, written);
     return written;
   }
 
@@ -314,6 +316,30 @@ export class AttributesService {
       "ATTRIBUTE_TYPE_LOCKED",
       "the type cannot change while users hold a value",
       "type",
+    );
+  }
+
+  /**
+   * Writes the unique keys of the stored values for the new flag. Two values
+   * that collide put the flag back (a value was written between the check and
+   * now) and the call is refused.
+   */
+  private async keepUnique(
+    tenantId: ObjectId,
+    before: AttributeDoc,
+    written: AttributeDoc,
+  ): Promise<AttributeDoc> {
+    const done = await this.options.values.setUnique(
+      tenantId,
+      written._id,
+      written.unique,
+    );
+    if (done) return written;
+    await this.write(tenantId, written, fieldsOf(before));
+    return refuse(
+      "ATTRIBUTE_NOT_UNIQUE",
+      "the stored values are not unique",
+      "unique",
     );
   }
 

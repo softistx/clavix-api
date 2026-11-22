@@ -11,6 +11,26 @@ type TenantUser {
   secondFactor: UserSecondFactor!
 }
 
+"""
+Everything the console holds about one user, for a data-access (GDPR) request:
+their profile, the values of their attributes (hidden ones included, flagged),
+their roles, their grants and their sessions. Never a secret or a code.
+"""
+type UserDataExport {
+  exportedAt: DateTime!
+  profile: TenantUser!
+  attributes: [ExportedAttributeValue!]!
+  roles: [ExportedRole!]!
+  grants: [UserGrant!]!
+  sessions: [UserSession!]!
+}
+
+"A role a user holds, by name, with its assignment date."
+type ExportedRole {
+  role: String!
+  assignedAt: DateTime!
+}
+
 "A user's TOTP second factor, as an admin may know it."
 type UserSecondFactor {
   "True once the factor is active: the user's sign-in by code, link or social asks for it."
@@ -119,6 +139,12 @@ extend type Query {
   userGrants(tenantId: ID!, userId: ID!): [UserGrant!]!
   "The user's standing sessions, newest first (tenant viewer). Empty for an unknown user."
   userSessions(tenantId: ID!, userId: ID!): [UserSession!]!
+  """
+  The data the console holds about a user, for their access request. Needs
+  `edit` (it exposes personal data) and is recorded as `user.export`.
+  Errors: NOT_FOUND (no such user).
+  """
+  userDataExport(tenantId: ID!, userId: ID!): UserDataExport!
 }
 
 extend type Mutation {

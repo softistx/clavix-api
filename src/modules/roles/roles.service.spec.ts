@@ -161,3 +161,18 @@ describe("roles", () => {
     ).toEqual(["svc-wide"]);
   });
 });
+
+describe("personalDataOf", () => {
+  test("lists the roles a user holds by name with the assignment date, only theirs, for a tenant", async () => {
+    const zeta = await rolesService.create(tenant, { name: "pd-zeta" });
+    const alpha = await rolesService.create(tenant, { name: "pd-alpha" });
+    await rolesService.assign(tenant, zeta._id.toHexString(), "pd-user");
+    await rolesService.assign(tenant, alpha._id.toHexString(), "pd-user");
+    await rolesService.assign(tenant, alpha._id.toHexString(), "pd-other");
+    const held = await rolesService.personalDataOf(tenant, "pd-user");
+    expect(held.map((r) => r.role)).toEqual(["pd-alpha", "pd-zeta"]);
+    expect(held[0]?.assignedAt).toBeInstanceOf(Date);
+    expect(await rolesService.personalDataOf(other, "pd-user")).toEqual([]);
+    expect(await rolesService.personalDataOf(tenant, "nobody")).toEqual([]);
+  });
+});

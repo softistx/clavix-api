@@ -8,7 +8,9 @@ import {
   spyOn,
   test,
 } from "bun:test";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
+import { attributesService, attributeValuesService } from "@/config/attributes";
 import { connectionRecordsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
@@ -181,6 +183,8 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  await mongo.db.userAttributes.raw.deleteMany({});
+  await mongo.db.attributeValues.raw.deleteMany({});
   await mongo.db.tenants.raw.deleteMany({
     slug: { $nin: [PLATFORM_TENANT_SLUG] },
   });
@@ -603,8 +607,26 @@ describe("social sign-in", () => {
       expect(answer.errors).toBeUndefined();
       return at(answer.data, "socialSignInComplete", completeSchema);
     };
+    // The previous holder's attribute values go with the replacement.
+    const owned = new ObjectId(grants);
+    const attribute = await attributesService.create(owned, {
+      key: "replace_me",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    await attributeValuesService.save(
+      owned,
+      holder.id,
+      [{ attributeId: attribute._id.toHexString(), value: { text: "old" } }],
+      { kind: "admin", id: "spec" },
+      false,
+    );
     const replaced = await signIn();
     expect(replaced).toMatchObject({ replaced: true, user: { id: holder.id } });
+    expect(
+      await mongo.db.attributeValues.raw.countDocuments({ userId: holder.id }),
+    ).toBe(0);
     const refused = await refresh(held.refresh_token ?? "");
     expect(refused.status).toBe(400);
     expect(

@@ -259,6 +259,27 @@ export class RolesService {
     return this.assignmentsOf(tenantId).count({ roleId: new ObjectId(roleId) });
   }
 
+  /**
+   * What the roles module holds about a user, for a data export: each role they
+   * hold, by name, with the date it was assigned. Nothing about the roles themselves.
+   */
+  async personalDataOf(
+    tenantId: ObjectId,
+    userId: string,
+  ): Promise<{ role: string; assignedAt: Date }[]> {
+    const held = await this.assignmentsOf(tenantId).findMany({
+      filter: { userId },
+    });
+    const roles = await this.rolesOf(tenantId).findMany();
+    const names = new Map(roles.map((r) => [r._id.toHexString(), r.name]));
+    return held
+      .map((a) => ({
+        role: names.get(a.roleId.toHexString()) ?? a.roleId.toHexString(),
+        assignedAt: a.createdAt,
+      }))
+      .sort((a, b) => a.role.localeCompare(b.role));
+  }
+
   /** The roles a user holds, by name. */
   async rolesOfUser(tenantId: ObjectId, userId: string): Promise<RoleDoc[]> {
     const held: AssignmentDoc[] = await this.assignmentsOf(tenantId).findMany({

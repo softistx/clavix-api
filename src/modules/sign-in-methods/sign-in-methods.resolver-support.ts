@@ -1,4 +1,6 @@
 import { socialResolvers } from "@softistx/janus-graphql";
+import { ObjectId } from "mongodb";
+import { attributeValuesService } from "@/config/attributes";
 import { grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { usageService } from "@/config/usage";
@@ -193,6 +195,12 @@ export async function completedAnswer(
       tenantId,
       done.userId,
       grantsRevokeQueue.current,
+    );
+    // The previous holder's attribute values are personal data of someone
+    // else: the new holder starts with none.
+    await attributeValuesService.removeUser(
+      new ObjectId(tenantId),
+      done.userId,
     );
   }
   // janus types the user as an id and a type only: read the profile.

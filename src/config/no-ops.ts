@@ -1,7 +1,6 @@
 import type { ExportThrottle } from "@/console/audit-export/throttle";
 import type { ConsoleBudgets } from "@/console/budgets";
 import type { Throttle, UserThrottle } from "@/http/throttle/core";
-import type { AttributeValues } from "@/modules/attributes";
 import type { ClientDetailTypes } from "@/modules/resources";
 import type { InvitationHooks } from "@/modules/users";
 
@@ -49,13 +48,3 @@ export const noQueue = {
 /** The per-user lock of a script or a spec that runs nothing beside it: the work runs at once. */
 export const noUserLock = <T>(_userId: string, work: () => Promise<T>) =>
   work();
-
-/** The attribute values before they exist (slice A2): no user holds one, so every count is 0 and a removal does nothing. */
-export const noAttributeValues: AttributeValues = {
-  count: async () => 0,
-  counts: async () => new Map<string, number>(),
-  countOtherType: async () => 0,
-  countOptions: async () => 0,
-  countDuplicates: async () => 0,
-  removeAll: async () => {},
-};
