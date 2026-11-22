@@ -9,7 +9,7 @@ import {
   test,
 } from "bun:test";
 import { z } from "zod";
-import { connectionsService } from "@/config/connections";
+import { connectionRecordsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
@@ -244,7 +244,7 @@ describe("hostedSignInMethods", () => {
 
   describe("enterprise connections", () => {
     // A connection is offered only when it can be opened: a verified domain
-    // and a secret the box opens (what `ConnectionsService.build` checks).
+    // and a secret the box opens (what `ConnectionSourcesService.build` checks).
     const connect = async (
       id: string,
       name: string,
@@ -255,7 +255,7 @@ describe("hostedSignInMethods", () => {
       } = {},
     ) => {
       const { verified = true, ...rest } = extra;
-      const created = await connectionsService.create(
+      const created = await connectionRecordsService.create(
         social,
         {
           id,
@@ -302,8 +302,8 @@ describe("hostedSignInMethods", () => {
     };
 
     afterEach(async () => {
-      for (const doc of await connectionsService.list(social)) {
-        await connectionsService.delete(social, doc.connectionId);
+      for (const doc of await connectionRecordsService.list(social)) {
+        await connectionRecordsService.delete(social, doc.connectionId);
       }
     });
 

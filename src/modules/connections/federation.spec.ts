@@ -11,7 +11,11 @@ import {
   softwareAuthenticator,
 } from "@softistx/janus-passkeys/testing";
 import { z } from "zod";
-import { connectionsService } from "@/config/connections";
+import {
+  connectionDomainsService,
+  connectionRecordsService,
+  connectionSourcesService,
+} from "@/config/connections";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
@@ -51,7 +55,7 @@ import { createTenantParOff } from "~/tenant-par-off";
 // discovery, the authorization, the code exchange and the ID token's checks.
 // The guard's address check resolves the IdP's host: the connections answer a
 // public address for the spec's `.test` hosts, with no global DNS mock.
-connectionsService.useHostResolver(async (host) =>
+connectionSourcesService.useHostResolver(async (host) =>
   host.endsWith(".clavix.test")
     ? ["93.184.216.34"]
     : (await lookup(host, { all: true })).map((a) => a.address),
@@ -59,7 +63,9 @@ connectionsService.useHostResolver(async (host) =>
 
 // janus-social connects to the checked addresses itself unless it is given a
 // `fetch`: the spec hands it the global one, which `beforeAll` swaps for the IdP.
-connectionsService.useFetch((input, init) => globalThis.fetch(input, init));
+connectionSourcesService.useFetch((input, init) =>
+  globalThis.fetch(input, init),
+);
 
 const origin = {
   scheme: env.CLAVIX_PUBLIC_SCHEME,
@@ -325,7 +331,7 @@ beforeAll(async () => {
   );
   secret = registered.clientSecret ?? "";
   for (const id of [acme, other]) {
-    await connectionsService.create(
+    await connectionRecordsService.create(
       id,
       {
         id: "acme",
@@ -361,7 +367,7 @@ afterAll(async () => {
 
 describe("home-realm discovery", () => {
   test("a domain nobody verified is not discovered", async () => {
-    await connectionsService.addDomain(acme, "acme", "acme.test");
+    await connectionDomainsService.addDomain(acme, "acme", "acme.test");
     expect(await homeOf("ada@acme.test")).toBeNull();
   });
 
@@ -480,7 +486,7 @@ describe("federated sign-in", () => {
 
   test("an existing user with the verified address is linked, not duplicated", async () => {
     // Made through the e-mail code, while the domain does not yet require single sign-on.
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     await setSignUp("fedacme", true);
     const before = memory.sent.length;
     const asked = await gql("fedacme", REQUEST, { e: "grace@acme.test" });
@@ -497,7 +503,7 @@ describe("federated sign-in", () => {
     const known = dataOf(verified, "verifySignInCode", userShape).user.id;
     graceId = known;
     await setSignUp("fedacme", false);
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
 
     const linked = await federated("grace");
     if (!("done" in linked)) throw new Error("no sign-in");
@@ -521,13 +527,13 @@ describe("federated sign-in", () => {
   });
 
   test("a connection with linked accounts is not deleted, counted by the tenant's own store", async () => {
-    await expect(connectionsService.delete(acme, "acme")).rejects.toMatchObject(
-      { code: "CONNECTION_IN_USE" },
-    );
+    await expect(
+      connectionRecordsService.delete(acme, "acme"),
+    ).rejects.toMatchObject({ code: "CONNECTION_IN_USE" });
   });
 
   test("jit off: a new user is not created, even from the company's own IdP", async () => {
-    await connectionsService.update(acme, "acme", { jit: false });
+    await connectionRecordsService.update(acme, "acme", { jit: false });
     const refused = await federated("newcomer");
     if (!("done" in refused)) throw new Error("no sign-in");
     expect(codeOf(refused.done)).toBe("SIGN_UP_DISABLED");
@@ -536,22 +542,22 @@ describe("federated sign-in", () => {
     const known = await federated("ada");
     if (!("done" in known)) throw new Error("no sign-in");
     expect(known.done.errors).toBeUndefined();
-    await connectionsService.update(acme, "acme", { jit: true });
+    await connectionRecordsService.update(acme, "acme", { jit: true });
   });
 
   test("a connection that asks for the IdP's MFA refuses an ID token without the acr (D6)", async () => {
-    await connectionsService.update(acme, "acme", {
+    await connectionRecordsService.update(acme, "acme", {
       upstreamMfa: { acr: "urn:acme:mfa" },
     });
     const refused = await federated("ada");
     if (!("done" in refused)) throw new Error("no sign-in");
     expect(codeOf(refused.done)).toBe("SOCIAL_STEP_UP_UNMET");
     expect(refused.done.cookies).toEqual([]);
-    await connectionsService.update(acme, "acme", { upstreamMfa: null });
+    await connectionRecordsService.update(acme, "acme", { upstreamMfa: null });
   });
 
   test("a connection that trusts the IdP's MFA gives the session mfa, so acr mfa is reached (D6)", async () => {
-    await connectionsService.update(acme, "acme", {
+    await connectionRecordsService.update(acme, "acme", {
       upstreamMfa: { acr: "urn:acme:mfa" },
     });
     try {
@@ -564,7 +570,9 @@ describe("federated sign-in", () => {
       expect(session?.amr).toEqual(["fed", "mfa"]);
       expect(acrOf(session?.amr ?? [])).toBe(ACR.mfa);
     } finally {
-      await connectionsService.update(acme, "acme", { upstreamMfa: null });
+      await connectionRecordsService.update(acme, "acme", {
+        upstreamMfa: null,
+      });
     }
   });
 
@@ -583,7 +591,7 @@ describe("federated sign-in", () => {
   });
 
   test("each connection has its own callback URL, and a callback bound to another connection is refused before any request (nxgt-janus#987)", async () => {
-    await connectionsService.create(
+    await connectionRecordsService.create(
       acme,
       {
         id: "beta",
@@ -630,7 +638,7 @@ describe("federated sign-in", () => {
     const own = await trip();
     const real = await bffComplete("fedacme", own.callback, own.flow);
     expect(real.errors).toBeUndefined();
-    await connectionsService.delete(acme, "beta");
+    await connectionRecordsService.delete(acme, "beta");
   });
 
   test("a connection that is not the tenant's, or unknown, does not start", async () => {
@@ -638,7 +646,7 @@ describe("federated sign-in", () => {
       const refused = await gql("fedacme", START, { p: provider });
       expect(codeOf(refused)).toBe("SIGN_IN_METHOD_DISABLED");
     }
-    await connectionsService.delete(other, "acme");
+    await connectionRecordsService.delete(other, "acme");
     expect(codeOf(await gql("fedother", START, { p: "acme" }))).toBe(
       "SIGN_IN_METHOD_DISABLED",
     );
@@ -662,7 +670,7 @@ describe("single sign-on required (D3)", () => {
   });
 
   test("a code asked for before the rule is refused at the verification, and no session is left", async () => {
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     const before = memory.sent.length;
     const asked = await gql("fedacme", REQUEST, { e: "grace@acme.test" });
     await settled();
@@ -674,7 +682,7 @@ describe("single sign-on required (D3)", () => {
       "requestSignInCode",
       challengeShape,
     ).challenge;
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
     const sessions = await activeSessions(graceId);
     const refused = await gql("fedacme", VERIFY, { c: challenge, k: code });
     expect(codeOf(refused)).toBe("SSO_REQUIRED");
@@ -683,10 +691,10 @@ describe("single sign-on required (D3)", () => {
   });
 
   test("a connection that turned the rule off lets the code through", async () => {
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     const refused = await gql("fedacme", REQUEST, { e: "grace@acme.test" });
     expect(refused.errors).toBeUndefined();
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
   });
 });
 
@@ -695,7 +703,7 @@ describe("a connection turned off", () => {
     const started = await gql("fedacme", START, { p: "acme" });
     const start = at(started.data, "socialSignInStart", startShape);
     const callback = await throughIdp(start.url, "ada");
-    await connectionsService.update(acme, "acme", { enabled: false });
+    await connectionRecordsService.update(acme, "acme", { enabled: false });
     expect(await homeOf("ada@acme.test")).toBeNull();
     expect(codeOf(await gql("fedacme", START, { p: "acme" }))).toBe(
       "SIGN_IN_METHOD_DISABLED",
@@ -762,7 +770,7 @@ const codeFrom = (before: number, email: string) =>
 describe("single sign-on required: the other doors (D3)", () => {
   test("a magic link is refused at the request, before any mail, and at the confirmation of one asked before the rule", async () => {
     // The previous describe turned the connection off.
-    await connectionsService.update(acme, "acme", {
+    await connectionRecordsService.update(acme, "acme", {
       enabled: true,
       requireSso: true,
     });
@@ -775,7 +783,7 @@ describe("single sign-on required: the other doors (D3)", () => {
     expect(memory.sent.length).toBe(before);
 
     // A link asked while the rule was off is refused when it is used.
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     const max = await userWithSession("max@acme.test");
     const live = await activeSessions(max.id);
     const asked = await gql("fedacme", LINK_REQUEST, { e: "max@acme.test" });
@@ -789,7 +797,7 @@ describe("single sign-on required: the other doors (D3)", () => {
           .at(-1)?.text ?? "",
       )?.[0] ?? "",
     ).searchParams.get("token");
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
     const done = await gql("fedacme", LINK, { t: token ?? "" });
     expect(codeOf(done)).toBe("SSO_REQUIRED");
     expect(cookieOf(done)).toBe("");
@@ -797,7 +805,7 @@ describe("single sign-on required: the other doors (D3)", () => {
   });
 
   test("a user holding TOTP gets SSO_REQUIRED, not a second-factor challenge, and no session", async () => {
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     await policies.updateMfa(acme, { totp: true });
     const email = "tess@acme.test";
     const { id: tessId, cookie } = await userWithSession(email);
@@ -818,7 +826,7 @@ describe("single sign-on required: the other doors (D3)", () => {
       challengeShape,
     ).challenge;
     const code = codeFrom(again, email);
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
     const refused = await gql("fedacme", CHALLENGE_VERIFY, {
       c: challenge,
       k: code,
@@ -828,7 +836,7 @@ describe("single sign-on required: the other doors (D3)", () => {
     expect(cookieOf(refused)).toBe("");
 
     // A challenge issued while the rule was off opens no session once it is on.
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     const third = memory.sent.length;
     const asked3 = await gql("fedacme", REQUEST, { e: email });
     await settled();
@@ -837,7 +845,7 @@ describe("single sign-on required: the other doors (D3)", () => {
       k: codeFrom(third, email),
     });
     const pending = dataOf(issued, "verifySignInCode", challengeShape);
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
     const live = await activeSessions(tessId);
     const blocked = await gql("fedacme", CONFIRM_TOTP, {
       c: pending.challenge,
@@ -853,7 +861,7 @@ describe("single sign-on required: the other doors (D3)", () => {
   });
 
   test("a passkey sign-in is refused by the sign-in guard: no cookie and no session", async () => {
-    await connectionsService.update(acme, "acme", { requireSso: false });
+    await connectionRecordsService.update(acme, "acme", { requireSso: false });
     const { id, cookie } = await userWithSession("pam@acme.test");
     const tenant = await tenantResolver.resolveHost(
       `fedacme.${env.CLAVIX_DOMAIN}`,
@@ -882,7 +890,7 @@ describe("single sign-on required: the other doors (D3)", () => {
       cookie,
     );
     expect(registered.errors).toBeUndefined();
-    await connectionsService.update(acme, "acme", { requireSso: true });
+    await connectionRecordsService.update(acme, "acme", { requireSso: true });
 
     const issued = dataOf(
       await gql("fedacme", SIGN_IN_OPTIONS),

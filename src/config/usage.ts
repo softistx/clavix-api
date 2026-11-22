@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { partitionOf } from "@/modules/tenants";
 import { UsageService } from "@/modules/usage";
 import { agentClientsService } from "./agent-clients";
-import { connectionsService } from "./connections";
+import { connectionRecordsService } from "./connections";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { redis } from "./redis";
@@ -44,7 +44,7 @@ export const usageService = new UsageService(
     },
     agents: (tenantId) => agentClientsService.count(tenantId),
     webhooks: (tenantId) => webhooksService.countEndpoints(tenantId),
-    connections: (tenantId) => connectionsService.count(tenantId),
+    connections: (tenantId) => connectionRecordsService.count(tenantId),
     domains: (tenantId) => domainsService.count(new ObjectId(tenantId)),
   },
   redis?.mau,

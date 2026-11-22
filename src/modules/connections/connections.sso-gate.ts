@@ -1,4 +1,4 @@
-import { connectionsService } from "@/config/connections";
+import { connectionSourcesService } from "@/config/connections";
 import type { TenantJanus } from "@/modules/users";
 import { fail } from "@/shared/errors";
 
@@ -13,7 +13,7 @@ export async function requireNoSso(
   tenantId: string,
   email: string,
 ): Promise<void> {
-  if (await connectionsService.requiresSso(tenantId, email)) {
+  if (await connectionSourcesService.requiresSso(tenantId, email)) {
     throw ssoRequired();
   }
 }
@@ -27,7 +27,7 @@ async function userRequiresSso(
   const user = await auth.findUser(userId);
   return (
     user !== null &&
-    (await connectionsService.requiresSso(tenantId, user.email))
+    (await connectionSourcesService.requiresSso(tenantId, user.email))
   );
 }
 

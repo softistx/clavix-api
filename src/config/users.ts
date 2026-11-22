@@ -5,7 +5,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTenantAuth, secondFactorKeysOf } from "@/modules/users";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import { access } from "./access";
-import { connectionsService } from "./connections";
+import { connectionSourcesService } from "./connections";
 import { eventBus } from "./events";
 import { exclusive } from "./exclusive";
 import { masterKeys, secretBox } from "./keys";
@@ -39,7 +39,7 @@ export const { janusIssuers, authFor, claimsFor, forTenant } = createTenantAuth(
     log: warn,
     secondFactorKeys: secondFactorKeysOf(masterKeys),
     secrets: secretBox,
-    connections: connectionsService,
+    connections: connectionSourcesService,
     events: (tenant) => janusListener(tenant.tenantId, eventBus),
     invitationHooks: (tenant) =>
       tenant.slug === PLATFORM_TENANT_SLUG

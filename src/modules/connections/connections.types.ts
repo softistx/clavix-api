@@ -48,5 +48,4 @@ export interface ConnectionsOptions {
   /** Reads the issuer's metadata: whether it advertises the `iss` response parameter (RFC 9207). */
   advertisesIss: (issuer: string) => Promise<boolean>;
   now: () => Date;
-  log: (message: string) => void;
 }
