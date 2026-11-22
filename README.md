@@ -606,6 +606,7 @@ curl -s https://api.clavix.example/console/graphql \
       id
       label
     }
+    signUp # the tenant's sign-up mode: show "Create an account" only when true
   }
 }
 ```

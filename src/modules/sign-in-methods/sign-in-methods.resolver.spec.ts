@@ -123,7 +123,7 @@ const completeSchema = z.looseObject({
 });
 const codeOf = (answer: Answer) => answer.errors?.[0]?.extensions?.["code"];
 
-const HOSTED = "{ hostedSignInMethods { methods social { id label } } }";
+const HOSTED = "{ hostedSignInMethods { methods social { id label } signUp } }";
 const START = `mutation ($p: String!, $r: String) {
   socialSignInStart(provider: $p, returnTo: $r) { url flow expiresAt }
 }`;
@@ -186,7 +186,11 @@ describe("hostedSignInMethods", () => {
   test("a new tenant offers passkey and e-mail code, no social provider", async () => {
     const answer = await gql("sih-open", HOSTED);
     expect(answer.data).toEqual({
-      hostedSignInMethods: { methods: ["PASSKEY", "EMAIL_CODE"], social: [] },
+      hostedSignInMethods: {
+        methods: ["PASSKEY", "EMAIL_CODE"],
+        social: [],
+        signUp: false,
+      },
     });
   });
 
@@ -200,20 +204,41 @@ describe("hostedSignInMethods", () => {
       hostedSignInMethods: {
         methods: ["EMAIL_CODE", "MAGIC_LINK"],
         social: [{ id: "github", label: "GitHub" }],
+        signUp: true,
       },
     });
     expect(answer.text).not.toContain("gh-client-social");
     // The other tenants are unchanged.
     expect(
       (await gql("sih-open", HOSTED)).data?.["hostedSignInMethods"],
-    ).toEqual({ methods: ["PASSKEY", "EMAIL_CODE"], social: [] });
+    ).toEqual({
+      methods: ["PASSKEY", "EMAIL_CODE"],
+      social: [],
+      signUp: false,
+    });
+  });
+
+  test("signUp is the tenant's sign-up mode, open or closed", async () => {
+    const signUpOf = async (slug: string) =>
+      at(
+        (await gql(slug, HOSTED)).data,
+        "hostedSignInMethods",
+        z.looseObject({ signUp: z.boolean() }),
+      ).signUp;
+    expect(await signUpOf("sih-social")).toBe(true);
+    expect(await signUpOf("sih-other")).toBe(false);
+    expect(await signUpOf("sih-open")).toBe(false);
   });
 
   test("a disabled provider is not offered", async () => {
     await policy.setSocial(other, { provider: "github", enabled: false });
     expect(
       (await gql("sih-other", HOSTED)).data?.["hostedSignInMethods"],
-    ).toEqual({ methods: ["PASSKEY", "EMAIL_CODE"], social: [] });
+    ).toEqual({
+      methods: ["PASSKEY", "EMAIL_CODE"],
+      social: [],
+      signUp: false,
+    });
     await policy.setSocial(other, { provider: "github", enabled: true });
   });
 
@@ -331,6 +356,7 @@ describe("hostedSignInMethods", () => {
       ).toEqual({
         methods: ["PASSKEY", "EMAIL_CODE"],
         social: [{ id: "github", label: "GitHub" }],
+        signUp: false,
       });
     });
 

@@ -110,10 +110,15 @@ export async function socialOfTenant(ctx: Context) {
 }
 
 /** What the hosted sign-in page shows: the enabled methods, the static apps first, then the enterprise connections the tenant chose to show as a button (enabled, `showButton`), oldest first. */
-export async function hostedMethods({ signIn, tenantId }: ResolvedTenant) {
+export async function hostedMethods({
+  signIn,
+  signUp,
+  tenantId,
+}: ResolvedTenant) {
   const { connections } = services();
   const list = await connections.list(tenantId);
   return {
+    signUp,
     methods: methodsOf(signIn)
       .filter((method) => method.enabled)
       .map((method) => HOSTED[method.type]),

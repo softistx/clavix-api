@@ -19,11 +19,15 @@ What the hosted sign-in page of the tenant the host names offers. Public; it
 says nothing about who may sign in. `methods` lists the enabled methods only,
 in the enum's order (PASSWORD never appears yet); `social` the enabled
 providers, then the enabled enterprise connections with `showButton` (id: the
-connection's id, label: its name). Never both empty.
+connection's id, label: its name). Never both empty. `signUp` is the tenant's
+sign-up mode, the flag the console's `Tenant.signUp` reads: tenant-level, it
+never depends on an address.
 """
 type HostedSignInMethods {
   methods: [HostedSignInMethod!]!
   social: [HostedSocialProvider!]!
+  "Whether the tenant lets strangers sign up (true) or only people it already holds or invited (false). Tenant-level: it never depends on an address."
+  signUp: Boolean!
 }
 
 "A social sign-in begun: send the visitor to `url`, and keep `flow` until the callback."
