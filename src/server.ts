@@ -15,7 +15,7 @@ import { createAgentsPrune } from "./config/agents-prune";
 import { appPorts } from "./config/app-ports";
 import { createAuditRetention } from "./config/audit-retention";
 import { createConsoleDeps } from "./config/console";
-import { connectMongo } from "./config/db";
+import { closeMongo, connectMongo } from "./config/db";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
 import { createGrantsRevoke } from "./config/grants-revoke";
@@ -106,6 +106,7 @@ const app = createApp({
   await webhookDelivery.close();
   // Last, so the final spans reach the collector: the backlog is shipped.
   await telemetry.close();
+  await closeMongo();
 });
 
 // In dev, the URL and the route table; in production, the URL alone. On
