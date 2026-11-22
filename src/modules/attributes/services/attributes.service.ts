@@ -392,7 +392,7 @@ export class AttributesService {
   }
 
   /**
-   * Deletes an archived attribute and every value it holds, and frees its key.
+   * Deletes an archived attribute, every value it holds and its role links, and frees its key.
    * `confirmKey` must be the attribute's key. True also when it is already gone.
    */
   async delete(
@@ -415,9 +415,14 @@ export class AttributesService {
         "confirmKey",
       );
     }
-    // Values first: a repeat after a failure finds the attribute and finishes.
+    // Values and role links first: a repeat after a failure finds the
+    // attribute and finishes.
     await this.options.values.removeAll(tenantId, found._id);
+    await this.options.roleLinks.removeForAttribute(tenantId, found._id);
     await this.own(tenantId).hardDeleteMany({ _id: found._id });
+    // A link written between the sweep and the delete (an assign that had
+    // passed its checks) is swept again, now the attribute is gone.
+    await this.options.roleLinks.removeForAttribute(tenantId, found._id);
     return true;
   }
 }

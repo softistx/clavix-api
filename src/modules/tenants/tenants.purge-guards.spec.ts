@@ -39,6 +39,8 @@ describe("the tenant purge guards", () => {
     expect(names).toContain("agentClients");
     // The user attributes catalogue goes with the tenant too.
     expect(names).toContain("userAttributes");
+    // The role links go with the tenant too.
+    expect(names).toContain("roleAttributes");
     // Their values are personal data: they go with the tenant too.
     expect(names).toContain("attributeValues");
     // The profile locks are the tenant's too.

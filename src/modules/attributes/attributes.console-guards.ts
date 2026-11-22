@@ -18,6 +18,9 @@ export const attributesGuards: Guards = {
   "Mutation.restoreUserAttribute": edit,
   "Mutation.deleteUserAttribute": manage,
   "Mutation.setUserAttributeValues": edit,
+  "Mutation.assignRoleAttribute": edit,
+  "Mutation.updateRoleAttribute": edit,
+  "Mutation.unassignRoleAttribute": edit,
 };
 
 // One event per mutation, once its change is stored; a repeat records again.
@@ -30,4 +33,7 @@ export const attributesAudits: Audits = {
   "Mutation.restoreUserAttribute": "userAttribute.restore",
   "Mutation.deleteUserAttribute": "userAttribute.delete",
   "Mutation.setUserAttributeValues": "user.setAttributes",
+  "Mutation.assignRoleAttribute": "roleAttribute.assign",
+  "Mutation.updateRoleAttribute": "roleAttribute.update",
+  "Mutation.unassignRoleAttribute": "roleAttribute.unassign",
 };

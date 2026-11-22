@@ -5,18 +5,27 @@ import { extensionCodeOf } from "@/shared/errors";
 import { defined } from "~/narrow";
 import type { AttributeType } from "../attributes.model";
 import { AttributesService } from "./attributes.service";
+import { RoleAttributesService } from "./role-attributes.service";
 import { AttributeValuesService } from "./values.service";
 
 const tenant = new ObjectId();
 const other = new ObjectId();
+const links = new RoleAttributesService({
+  links: mongo.db.roleAttributes,
+  attributes: mongo.db.userAttributes,
+  roles: mongo.db.roles,
+  assignments: mongo.db.roleAssignments,
+});
 const values = new AttributeValuesService({
   values: mongo.db.attributeValues,
   attributes: mongo.db.userAttributes,
+  roleLinks: links,
 });
 const catalogue = new AttributesService({
   attributes: mongo.db.userAttributes,
   scopes: mongo.db.scopes,
   values,
+  roleLinks: links,
   clock: () => new Date("2026-01-02T03:04:05.000Z"),
 });
 const admin = { kind: "admin", id: "admin-1" } as const;
@@ -247,6 +256,7 @@ describe("unique values", () => {
     const spy = new AttributeValuesService({
       values: mongo.db.attributeValues,
       attributes: mongo.db.userAttributes,
+      roleLinks: links,
     });
     const free = async () => undefined;
     Object.assign(spy, { checkFree: free });

@@ -1,0 +1,114 @@
+"""
+One attribute of a user's section and the value the user holds. Exactly the
+field of the attribute's type is set (`text` for STRING and TEXT, `color`,
+`number`, `date`, `dateTime`, `time`, `options` for SELECT and MULTI_SELECT,
+`boolean`); every field is `null` while the user holds no value.
+"""
+type AttributeValue {
+  attribute: UserAttribute!
+  text: String
+  color: HexColorCode
+  number: Float
+  boolean: Boolean
+  date: Date
+  dateTime: DateTime
+  time: LocalTime
+  "The keys of the chosen options (one for SELECT)."
+  options: [String!]
+    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+}
+
+"""
+What a user holds, by section: `general` is every live attribute of family
+`USER`, by position; `roles` has one section per held role (by name) that is
+linked to live attributes. The values of an archived attribute, of a role no
+longer held or whose link was removed are not shown (they stay stored).
+"""
+type UserAttributeSections {
+  general: [AttributeValue!]!
+    @listSize(assumedSize: 100, requireOneSlicingArgument: false)
+  roles: [RoleAttributeSection!]!
+    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+}
+
+extend type TenantUser {
+  "The user's attribute values by section, hidden ones left out (tenant viewer)."
+  attributes: UserAttributeSections!
+  "False while the user lacks a value of a live required attribute: of the general section, or of a role section (a held role, a required link). Accounts are flagged, never blocked (tenant viewer)."
+  attributesComplete: Boolean!
+}
+
+"""
+Which section a save is about: `roleId` null for the general section, else the
+role whose section is saved (the user must hold it).
+"""
+input AttributeSectionInput {
+  roleId: ID
+}
+
+"""
+The value to set, through the one field of the attribute's type (`text` for
+STRING and TEXT, `color`, `number`, `date`, `dateTime`, `time`, `options` for
+SELECT and MULTI_SELECT, `boolean`).
+"""
+input AttributeValueSetInput @oneOf {
+  text: String
+  color: HexColorCode
+  number: Float
+  boolean: Boolean
+  date: Date
+  dateTime: DateTime
+  time: LocalTime
+  options: [String!]
+}
+
+"One change of a save: `value` null clears the attribute's value."
+input AttributeValueInput {
+  attributeId: ID!
+  value: AttributeValueSetInput
+}
+
+"""
+One attribute value in a user's data export, hidden ones included (an archived
+attribute, a value written under another type). Exactly the field of the
+attribute's type is set.
+"""
+type ExportedAttributeValue {
+  key: String!
+  label: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  "True when the user does not see the value (its attribute is archived, its type changed, or no role the user holds links it)."
+  hidden: Boolean!
+  "The names of the held roles whose section holds the attribute; empty for the general section."
+  roles: [String!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  text: String
+  color: HexColorCode
+  number: Float
+  boolean: Boolean
+  date: Date
+  dateTime: DateTime
+  time: LocalTime
+  options: [String!]
+    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  updatedAt: DateTime!
+}
+
+extend type Mutation {
+  """
+  Sets and clears a user's values in one section (tenant admin) and returns
+  the sections as they stand. A bad value writes nothing. Required attributes
+  (the role link's flag in a role section) cannot be cleared here. Errors:
+  NOT_FOUND (user, or attribute at `values.<i>`), ATTRIBUTE_ARCHIVED,
+  ATTRIBUTE_FAMILY_MISMATCH (400, field `values.<i>`: a role attribute in the
+  general section, a user attribute or one not linked to the role in a role's),
+  ATTRIBUTE_VALUE_INVALID (400, field `values.<i>`), ATTRIBUTE_REQUIRED (400),
+  ATTRIBUTE_VALUE_TAKEN (409, a `unique` attribute) and ATTRIBUTE_ROLE_NOT_HELD
+  (409, field `section.roleId`: the user does not hold the role).
+  """
+  setUserAttributeValues(
+    tenantId: ID!
+    userId: ID!
+    section: AttributeSectionInput!
+    values: [AttributeValueInput!]!
+  ): UserAttributeSections!
+}

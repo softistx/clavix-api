@@ -3,14 +3,17 @@ import DataLoader from "dataloader";
 import { ObjectId } from "mongodb";
 import { attributesService, attributeValuesService } from "@/config/attributes";
 import type { ConsoleContext } from "@/console/context";
-import { attributeValueView } from "./utils";
+import { roleSectionsOf } from "./attributes.console-support";
+import { sectionValueView } from "./utils";
 
 /**
- * `TenantUser.attributes` of one tenant, batched per request: the general
- * section's attributes, their value counts and the values of a page of users
- * are read once, not once per row. The sections of a user hold the live USER
- * attributes by position (hidden ones, archived or of another family, are
- * left out), each with the user's value or none.
+ * `TenantUser.attributes` of one tenant, batched per request: the attributes,
+ * their value counts, role links and the values of a page of users are read
+ * once, not once per row. The general section holds the live USER attributes
+ * by position, each with the user's value or none. A role section is one held
+ * role that links live role attributes (by position, the link's `required`
+ * shown); an archived attribute, a role no longer held or one whose link was
+ * removed is left out, and the value stays stored (hidden).
  */
 export const sectionsLoader = (ctx: ConsoleContext, tenantId: string) =>
   oncePerRequest(
@@ -22,17 +25,18 @@ export const sectionsLoader = (ctx: ConsoleContext, tenantId: string) =>
         const general = await attributeValuesService.general(tenant);
         const counts = await attributesService.valueCounts(tenant, general);
         const held = await attributeValuesService.ofUsers(tenant, userIds);
+        const roles = await roleSectionsOf(tenant, userIds, held);
         return userIds.map((userId) => ({
           general: general.map((attribute) =>
-            attributeValueView(
+            sectionValueView(
               attribute,
+              attribute.required,
               counts.get(attribute._id.toHexString()) ?? 0,
-              held
-                .get(userId)
-                ?.find((v) => v.attributeId.equals(attribute._id)),
+              held.get(userId),
+              [],
             ),
           ),
-          roles: [],
+          roles: roles.get(userId) ?? [],
         }));
       }),
   );

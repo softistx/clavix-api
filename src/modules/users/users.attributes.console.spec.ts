@@ -126,6 +126,129 @@ describe("setUserAttributeValues", () => {
     const recorded = await events();
     expect(recorded.map((e) => e.action)).toEqual(["user.setAttributes"]);
     expect(recorded[0]?.target).toEqual({ type: "user", id: userA });
-    expect(JSON.stringify(recorded)).not.toContain("99");
+    expect(Object.keys(recorded[0] ?? {}).sort()).toEqual(
+      [
+        "_id",
+        "action",
+        "actor",
+        "at",
+        "requestId",
+        "target",
+        "tenantId",
+      ].sort(),
+    );
+  });
+});
+
+describe("role attributes", () => {
+  const CREATE_ROLE = `mutation($t: ID!, $input: CreateRoleInput!) { createRole(tenantId: $t, input: $input) { id } }`;
+  const ASSIGN_ROLE = `mutation($t: ID!, $r: ID!, $u: ID!) { assignRole(tenantId: $t, roleId: $r, userId: $u) }`;
+  const UNASSIGN_ROLE = `mutation($t: ID!, $r: ID!, $u: ID!) { unassignRole(tenantId: $t, roleId: $r, userId: $u) }`;
+  const LINK = `mutation($t: ID!, $r: ID!, $a: ID!, $q: Boolean) { assignRoleAttribute(tenantId: $t, roleId: $r, attributeId: $a, required: $q) { key roles { required role { id } } } }`;
+  const RELINK = `mutation($t: ID!, $r: ID!, $a: ID!, $q: Boolean!) { updateRoleAttribute(tenantId: $t, roleId: $r, attributeId: $a, required: $q) { roles { required } } }`;
+  const UNLINK = `mutation($t: ID!, $r: ID!, $a: ID!) { unassignRoleAttribute(tenantId: $t, roleId: $r, attributeId: $a) }`;
+  const ROLES = `query($t: ID!, $id: ID!) { user(tenantId: $t, id: $id) { attributes { roles { role { id } values { attribute { key required } text } } } } }`;
+  const SAVE = `mutation($t: ID!, $u: ID!, $s: AttributeSectionInput!, $v: [AttributeValueInput!]!) { setUserAttributeValues(tenantId: $t, userId: $u, section: $s, values: $v) { roles { role { id } values { attribute { key } text } } } }`;
+
+  const idOf = (
+    data: Record<string, unknown> | null | undefined,
+    field: string,
+  ) => at(data, field, z.looseObject({ id: z.string() })).id;
+
+  test("link, fill the role's section, hide on unassign, show on re-assign", async () => {
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const role = idOf(
+      (await admin(CREATE_ROLE, { t: tenant, input: { name: "uav-doctor" } }))
+        .data,
+      "createRole",
+    );
+    const licence = await make("licence", { family: "ROLE" });
+    const other = await make("plain");
+    const linked = await admin(LINK, {
+      t: tenant,
+      r: role,
+      a: licence,
+      q: true,
+    });
+    expect(linked.data).toMatchObject({
+      assignRoleAttribute: {
+        key: "licence",
+        roles: [{ required: true, role: { id: role } }],
+      },
+    });
+    expect(codeOf(await admin(LINK, { t: tenant, r: role, a: other }))).toBe(
+      "ATTRIBUTE_FAMILY_MISMATCH",
+    );
+    expect(
+      (await admin(RELINK, { t: tenant, r: role, a: licence, q: false })).data,
+    ).toMatchObject({ updateRoleAttribute: { roles: [{ required: false }] } });
+    // A user without the role has no section and cannot fill it.
+    const section = { roleId: role };
+    const body = [{ attributeId: licence, value: { text: "L-1" } }];
+    expect(
+      codeOf(await admin(SAVE, { t: tenant, u: userA, s: section, v: body })),
+    ).toBe("ATTRIBUTE_ROLE_NOT_HELD");
+    await admin(ASSIGN_ROLE, { t: tenant, r: role, u: userA });
+    const saved = await admin(SAVE, {
+      t: tenant,
+      u: userA,
+      s: section,
+      v: body,
+    });
+    expect(saved.errors).toBeUndefined();
+    expect(saved.data).toMatchObject({
+      setUserAttributeValues: {
+        roles: [{ role: { id: role }, values: [{ text: "L-1" }] }],
+      },
+    });
+    // The general section refuses a role attribute.
+    expect(codeOf(await set(userA, body))).toBe("ATTRIBUTE_FAMILY_MISMATCH");
+    await admin(UNASSIGN_ROLE, { t: tenant, r: role, u: userA });
+    const hidden = await admin(ROLES, { t: tenant, id: userA });
+    expect(hidden.data).toMatchObject({ user: { attributes: { roles: [] } } });
+    await admin(ASSIGN_ROLE, { t: tenant, r: role, u: userA });
+    const shown = await admin(ROLES, { t: tenant, id: userA });
+    expect(shown.data).toMatchObject({
+      user: {
+        attributes: {
+          roles: [{ values: [{ attribute: { key: "licence" }, text: "L-1" }] }],
+        },
+      },
+    });
+    expect(
+      (await admin(UNLINK, { t: tenant, r: role, a: licence })).data,
+    ).toEqual({ unassignRoleAttribute: true });
+    expect(
+      (await admin(UNLINK, { t: tenant, r: role, a: licence })).data,
+    ).toEqual({ unassignRoleAttribute: false });
+    expect(
+      codeOf(await admin(RELINK, { t: tenant, r: role, a: licence, q: true })),
+    ).toBe("NOT_FOUND");
+    const actions = (await events())
+      .map((e) => e.action)
+      .filter((a) => a.startsWith("roleAttribute."));
+    expect(actions).toEqual([
+      "roleAttribute.assign",
+      "roleAttribute.assign",
+      "roleAttribute.update",
+      "roleAttribute.update",
+      "roleAttribute.unassign",
+      "roleAttribute.unassign",
+      "roleAttribute.unassign",
+      "roleAttribute.unassign",
+    ]);
+  });
+
+  test("a viewer and a stranger cannot link or unlink", async () => {
+    const args = {
+      t: tenant,
+      r: new ObjectId().toHexString(),
+      a: new ObjectId().toHexString(),
+    };
+    for (const who of [viewer, stranger]) {
+      expect(codeOf(await who(LINK, args))).toBe("FORBIDDEN");
+      expect(codeOf(await who(RELINK, { ...args, q: true }))).toBe("FORBIDDEN");
+      expect(codeOf(await who(UNLINK, args))).toBe("FORBIDDEN");
+    }
   });
 });

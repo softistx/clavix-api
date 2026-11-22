@@ -7,6 +7,7 @@ export { adminEvents } from "../console/admin-events/admin-events.model";
 export { agentClients } from "./agents/agents.model";
 export {
   attributeValues,
+  roleAttributes,
   userAttributes,
 } from "./attributes/attributes.model";
 export { authEvents } from "./audit/audit.model";
