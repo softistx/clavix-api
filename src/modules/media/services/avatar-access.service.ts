@@ -1,8 +1,8 @@
 import type { BaseContext } from "@softistx/alxia";
 import { MediaRefusal } from "@softistx/alxia-media";
 import { isLive, type ResolvedTenant } from "@/tenancy/resolved-tenant";
-import { adminQueryOf, crossSite } from "../media.access";
 import type { AvatarAccessPorts, AvatarTarget } from "../media.types";
+import { adminQueryOf, crossSite } from "../media.utils";
 
 /** What the access reads of a request's context. */
 export type AccessContext = Pick<BaseContext, "request" | "url"> & {
