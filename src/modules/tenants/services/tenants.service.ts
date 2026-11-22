@@ -39,8 +39,8 @@ type TenantId = IdOf<typeof tenants> | string;
 /**
  * The platform's tenants, in one service (owner, 2026-11-20): create and
  * register, suspend, reactivate, delete, restore, rename, set the plan and the
- * policies, read (the trash included), list, and the purge. The slug never
- * changes. Every write drops the tenant's hosts from the resolver's cache.
+ * policies, read (the trash included) and list. The social config and the
+ * purge have their own services. The slug never changes. Every write drops the tenant's hosts from the resolver's cache.
  */
 export class TenantsService {
   private readonly options: TenantsServiceOptions;
