@@ -128,7 +128,7 @@ describe("catalogue", () => {
       valueCount: 0,
       roles: [],
     });
-    const second = await make(admin, tenantA, "crud_other");
+    await make(admin, tenantA, "crud_other");
     expect(
       (await viewer(GET, { t: tenantA, id: attribute.id })).data?.[
         "userAttribute"
@@ -142,7 +142,20 @@ describe("catalogue", () => {
     expect(
       listed.map((a) => a.key).filter((k) => k.startsWith("crud_")),
     ).toEqual(["crud_size", "crud_other"]);
+  });
 
+  test("update refuses a stale version and move reorders the family", async () => {
+    const attribute = at(
+      (
+        await admin(CREATE, {
+          t: tenantA,
+          input: input("upd_size", { type: "NUMBER" }),
+        })
+      ).data,
+      "createUserAttribute",
+      shown,
+    );
+    const second = await make(admin, tenantA, "upd_other");
     const updated = await admin(UPDATE, {
       t: tenantA,
       id: attribute.id,
@@ -168,12 +181,19 @@ describe("catalogue", () => {
       (await viewer(LIST, { t: tenantA })).data,
       "userAttributes",
       z.array(shown),
-    ).filter((a) => a.key.startsWith("crud_"));
-    expect(moved.map((a) => a.key)).toEqual(["crud_other", "crud_size"]);
+    ).filter((a) => a.key.startsWith("upd_"));
+    expect(moved.map((a) => a.key)).toEqual(["upd_other", "upd_size"]);
+  });
 
+  test("archive, restore and the permanent delete", async () => {
+    const attribute = at(
+      (await admin(CREATE, { t: tenantA, input: input("arc_size") })).data,
+      "createUserAttribute",
+      shown,
+    );
     const archived = await admin(ARCHIVE, { t: tenantA, id: attribute.id });
     expect(archived.data?.["archiveUserAttribute"]).toMatchObject({
-      key: "crud_size",
+      key: "arc_size",
     });
     expect(
       at(
@@ -181,9 +201,9 @@ describe("catalogue", () => {
         "userAttributes",
         z.array(shown),
       ).map((a) => a.key),
-    ).toContain("crud_size");
+    ).toContain("arc_size");
     expect(
-      codeOf(await admin(CREATE, { t: tenantA, input: input("crud_size") })),
+      codeOf(await admin(CREATE, { t: tenantA, input: input("arc_size") })),
     ).toBe("ATTRIBUTE_KEY_TAKEN");
     const restored = await admin(RESTORE, { t: tenantA, id: attribute.id });
     expect(restored.data?.["restoreUserAttribute"]).toMatchObject({
@@ -192,7 +212,7 @@ describe("catalogue", () => {
 
     expect(
       codeOf(
-        await owner(DELETE, { t: tenantA, id: attribute.id, k: "crud_size" }),
+        await owner(DELETE, { t: tenantA, id: attribute.id, k: "arc_size" }),
       ),
     ).toBe("ATTRIBUTE_NOT_ARCHIVED");
     await admin(ARCHIVE, { t: tenantA, id: attribute.id });
@@ -201,7 +221,7 @@ describe("catalogue", () => {
     ).toBe("ATTRIBUTE_DELETE_UNCONFIRMED");
     for (let i = 0; i < 2; i += 1) {
       expect(
-        (await owner(DELETE, { t: tenantA, id: attribute.id, k: "crud_size" }))
+        (await owner(DELETE, { t: tenantA, id: attribute.id, k: "arc_size" }))
           .data,
       ).toEqual({
         deleteUserAttribute: true,

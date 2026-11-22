@@ -35,10 +35,12 @@ const values: AttributeValues = {
     held.removed.push(id.toHexString());
   },
 };
+const fixed = new Date("2026-01-02T03:04:05.000Z");
 const service = new AttributesService({
   attributes: mongo.db.userAttributes,
   scopes: mongo.db.scopes,
   values,
+  clock: () => fixed,
 });
 
 const reset = () => {
@@ -369,7 +371,7 @@ describe("attributes catalogue", () => {
     const created = await make("svc_arch");
     const id = created._id.toHexString();
     const archived = await service.archive(tenant, id);
-    expect(archived.archivedAt).toBeInstanceOf(Date);
+    expect(archived.archivedAt).toEqual(fixed);
     expect((await service.archive(tenant, id)).version).toBe(archived.version);
     expect(
       (await service.list(tenant, { archived: true })).map((a) => a.key),

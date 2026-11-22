@@ -1,6 +1,7 @@
 import { AttributesService } from "@/modules/attributes";
 import { mongo } from "./db";
 import { noAttributeValues } from "./no-ops";
+import { clock } from "./runtime";
 
 /**
  * The real attribute catalogue. The collection is tenant-owned: only this
@@ -11,4 +12,5 @@ export const attributesService = new AttributesService({
   attributes: mongo.db.userAttributes,
   scopes: mongo.db.scopes,
   values: noAttributeValues,
+  clock,
 });

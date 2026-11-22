@@ -17,7 +17,6 @@ export { OIDC_SCOPES } from "./resources.rules";
 export * from "./resources.service";
 export {
   cleanTranslations,
-  MAX_TRANSLATIONS,
   mergeTranslations,
 } from "./resources.translation-rules";
 export type { RegisterResourceInput } from "./resources.types";

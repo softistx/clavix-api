@@ -48,6 +48,8 @@ export interface AttributesOptions {
   /** Read only: an emission names a scope of the tenant. */
   scopes: TypedCollection<typeof scopes>;
   values: AttributeValues;
+  /** The process's clock, passed in (never read from the system here). */
+  clock: () => Date;
 }
 
 /** A text as a caller sends it: the locales it sets. */

@@ -355,7 +355,7 @@ export class AttributesService {
   async archive(tenantId: ObjectId, id: string): Promise<AttributeDoc> {
     const found = await this.get(tenantId, id);
     if (found.archivedAt !== null) return found;
-    return this.write(tenantId, found, { archivedAt: new Date() });
+    return this.write(tenantId, found, { archivedAt: this.options.clock() });
   }
 
   /** Brings an archived attribute back. Idempotent. */

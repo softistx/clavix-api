@@ -1,9 +1,5 @@
 import { RESERVED_ACCESS_TOKEN_CLAIMS } from "@softistx/janus-oauth";
-import {
-  cleanTranslations,
-  MAX_TRANSLATIONS,
-  mergeTranslations,
-} from "@/modules/resources";
+import { cleanTranslations, mergeTranslations } from "@/modules/resources";
 import type { Translation } from "@/shared/translations";
 import { unique } from "@/shared/values";
 import type { AttributeOption, AttributeType } from "./attributes.model";
@@ -15,7 +11,6 @@ export const MAX_OPTIONS = 100;
 export const MAX_LABEL = 100;
 export const MAX_DESCRIPTION = 300;
 export const MAX_UNIT = 20;
-export { MAX_TRANSLATIONS };
 
 const KEY = /^[a-z][a-z0-9_]{1,63}$/;
 const OPTION_KEY = /^[a-z0-9][a-z0-9_-]{0,62}$/;
