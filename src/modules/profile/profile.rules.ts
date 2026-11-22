@@ -7,7 +7,7 @@ import type {
   ProfileChanges,
   ProfileInput,
 } from "./profile.types";
-import { isCountryCode } from "./utils/countries.utils";
+import { isCountryCode } from "./utils";
 
 export const MAX_NAME_PART = 100;
 export const MAX_ADDRESS_PART = 200;
