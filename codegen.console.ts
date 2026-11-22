@@ -1,5 +1,5 @@
 import type { CodegenConfig } from "@graphql-codegen/cli";
-import { codegenScalars } from "@nxgt/graphql-scalars";
+import { codegenScalars } from "@softistx/graphql-scalars";
 
 // `bun run generate` also writes the console API's types
 // (src/generated/console/resolvers.ts) from src/console/**/*.graphqls and the modules' `*.console.graphqls`, whose
