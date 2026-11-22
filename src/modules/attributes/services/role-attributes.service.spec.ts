@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import {
   attributesService as catalogue,
@@ -189,6 +189,62 @@ describe("linking", () => {
         attributeId: a._id,
       }),
     ).toBe(1);
+  });
+});
+
+describe("races", () => {
+  test("a role deleted while assigning leaves no link", async () => {
+    const role = await rolesService.create(tenant, { name: "ra-race-role" });
+    const attr = await roleAttribute("ra_race_role");
+    const raw = mongo.db.roleAttributes.raw;
+    const insert = raw.insertOne.bind(raw);
+    const spy = spyOn(raw, "insertOne").mockImplementation(async (...args) => {
+      const made = await insert(...args);
+      await mongo.db.roles.raw.deleteOne({ _id: role._id });
+      return made;
+    });
+    try {
+      expect(
+        await code(() =>
+          links.assign(tenant, role.id, attr._id.toHexString(), false),
+        ),
+      ).toBe("NOT_FOUND");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(
+      await mongo.db.roleAttributes.raw.countDocuments({
+        tenantId: tenant,
+        attributeId: attr._id,
+      }),
+    ).toBe(0);
+  });
+
+  test("an attribute deleted while assigning leaves no link", async () => {
+    const role = await rolesService.create(tenant, { name: "ra-race-attr" });
+    const attr = await roleAttribute("ra_race_attr");
+    const raw = mongo.db.roleAttributes.raw;
+    const insert = raw.insertOne.bind(raw);
+    const spy = spyOn(raw, "insertOne").mockImplementation(async (...args) => {
+      const made = await insert(...args);
+      await mongo.db.userAttributes.raw.deleteOne({ _id: attr._id });
+      return made;
+    });
+    try {
+      expect(
+        await code(() =>
+          links.assign(tenant, role.id, attr._id.toHexString(), false),
+        ),
+      ).toBe("NOT_FOUND");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(
+      await mongo.db.roleAttributes.raw.countDocuments({
+        tenantId: tenant,
+        roleId: role._id,
+      }),
+    ).toBe(0);
   });
 });
 

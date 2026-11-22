@@ -420,6 +420,9 @@ export class AttributesService {
     await this.options.values.removeAll(tenantId, found._id);
     await this.options.roleLinks.removeForAttribute(tenantId, found._id);
     await this.own(tenantId).hardDeleteMany({ _id: found._id });
+    // A link written between the sweep and the delete (an assign that had
+    // passed its checks) is swept again, now the attribute is gone.
+    await this.options.roleLinks.removeForAttribute(tenantId, found._id);
     return true;
   }
 }

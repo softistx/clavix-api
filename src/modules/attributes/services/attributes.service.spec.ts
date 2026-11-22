@@ -414,7 +414,7 @@ describe("attributes catalogue", () => {
     );
     expect(await service.delete(tenant, id, "svc_del")).toBe(true);
     expect(held.removed).toEqual([id]);
-    expect(unlinked).toEqual([id]);
+    expect(unlinked).toEqual([id, id]);
     expect(await service.find(tenant, id)).toBeUndefined();
     expect(await service.delete(tenant, id, "svc_del")).toBe(true);
     expect((await make("svc_del")).key).toBe("svc_del");
