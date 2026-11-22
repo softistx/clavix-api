@@ -324,7 +324,6 @@ fetch is timed (3 s). A wildcard `allowHosts` entry over a public suffix (`*.co.
 console and ignored if it was stored before.
 
 Residual risks, none of them closed by code here:
-
 - The check trusts the host's system resolver. A poisoned or hostile resolver can choose which public address a name gets;
   it cannot make the fetch reach a private one.
 - Public means "not in the ranges janus-oauth lists". A range reserved later is allowed until janus-oauth lists it
