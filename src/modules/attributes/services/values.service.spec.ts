@@ -188,6 +188,48 @@ describe("saving values", () => {
   });
 });
 
+describe("a user's own save", () => {
+  test("refuses an attribute the user may not set, with the index", async () => {
+    const open = await make("v_own_open", "STRING", { userEditable: true });
+    const shut = await make("v_own_shut");
+    await values.checkEditable(tenant, [set(open._id, { text: "ok" })]);
+    expect(
+      await code(() =>
+        values.checkEditable(tenant, [
+          set(open._id, { text: "ok" }),
+          set(shut._id, { text: "no" }),
+        ]),
+      ),
+    ).toBe("ATTRIBUTE_NOT_EDITABLE");
+  });
+
+  test("lists the editable attributes with the user's values", async () => {
+    const open = await make("v_own_list", "STRING", { userEditable: true });
+    await make("v_own_hidden");
+    await values.save(
+      tenant,
+      "own-1",
+      [set(open._id, { text: "mine" })],
+      { kind: "user", id: "own-1" },
+      false,
+    );
+    const mine = await values.editableOf(tenant, "own-1");
+    const found = mine.find((m) => m.attribute.key === "v_own_list");
+    expect(found?.text).toBe("mine");
+    expect(mine.some((m) => m.attribute.key === "v_own_hidden")).toBe(false);
+    const others = await values.editableOf(tenant, "own-2");
+    expect(
+      others.find((m) => m.attribute.key === "v_own_list")?.text,
+    ).toBeNull();
+  });
+
+  test("leaves an unknown id to the save", async () => {
+    await values.checkEditable(tenant, [
+      set(new ObjectId(), { text: "ghost" }),
+    ]);
+  });
+});
+
 describe("unique values", () => {
   test("a taken value is refused, normalised, for another user only", async () => {
     const email = await make("v_uniq", "STRING", { unique: true });

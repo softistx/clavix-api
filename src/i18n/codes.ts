@@ -1,4 +1,5 @@
 import { codes as console } from "@/console/console.errors";
+import { codes as account } from "@/modules/account/account.errors";
 import { codes as attributes } from "@/modules/attributes/attributes.errors";
 import { codes as auth } from "@/modules/auth/auth.errors";
 import { codes as branding } from "@/modules/branding";
@@ -31,6 +32,7 @@ export const common = defineCodes("common", [
 // Every module's declaration, in module order.
 export const groups = [
   common,
+  account,
   attributes,
   auth,
   branding,

@@ -21,6 +21,7 @@ const STATUS = {
   ATTRIBUTE_VALUE_INVALID: 400,
   ATTRIBUTE_VALUE_TAKEN: 409,
   ATTRIBUTE_REQUIRED: 400,
+  ATTRIBUTE_NOT_EDITABLE: 403,
 } as const satisfies Record<(typeof codes.codes)[number], number>;
 
 /** A refusal of this module: one of its codes, its message and the field it is about. */

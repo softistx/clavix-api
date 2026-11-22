@@ -37,5 +37,6 @@ export {
   exportedView,
   isRequired,
   matches,
+  ownAttributeView,
   sectionValueView,
 } from "./values.utils";

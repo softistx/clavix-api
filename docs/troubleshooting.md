@@ -944,6 +944,7 @@ Every refusal on the attribute catalogue or on a user's values writes nothing.
 - `ATTRIBUTE_FAMILY_MISMATCH` (400): the attribute is not in the section being set (a ROLE attribute in the general section, a USER attribute in a role section, or a ROLE attribute the role does not link), or `assignRoleAttribute` was given a USER-family attribute.
 - `ATTRIBUTE_VALUE_TAKEN` (409): another user holds that value of a `unique` attribute (text compares in lower case).
 - `ATTRIBUTE_REQUIRED` (400): a console save cannot clear a required attribute's value.
+- `ATTRIBUTE_NOT_EDITABLE` (403): `setMyAttributeValues` named an attribute whose `userEditable` is off; only an administrator sets it (console `setUserAttributeValues`). `field` is `values.<i>`.
 - Values of a ROLE attribute vanished after `unassignRole` or `unassignRoleAttribute`: they are stored, only hidden (the export flags them `hidden`); assigning the role again, or linking the attribute again, shows them.
 - `NOT_FOUND` on `assignRoleAttribute`, `updateRoleAttribute`, `unassignRoleAttribute`: the role or attribute is unknown, or (`updateRoleAttribute`) the role is not linked to the attribute; `unassignRoleAttribute` answers `false` when there is no link.
 - `ATTRIBUTE_ROLE_NOT_HELD` (409): `section.roleId` is given and the user does not hold that role, or no such role exists. Assign the role to the user first (`assignRole`); a role the user lost is no longer a section.

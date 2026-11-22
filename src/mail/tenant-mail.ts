@@ -9,6 +9,9 @@ export const MAGIC_LINK_PATH = "/sign-in/link";
 /** The hosted page a verification e-mail opens (clavix-ui); the token is its `token` query parameter. */
 export const VERIFY_EMAIL_PATH = "/verify";
 
+/** The hosted page an e-mail change link opens (clavix-ui, signed in); the token is its `token` query parameter, which the page POSTs (`confirmEmailChange`), never confirming on GET. */
+export const CHANGE_EMAIL_PATH = "/account/email";
+
 /** The hosted page an invitation e-mail opens (clavix-ui); the code is its `code` query parameter. */
 export const INVITATION_PATH = "/invitation";
 
@@ -42,6 +45,8 @@ export function createTenantMail({ mailer, domain }: TenantMailOptions) {
           `${tenant.issuer}${MAGIC_LINK_PATH}?token=${encodeURIComponent(token)}`,
         verifyEmail: (token) =>
           `${tenant.issuer}${VERIFY_EMAIL_PATH}?token=${encodeURIComponent(token)}`,
+        changeEmail: (token) =>
+          `${tenant.issuer}${CHANGE_EMAIL_PATH}?token=${encodeURIComponent(token)}`,
         resetPassword: (token) =>
           `${tenant.issuer}/reset?token=${encodeURIComponent(token)}`,
         secureAccount: () => `${tenant.issuer}/account`,

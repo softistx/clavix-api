@@ -1,5 +1,6 @@
 import { mergeResolvers } from "@graphql-tools/merge";
 import type { Resolvers } from "@/generated/graphql/resolvers";
+import { account } from "./account/account.resolver";
 import { auth } from "./auth/auth.resolver";
 import { branding } from "./branding/branding.resolver";
 import { connections } from "./connections/connections.resolver";
@@ -21,4 +22,5 @@ export const resolvers: Resolvers = mergeResolvers([
   signInMethods,
   connections,
   media,
+  account,
 ]);

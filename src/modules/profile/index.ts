@@ -7,10 +7,16 @@
 // `profile.model` (read by `collections.ts`).
 // `profile.refusals` is re-exported for the users module.
 
+export type { ProfileField } from "./profile.model";
 export { refuse, refuseCommon } from "./profile.refusals";
-export { cleanProfile } from "./profile.rules";
+export { checkUnlocked, cleanProfile } from "./profile.rules";
 export { ProfilePoliciesService } from "./profile.service";
-export type { ProfileChanges, ProfileView } from "./profile.types";
+export type {
+  ProfileChanges,
+  ProfileInput,
+  ProfileView,
+} from "./profile.types";
+export type { ProfileSource } from "./utils";
 export {
   emptyProfile,
   patchOf,
