@@ -1,5 +1,5 @@
 import { migrate, migrationStatus } from "@softistx/mongo/migrations";
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo, mongo } from "@/config/db";
 import { migrationsWith } from "@/config/migrations";
 
 // A deployment step, after `bun run db:sync` and before the new code rolls:
@@ -16,6 +16,7 @@ const migrations = migrationsWith((clientSecret) =>
   ),
 );
 try {
+  await connectMongo();
   if (!args.includes("--status")) {
     const result = await migrate(mongo.db, migrations, {
       dryRun: args.includes("--dry-run"),
@@ -24,5 +25,5 @@ try {
   }
   console.table(await migrationStatus(mongo.db, migrations));
 } finally {
-  await mongo.close();
+  await closeMongo();
 }

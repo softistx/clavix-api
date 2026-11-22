@@ -1,4 +1,4 @@
-import { mongo } from "@/config/db";
+import { closeMongo, connectMongo } from "@/config/db";
 import { keysService } from "@/config/keys";
 import { redis } from "@/config/redis";
 import { tenantsCollection, tenantsService } from "@/config/tenancy";
@@ -20,6 +20,7 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 try {
+  await connectMongo();
   const target = parseRotateArgs(args);
   let tenantIds: string[];
   if (target.all) {
@@ -41,6 +42,6 @@ try {
   console.error(`keys:rotate: ${error.message}\n\n${ROTATE_USAGE}`);
   process.exitCode = 1;
 } finally {
-  await mongo.close();
+  await closeMongo();
   await redis?.close();
 }

@@ -23,7 +23,8 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
 // Every collection and its indexes, before any spec (autoSync would create one
 // on first use, which a transaction cannot do), then the migrations.
 {
-  const { mongo } = await import("@/config/db");
+  const { connectMongo, mongo } = await import("@/config/db");
+  await connectMongo();
   await mongo.sync();
   // The janus OAuth collections (partitioned per tenant) and their indexes.
   const { oauthDb } = await import("@/config/oauth-db");
@@ -69,8 +70,8 @@ Bun.env["CLAVIX_TRUSTED_PROXIES"] = "1";
 // is a throwaway temp folder, so the hook closes the driver, kills mongod and
 // removes its folder, all synchronous: no wait, no timeout, no leftover.
 afterAll(async () => {
-  const { mongo } = await import("@/config/db");
-  await mongo.close();
+  const { closeMongo } = await import("@/config/db");
+  await closeMongo();
   for (const server of replSet.servers) {
     server.instanceInfo?.instance.mongodProcess?.kill("SIGKILL");
     const dbPath = server.instanceInfo?.dbPath;
