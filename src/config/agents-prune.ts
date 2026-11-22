@@ -54,13 +54,12 @@ export const createAgentsPrune =
         // (consent approval does not take it, so a grant made in between is revoked with the agent).
         locked: (tenantId, work) =>
           exclusive(clientsKey({ _id: new ObjectId(tenantId) }), work),
-        remove: async (tenantId, clientId) =>
-          (
-            await clientsService.delete(
-              { _id: new ObjectId(tenantId), slug: "", status: "active" },
-              clientId,
-            )
-          ).removed,
+        remove: async (tenantId, clientId) => {
+          // The real tenant (its slug and status), as the console passes it.
+          const tenant = await tenantsService.find(tenantId);
+          if (tenant === undefined) return false;
+          return (await clientsService.delete(tenant, clientId)).removed;
+        },
         emit: (event) => adminEventRecorder.record(agentPruneEventInput(event)),
         log: warn,
       },

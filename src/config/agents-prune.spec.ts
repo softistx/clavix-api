@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { noDetailTypes } from "@/config/no-ops";
@@ -6,6 +6,7 @@ import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG, partitionOf } from "@/modules/tenants";
 import { agentClientsService } from "./agent-clients";
 import { createAgentsPrune } from "./agents-prune";
+import { clientsService } from "./clients";
 import { mongo } from "./db";
 import { oauthDb } from "./oauth-db";
 import { tenantsService } from "./tenancy";
@@ -129,6 +130,36 @@ describe("createAgentsPrune over the real stores", () => {
     expect(events.every((e) => e["actor"] === "system:agents:prune")).toBe(
       true,
     );
+  });
+
+  test("deletes through the real tenant, not a stand-in with an empty slug", async () => {
+    const id = await agent("prn-a", idA, "Real tenant", 20);
+    const spy = spyOn(clientsService, "delete");
+    try {
+      await createAgentsPrune(() => NOW)();
+      const call = spy.mock.calls.find(([, clientId]) => clientId === id);
+      expect(call?.[0]).toMatchObject({
+        _id: new ObjectId(idA),
+        slug: "prn-a",
+        status: "active",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await storeOf(idA).findClient(id)).toBeNull();
+  });
+
+  test("a tenant that is gone removes nothing", async () => {
+    const id = await agent("prn-a", idA, "Gone tenant", 20);
+    const spy = spyOn(tenantsService, "find").mockResolvedValue(undefined);
+    try {
+      const report = await createAgentsPrune(() => NOW)();
+      expect(report.pruned).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await storeOf(idA).findClient(id)).not.toBeNull();
+    await createAgentsPrune(() => NOW)();
   });
 
   test("a second pass finds nothing: no pruning, no event", async () => {
