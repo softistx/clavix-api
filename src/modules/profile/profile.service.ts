@@ -4,14 +4,14 @@ import {
   scopeToTenant,
 } from "@softistx/mongo";
 import type { ObjectId } from "mongodb";
-import type { ProfileField } from "../profile.model";
-import { refuseCommon } from "../profile.refusals";
+import type { ProfileField } from "./profile.model";
+import { refuseCommon } from "./profile.refusals";
+import { sortedLocks } from "./profile.rules";
 import type {
   ProfilePoliciesOptions,
   ProfilePolicyView,
-} from "../profile.types";
-import { sortedLocks } from "../rules";
-import { versionOf } from "../utils";
+} from "./profile.types";
+import { versionOf } from "./utils";
 
 const STALE =
   "The profile locks were changed meanwhile; read them and try again";

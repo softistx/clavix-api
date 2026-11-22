@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { extensionCodeOf } from "@/shared/errors";
-import { ProfilePoliciesService } from "./profile-policies.service";
+import { ProfilePoliciesService } from "./profile.service";
 
 // Tenant ids of their own: the service reads and writes through the scope, so
 // no tenant document is needed and no other spec's data is touched.

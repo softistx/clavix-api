@@ -1,13 +1,13 @@
 import { canonicalLocale } from "@/shared/translations";
-import { PROFILE_FIELDS, type ProfileField } from "../profile.model";
-import { refuse } from "../profile.refusals";
+import { PROFILE_FIELDS, type ProfileField } from "./profile.model";
+import { refuse } from "./profile.refusals";
 import type {
   Address,
   AddressInput,
   ProfileChanges,
   ProfileInput,
-} from "../profile.types";
-import { isCountryCode } from "../utils/countries.utils";
+} from "./profile.types";
+import { isCountryCode } from "./utils/countries.utils";
 
 export const MAX_NAME_PART = 100;
 export const MAX_ADDRESS_PART = 200;
