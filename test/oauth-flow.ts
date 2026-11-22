@@ -15,7 +15,12 @@ import {
   type ClavixOAuthOptions,
   createClavixOAuthIssuers,
 } from "@/oauth/issuers";
-import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
+import type {
+  AttributesFor,
+  AuthFor,
+  ClaimsFor,
+  RolesFor,
+} from "@/oauth/ports";
 import type {
   MetadataThrottle,
   RegisterThrottle,
@@ -36,6 +41,7 @@ const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
 interface FlowOptions {
   rolesFor?: RolesFor;
+  attributesFor?: AttributesFor;
   /** What the `/register` route throttles with (none by default). */
   registerThrottle?: RegisterThrottle;
   /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
@@ -89,6 +95,9 @@ function issuersOf(
       ? {}
       : { eventsFor: options.eventsFor }),
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
+    ...(options.attributesFor === undefined
+      ? {}
+      : { attributesFor: options.attributesFor }),
     ...(options.metadataTransport === undefined
       ? {}
       : { metadataTransport: options.metadataTransport }),

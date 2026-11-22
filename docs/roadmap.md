@@ -18,8 +18,8 @@ nxgt-janus release says which.
   user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
   restored and deleted for good. The catalogue and the stored values come first (an admin sets a user's
   values, the data export and the erase on deletion are in; a role attribute is linked to a role, filled in
-  that role's section, and hidden, never erased, when the user loses the role); claims and the profile follow on
-  the same integration branch
+  that role's section, and hidden, never erased, when the user loses the role); the attribute claims are in the access tokens (the ID token
+  and userinfo wait on janus J1), and the profile follows on the same integration branch
   ([#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
