@@ -189,6 +189,28 @@ enum AgentRegistrationMode {
   RESTRICTED
 }
 
+"""Who an attribute describes."""
+enum AttributeFamily {
+  """Only the holders of the roles the attribute is linked to."""
+  ROLE
+  """Every user of the tenant."""
+  USER
+}
+
+"""What an attribute holds. Its values are canonical per type."""
+enum AttributeType {
+  BOOLEAN
+  COLOR
+  DATE
+  DATETIME
+  MULTI_SELECT
+  NUMBER
+  SELECT
+  STRING
+  TEXT
+  TIME
+}
+
 """
 Who did it, resolved to a name and an e-mail address when the party is a user
 who still exists; `name` and `email` are `null` otherwise (gone, a client, the
@@ -747,6 +769,29 @@ input CreateTenantInput {
   slug: String!
 }
 
+input CreateUserAttributeInput {
+  """300 characters at most each."""
+  description: [TranslationInput!]
+  emissionScope: String
+  """Never changes."""
+  family: AttributeFamily!
+  """
+  Never changes. See `UserAttribute.key`; reserved claim names are refused.
+  """
+  key: String!
+  """At least one language, 100 characters at most each."""
+  label: [TranslationInput!]!
+  """
+  Required (1 to 100) for SELECT and MULTI_SELECT, refused for the other types.
+  """
+  options: [UserAttributeOptionInput!]
+  required: Boolean
+  type: AttributeType!
+  unique: Boolean
+  unit: String
+  userEditable: Boolean
+}
+
 input CreateWebhookEndpointInput {
   description: String
   """Empty or absent: every type."""
@@ -1078,6 +1123,10 @@ type Mutation {
   """
   addDomain(host: String!, tenantId: ID!): Domain!
   """
+  Hides the attribute from lists and tokens; its key and values stay (tenant admin). Idempotent. Errors: NOT_FOUND.
+  """
+  archiveUserAttribute(id: ID!, tenantId: ID!): UserAttribute!
+  """
   Gives the user the role (tenant admin). Idempotent: True also when the user
   already holds it. Errors: NOT_FOUND for an unknown role or user.
   """
@@ -1119,6 +1168,14 @@ type Mutation {
   SLUG_TAKEN (409; a deleted or purged tenant keeps its slug for ever).
   """
   createTenant(input: CreateTenantInput!): Tenant!
+  """
+  Creates an attribute at the end of its family (tenant admin). Errors:
+  ATTRIBUTE_KEY_INVALID, ATTRIBUTE_KEY_RESERVED, ATTRIBUTE_UNIQUE_UNSUPPORTED,
+  ATTRIBUTE_EDITABLE_EMITTED and ATTRIBUTE_SCOPE_UNKNOWN (400),
+  ATTRIBUTE_KEY_TAKEN (409, an archived attribute keeps its key) and
+  ATTRIBUTE_LIMIT (409, 100 per tenant).
+  """
+  createUserAttribute(input: CreateUserAttributeInput!, tenantId: ID!): UserAttribute!
   """
   Adds an endpoint and mints its secret. Needs `edit` on the tenant. Errors:
   BAD_USER_INPUT (400, `extensions.field` `url` or `types`: not https, holds
@@ -1164,6 +1221,12 @@ type Mutation {
   """
   deleteUser(tenantId: ID!, userId: ID!): Boolean!
   """
+  Deletes an archived attribute and every value it holds, and frees its key
+  (tenant owner). `confirmKey` must be its key. True also when it is already
+  gone. Errors: ATTRIBUTE_NOT_ARCHIVED (409), ATTRIBUTE_DELETE_UNCONFIRMED (400).
+  """
+  deleteUserAttribute(confirmKey: String!, id: ID!, tenantId: ID!): Boolean!
+  """
   Removes the endpoint; what waits for it is given up. `false` when it was already gone.
   """
   deleteWebhookEndpoint(id: ID!, tenantId: ID!): Boolean!
@@ -1201,6 +1264,10 @@ type Mutation {
   unknown tenant.
   """
   inviteUser(email: EmailAddress!, tenantId: ID!): UserInvitation!
+  """
+  Puts the attribute at `position` (0-based) among the live ones of its family (tenant admin). Errors: NOT_FOUND, ATTRIBUTE_ARCHIVED.
+  """
+  moveUserAttribute(id: ID!, position: Int!, tenantId: ID!): UserAttribute!
   """Drops a domain, verified or not. Errors: NOT_FOUND (404)."""
   removeConnectionDomain(domain: String!, id: ID!, tenantId: ID!): Connection!
   """
@@ -1243,6 +1310,10 @@ type Mutation {
   (unknown, or already purged).
   """
   restoreTenant(id: ID!): Tenant!
+  """
+  Brings an archived attribute back (tenant admin). Idempotent. Errors: NOT_FOUND.
+  """
+  restoreUserAttribute(id: ID!, tenantId: ID!): UserAttribute!
   """
   Lifts a suspension. Needs `edit` on the platform. Idempotent. Errors: NOT_FOUND (a tenant in the trash is restored, not resumed).
   """
@@ -1405,6 +1476,14 @@ type Mutation {
   The e-mail address and the verified flag are not editable.
   """
   updateUser(input: UpdateUserInput!, tenantId: ID!, userId: ID!): TenantUser!
+  """
+  Changes an attribute at the `version` read (tenant admin); nothing is written
+  when nothing changes. Errors: CONFLICT (stale version), NOT_FOUND,
+  ATTRIBUTE_ARCHIVED, ATTRIBUTE_TYPE_LOCKED and ATTRIBUTE_OPTION_IN_USE
+  (users hold values), ATTRIBUTE_NOT_UNIQUE (stored values repeat), plus the
+  400 refusals of `createUserAttribute`.
+  """
+  updateUserAttribute(id: ID!, input: UpdateUserAttributeInput!, tenantId: ID!, version: Int!): UserAttribute!
   """Needs `edit`. Errors: NOT_FOUND (404), BAD_USER_INPUT (400)."""
   updateWebhookEndpoint(id: ID!, input: UpdateWebhookEndpointInput!, tenantId: ID!): WebhookEndpoint!
   """
@@ -1667,6 +1746,14 @@ type Query {
   """
   user(id: ID!, tenantId: ID!): TenantUser
   """
+  One attribute (tenant viewer), or `null`: unknown, or of another tenant.
+  """
+  userAttribute(id: ID!, tenantId: ID!): UserAttribute
+  """
+  The tenant's attributes by position (tenant viewer), the live ones or, with `archived`, the archived ones. All families unless `family` is given.
+  """
+  userAttributes(archived: Boolean = false, family: AttributeFamily, tenantId: ID!): [UserAttribute!]!
+  """
   The user's standing grants, oldest first (tenant viewer). Empty for an unknown user.
   """
   userGrants(tenantId: ID!, userId: ID!): [UserGrant!]!
@@ -1797,6 +1884,16 @@ enum Role {
   ADMIN
   OWNER
   VIEWER
+}
+
+"""
+The link between an attribute and a role (family `ROLE` attributes): a user
+holds the attribute when it holds the role. Always empty until the role links
+ship.
+"""
+type RoleAttributeLink {
+  required: Boolean!
+  role: TenantRole!
 }
 
 """A user holding a role."""
@@ -2231,6 +2328,25 @@ input UpdateTenantInput {
 }
 
 """
+A field left out keeps its value; `null` clears `unit` and `emissionScope`.
+"""
+input UpdateUserAttributeInput {
+  description: [TranslationInput!]
+  emissionScope: String
+  """
+  Sets or replaces the languages it names and keeps the others; a blank text removes one.
+  """
+  label: [TranslationInput!]
+  """Replaces the whole list."""
+  options: [UserAttributeOptionInput!]
+  required: Boolean
+  type: AttributeType
+  unique: Boolean
+  unit: String
+  userEditable: Boolean
+}
+
+"""
 What a tenant admin may change on a user. The e-mail address is not editable; its verified flag is `setUserEmailVerified`.
 """
 input UpdateUserInput {
@@ -2277,6 +2393,64 @@ type UsageMeter {
   """The quota that applies; `null` means no limit."""
   quota: Int
   used: Int!
+}
+
+"""
+An extra field of the tenant's users (family `USER`) or of the holders of some
+roles (family `ROLE`). The `key` is the claim name and never changes; it stays
+taken while the attribute is archived, and only the permanent delete frees it.
+"""
+type UserAttribute {
+  """When the attribute was archived, or `null` while it is live."""
+  archivedAt: DateTime
+  description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  """
+  The scope whose token carries the value as a claim, or `null` when it is not emitted.
+  """
+  emissionScope: String
+  family: AttributeFamily!
+  id: ID!
+  """
+  2 to 64 characters: a lower-case letter, then lower-case letters, digits and `_`.
+  """
+  key: String!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  """
+  The choices of a SELECT or MULTI_SELECT attribute, in order; empty for the other types.
+  """
+  options: [UserAttributeOption!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  required: Boolean!
+  """The roles the attribute is linked to (family `ROLE`)."""
+  roles: [RoleAttributeLink!]! @listSize(assumedSize: 10, requireOneSlicingArgument: false)
+  type: AttributeType!
+  """Whether two users may not hold the same value. Only STRING and NUMBER."""
+  unique: Boolean!
+  """The unit a value is shown with (`kg`, `%`), or `null`."""
+  unit: String
+  """
+  Whether the user may set its own value (profile or `/userinfo` write); never with an emission scope.
+  """
+  userEditable: Boolean!
+  """How many users hold a value of the attribute."""
+  valueCount: Int!
+  """The version to send back to `updateUserAttribute`."""
+  version: Int!
+}
+
+"""
+One choice of a SELECT or MULTI_SELECT attribute. Its `key` is the stored (and emitted) value.
+"""
+type UserAttributeOption {
+  key: String!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+}
+
+input UserAttributeOptionInput {
+  """
+  1 to 63 characters: a lower-case letter or digit, then lower-case letters, digits, `_` and `-`.
+  """
+  key: String!
+  label: [TranslationInput!]!
 }
 
 """

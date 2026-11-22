@@ -583,6 +583,40 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 - `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
   read a token's content; its request and code-flow steps are in `test/oauth-flow-steps.ts`).
 
+## User attributes (`src/modules/attributes`, with its `attributes.console-*` files; `src/config/attributes.ts`)
+
+A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slice A1; the plan is
+`spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
+purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slices A2 to A5 add
+the stored values, the role links, the claims and the profile.
+- **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
+  `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
+  and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
+  permanent delete frees it. A tenant has at most 100 attributes (`ATTRIBUTE_LIMIT`; a creation that lost
+  the race is taken back).
+- **Settings.** `family` (`USER` or `ROLE`), `type` (STRING, TEXT, COLOR, NUMBER, DATE, DATETIME, TIME,
+  SELECT, MULTI_SELECT, BOOLEAN), a label and a description as `[{ locale, text }]` lists (at least one
+  label language), a unit, options (SELECT and MULTI_SELECT only, 100 at most), `required` (USER family
+  only), `userEditable`, `unique` (STRING and NUMBER only) and `emissionScope` (a scope of the tenant or a
+  standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
+  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `attributes.rules.ts`.
+- **The stored values are a port, `AttributeValues`** (`attributes.types.ts`), required and bound in
+  `src/config/attributes.ts`. Until A2 it is `noAttributeValues` (`src/config/no-ops.ts`): every count is 0,
+  so `valueCount` reads 0 and no lock applies. With values, the type is locked
+  (`ATTRIBUTE_TYPE_LOCKED`, checked again after the write), a removed option in use is refused
+  (`ATTRIBUTE_OPTION_IN_USE`), `unique` over duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`), and the
+  permanent delete removes the values first. `UserAttribute.roles` is `[]` until A3.
+- **Updates** send the `version` read (a stale one is `CONFLICT`); nothing is written when nothing
+  changes; an archived attribute is refused (`ATTRIBUTE_ARCHIVED`) until restored. `position` is a
+  gapped number: a move writes one document, and renumbers the family only when two neighbours are too
+  close. Archive and restore are idempotent; the delete needs the archived attribute and its key as
+  `confirmKey` (`ATTRIBUTE_NOT_ARCHIVED`, `ATTRIBUTE_DELETE_UNCONFIRMED`) and is true on a repeat.
+- **Refusals** go through `refuse` / `refuseCommon` (`attributes.errors.ts`: codes with their status);
+  the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
+- **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
+  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`.
+
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)
 
 A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`), reached only through

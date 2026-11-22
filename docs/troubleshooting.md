@@ -922,6 +922,24 @@ On `updateRole` or `deleteRole` of a role whose `managed` field is `true`: Clavi
 tenant and keeps it as it is. Nothing was written. Hide Edit and Delete on such a role; assigning
 it with `assignRole` still works. A tenant's own roles (`managed: false`) are not affected.
 
+### `ATTRIBUTE_*` codes on a user attribute
+
+Every refusal on the attribute catalogue writes nothing.
+- `ATTRIBUTE_KEY_INVALID` (400): the key is not 2 to 64 characters of a lower-case letter, then lower-case letters, digits and `_`.
+- `ATTRIBUTE_KEY_RESERVED` (400): the key is a claim name tokens already carry (`email`, `roles`, `scope`...). Pick another.
+- `ATTRIBUTE_KEY_TAKEN` (409): the tenant has an attribute with that key, an archived one included. Restore it, or delete it for good to free the key.
+- `ATTRIBUTE_LIMIT` (409): a tenant has at most 100 attributes. Delete one for good.
+- `ATTRIBUTE_UNIQUE_UNSUPPORTED` (400): only STRING and NUMBER attributes can be unique.
+- `ATTRIBUTE_EDITABLE_EMITTED` (400): an attribute the user can edit cannot be emitted as a claim; turn one off.
+- `ATTRIBUTE_SCOPE_UNKNOWN` (400): `emissionScope` is neither a scope of the tenant nor a standard OpenID Connect scope.
+- `ATTRIBUTE_TYPE_LOCKED` (409): users hold values, so the type cannot change.
+- `ATTRIBUTE_OPTION_IN_USE` (409): users hold an option you removed; keep it.
+- `ATTRIBUTE_NOT_UNIQUE` (409): stored values already repeat, so `unique` cannot be turned on.
+- `ATTRIBUTE_ARCHIVED` (409): an archived attribute cannot be updated or moved; restore it first.
+- `ATTRIBUTE_NOT_ARCHIVED` (409): `deleteUserAttribute` needs the attribute archived first.
+- `ATTRIBUTE_DELETE_UNCONFIRMED` (400): `confirmKey` is not the attribute's key.
+- `CONFLICT` on `updateUserAttribute`: the `version` is stale; read the attribute again and resend.
+
 ### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
 
 `No such role`: the id names no role of this tenant (another tenant's id is not found either), or the

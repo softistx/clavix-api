@@ -6,6 +6,11 @@ import {
   adminsGuards,
 } from "@/modules/admins/admins.console-resolver";
 import {
+  attributes,
+  attributesAudits,
+  attributesGuards,
+} from "@/modules/attributes/attributes.console-resolver";
+import {
   audit,
   auditAudits,
   auditGuards,
@@ -83,6 +88,7 @@ export const resolvers: Resolvers = mergeResolvers([
   domains,
   resources,
   roles,
+  attributes,
   tenants,
   users,
   webhooks,
@@ -97,6 +103,7 @@ export const guards: Guards = {
   ...domainsGuards,
   ...resourcesGuards,
   ...rolesGuards,
+  ...attributesGuards,
   ...tenantsGuards,
   ...signInMethodsGuards,
   ...oauthPolicyGuards,
@@ -112,6 +119,7 @@ export const audits: Audits = {
   ...domainsAudits,
   ...resourcesAudits,
   ...rolesAudits,
+  ...attributesAudits,
   ...tenantsAudits,
   ...signInMethodsAudits,
   ...oauthPolicyAudits,

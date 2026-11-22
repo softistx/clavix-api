@@ -13,6 +13,13 @@ nxgt-janus release says which.
   language, then the first stored translation. Breaking for the console UI
   ([#484](https://github.com/softistx/clavix-api/issues/484)).
 
+- **User attributes** — a tenant defines the extra fields of its users (text, number, date, choice,
+  yes/no…) in a catalogue: key, label and description per language, unit, options, required,
+  user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
+  restored and deleted for good. The catalogue is first; stored values, role links, claims and the
+  profile follow on the same integration branch
+  ([#501](https://github.com/softistx/clavix-api/issues/501)).
+
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
   the `<name>.<role>.ts` shape with the console's resolvers inside their owning module; errors go
