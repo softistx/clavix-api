@@ -107,6 +107,25 @@ describe("the client reads", () => {
     ).rejects.toThrow();
   });
 
+  test("matches is true for a repeat of the stored client's creation", async () => {
+    expect(
+      await matchesClient(reads, tenant, {
+        name: "Console",
+        clientId: consoleId,
+        redirectUris: [REDIRECT],
+        type: "public",
+      }),
+    ).toBe(true);
+    expect(
+      await matchesClient(reads, tenant, {
+        name: "Renamed",
+        clientId: consoleId,
+        redirectUris: [REDIRECT],
+        type: "public",
+      }),
+    ).toBe(false);
+  });
+
   test("matches is false for an id that is not stored", async () => {
     expect(
       await matchesClient(reads, tenant, {
