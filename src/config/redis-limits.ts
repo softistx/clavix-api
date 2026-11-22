@@ -2,6 +2,7 @@ import type { ExportLimitConfig } from "@/console/audit-export/throttle";
 import type { SignInLimitConfig } from "@/modules/auth/auth.throttle";
 import type { VerificationLimitConfig } from "@/modules/auth/auth.verification-throttle";
 import type { DeviceLimitConfig } from "@/modules/consent/consent.device-throttle";
+import type { AvatarLimitConfig } from "@/modules/media/media.throttle";
 import type { PasskeyLimitConfig } from "@/modules/passkeys/passkeys.throttle";
 import type {
   MetadataLimitConfig,
@@ -43,6 +44,16 @@ export const deviceFromEnv = (): DeviceLimitConfig => ({
   ipWindowSeconds: env.CLAVIX_DEVICE_IP_WINDOW_SECONDS,
   tenantLimit: env.CLAVIX_DEVICE_TENANT_LIMIT,
   tenantWindowSeconds: env.CLAVIX_DEVICE_TENANT_WINDOW_SECONDS,
+});
+
+/** The picture upload limits, read from the environment. */
+export const avatarFromEnv = (): AvatarLimitConfig => ({
+  userLimit: env.CLAVIX_AVATAR_USER_LIMIT,
+  userWindowSeconds: env.CLAVIX_AVATAR_USER_WINDOW_SECONDS,
+  ipLimit: env.CLAVIX_AVATAR_IP_LIMIT,
+  ipWindowSeconds: env.CLAVIX_AVATAR_IP_WINDOW_SECONDS,
+  tenantLimit: env.CLAVIX_AVATAR_TENANT_LIMIT,
+  tenantWindowSeconds: env.CLAVIX_AVATAR_TENANT_WINDOW_SECONDS,
 });
 
 /** The client registration limits, read from the environment. */

@@ -12,6 +12,7 @@ import {
 import { consentService } from "@/config/consent";
 import { invitationsService } from "@/config/invitations";
 import { keysService } from "@/config/keys";
+import { avatarsService } from "@/config/media";
 import { mfaService } from "@/config/mfa";
 import { oauthPolicyService } from "@/config/oauth-policy";
 import { passkeysService } from "@/config/passkeys";
@@ -40,6 +41,7 @@ export const services = () => ({
   agents: agentClientsService,
   audit: authEventsService,
   attributes: attributesService,
+  avatars: avatarsService,
   auth: authService,
   branding: brandingService,
   clientPolicies: clientPoliciesService,

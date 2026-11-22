@@ -429,3 +429,23 @@ describe("magic link policy", () => {
     expect(quietJanus(oauthDb, tenant).magicLink.enabled).toBe(false);
   });
 });
+
+describe("the picture claim", () => {
+  test("is the issuer's media URL of the stored key, and absent without a picture", async () => {
+    const acme = await tenantOf("acme");
+    const auth = await janusOf("acme");
+    const user = await auth.create({ email: "picture@example.test" });
+    expect(
+      await claimsFor(acme)({ id: user.id }, ["profile"]),
+    ).not.toHaveProperty("picture");
+    const key = crypto.randomUUID();
+    await auth.avatar.set(user.id, { id: key });
+    expect(await claimsFor(acme)({ id: user.id }, ["profile"])).toMatchObject({
+      picture: `${acme.issuer}/media/avatar/${key}`,
+    });
+    await auth.avatar.remove(user.id);
+    expect(
+      await claimsFor(acme)({ id: user.id }, ["profile"]),
+    ).not.toHaveProperty("picture");
+  });
+});

@@ -35,6 +35,13 @@ const clean = {
 };
 
 const masterKey = Buffer.alloc(32, 7).toString("base64");
+// The pictures' bucket, which production requires.
+const media = {
+  CLAVIX_MEDIA_S3_ENDPOINT: "https://s3.example",
+  CLAVIX_MEDIA_S3_BUCKET: "clavix-media",
+  CLAVIX_MEDIA_S3_ACCESS_KEY_ID: "key",
+  CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY: "secret",
+};
 
 test("outside production the defaults stand in", async () => {
   const { env } = await load(clean);
@@ -92,6 +99,7 @@ test("a malformed variable stops the app, naming it", async () => {
 test("production requires REDIS_URL and CLAVIX_DOMAIN and refuses http", async () => {
   const production = {
     NODE_ENV: "production",
+    ...media,
     REDIS_URL: "redis://redis:6379",
     CLAVIX_DOMAIN: "clavix.example",
     CLAVIX_PUBLIC_SCHEME: "https",
@@ -128,6 +136,7 @@ test("the keys master key: a public default outside production, never in it", as
   const production = {
     ...clean,
     NODE_ENV: "production",
+    ...media,
     REDIS_URL: "redis://redis:6379",
     CLAVIX_DOMAIN: "clavix.example",
     CLAVIX_SMTP_URL: "smtps://relay.example:465",
@@ -193,6 +202,7 @@ test("CLAVIX_TRUSTED_PROXIES is required in production, with a clear error", asy
   const production = {
     ...clean,
     NODE_ENV: "production",
+    ...media,
     REDIS_URL: "redis://redis:6379",
     CLAVIX_DOMAIN: "clavix.example",
     CLAVIX_SMTP_URL: "smtps://relay.example:465",
@@ -229,6 +239,7 @@ test("the GraphQL IDE: on under development, off elsewhere, refused in productio
   const production = {
     ...clean,
     NODE_ENV: "production",
+    ...media,
     REDIS_URL: "redis://redis:6379",
     CLAVIX_DOMAIN: "clavix.example",
     CLAVIX_PUBLIC_SCHEME: "https",
@@ -250,4 +261,32 @@ test("the client header is optional by default and only true or false are accept
   await expect(
     load({ ...clean, CLAVIX_REQUIRE_CLIENT_HEADER: "yes" }),
   ).rejects.toThrow("CLAVIX_REQUIRE_CLIENT_HEADER");
+});
+
+test("the pictures' bucket is optional outside production and required in it", async () => {
+  const { env } = await load({
+    ...clean,
+    ...media,
+    CLAVIX_MEDIA_S3_BUCKET: "",
+  });
+  expect(env.CLAVIX_MEDIA_S3_BUCKET).toBeUndefined();
+  expect(env.CLAVIX_MEDIA_S3_REGION).toBe("us-east-1");
+  const production = {
+    ...clean,
+    ...media,
+    NODE_ENV: "production",
+    REDIS_URL: "redis://redis:6379",
+    CLAVIX_DOMAIN: "clavix.example",
+    CLAVIX_KEYS_MASTER_KEY: masterKey,
+    CLAVIX_SMTP_URL: "smtps://relay.example:465",
+  };
+  expect((await load(production)).env.CLAVIX_MEDIA_S3_BUCKET).toBe(
+    "clavix-media",
+  );
+  await expect(
+    load({ ...production, CLAVIX_MEDIA_S3_BUCKET: undefined }),
+  ).rejects.toThrow("CLAVIX_MEDIA_S3_BUCKET");
+  await expect(
+    load({ ...production, CLAVIX_MEDIA_S3_ENDPOINT: "nope" }),
+  ).rejects.toThrow("CLAVIX_MEDIA_S3_ENDPOINT");
 });

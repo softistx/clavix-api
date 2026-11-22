@@ -13,6 +13,7 @@ import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
+import { avatarObjects } from "@/config/media-objects";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { rolesService } from "@/config/roles";
@@ -1184,6 +1185,29 @@ describe("disabling, sessions, grants and deletion", () => {
       ]);
       expect(await rolesService.rolesOfUser(tenant, user)).toEqual([]);
       expect(await rolesService.memberCount(tenant, role)).toBe(0);
+    }
+  });
+
+  test("deleteUser removes the user's picture object, and none for a user without one", async () => {
+    const a = await poolOf(slugA);
+    const removed = spyOn(avatarObjects, "remove");
+    try {
+      const without = (await a.auth.create({ email: "nopic@end.test" })).id;
+      await asConsole(
+        ownA,
+        `mutation { deleteUser(tenantId: "${tenantA}", userId: "${without}") }`,
+      );
+      expect(removed).not.toHaveBeenCalled();
+      const holder = (await a.auth.create({ email: "withpic@end.test" })).id;
+      const key = crypto.randomUUID();
+      await a.auth.avatar.set(holder, { id: key });
+      await asConsole(
+        ownA,
+        `mutation { deleteUser(tenantId: "${tenantA}", userId: "${holder}") }`,
+      );
+      expect(removed).toHaveBeenCalledWith(tenantA, key);
+    } finally {
+      removed.mockRestore();
     }
   });
 

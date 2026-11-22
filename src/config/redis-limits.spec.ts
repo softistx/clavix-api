@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { env } from "./env";
 import {
   auditExportFromEnv,
+  avatarFromEnv,
   consoleFromEnv,
   deviceFromEnv,
   metadataFromEnv,
@@ -29,6 +30,14 @@ describe("the limits read from the environment", () => {
     expect(auditExportFromEnv()).toEqual({
       limit: env.CLAVIX_EXPORT_TENANT_LIMIT,
       windowSeconds: env.CLAVIX_EXPORT_TENANT_WINDOW_SECONDS,
+    });
+    expect(avatarFromEnv()).toEqual({
+      userLimit: env.CLAVIX_AVATAR_USER_LIMIT,
+      userWindowSeconds: env.CLAVIX_AVATAR_USER_WINDOW_SECONDS,
+      ipLimit: env.CLAVIX_AVATAR_IP_LIMIT,
+      ipWindowSeconds: env.CLAVIX_AVATAR_IP_WINDOW_SECONDS,
+      tenantLimit: env.CLAVIX_AVATAR_TENANT_LIMIT,
+      tenantWindowSeconds: env.CLAVIX_AVATAR_TENANT_WINDOW_SECONDS,
     });
     expect(ssoFromEnv().tenantLimit).toBe(env.CLAVIX_SSO_TENANT_LIMIT);
     expect(consoleFromEnv().inviteCallerLimit).toBe(

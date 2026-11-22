@@ -6,6 +6,7 @@ import { codes as connections } from "@/modules/connections/connections.errors";
 import { codes as consent } from "@/modules/consent/consent.errors";
 import { codes as domains } from "@/modules/domains";
 import { codes as invitations } from "@/modules/invitations/invitations.errors";
+import { codes as media } from "@/modules/media/media.errors";
 import { codes as mfa } from "@/modules/mfa/mfa.errors";
 import { codes as passkeys } from "@/modules/passkeys/passkeys.errors";
 import { codes as profile } from "@/modules/profile/profile.errors";
@@ -38,6 +39,7 @@ export const groups = [
   console,
   domains,
   invitations,
+  media,
   mfa,
   passkeys,
   profile,

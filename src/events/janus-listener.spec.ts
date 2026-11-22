@@ -14,7 +14,14 @@ async function run(type: UserEvent["type"]) {
   return all.filter((event) => event.kind === "auth");
 }
 
-async function runAll(type: UserEvent["type"]) {
+const removed: Array<[string, string | null]> = [];
+const avatars = {
+  removeFormer: async (tenantId: string, key: string | null) => {
+    removed.push([tenantId, key]);
+  },
+};
+
+async function runAll(type: UserEvent["type"], formerAvatarId?: string | null) {
   const emitted: ClavixEvent[] = [];
   const bus: Pick<EventBus, "emit"> = {
     emit: async (event) => {
@@ -24,12 +31,14 @@ async function runAll(type: UserEvent["type"]) {
   await janusListener(
     TENANT,
     bus,
+    avatars,
   )({
     id: mintId(at.getTime()),
     type,
     userId: USER,
     userType: "user",
     occurredAt: at,
+    ...(formerAvatarId === undefined ? {} : { formerAvatarId }),
   });
   return emitted;
 }
@@ -73,5 +82,31 @@ describe("janusListener", () => {
         data: { tenantId: TENANT, userId: USER },
       },
     });
+  });
+
+  test("a replaced picture's former object is removed", async () => {
+    removed.length = 0;
+    await runAll("user.avatarChanged", "old-key");
+    await runAll("user.avatarRemoved", "other-key");
+    expect(removed).toEqual([
+      [TENANT, "old-key"],
+      [TENANT, "other-key"],
+    ]);
+  });
+
+  test("a first picture has no former object", async () => {
+    removed.length = 0;
+    await runAll("user.avatarChanged", null);
+    await runAll("user.avatarChanged");
+    expect(removed).toEqual([
+      [TENANT, null],
+      [TENANT, null],
+    ]);
+  });
+
+  test("another event removes no picture", async () => {
+    removed.length = 0;
+    await runAll("user.created");
+    expect(removed).toEqual([]);
   });
 });

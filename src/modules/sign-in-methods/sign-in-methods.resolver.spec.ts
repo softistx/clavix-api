@@ -622,8 +622,11 @@ describe("social sign-in", () => {
       { kind: "admin", id: "spec" },
       false,
     );
+    // ... and so does their picture.
+    await auth.avatar.set(holder.id, { id: crypto.randomUUID() });
     const replaced = await signIn();
     expect(replaced).toMatchObject({ replaced: true, user: { id: holder.id } });
+    expect((await auth.findUser(holder.id))?.avatar).toBeNull();
     expect(
       await mongo.db.attributeValues.raw.countDocuments({ userId: holder.id }),
     ).toBe(0);

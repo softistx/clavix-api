@@ -18,12 +18,14 @@ import { readyz } from "./config/ready";
 import { telemetry as appTelemetry } from "./config/telemetry";
 import { tenantResolver } from "./config/tenancy";
 import { serveAuditExport } from "./console/audit-export/export";
+import { consoleAvatarAccess } from "./console/avatar-access";
 import { mountConsoleGraphql } from "./console/graphql-mount";
 import { CONSOLE_EXPORT_PATH } from "./console/identity";
 import type { ConsoleDeps } from "./console/plugin";
 import type { consoleSchema } from "./console/schema";
 import { createBase } from "./http/context";
 import { mountHostedGraphql } from "./http/graphql-mount";
+import { type MediaPorts, mountMedia } from "./http/media-mount";
 import { serveReadyz } from "./http/readyz";
 import { type ThrottleContext, throttlesOf } from "./http/throttle/context";
 import { mountOAuth, type OAuthHandle } from "./oauth/routes";
@@ -45,6 +47,8 @@ export interface AppPorts extends ThrottleContext {
   detailTexts: DetailTextsFor;
   /** The tenants' agents, for `OAuthClient.agent` on the hosted pages. */
   agents: AgentsFor;
+  /** The picture routes (`/media/avatar`): the bucket, the janus instances and the upload budget. */
+  media: MediaPorts;
 }
 
 /** What `createApp` takes: the ports, and the entry-point options (their defaults are the app's config). */
@@ -59,7 +63,7 @@ export interface AppOptions extends AppPorts {
   ready?: () => Promise<ReadyReport>;
 }
 
-/** The base app: context, health and readiness probes, the logo, the TLS ask and the body limit. */
+/** The base app: context, health and readiness probes, the logo, the TLS ask, the picture routes and the body limit. */
 function baseOf(options: AppOptions) {
   return (
     createBase(
@@ -77,6 +81,10 @@ function baseOf(options: AppOptions) {
       // Caddy's on-demand TLS ask: internal, secret-guarded (src/modules/domains/domains.tls-ask.ts).
       .all(TLS_ASK_PATH, ({ request }) => serveTlsAsk(request))
       .all(WEBAUTHN_WELL_KNOWN, ({ request }) => serveWebauthnOrigins(request))
+      // Before the body limit: a picture is up to 1 MiB, and the routes check their own size.
+      .plugin((app) =>
+        mountMedia(app, options.media, consoleAvatarAccess(options.console)),
+      )
       .bodyLimit(BODY_LIMIT)
   );
 }

@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { attributeValuesService } from "@/config/attributes";
+import { avatarObjects } from "@/config/media-objects";
 import { rolesService } from "@/config/roles";
 import { clock } from "@/config/runtime";
 import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
@@ -106,6 +107,13 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
       tenant,
       userId,
       async () => {
+        // Their picture is personal data in the bucket: removed with the
+        // account, first, so a retry finishes what a failed run left.
+        const picture = (await ctx.users.find(tenantId, userId))?.profile
+          .pictureKey;
+        if (picture !== null && picture !== undefined) {
+          await avatarObjects.remove(tenantId, picture);
+        }
         await ctx.users.delete(tenantId, userId);
         // Their role assignments go with them; on a repeat too, so a retry
         // finishes what a failed first run left.
