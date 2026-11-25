@@ -35,7 +35,7 @@
     "@softistx/alxia-telemetry": "^0.10.0",
     "@softistx/graphql-scalars": "^0.8.0",
     "@softistx/graphql-validation": "^0.10.0",
-    "@softistx/graxia": "^0.17.1",
+    "@softistx/graxia": "^0.17.2",
     "@softistx/graxia-graphiql": "^0.4.1",
     "@softistx/janus": "^0.81.0",
     "@softistx/janus-graphql": "^0.38.2",
