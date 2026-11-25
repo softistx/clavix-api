@@ -1557,5 +1557,5 @@ Operating the cache:
 The Redis spec (`src/tenancy/tenant-cache.spec.ts`) starts a real Redis through
 `@softistx/redis/testing`, compiled from source on its first run (about two minutes, then
 cached in `node_modules/.cache/redis-memory-server` unless `REDISMS_DOWNLOAD_DIR` is set, which
-moves the cache there: CI sets it to a per-runner folder under `~/.cache/nxgt/`, so the path above
+moves the cache there: CI sets it to `~/.cache/nxgt/redis-binaries`, restored through `actions/cache`, so the path above
 is the local default only; needs `make` and a C compiler).
