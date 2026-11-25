@@ -643,9 +643,9 @@ the token claims, slices A4 and A5 the profile.
   MULTI_SELECT), a DATE is `YYYY-MM-DD`, a DATETIME is RFC 3339, NUMBER and BOOLEAN are native. A
   `client_credentials` token carries none; a reserved key is dropped and `roles`, `auth_time`, `acr` and
   `amr` win over an attribute claim. 100 STRING values weigh under 8 KiB (spec), so TEXT stays emittable.
-  **ID token and userinfo too** (janus-oidc 0.5 `scopeClaims` as a function; the user's own claims, `picture` included, win over an attribute: `RESERVED_CLAIMS` drops it from the catalogue and `issuers-oidc.ts` spreads `own` last): the `AttributeScopesFor` port
+  **ID token and userinfo too** (janus-oidc 0.5+ `scopeClaims` as a function; the user's own claims, `picture` included, win over an attribute: `RESERVED_CLAIMS` drops it from the catalogue and `issuers-oidc.ts` spreads `own` last): the `AttributeScopesFor` port
   (same wiring) gives `oidcProviderOf` (`oauth/issuers-oidc.ts`) the tenant's scope table (emission scope to
-  claim keys, `AttributeClaimsService.scopeClaims`, `claimTable`), seeded with `openid: [roles]` and janus's standard `profile`, `email`, `address` and `phone` lists (janus replaces a listed scope's list, so an attribute on `profile` would otherwise stop `name` and `picture`; temporary, until softistx/janus#1049) and unioned with the attribute keys. Janus asks
+  claim keys, `AttributeClaimsService.scopeClaims`, `claimTable`), seeded with `openid: [roles]` only and unioned with the attribute keys; janus-oidc 0.6 adds a key named on `profile`, `email`, `address` or `phone` to that scope's standard claims (`STANDARD_SCOPE_CLAIMS`, softistx/janus#1049), so an attribute on `profile` keeps `name` and `picture`. Janus asks
   it on every discovery document, userinfo request and ID token, so the claims are released by their scope and
   listed in `claims_supported`; it is one small tenant-scoped read, uncached (the discovery document itself is
   cached for 60 s by `withPublicDocuments`, which bounds how late a new attribute shows there). The `claims`

@@ -8,17 +8,13 @@ describe("scopeClaimsOf", () => {
     expect(scopeClaimsOf({ read: ["nick"], profile: ["age"] })).toEqual({
       ...STANDARD,
       read: ["nick"],
-      profile: [...(STANDARD["profile"] ?? []), "age"],
+      profile: ["age"],
     });
   });
 
-  test("an attribute on a standard scope keeps the standard claims, picture included", () => {
-    expect(scopeClaimsOf({ profile: ["age"] })["profile"]).toEqual(
-      expect.arrayContaining(["name", "picture", "age"]),
-    );
-    expect(scopeClaimsOf({ email: ["tier"] })["email"]).toEqual(
-      expect.arrayContaining(["email", "email_verified", "tier"]),
-    );
+  test("an attribute on a standard scope is listed alone: janus adds the standard claims", () => {
+    expect(scopeClaimsOf({ profile: ["age"] })["profile"]).toEqual(["age"]);
+    expect(scopeClaimsOf({ email: ["tier"] })["email"]).toEqual(["tier"]);
   });
 
   test("a scope listed in both releases both lists, without repeats", () => {
@@ -37,6 +33,6 @@ describe("scopeClaimsOf", () => {
 
   test("a tenant with no attribute scope keeps the base table", () => {
     expect(scopeClaimsOf({})["openid"]).toEqual(["roles"]);
-    expect(scopeClaimsOf({})["profile"]).toContain("picture");
+    expect(scopeClaimsOf({})).toEqual({ openid: ["roles"] });
   });
 });
