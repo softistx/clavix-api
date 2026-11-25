@@ -27,7 +27,7 @@ jobs:
             echo "REDISMS_DOWNLOAD_DIR=$HOME/.cache/nxgt/redis-binaries"
           } >> "$GITHUB_ENV"
       # Node for the tools that run under node (graphql-codegen and its
-      # dependencies use the regex `v` flag): the runners' system Node is 18.
+      # dependencies use the regex `v` flag): Node 24 from the workflow, never the runner's own.
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
