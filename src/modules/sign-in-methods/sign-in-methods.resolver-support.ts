@@ -4,6 +4,7 @@ import { attributeValuesService } from "@/config/attributes";
 import { exclusive } from "@/config/exclusive";
 import { grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
+import { reportError } from "@/config/runtime";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
 import { userKey } from "@/console/modules/user-key";
@@ -24,6 +25,7 @@ import {
   offeredSocial,
   SOCIAL_LABELS,
 } from "./sign-in-methods.schema";
+import { clearReplacedProfile, settleReplaced } from "./sign-in-methods.utils";
 
 /** Set by the BFF from the path of its callback route (`/sign-in/social/:provider/callback`), never from the browser's own claim. */
 const SSO_CONNECTION_HEADER = "x-sso-connection";
@@ -207,17 +209,22 @@ export async function completedAnswer(
   // `replaced`, a retried sign-in would not revoke. A failed revocation is
   // queued and retried (clavix-api #353); unqueued, the sign-in fails.
   if (done.replaced) {
-    // The erase is idempotent and runs first: a failed revocation must not
-    // leave the previous holder's attribute values on the new owner.
-    await eraseReplacedValues(tenantId, done.userId);
-    // Their picture goes too: the janus removal fires the event that
-    // deletes the object.
-    await services().avatars.remove({ tenantId, userId: done.userId, auth });
-    await services().consent.revokeOnReplace(
-      ctx,
-      tenantId,
-      done.userId,
-      grantsRevokeQueue.current,
+    await settleReplaced(
+      {
+        revoke: () =>
+          services().consent.revokeOnReplace(
+            ctx,
+            tenantId,
+            done.userId,
+            grantsRevokeQueue.current,
+          ),
+        erase: () => eraseReplacedValues(tenantId, done.userId),
+        // The janus removal fires the event that deletes the object.
+        removePicture: () =>
+          services().avatars.remove({ tenantId, userId: done.userId, auth }),
+        clearProfile: () => clearReplacedProfile(auth, done.userId),
+      },
+      reportError,
     );
   }
   // janus types the user as an id and a type only: read the profile.

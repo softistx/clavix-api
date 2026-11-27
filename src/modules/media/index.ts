@@ -16,10 +16,14 @@ export {
 } from "./media.throttle";
 export type {
   AvatarAccessPorts,
+  AvatarRecorder,
   AvatarsPorts,
   AvatarTarget,
+  AvatarWrite,
 } from "./media.types";
 export { tenantFolder } from "./media.utils";
-export { AvatarAccessService } from "./services/avatar-access.service";
-export { AvatarsService } from "./services/avatars.service";
-export { AvatarObjectsService } from "./services/objects.service";
+export {
+  AvatarAccessService,
+  AvatarObjectsService,
+  AvatarsService,
+} from "./services";

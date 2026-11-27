@@ -64,6 +64,7 @@ interface Wiring {
 /** The app of a spec: the caller `u1` (or nobody), and what janus was told. */
 function appOver(wiring: Wiring = {}) {
   const recorded: Array<{ tenantId: string; userId: string; key: string }> = [];
+  const audited: Array<{ tenantId: string; userId: string }> = [];
   const auth: TenantJanus = janusOver({
     authenticate: async () =>
       wiring.signedIn === false ? null : signedAs("u1"),
@@ -87,9 +88,14 @@ function appOver(wiring: Wiring = {}) {
       pictureLocked: async () => wiring.pictureLocked === true,
       throttle: wiring.throttle ?? { check: async () => {} },
     },
-    async (_request, tenantId) => wiring.admin?.(tenantId),
+    async (_request, tenantId) => {
+      await wiring.admin?.(tenantId);
+      return async (userId) => {
+        audited.push({ tenantId, userId });
+      };
+    },
   );
-  return { app, recorded };
+  return { app, recorded, audited };
 }
 
 const put = (
@@ -113,12 +119,13 @@ const objects = async () => (await store.list({ prefix: "" })).items;
 
 suite("/media/avatar over S3", () => {
   test("the owner's upload is stored under the tenant, recorded, and served public, immutable and nosniff", async () => {
-    const { app, recorded } = appOver();
+    const { app, recorded, audited } = appOver();
     const response = await put(app, PNG);
     expect(response.status).toBe(200);
     const { key, contentType } = await response.json();
     expect(contentType).toBe("image/png");
     expect(recorded).toEqual([{ tenantId: "t1", userId: "u1", key }]);
+    expect(audited).toEqual([]);
     expect((await objects()).map((o) => o.key)).toContain(`t1/avatar/${key}`);
 
     const read = await appOver({ signedIn: false }).app.request(
@@ -220,6 +227,8 @@ suite("/media/avatar over S3", () => {
     expect(ok.status).toBe(200);
     const { key } = await ok.json();
     expect(allowed.recorded).toEqual([{ tenantId, userId: "u7", key }]);
+    // The console caller's write is an admin event; the owner's own is not.
+    expect(allowed.audited).toEqual([{ tenantId, userId: "u7" }]);
     expect((await objects()).map((o) => o.key)).toContain(
       `${tenantId}/avatar/${key}`,
     );

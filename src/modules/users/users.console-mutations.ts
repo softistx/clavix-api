@@ -7,14 +7,12 @@ import { idArg, liveTenant, tenantIdOf } from "@/console/modules/ids";
 import { userKey } from "@/console/modules/user-key";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { refusing } from "@/modules/admins";
-import { cleanProfile } from "@/modules/profile";
+import { cleanName, cleanProfile } from "@/modules/profile";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
-import { badInput, fail } from "@/shared/errors";
+import { fail } from "@/shared/errors";
 import { setActive } from "./users.console-support";
 import { keepOwners } from "./users.owners";
 import { shape, target } from "./users.utils";
-
-const MAX_NAME = 200;
 
 export const userMutations: NonNullable<Resolvers["Mutation"]> = {
   inviteUser: async (_, { tenantId: given, email }, ctx) => {
@@ -59,10 +57,8 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");
     const { name: nameInput, ...fields } = input;
-    const name = nameInput?.trim();
-    if (name !== undefined && (name === "" || [...name].length > MAX_NAME)) {
-      throw badInput("The name must be 1 to 200 characters");
-    }
+    const name =
+      typeof nameInput === "string" ? cleanName(nameInput) : undefined;
     const changes = {
       ...cleanProfile(fields, clock()),
       ...(name === undefined ? {} : { name }),

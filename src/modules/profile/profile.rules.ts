@@ -1,3 +1,4 @@
+import { badInput } from "@/shared/errors";
 import { canonicalLocale } from "@/shared/translations";
 import { PROFILE_FIELDS, type ProfileField } from "./profile.model";
 import { refuse } from "./profile.refusals";
@@ -9,6 +10,7 @@ import type {
 } from "./profile.types";
 import { isCountryCode } from "./utils";
 
+export const MAX_NAME = 200;
 export const MAX_NAME_PART = 100;
 export const MAX_ADDRESS_PART = 200;
 export const MAX_FORMATTED = 500;
@@ -26,6 +28,15 @@ const zones = new Map(
     zone,
   ]),
 );
+
+/** A display name of 1 to 200 characters once trimmed. */
+export function cleanName(raw: string): string {
+  const name = raw.trim();
+  if (name === "" || length(name) > MAX_NAME) {
+    throw badInput("The name must be 1 to 200 characters", "name");
+  }
+  return name;
+}
 
 /** A text of 1 to `max` characters once trimmed. */
 export function cleanText(raw: string, field: string, max: number): string {

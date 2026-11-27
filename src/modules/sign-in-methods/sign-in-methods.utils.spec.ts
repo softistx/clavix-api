@@ -1,10 +1,19 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
+import { mongo } from "@/config/db";
+import { env } from "@/config/env";
+import { tenantResolver, tenantsService } from "@/config/tenancy";
+import { forTenant } from "@/config/users";
+import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
+import { defined } from "~/narrow";
 import type { SocialEntry } from "./sign-in-methods.schema";
 import { createSecretBox, secretContext } from "./sign-in-methods.secrets";
 import {
+  clearReplacedProfile,
   holdsSecret,
+  type ReplacedSteps,
   sameValue,
+  settleReplaced,
   storedOf,
   withSocial,
 } from "./sign-in-methods.utils";
@@ -77,5 +86,111 @@ describe("storedOf", () => {
     expect(() => storedOf<string, string>(names, "SMS")).toThrow(
       'No stored name for the enum value "SMS"',
     );
+  });
+});
+
+describe("settleReplaced", () => {
+  const stepsOf = (calls: string[], failing: string[] = []): ReplacedSteps => {
+    const step = (name: string) => async () => {
+      calls.push(name);
+      if (failing.includes(name)) throw new Error(`${name} down`);
+    };
+    return {
+      revoke: step("revoke"),
+      erase: step("erase"),
+      removePicture: step("picture"),
+      clearProfile: step("profile"),
+    };
+  };
+
+  test("the revocation runs first, then every other step", async () => {
+    const calls: string[] = [];
+    await settleReplaced(stepsOf(calls), () => {});
+    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
+  });
+
+  test("an erase that rejects is reported and the revocation, picture and profile still happen", async () => {
+    const calls: string[] = [];
+    const reported: unknown[] = [];
+    await settleReplaced(stepsOf(calls, ["erase"]), (_, cause) =>
+      reported.push(cause),
+    );
+    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
+    expect(reported).toHaveLength(1);
+  });
+
+  test("each best-effort step fails on its own", async () => {
+    const calls: string[] = [];
+    const reported: string[] = [];
+    await settleReplaced(
+      stepsOf(calls, ["erase", "picture", "profile"]),
+      (message) => reported.push(message),
+    );
+    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
+    expect(reported).toHaveLength(3);
+  });
+
+  test("a failed revocation still lets the rest run, then is thrown", async () => {
+    const calls: string[] = [];
+    await expect(
+      settleReplaced(stepsOf(calls, ["revoke"]), () => {}),
+    ).rejects.toThrow("revoke down");
+    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
+  });
+});
+
+describe("clearReplacedProfile", () => {
+  let auth: Awaited<ReturnType<typeof forTenant>>;
+  beforeAll(async () => {
+    await tenantsService.create({ slug: "crp-t", name: "T" });
+    const resolved = defined(
+      await tenantResolver.resolveHost(`crp-t.${env.CLAVIX_DOMAIN}`),
+    );
+    auth = await forTenant(resolved);
+  });
+  afterAll(async () => {
+    await mongo.db.tenants.raw.deleteMany({
+      slug: { $ne: PLATFORM_TENANT_SLUG },
+    });
+  });
+
+  test("clears the names, phone, birthdate and address, and keeps the name and email", async () => {
+    const created = await defined(auth).create({
+      email: "holder@crp.test",
+      name: "Holder",
+    });
+    await defined(auth).update(
+      created,
+      {
+        givenName: "Ada",
+        familyName: "Lovelace",
+        nickname: "ada",
+        phone: { number: "+14155550100", verified: true },
+        birthdate: "1815-12-10",
+        address: { locality: "London" },
+      },
+      { ifVersion: created.version },
+    );
+    await clearReplacedProfile(defined(auth), created.id);
+    const user = defined(await defined(auth).findUser(created.id));
+    expect(user.givenName ?? null).toBeNull();
+    expect(user.familyName ?? null).toBeNull();
+    expect(user.nickname ?? null).toBeNull();
+    expect(user.phone ?? null).toBeNull();
+    expect(user.birthdate ?? null).toBeNull();
+    expect(user.address ?? null).toBeNull();
+    expect(user.name).toBe("Holder");
+    expect(user.email).toBe("holder@crp.test");
+  });
+
+  test("a user with nothing set, or gone, writes nothing and does not fail", async () => {
+    const created = await defined(auth).create({
+      email: "empty@crp.test",
+      name: "Empty",
+    });
+    await clearReplacedProfile(defined(auth), created.id);
+    await clearReplacedProfile(defined(auth), "no-such-user");
+    const user = defined(await defined(auth).findUser(created.id));
+    expect(user.version).toBe(created.version);
   });
 });

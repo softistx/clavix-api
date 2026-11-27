@@ -7,10 +7,12 @@ import {
   cleanBirthdate,
   cleanCountry,
   cleanLocale,
+  cleanName,
   cleanPhoneNumber,
   cleanProfile,
   cleanText,
   cleanZoneinfo,
+  MAX_NAME,
   sortedLocks,
   touchedFields,
 } from "./profile.rules";
@@ -45,6 +47,20 @@ describe("cleanText", () => {
   });
   test("counts characters, not code units", () => {
     expect(cleanText("😀".repeat(100), "nickname", 100)).toHaveLength(200);
+  });
+});
+
+describe("cleanName", () => {
+  test("trims the name", () => {
+    expect(cleanName("  Ada Lovelace ")).toBe("Ada Lovelace");
+  });
+
+  test("refuses a blank name and one past 200 characters", () => {
+    expect(refusal(() => cleanName("   "))?.code).toBe("BAD_USER_INPUT");
+    expect(cleanName("a".repeat(MAX_NAME))).toHaveLength(MAX_NAME);
+    expect(refusal(() => cleanName("a".repeat(MAX_NAME + 1)))?.code).toBe(
+      "BAD_USER_INPUT",
+    );
   });
 });
 

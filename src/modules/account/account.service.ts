@@ -7,6 +7,7 @@ import { afterAnswer, currentUserOf } from "@/modules/auth";
 import { FRESH_WITHIN } from "@/modules/mfa";
 import {
   checkUnlocked,
+  cleanName,
   cleanProfile,
   patchOf,
   profileOf,
@@ -16,7 +17,7 @@ import { badInput, fail, refuseCommon } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import { emailChangeInvalid } from "./account.errors";
 import type { AccountPorts } from "./account.types";
-import { cleanName, TOKEN_REFUSALS, valueChangesOf } from "./account.utils";
+import { TOKEN_REFUSALS, valueChangesOf } from "./account.utils";
 
 /**
  * The signed-in user's own account, for the hosted pages of the tenant the
@@ -55,13 +56,18 @@ export class AccountService {
     return current.user;
   }
 
+  /** The session's user, refused (FORBIDDEN) when `userId` names someone else. */
+  private async ownUser(auth: TenantJanus, ctx: Context, userId: string) {
+    const user = await this.signedIn(auth, ctx.request);
+    if (user.id !== userId)
+      throw fail("FORBIDDEN", "Not your account", { status: 403 });
+    return user;
+  }
+
   /** The user's standard profile fields, as `CurrentUser.profile`. */
   async profile(ctx: Context, userId: string) {
     const { auth } = await this.tenantOf(ctx);
-    const user = await auth.findUser(userId);
-    if (user === null)
-      throw fail("UNAUTHENTICATED", "Not signed in", { status: 401 });
-    return profileOf(user);
+    return profileOf(await this.ownUser(auth, ctx, userId));
   }
 
   /** The tenant's locked profile fields, as `CurrentUser.lockedFields`. */
@@ -72,7 +78,8 @@ export class AccountService {
 
   /** The attributes the user may set themselves, with their values, as `CurrentUser.attributes`. */
   async attributes(ctx: Context, userId: string) {
-    const { tenantId } = await this.tenantOf(ctx);
+    const { auth, tenantId } = await this.tenantOf(ctx);
+    await this.ownUser(auth, ctx, userId);
     return this.ports.values.editableOf(tenantId, userId);
   }
 
@@ -210,10 +217,8 @@ export class AccountService {
     ctx.set.headers.set("cache-control", "no-store");
     const moved = await this.ports.exclusive(
       userKey(tenantId.toHexString(), session.id),
-      () => this.redeemed(auth, token),
+      () => this.redeemed(auth, token, session),
     );
-    // Temporary, until @softistx/janus#1054: janus cannot refuse a token that is not the caller's before spending it.
-    if (moved.id !== session.id) return currentUserOf(session);
     const mail = this.ports.mailOf(tenant);
     afterAnswer(async () => {
       await mail.emailChanged({
@@ -225,10 +230,17 @@ export class AccountService {
     return currentUserOf(moved);
   }
 
-  /** `changeEmail.confirm` with the token refusals worded as this module's. */
-  private async redeemed(auth: TenantJanus, token: string) {
+  /**
+   * `changeEmail.confirm` bound to the caller (janus 0.81): another account's
+   * token is `TOKEN_UNKNOWN`, unspent and unwritten, worded as this module's.
+   */
+  private async redeemed(
+    auth: TenantJanus,
+    token: string,
+    session: { id: string },
+  ) {
     try {
-      return await auth.changeEmail.confirm(token);
+      return await auth.changeEmail.confirm(token, { user: session });
     } catch (error) {
       if (error instanceof JanusError) {
         if (TOKEN_REFUSALS.has(error.code)) throw emailChangeInvalid();

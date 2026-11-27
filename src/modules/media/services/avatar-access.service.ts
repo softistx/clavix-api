@@ -1,7 +1,7 @@
 import type { BaseContext } from "@softistx/alxia";
 import { MediaRefusal } from "@softistx/alxia-media";
 import { isLive, type ResolvedTenant } from "@/tenancy/resolved-tenant";
-import type { AvatarAccessPorts, AvatarTarget } from "../media.types";
+import type { AvatarAccessPorts, AvatarWrite } from "../media.types";
 import { adminQueryOf, crossSite } from "../media.utils";
 
 /** What the access reads of a request's context. */
@@ -16,12 +16,12 @@ export type AccessContext = Pick<BaseContext, "request" | "url"> & {
  * refusal is a `MediaRefusal`, so nothing is written for a denied request.
  */
 export class AvatarAccessService {
-  private readonly targets = new WeakMap<Request, Promise<AvatarTarget>>();
+  private readonly targets = new WeakMap<Request, Promise<AvatarWrite>>();
 
   constructor(private readonly ports: AvatarAccessPorts) {}
 
   /** The target of the request, resolved on the first call and shared by the later ones. */
-  targetOf(ctx: AccessContext): Promise<AvatarTarget> {
+  targetOf(ctx: AccessContext): Promise<AvatarWrite> {
     let target = this.targets.get(ctx.request);
     if (target === undefined) {
       target = this.resolve(ctx);
@@ -30,16 +30,16 @@ export class AvatarAccessService {
     return target;
   }
 
-  private async resolve(ctx: AccessContext): Promise<AvatarTarget> {
+  private async resolve(ctx: AccessContext): Promise<AvatarWrite> {
     const named = adminQueryOf(ctx.url);
     if (named === null) return this.own(ctx);
-    await this.ports.admin(ctx.request, named.tenantId);
+    const record = await this.ports.admin(ctx.request, named.tenantId);
     const auth = await this.ports.janusOf(named.tenantId);
     if (auth === null) throw new MediaRefusal("not_found");
-    return { ...named, auth };
+    return { ...named, auth, record };
   }
 
-  private async own(ctx: AccessContext): Promise<AvatarTarget> {
+  private async own(ctx: AccessContext): Promise<AvatarWrite> {
     if (crossSite(ctx.request)) throw new MediaRefusal("forbidden");
     const [tenant, auth] = await Promise.all([
       ctx.tenant(),
@@ -52,6 +52,11 @@ export class AvatarAccessService {
     if (await this.ports.pictureLocked(tenant.tenantId)) {
       throw new MediaRefusal("locked");
     }
-    return { tenantId: tenant.tenantId, userId: current.user.id, auth };
+    return {
+      tenantId: tenant.tenantId,
+      userId: current.user.id,
+      auth,
+      record: null,
+    };
   }
 }

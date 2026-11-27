@@ -13,6 +13,7 @@ import type {
   ClaimsFor,
   RolesFor,
 } from "./ports";
+import { omitReserved } from "./reserved-claims";
 
 /** What the OIDC provider of the issuers reads of the options. */
 export interface OidcOptions {
@@ -40,47 +41,17 @@ async function withExtras(
     options.attributesFor(tenant)(subject.id, scopes, null),
     options.rolesFor(tenant)(subject.id, null),
   ]);
-  return { ...omitReserved(attributes), ...own, roles };
+  return { ...omitReserved(RESERVED, attributes), ...own, roles };
 }
 
 const RESERVED: ReadonlySet<string> = new Set(RESERVED_CLAIMS);
 
-/** The claims without the names an attribute may never take (a catalogue refuses them at creation; this keeps a token valid whatever the data). */
-const omitReserved = (claims: Record<string, unknown>) =>
-  Object.fromEntries(
-    Object.entries(claims).filter(([name]) => !RESERVED.has(name)),
-  );
-
 /**
- * Temporary, until softistx/janus#1049: janus replaces a standard scope's list
- * with the tenant's table, so a table naming `profile`, `email`, `address` or
- * `phone` would stop releasing `name`, `picture`, `email`... Clavix seeds the
- * table with janus's standard lists and adds the attribute keys to them.
- * `openid` releases nothing else (`sub` aside), so roles go with every OpenID
- * Connect token.
+ * Every OpenID Connect token carries the user's roles (`openid` releases
+ * nothing else, `sub` aside). The standard scopes' claims are janus-oidc's:
+ * a key naming `profile`, `email`, `address` or `phone` adds to its list.
  */
-const BASE_SCOPE_CLAIMS: OidcScopeClaims = {
-  openid: ["roles"],
-  profile: [
-    "name",
-    "family_name",
-    "given_name",
-    "middle_name",
-    "nickname",
-    "preferred_username",
-    "profile",
-    "picture",
-    "website",
-    "gender",
-    "birthdate",
-    "zoneinfo",
-    "locale",
-    "updated_at",
-  ],
-  email: ["email", "email_verified"],
-  address: ["address"],
-  phone: ["phone_number", "phone_number_verified"],
-};
+const BASE_SCOPE_CLAIMS: OidcScopeClaims = { openid: ["roles"] };
 
 /** The base table with the attribute scopes added: a scope listed in both releases both lists. */
 export function scopeClaimsOf(

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { MediaRefusal } from "@softistx/alxia-media";
 import { createConsoleDeps } from "@/config/console";
+import type { AdminEventInput } from "./admin-events/recorder";
 import { consoleAvatarAccess } from "./avatar-access";
 import type { ConsoleDeps } from "./plugin";
 
@@ -18,7 +19,10 @@ interface Facts {
   tenant?: { slug: string; status: "active" | "suspended" } | null;
 }
 
-function depsOf(facts: Facts = {}): ConsoleDeps {
+function depsOf(
+  facts: Facts = {},
+  events: AdminEventInput[] = [],
+): ConsoleDeps {
   const tenant =
     facts.tenant === undefined
       ? { slug: "acme", status: "active" as const }
@@ -26,6 +30,11 @@ function depsOf(facts: Facts = {}): ConsoleDeps {
   return {
     ...base,
     reportError: () => {},
+    adminEvents: {
+      record: async (event) => {
+        events.push(event);
+      },
+    },
     authenticate: async () => {
       if (facts.token === "down") throw new Error("store down");
       if (facts.token === "none") return null;
@@ -100,5 +109,32 @@ describe("consoleAvatarAccess", () => {
     expect(await refusal({ tenant, can: false, platform: true })).toBe(
       "allowed",
     );
+  });
+});
+
+describe("the recorder consoleAvatarAccess resolves with", () => {
+  test("records the caller's user.setPicture event for the user, ids only", async () => {
+    const events: AdminEventInput[] = [];
+    const record = await consoleAvatarAccess(depsOf({}, events))(
+      REQUEST,
+      TENANT,
+    );
+    await record("u9");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actor: "caller",
+      action: "user.setPicture",
+      tenantId: TENANT,
+      target: { type: "user", id: "u9" },
+    });
+    expect(events[0]?.requestId).not.toBe("");
+  });
+
+  test("a refused caller gets no recorder and nothing is recorded", async () => {
+    const events: AdminEventInput[] = [];
+    await expect(
+      consoleAvatarAccess(depsOf({ can: false }, events))(REQUEST, TENANT),
+    ).rejects.toBeInstanceOf(MediaRefusal);
+    expect(events).toEqual([]);
   });
 });

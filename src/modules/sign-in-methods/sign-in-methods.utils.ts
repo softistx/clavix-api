@@ -1,3 +1,5 @@
+import { type ProfileChanges, patchOf } from "@/modules/profile";
+import type { TenantJanus } from "@/modules/users";
 import {
   isAvailable,
   type MethodType,
@@ -104,3 +106,68 @@ export const policyShape = (
   },
   version: tenant.version,
 });
+
+/** The standard profile fields the previous holder of an address leaves behind: the new owner starts with none (`name` is required and stays, the picture goes through the avatar removal). */
+const CLEARED: ProfileChanges = {
+  givenName: null,
+  familyName: null,
+  nickname: null,
+  phone: null,
+  birthdate: null,
+  address: null,
+};
+
+/** Clears the previous holder's names, phone, birthdate and address on the user; a repeat writes nothing. */
+export async function clearReplacedProfile(
+  auth: Pick<TenantJanus, "findUser" | "update">,
+  userId: string,
+): Promise<void> {
+  const user = await auth.findUser(userId);
+  if (user === null) return;
+  const patch = patchOf(CLEARED, user);
+  if (Object.keys(patch).length === 0) return;
+  await auth.update(user, patch, { ifVersion: user.version });
+}
+
+/** What a replaced holder leaves on the user, as steps the caller binds. */
+export interface ReplacedSteps {
+  /** The previous holder's OAuth grants and refresh tokens. */
+  readonly revoke: () => Promise<unknown>;
+  /** Their attribute values. */
+  readonly erase: () => Promise<unknown>;
+  /** Their picture. */
+  readonly removePicture: () => Promise<unknown>;
+  /** Their standard profile fields. */
+  readonly clearProfile: () => Promise<unknown>;
+}
+
+/**
+ * Runs what a replacement leaves to clean. The revocation is first and the one
+ * that matters (a failure, once unqueued, fails the sign-in, and is thrown
+ * after the rest ran); each other step is best effort, caught and reported on
+ * its own, so one failing never skips the others nor the revocation.
+ */
+export async function settleReplaced(
+  steps: ReplacedSteps,
+  report: (message: string, cause: unknown) => void,
+): Promise<void> {
+  try {
+    await steps.revoke();
+  } finally {
+    const rest = {
+      "attribute values": steps.erase,
+      picture: steps.removePicture,
+      "profile fields": steps.clearProfile,
+    };
+    for (const [what, step] of Object.entries(rest)) {
+      try {
+        await step();
+      } catch (cause) {
+        report(
+          `sign-in: the replaced holder's ${what} were not cleared`,
+          cause,
+        );
+      }
+    }
+  }
+}

@@ -69,7 +69,10 @@ export function mountMedia(
         return tenantFolder(tenant.tenantId);
       },
       uploaded: async (uploaded, ctx) => {
-        await avatars.set(await access.targetOf(ctx), uploaded.key);
+        const target = await access.targetOf(ctx);
+        await avatars.set(target, uploaded.key);
+        // A console caller's write is an admin event, once it is stored.
+        if (target.record !== null) await target.record(target.userId);
         return {
           key: uploaded.key,
           contentType: uploaded.contentType,

@@ -223,6 +223,16 @@ describe("a user's own save", () => {
     ).toBeNull();
   });
 
+  test("refuses more than 100 changes before checking editability", async () => {
+    const shut = await make("v_own_cap");
+    const over = Array.from({ length: 101 }, () =>
+      set(shut._id, { text: "no" }),
+    );
+    expect(await code(() => values.checkEditable(tenant, over))).toBe(
+      "BAD_USER_INPUT",
+    );
+  });
+
   test("leaves an unknown id to the save", async () => {
     await values.checkEditable(tenant, [
       set(new ObjectId(), { text: "ghost" }),

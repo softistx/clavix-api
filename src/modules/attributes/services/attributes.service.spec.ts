@@ -13,13 +13,21 @@ const tenant = new ObjectId();
 const other = new ObjectId();
 
 /** What the stored values answer: set per test, as slice A2's store will. */
-const held = {
+const held: {
+  count: number;
+  otherType: number;
+  options: number;
+  duplicates: number;
+  unique: boolean;
+  removed: string[];
+  during: () => Promise<void>;
+} = {
   count: 0,
   otherType: 0,
   options: 0,
   duplicates: 0,
   unique: true,
-  removed: [] as string[],
+  removed: [],
   during: async () => {},
 };
 const values: AttributeValues = {

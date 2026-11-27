@@ -33,6 +33,7 @@ function serviceOver(options: Options = {}) {
     admin: async (_request, tenantId) => {
       asked.push(tenantId);
       await options.admin?.();
+      return async () => {};
     },
   });
   const ctxOf = (url: string, headers: HeadersInit = {}): AccessContext => {
@@ -59,6 +60,7 @@ describe("AvatarAccessService: the signed-in user's own picture", () => {
       ctxOf("https://acme.example/media/avatar"),
     );
     expect(target).toMatchObject({ tenantId: "t1", userId: "u1" });
+    expect(target.record).toBeNull();
   });
 
   test("is decided once per request", async () => {
@@ -136,10 +138,9 @@ describe("AvatarAccessService: an admin's write", () => {
 
   test("names the user once the console says the caller may edit", async () => {
     const { service, ctxOf, asked } = serviceOver();
-    expect(await service.targetOf(ctxOf(url))).toMatchObject({
-      tenantId: TENANT_ID,
-      userId: "u7",
-    });
+    const target = await service.targetOf(ctxOf(url));
+    expect(target).toMatchObject({ tenantId: TENANT_ID, userId: "u7" });
+    expect(target.record).not.toBeNull();
     expect(asked).toEqual([TENANT_ID]);
   });
 
