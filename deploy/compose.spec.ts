@@ -93,9 +93,7 @@ describe("compose.yml", () => {
   });
 
   test("the api reaches the bucket by container name, with required credentials", () => {
-    expect(base).toContain(
-      ":-http://clavix-minio:9000}",
-    );
+    expect(base).toContain(":-http://clavix-minio:9000}");
     for (const name of [
       "CLAVIX_MEDIA_S3_ACCESS_KEY_ID",
       "CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY",
