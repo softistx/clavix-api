@@ -324,6 +324,7 @@ fetch is timed (3 s). A wildcard `allowHosts` entry over a public suffix (`*.co.
 console and ignored if it was stored before.
 
 Residual risks, none of them closed by code here:
+
 - The check trusts the host's system resolver. A poisoned or hostile resolver can choose which public address a name gets;
   it cannot make the fetch reach a private one.
 - Public means "not in the ranges janus-oauth lists". A range reserved later is allowed until janus-oauth lists it
@@ -362,7 +363,6 @@ trash or already purged are covered too, so a purged tenant's console activity e
 needs Redis (`REDIS_URL`): without it nothing runs. A tick that leaves a tenant unfinished fails and the
 queue retries it; the logs say `audit: retention failed for <tenant> (...)`. It deletes in batches of
 1,000 and writes no event per deletion (actor `system:audit:retention`). A plan change applies at the next run.
-
 
 ## Grant revocation retries
 
@@ -426,6 +426,7 @@ tenant holds: a dead endpoint keeps about 28 hours of its events in retry. Both 
 too (no `REDIS_URL`).
 
 **Upgrading to the capped queue.**
+
 - Run janus-webhooks-redis 0.13 or later on **every** instance before setting a cap, and the same values on all
   of them: an older instance claims without counting, so the cap is exceeded by what it claims. Roll the
   instances in one go.
@@ -465,6 +466,7 @@ Traces and logs go to an OpenTelemetry collector over OTLP/HTTP, through `@softi
 | `OTEL_EXPORTER_OTLP_HEADERS`  | optional, `key=value` pairs separated by commas, sent on every export (an API key)                                             |
 
 Both are read from `deploy/.env` like the others (compose hands the file to `api`).
+
 - **What is traced.** One server span per request (`@softistx/alxia-telemetry`, named `POST /graphql` or `query <Name>`; `/healthz`, `/readyz`
   and `/internal/*` are skipped), a span per sign-in, passkey, session and invitation flow with its security events as logs
   (`@softistx/janus-telemetry`, `janus.signIn`, `janus.signIn.refused`, `janus.signIn.throttled`, ...), and a client span per MongoDB
@@ -493,6 +495,7 @@ ACME HTTP-01 challenges are answered before any route and are not affected.
 Caddy gets a certificate for a host the first time it is asked for, but only
 after it asks the API: `GET http://api:3000/internal/tls/ask?token=...&domain=<host>`.
 The answer is 200 for
+
 - a verified custom domain of a live tenant,
 - the apex, `console.<domain>`, and `<slug>.<domain>` of a live tenant,
 
@@ -756,6 +759,7 @@ is dumped and a restore that cannot run in the local drill, so a half version wo
 only look like a recovery.
 
 Why it does not fit the current backup as is:
+
 - `mongodump --oplog` only works on a dump of the whole instance (it refuses `--db`,
   `--collection` and a database in the URI) and needs to read the `local` database.
   The application user has `readWrite` on `clavix` only, so a PITR backup needs its own user.
@@ -764,6 +768,7 @@ Why it does not fit the current backup as is:
   available with it.
 
 The design, in slices:
+
 1. **A backup user**: created by `deploy/mongo/init-app-user.js` (and by hand on an existing
    volume, as for the application user) in `admin` with the built-in `backup` role,
    credentials `MONGO_BACKUP_USER` / `MONGO_BACKUP_PASSWORD`, used by the `backup` service only (it
@@ -848,6 +853,7 @@ throwaway stack on 2026-11-20 (MongoDB 8 as a one-node replica set without authe
 Redis 7, the `deploy/tools.Dockerfile` image, the API from the repository) over a database of
 29 documents in 34 collections: the `clavix` tenant plus one tenant with a client, a verified
 user, a webhook endpoint and a Google social provider.
+
 1. **Seed.** `bun run db:sync`, `bun run db:migrate` (with `CLAVIX_PUBLIC_SCHEME=https`),
    `bun run tenants:create --slug drill --name Drill`,
    `bun run clients:create --tenant drill --name Machine --client-id machine --confidential --redirect-uri http://localhost:9/cb`,
@@ -895,6 +901,7 @@ starts on an empty Redis (cold cache, rate-limit counters at zero, the month's a
 and loses the queued jobs, the pending webhook deliveries among them.
 
 What the drill showed about the setup:
+
 - The restored database opens only with the same master key, or a keyring that holds it ("Backup").
   `restore` refuses an archive without its `.sha256`, and takes the target database from `MONGO_URI`.
 - The OAuth server accepts an `http:` issuer only on exactly `localhost`, so a local stack with tenant
@@ -920,6 +927,7 @@ key seals every new record, any key of the list opens one. Generate the new key
 with `openssl rand -base64 32`, keep it in the secret manager, and go in this
 order (the order matters: an instance that only knows the old key cannot open a
 record another instance sealed under the new one):
+
 1. Deploy `CLAVIX_KEYS_MASTER_KEY=<old>,<new>`: the old key still seals, the new
    one already opens. Wait until every instance runs it.
 2. Deploy `CLAVIX_KEYS_MASTER_KEY=<new>,<old>`: the new key seals.
@@ -968,6 +976,7 @@ record another instance sealed under the new one):
 
 Dropping the old key while `oldKeyNeededBy` still names a store makes those
 secrets unreadable until the old key is back in the list:
+
 - signing keys: signing fails for those tenants (the JWKS still serves);
 - webhook secrets: the endpoint is left out of delivery (never sent unsigned),
   with only a log line `webhooks: a secret of endpoint <id> could not be opened`;
@@ -1001,6 +1010,7 @@ the tenant's current signing key now and makes a new one sign, using janus's
 `retire` and rotation step; nothing is deleted by hand and no restart is needed.
 It prints, per tenant, the `retired` and the new `current` key id, and exits 1 if
 a tenant failed.
+
 - By default the retired key stays published for 24 h (the normal retirement
   window), so tokens already issued keep verifying.
 - If the **private key itself leaked**, add `--drop-old`: the retired key is
@@ -1061,6 +1071,7 @@ request rate. `jwks-discovery.js` warms for 10 s (not measured); `token.js` warm
 discovery request in `setup` instead, because its VUs hold state.
 
 Method notes:
+
 - **`client_credentials`**: the seed opts the load resource in (`allowClientCredentials`) and registers a
   confidential client per tenant, whose id and secret go under `confidential` in `seed.json`. `token.js` probes
   the grant once in `setup` and measures it beside the refresh grant (Basic authentication, `resource` and

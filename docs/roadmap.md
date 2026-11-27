@@ -7,6 +7,18 @@ nxgt-janus release says which.
 
 ## Now
 
+- **User attributes** — tenants get the standard OIDC profile on every user (given and family name,
+  nickname, phone with an admin-set verified flag, picture, locale, time zone, birthdate, address),
+  each released under its standard claim, and a catalogue of their own attributes. An attribute
+  applies to users or to a role, has a stable key that is its claim name, a type, translated texts and
+  options, and can be emitted as a claim under a scope, be editable by the user, or be unique. Role
+  attributes are assigned per role; removing the role hides their values instead of deleting them.
+  Users edit their own profile and change their e-mail from the hosted account, a tenant can lock
+  profile fields, the users list filters by role and attribute, and the user's data export and erasure
+  cover every value. Access tokens carry the emitted attributes first; the ID token and userinfo follow
+  once nxgt-janus ships per-issuer scope claims
+  ([#509](https://github.com/softistx/clavix-api/issues/509)).
+
 - **Translations as a list of locales** — scope descriptions and detail type texts are lists of
   `{ locale, text }` (any BCP 47 language, no fixed French and English), a write sets or replaces
   the locales it names, and the consent screen picks the viewer's `Accept-Language`, then its base
@@ -52,26 +64,30 @@ nxgt-janus release says which.
   resources, clients and app wiring are split into smaller modules, with no change in behaviour
   ([#266](https://github.com/softistx/clavix-api/issues/266)).
 
-- **Access rules** — an application publishes its OpenAPI and SDL from CI
-  ([#34](https://github.com/softistx/clavix-api/issues/34)); a tenant drafts, publishes,
-  versions and rolls back the access rules of a resource, with coverage and a simulator
-  ([#35](https://github.com/softistx/clavix-api/issues/35)); Clavix serves them signed, with a
-  `policy.published` event ([#36](https://github.com/softistx/clavix-api/issues/36)); and a guide
-  goes from schema publication to enforced rules
-  ([#37](https://github.com/softistx/clavix-api/issues/37)). The SDK part
-  (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
-  and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
-  Waits on `@softistx/security` `remotePolicy`.
+- **Authorization (RBAC)** — a tenant authors the permission catalogue of each resource (its
+  scopes, [#29](https://github.com/softistx/clavix-api/issues/29)); roles group permissions, a
+  resource can enforce them, and tokens carry `permissions`, `roles` and `scope` (a permission
+  holds when it is in `scope` and, when present, in `permissions`,
+  [#30](https://github.com/softistx/clavix-api/issues/30)); and a guide shows how to protect a
+  resource server with Clavix tokens and `@softistx/limix`
+  ([#37](https://github.com/softistx/clavix-api/issues/37)).
 
 ## Later
 
 **Follow-ups**
+
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
-**Authorization authoring**
-- Roles, permissions and relations defined per tenant in the console, as the vocabulary
-  the access rules refer to.
+## Not planned
+
+Resource servers enforce their own rules with limix, so Clavix does not host them:
+
+- ReBAC model, check API and SDK ([#31](https://github.com/softistx/clavix-api/issues/31)).
+- Schema publication from CI ([#34](https://github.com/softistx/clavix-api/issues/34)).
+- Access rules: drafts, versions, coverage, simulator ([#35](https://github.com/softistx/clavix-api/issues/35)).
+- Signed rules endpoint and `policy.published` ([#36](https://github.com/softistx/clavix-api/issues/36)).
+- `clavixPolicy()` and `clavixRelations()` in `@alxia/clavix` ([#38](https://github.com/softistx/clavix-api/issues/38)).
 
 ## Shipped
 
