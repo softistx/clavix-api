@@ -37,7 +37,11 @@ export class AvatarsService {
    * the removal is conditional on the user not having changed since the read.
    */
   async remove(target: AvatarTarget, setUntil?: Date): Promise<boolean> {
-    return removePicture(target, setUntil);
+    const removed = await removePicture(target, {
+      setUntil,
+      ifVersion: setUntil !== undefined,
+    });
+    return removed === true;
   }
 
   /** `removeMyPicture`: the signed-in user's own picture, on the tenant host's session. */

@@ -46,20 +46,27 @@ export function crossSite(request: Request): boolean {
 
 /**
  * Removes the user's picture in janus: `true` when there was one, `false` when
- * there was none (or the user is gone). With `setUntil`, a picture set after it
- * is kept (`false`), and the removal is conditional on the user not having
- * changed since the read. The `user.avatarRemoved` listener removes the object.
+ * there was none, `null` when the user is gone. With `setUntil`, a picture set
+ * after it is kept (`false`). With `ifVersion`, the removal is conditional on
+ * the user not having changed since the read (janus VERSION_CONFLICT). The
+ * `user.avatarRemoved` listener removes the object.
  */
 export async function removePicture(
   target: AvatarTarget,
-  setUntil?: Date,
-): Promise<boolean> {
+  options: { setUntil?: Date | undefined; ifVersion?: boolean } = {},
+): Promise<boolean | null> {
   const user = await target.auth.findUser(target.userId);
-  if (user === null || user.avatar === null) return false;
-  if (setUntil !== undefined && user.avatar.updatedAt > setUntil) return false;
+  if (user === null) return null;
+  if (user.avatar === null) return false;
+  if (
+    options.setUntil !== undefined &&
+    user.avatar.updatedAt > options.setUntil
+  ) {
+    return false;
+  }
   await target.auth.avatar.remove(
     target.userId,
-    setUntil === undefined ? undefined : { ifVersion: user.version },
+    options.ifVersion === true ? { ifVersion: user.version } : undefined,
   );
   return true;
 }

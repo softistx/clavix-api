@@ -181,9 +181,11 @@ export class UsersService implements ConsoleUsers {
 
   async removePicture(tenantId: string, id: string) {
     const auth = await this.janus(tenantId);
-    if ((await auth.findUser(id)) === null) return null;
     try {
-      return await removePicture({ tenantId, userId: id, auth });
+      return await removePicture(
+        { tenantId, userId: id, auth },
+        { ifVersion: true },
+      );
     } catch (error) {
       if (error instanceof JanusError && error.code === "NOT_FOUND") {
         return null;
