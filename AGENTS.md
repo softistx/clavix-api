@@ -613,6 +613,7 @@ A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
 reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slice A6 adds
 the token claims, slices A4 and A5 the profile.
+
 - **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
   with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
   `values.service.ts`, `role-attributes.service.ts`, `user-filter.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`, `user-filter.utils.ts`); the single-file roles (`attributes.model.ts`,
@@ -1091,6 +1092,7 @@ The signed-in user's own account on the tenant's hosted schema (slice A7 of `fea
 `CurrentUser` gains `profile`, `lockedFields` and `attributes`, and four mutations: `updateMyProfile`,
 `setMyAttributeValues`, `requestEmailChange`, `confirmEmailChange` (`removeMyPicture` is the media module's).
 One `AccountService` (`account.service.ts`, `accountService` in `config/account.ts`, registered as `account` in `services()`).
+
 - **`CurrentUser.profile`, `lockedFields` and `attributes` are field resolvers**, not part of `currentUserOf`: `codegen.ts` maps
   `CurrentUser` to `CurrentUserParent` (`auth.types.ts`, no profile) and `UserProfile` to `ProfileView`, so the many hand-built
   `CurrentUser` objects of other modules stay as they are.

@@ -931,6 +931,7 @@ it with `assignRole` still works. A tenant's own roles (`managed: false`) are no
 ### `ATTRIBUTE_*` codes on a user attribute and its values
 
 Every refusal on the attribute catalogue or on a user's values writes nothing.
+
 - `ATTRIBUTE_KEY_INVALID` (400): the key is not 2 to 64 characters of a lower-case letter, then lower-case letters, digits and `_`.
 - `ATTRIBUTE_KEY_RESERVED` (400): the key is a claim name tokens already carry (`email`, `roles`, `scope`...). Pick another.
 - `ATTRIBUTE_KEY_TAKEN` (409): the tenant has an attribute with that key, an archived one included. Restore it, or delete it for good to free the key.
