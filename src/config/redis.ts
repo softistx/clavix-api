@@ -29,10 +29,15 @@ import { tlsAskLimit } from "@/modules/domains";
 import { domainRecheck } from "@/modules/domains/domains.recheck-queue";
 import { keyRotation } from "@/modules/keys/keys.queue";
 import {
+  type AvatarLimitConfig,
+  avatarLimits,
+} from "@/modules/media/media.throttle";
+import {
   type PasskeyLimitConfig,
   passkeyLimits,
 } from "@/modules/passkeys/passkeys.throttle";
 import { ssoLimits } from "@/modules/sign-in-methods";
+import { eraseReplaced } from "@/modules/sign-in-methods/sign-in-methods.queue";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage";
 import { webhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-queue";
@@ -46,6 +51,7 @@ import { tenantHostCache } from "@/tenancy/tenant-cache";
 import { env } from "./env";
 import {
   auditExportFromEnv,
+  avatarFromEnv,
   consoleFromEnv,
   deviceFromEnv,
   metadataFromEnv,
@@ -92,6 +98,7 @@ export async function openAppRedis(
   register: RegisterLimitConfig = registerFromEnv(),
   metadata: MetadataLimitConfig = metadataFromEnv(),
   auditExport: ExportLimitConfig = auditExportFromEnv(),
+  avatar: AvatarLimitConfig = avatarFromEnv(),
 ) {
   const client = new RedisClient(uri, {
     enableOfflineQueue: false,
@@ -108,6 +115,7 @@ export async function openAppRedis(
         domainRecheck,
         agentsPrune,
         grantsRevoke,
+        eraseReplaced,
         auditRetention,
         webhookSecretsPrune,
       },
@@ -119,6 +127,7 @@ export async function openAppRedis(
         ...registerLimits(register),
         ...metadataLimits(metadata),
         ...exportLimits(auditExport),
+        ...avatarLimits(avatar),
         ...ssoLimits(ssoFromEnv()),
         ...consoleLimits(consoleFromEnv()),
         tlsAsk: tlsAskLimit(env.CLAVIX_TLS_ASK_LIMIT),

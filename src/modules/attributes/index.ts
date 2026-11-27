@@ -1,0 +1,20 @@
+// The module's import surface (attributes: a tenant's catalogue of user
+// attributes and the values users hold). Role files with several members are
+// folders with a barrel (`services/`, `rules/`, `utils/`).
+// `attributes.console-resolver` is loaded by file by `console/modules/index.ts`;
+// the hosted API's attribute fields are the `account` module's. `config/attributes.ts` builds the
+// services. Allowed deep imports: `attributes.errors` (a leaf file, read by
+// `i18n/codes.ts`) and `attributes.console-resolver` (read by
+// `console/modules/lock-order.spec.ts`).
+
+export { RESERVED_CLAIMS } from "./rules";
+export {
+  AttributeClaimsService,
+  AttributesService,
+  AttributeValuesService,
+  RoleAttributesService,
+  UserFilterService,
+} from "./services";
+export type { UserFilter } from "./user-filter.types";
+export { afterOf, exportedView, MAX_PREFIX_IDS } from "./utils";
+export type { ValueChange, ValueInput } from "./values.types";

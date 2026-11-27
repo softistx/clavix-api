@@ -12,6 +12,8 @@ export const usersGuards: Guards = {
   "Query.userGrants": onTenant("view", tenantArg),
   // A user's sessions: read is `view`, ending one is `edit`.
   "Query.userSessions": onTenant("view", tenantArg),
+  // The whole personal record of a user (a GDPR access request): `edit`.
+  "Query.userDataExport": onTenant("edit", tenantArg),
   "Mutation.revokeUserSession": onTenant("edit", tenantArg),
   "Mutation.inviteUser": onTenant("edit", tenantArg),
   "Mutation.revokeInvitation": onTenant("edit", tenantArg),
@@ -21,6 +23,7 @@ export const usersGuards: Guards = {
   "Mutation.deleteUser": onTenant("edit", tenantArg),
   "Mutation.revokeUserSessions": onTenant("edit", tenantArg),
   "Mutation.setUserEmailVerified": onTenant("edit", tenantArg),
+  "Mutation.setUserPhoneVerified": onTenant("edit", tenantArg),
   "Mutation.resetUserSecondFactor": onTenant("edit", tenantArg),
   "Mutation.revokeGrant": onTenant("edit", tenantArg),
 };
@@ -37,6 +40,7 @@ export const usersAudits: Audits = {
   "Mutation.deleteUser": "user.delete",
   "Mutation.revokeUserSessions": "user.revokeSessions",
   "Mutation.setUserEmailVerified": "user.setEmailVerified",
+  "Mutation.setUserPhoneVerified": "user.setPhoneVerified",
   "Mutation.resetUserSecondFactor": "user.resetSecondFactor",
   "Mutation.revokeGrant": "user.revokeGrant",
   "Mutation.revokeUserSession": "user.revokeSession",

@@ -24,6 +24,7 @@ afterAll(async () => {
     await mongo.db.roles.raw.deleteMany({ tenantId });
     await mongo.db.roleAssignments.raw.deleteMany({ tenantId });
     await mongo.db.resources.raw.deleteMany({ tenantId });
+    await mongo.db.roleAttributes.raw.deleteMany({ tenantId });
   }
 });
 
@@ -150,7 +151,18 @@ describe("roles", () => {
     ).toEqual(["svc-scoped", "svc-wide"]);
     expect(await rolesService.claimRoles(tenant, "nobody", null)).toEqual([]);
     // Deleting the resource's roles removes the scoped one and its assignment.
+    const link = await scopeToTenant(mongo.db.roleAttributes, tenant).create({
+      roleId: scoped._id,
+      attributeId: new ObjectId(),
+      required: false,
+    });
     const removed = await rolesService.deleteForResource(tenant, resource._id);
+    // The role's attribute links go with it.
+    expect(
+      await mongo.db.roleAttributes.raw.countDocuments({
+        _id: link._id,
+      }),
+    ).toBe(0);
     expect(removed.map((r) => r.name)).toEqual(["svc-scoped"]);
     expect(
       await rolesService.claimRoles(
@@ -159,5 +171,20 @@ describe("roles", () => {
         "https://api.svc.example/v1",
       ),
     ).toEqual(["svc-wide"]);
+  });
+});
+
+describe("personalDataOf", () => {
+  test("lists the roles a user holds by name with the assignment date, only theirs, for a tenant", async () => {
+    const zeta = await rolesService.create(tenant, { name: "pd-zeta" });
+    const alpha = await rolesService.create(tenant, { name: "pd-alpha" });
+    await rolesService.assign(tenant, zeta._id.toHexString(), "pd-user");
+    await rolesService.assign(tenant, alpha._id.toHexString(), "pd-user");
+    await rolesService.assign(tenant, alpha._id.toHexString(), "pd-other");
+    const held = await rolesService.personalDataOf(tenant, "pd-user");
+    expect(held.map((r) => r.role)).toEqual(["pd-alpha", "pd-zeta"]);
+    expect(held[0]?.assignedAt).toBeInstanceOf(Date);
+    expect(await rolesService.personalDataOf(other, "pd-user")).toEqual([]);
+    expect(await rolesService.personalDataOf(tenant, "nobody")).toEqual([]);
   });
 });

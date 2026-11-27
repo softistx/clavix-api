@@ -35,7 +35,12 @@ const config: CodegenConfig = {
         enumsAsTypes: true,
         // A module maps a GraphQL type to the document it is read from:
         // `Tenant: "@/modules/tenants#TenantDocument"`.
-        mappers: {},
+        mappers: {
+          // The user of a session; its profile, locks and attributes are read by field.
+          CurrentUser: "@/modules/auth/auth.types#CurrentUserParent",
+          // The standard profile fields of a user, as the profile module reads them.
+          UserProfile: "@/modules/profile#ProfileView",
+        },
       },
     },
     "src/generated/graphql/zod.ts": {

@@ -10,6 +10,10 @@ export const grantsRevokeQueue: { current: RevokeEnqueuer | undefined } = {
   current: redis?.queues.grantsRevoke,
 };
 
+/** The slug of a tenant by id, outside a request; `undefined` for one that is gone. */
+export const slugOfTenant = async (tenantId: string) =>
+  (await tenantsService.anyById(tenantId))?.slug;
+
 /**
  * Revokes every grant of a user over the real stores, outside a request: the
  * tenant's server is found by its issuer URL. A tenant that is gone or purged has no
@@ -18,8 +22,7 @@ export const grantsRevokeQueue: { current: RevokeEnqueuer | undefined } = {
 export const createGrantsRevoke =
   (
     serverFor: OAuthIssuers["serverFor"],
-    slugOf: (tenantId: string) => Promise<string | undefined> = async (id) =>
-      (await tenantsService.anyById(id))?.slug,
+    slugOf: (tenantId: string) => Promise<string | undefined>,
   ) =>
   async ({ tenantId, userId }: { tenantId: string; userId: string }) => {
     const slug = await slugOf(tenantId);

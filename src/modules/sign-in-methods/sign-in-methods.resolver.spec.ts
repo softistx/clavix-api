@@ -8,12 +8,18 @@ import {
   spyOn,
   test,
 } from "bun:test";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
+import { attributesService, attributeValuesService } from "@/config/attributes";
 import { connectionRecordsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
-import { createGrantsRevoke, grantsRevokeQueue } from "@/config/grants-revoke";
+import {
+  createGrantsRevoke,
+  grantsRevokeQueue,
+  slugOfTenant,
+} from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
@@ -181,6 +187,8 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  await mongo.db.userAttributes.raw.deleteMany({});
+  await mongo.db.attributeValues.raw.deleteMany({});
   await mongo.db.tenants.raw.deleteMany({
     slug: { $nin: [PLATFORM_TENANT_SLUG] },
   });
@@ -603,8 +611,29 @@ describe("social sign-in", () => {
       expect(answer.errors).toBeUndefined();
       return at(answer.data, "socialSignInComplete", completeSchema);
     };
+    // The previous holder's attribute values go with the replacement.
+    const owned = new ObjectId(grants);
+    const attribute = await attributesService.create(owned, {
+      key: "replace_me",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    await attributeValuesService.save(
+      owned,
+      holder.id,
+      [{ attributeId: attribute._id.toHexString(), value: { text: "old" } }],
+      { kind: "admin", id: "spec" },
+      false,
+    );
+    // ... and so does their picture.
+    await auth.avatar.set(holder.id, { id: crypto.randomUUID() });
     const replaced = await signIn();
     expect(replaced).toMatchObject({ replaced: true, user: { id: holder.id } });
+    expect((await auth.findUser(holder.id))?.avatar).toBeNull();
+    expect(
+      await mongo.db.attributeValues.raw.countDocuments({ userId: holder.id }),
+    ).toBe(0);
     const refused = await refresh(held.refresh_token ?? "");
     expect(refused.status).toBe(400);
     expect(
@@ -658,7 +687,7 @@ describe("social sign-in", () => {
       },
     };
     consentService.startRevokeWorker(
-      createGrantsRevoke(flow.issuers.serverFor),
+      createGrantsRevoke(flow.issuers.serverFor, slugOfTenant),
       {
         work: (fn) => {
           handler = fn;
@@ -683,7 +712,7 @@ describe("social sign-in", () => {
     }
     // The first run of the job fails (the store is still down for it), the retry succeeds.
     revokeDown.on = true;
-    const down = createGrantsRevoke(issuers.serverFor);
+    const down = createGrantsRevoke(issuers.serverFor, slugOfTenant);
     const job = defined(jobs[0], "the queued revocation");
     await expect(down(job)).rejects.toThrow("store down");
     revokeDown.on = false;

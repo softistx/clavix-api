@@ -6,6 +6,11 @@ import {
   adminsGuards,
 } from "@/modules/admins/admins.console-resolver";
 import {
+  attributes,
+  attributesAudits,
+  attributesGuards,
+} from "@/modules/attributes/attributes.console-resolver";
+import {
   audit,
   auditAudits,
   auditGuards,
@@ -36,6 +41,11 @@ import {
   oauthPolicyAudits,
   oauthPolicyGuards,
 } from "@/modules/oauth-policy/oauth-policy.console-resolver";
+import {
+  profile,
+  profileAudits,
+  profileGuards,
+} from "@/modules/profile/profile.console-resolver";
 import {
   resources,
   resourcesAudits,
@@ -83,6 +93,8 @@ export const resolvers: Resolvers = mergeResolvers([
   domains,
   resources,
   roles,
+  attributes,
+  profile,
   tenants,
   users,
   webhooks,
@@ -97,6 +109,8 @@ export const guards: Guards = {
   ...domainsGuards,
   ...resourcesGuards,
   ...rolesGuards,
+  ...attributesGuards,
+  ...profileGuards,
   ...tenantsGuards,
   ...signInMethodsGuards,
   ...oauthPolicyGuards,
@@ -112,6 +126,8 @@ export const audits: Audits = {
   ...domainsAudits,
   ...resourcesAudits,
   ...rolesAudits,
+  ...attributesAudits,
+  ...profileAudits,
   ...tenantsAudits,
   ...signInMethodsAudits,
   ...oauthPolicyAudits,

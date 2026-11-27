@@ -7,13 +7,17 @@ import type { AuthEvent, ClavixEvent } from "@/events/types";
 // `user.apiKeyRevoked` are left out: Clavix configures no janus `apiKeys`, so
 // they can never fire (#336); they come back with API keys. The same for
 // `user.passwordReset` and `user.passwordChanged`: password sign-in is
-// unavailable, so no password flow runs (#336's rule). Typed as a record
+// unavailable, so no password flow runs (#336's rule). And `user.phoneVerified`
+// and `user.phoneChanged` (janus 0.82+): Clavix configures no janus `phone`
+// type, so no phone code flow runs. Typed as a record
 // so that a type janus adds fails the build here, where the catalogue is decided.
 type NotEmitted =
   | "user.apiKeyCreated"
   | "user.apiKeyRevoked"
   | "user.passwordReset"
-  | "user.passwordChanged";
+  | "user.passwordChanged"
+  | "user.phoneVerified"
+  | "user.phoneChanged";
 const USER_TYPES: Record<Exclude<UserEventType, NotEmitted>, true> = {
   "user.created": true,
   "user.emailVerified": true,

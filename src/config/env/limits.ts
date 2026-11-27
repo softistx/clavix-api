@@ -58,6 +58,22 @@ export const limitsEnv = {
     .int()
     .min(1)
     .default(3600),
+  // Picture uploads (`PUT /media/avatar`, signed in): per user, then per
+  // client address and tenant, and per tenant. Redis only, as above.
+  CLAVIX_AVATAR_USER_LIMIT: z.coerce.number().int().min(1).default(10),
+  CLAVIX_AVATAR_USER_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
+  CLAVIX_AVATAR_IP_LIMIT: z.coerce.number().int().min(1).default(30),
+  CLAVIX_AVATAR_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).default(3600),
+  CLAVIX_AVATAR_TENANT_LIMIT: z.coerce.number().int().min(1).default(1000),
+  CLAVIX_AVATAR_TENANT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(3600),
   // Dynamic client registration (`POST /register`, agents): per client address
   // and tenant, and per tenant. Every call stores a client for anyone who asks,
   // so the address budget is small (janus: 5 an hour open, 20 with a list).

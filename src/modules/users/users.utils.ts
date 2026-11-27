@@ -1,4 +1,5 @@
 import type { TenantUserView, UserGrantView } from "@/console/context";
+import { profileOf } from "@/modules/profile";
 import type { TenantJanus } from "./users.tenant-janus";
 import type { TenantUserParent } from "./users.types";
 
@@ -11,6 +12,7 @@ export const view = (user: PoolUser): TenantUserView => ({
   emailVerified: user.emailVerified,
   active: user.active,
   createdAt: user.createdAt,
+  profile: profileOf(user),
 });
 
 export const shape = (
@@ -24,6 +26,7 @@ export const shape = (
   emailVerified: user.emailVerified,
   active: user.active,
   createdAt: user.createdAt,
+  profile: user.profile,
 });
 
 export const grantShape = (grant: UserGrantView) => ({

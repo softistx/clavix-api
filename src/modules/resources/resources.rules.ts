@@ -15,7 +15,13 @@ const MAX_CLAIMS = 50;
  * The scopes of the userinfo resource (`src/oauth/building.ts`): the standard
  * OpenID Connect ones, built in and owned by no resource.
  */
-export const OIDC_SCOPES = ["openid", "profile", "email"] as const;
+export const OIDC_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "phone",
+  "address",
+] as const;
 
 export const isOidcScope = (name: string): boolean =>
   isOneOf(OIDC_SCOPES, name);

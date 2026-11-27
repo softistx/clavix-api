@@ -13,6 +13,8 @@ import { buildIssuer, userinfoOf } from "./building";
 import { oidcProviderOf } from "./issuers-oidc";
 import type {
   AgentCheckFor,
+  AttributeScopesFor,
+  AttributesFor,
   AuthFor,
   ClaimsFor,
   ExchangeRulesFor,
@@ -50,6 +52,16 @@ export interface ClavixOAuthOptions {
    * (tenant-wide plus the roles of the token's resource).
    */
   rolesFor: RolesFor;
+  /**
+   * The attribute claims (slice A6) of the JWT access tokens, the id_token and
+   * userinfo: the attributes whose emission scope the token holds.
+   */
+  attributesFor: AttributesFor;
+  /**
+   * The scope table of those claims, per tenant: it makes the id_token,
+   * userinfo and the discovery document's `claims_supported` carry them.
+   */
+  attributeScopesFor: AttributeScopesFor;
   /**
    * The token exchange rules of a tenant's clients (`clientPolicies`): a client
    * with none may not exchange tokens.
@@ -97,6 +109,7 @@ export function createClavixOAuthIssuers(
     oidc,
     clock,
     rolesFor: options.rolesFor,
+    attributesFor: options.attributesFor,
     exchangeRulesFor: options.exchangeRulesFor,
     agentCheckFor: options.agentCheckFor,
     metadataTransport: options.metadataTransport,

@@ -1,8 +1,10 @@
 import { JanusError } from "@softistx/janus";
-import { liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
+import { idArg, liveTenant, pageSize, tenantIdOf } from "@/console/modules/ids";
 import type { Resolvers } from "@/generated/console/resolvers";
 import { badInput } from "@/shared/errors";
-import { grantShape, shape } from "./users.utils";
+import { filteredUsers } from "./users.console-support";
+import { userDataExport } from "./users.export";
+import { grantShape, shape, target } from "./users.utils";
 
 const MAX_PREFIX = 254;
 /** The suggestions a lookup returns at most (10 by default). */
@@ -11,7 +13,7 @@ const MAX_LOOKUP = 20;
 export const userQueries: NonNullable<Resolvers["Query"]> = {
   users: async (
     _,
-    { tenantId: given, after, first, email, emailPrefix },
+    { tenantId: given, after, first, email, emailPrefix, roleId, attributes },
     ctx,
   ) => {
     const tenantId = tenantIdOf(given);
@@ -23,6 +25,20 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
       throw badInput("The prefix is too long");
     }
     await liveTenant(ctx.directory, tenantId);
+    const narrowed = (attributes?.length ?? 0) > 0 || (roleId ?? null) !== null;
+    if (narrowed && email !== null && email !== undefined) {
+      throw badInput(
+        "Give either email or role and attribute filters, not both",
+      );
+    }
+    if (narrowed) {
+      return filteredUsers(
+        ctx,
+        tenantId,
+        { roleId, attributes },
+        { prefix, after, first },
+      );
+    }
     if (email !== null && email !== undefined) {
       const found = await ctx.users.findByEmail(tenantId, email);
       return {
@@ -93,5 +109,15 @@ export const userQueries: NonNullable<Resolvers["Query"]> = {
       device: session.device ?? null,
       lastUsedAt: session.lastUsedAt ?? null,
     }));
+  },
+  userDataExport: async (_, { tenantId: given, userId }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    idArg(userId, "userId");
+    await liveTenant(ctx.directory, tenantId);
+    const exported = await userDataExport(ctx, tenantId, userId);
+    // A query is outside `Audits` (mutations only), and this read exposes
+    // personal data: it is recorded here, once the export is built.
+    await ctx.audit("user.export", target("user", userId, tenantId));
+    return exported;
   },
 };

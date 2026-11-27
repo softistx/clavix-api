@@ -5,3 +5,4 @@
 
 export { challengeAnswer } from "./mfa.challenge";
 export { MfaService } from "./mfa.service";
+export { FRESH_WITHIN } from "./mfa.utils";

@@ -40,6 +40,12 @@ async function resolveById(id: string) {
     : tenantResolver.resolveHost(`${tenant.slug}.${env.CLAVIX_DOMAIN}`);
 }
 
+/** The janus instance of a tenant by id (suspended included); `null` when gone or trashed. */
+export async function tenantJanusById(id: string) {
+  const tenant = await resolveById(id);
+  return tenant === null ? null : forTenant(tenant);
+}
+
 /**
  * The console API's wiring: tokens verified in process by the `clavix`
  * tenant's OAuth server, permissions in the relation store, users of the
@@ -64,10 +70,7 @@ export function createConsoleDeps(
     reportError,
     admins: createJanusAdmins(invitationsOf(clavixTenant)),
     users: new UsersService({
-      janusOf: async (id) => {
-        const tenant = await resolveById(id);
-        return tenant === null ? null : forTenant(tenant);
-      },
+      janusOf: tenantJanusById,
       grantsOf: async (id) => {
         const tenant = await resolveById(id);
         const server =

@@ -15,7 +15,13 @@ import {
   type ClavixOAuthOptions,
   createClavixOAuthIssuers,
 } from "@/oauth/issuers";
-import type { AuthFor, ClaimsFor, RolesFor } from "@/oauth/ports";
+import type {
+  AttributeScopesFor,
+  AttributesFor,
+  AuthFor,
+  ClaimsFor,
+  RolesFor,
+} from "@/oauth/ports";
 import type {
   MetadataThrottle,
   RegisterThrottle,
@@ -35,7 +41,11 @@ export const REDIRECT = "https://app.example/callback";
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 
 interface FlowOptions {
+  /** The user's own claims (the user's e-mail by default). */
+  claimsFor?: ClaimsFor;
   rolesFor?: RolesFor;
+  attributesFor?: AttributesFor;
+  attributeScopesFor?: AttributeScopesFor;
   /** What the `/register` route throttles with (none by default). */
   registerThrottle?: RegisterThrottle;
   /** What `/authorize` and `/par` throttle a metadata document fetch with (none by default). */
@@ -81,7 +91,7 @@ function issuersOf(
     db: oauthDb,
     signingKeysFor,
     authFor,
-    claimsFor,
+    claimsFor: options.claimsFor ?? claimsFor,
     resourcesFor,
     exchangeRulesFor,
     agentCheckFor,
@@ -89,6 +99,12 @@ function issuersOf(
       ? {}
       : { eventsFor: options.eventsFor }),
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
+    ...(options.attributesFor === undefined
+      ? {}
+      : { attributesFor: options.attributesFor }),
+    ...(options.attributeScopesFor === undefined
+      ? {}
+      : { attributeScopesFor: options.attributeScopesFor }),
     ...(options.metadataTransport === undefined
       ? {}
       : { metadataTransport: options.metadataTransport }),

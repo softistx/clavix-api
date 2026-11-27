@@ -1,0 +1,50 @@
+"""
+The link between a role-family attribute and one precise role (a role is per
+tenant and per resource): a user shows the attribute while it holds the role.
+`required` is this role's own flag: a console save cannot clear the value in
+the role's section. Removing the role (or the link) hides the values without
+deleting them; they show again when the link comes back.
+"""
+type RoleAttributeLink {
+  role: TenantRole!
+  required: Boolean!
+}
+
+"""
+The values of one role's attributes, for a user who holds the role. Each
+attribute's `required` is the role link's. One value per user and attribute
+whatever the number of roles: two roles that link the same attribute show the
+same value.
+"""
+type RoleAttributeSection {
+  role: TenantRole!
+  values: [AttributeValue!]!
+    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+}
+
+extend type Mutation {
+  """
+  Links a role-family attribute to one role, `required` for that role only
+  (tenant admin), and returns the attribute. Idempotent: a repeat sets
+  `required`. Errors: NOT_FOUND (role or attribute), ATTRIBUTE_FAMILY_MISMATCH
+  (400, a user-family attribute) and ATTRIBUTE_ARCHIVED (409).
+  """
+  assignRoleAttribute(
+    tenantId: ID!
+    roleId: ID!
+    attributeId: ID!
+    required: Boolean = false
+  ): UserAttribute!
+  "Changes the `required` flag of a link (tenant admin) and returns the attribute. Errors: NOT_FOUND (role, attribute, or no such link)."
+  updateRoleAttribute(
+    tenantId: ID!
+    roleId: ID!
+    attributeId: ID!
+    required: Boolean!
+  ): UserAttribute!
+  """
+  Removes the link (tenant admin); `true` when there was one. The users' values
+  stay stored and hidden: nothing else is written. Idempotent.
+  """
+  unassignRoleAttribute(tenantId: ID!, roleId: ID!, attributeId: ID!): Boolean!
+}

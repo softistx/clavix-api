@@ -373,6 +373,28 @@ doubling to 1 hour. Without `REDIS_URL`, or when the job cannot be stored, the s
 (check `CLAVIX_PUBLIC_SCHEME`, `CLAVIX_DOMAIN`, `CLAVIX_PUBLIC_PORT`). A job that exhausts its attempts stays in the
 failed set for 30 days and the user's grants stay live: revoke them from the console (connected apps).
 
+## Erase of a replaced holder
+
+When a social sign-in replaces an unverified holder, the former holder's attribute values and picture are erased by
+the `erase-replaced` queue (Redis, `{ tenantId, userId, replacedAt }`), right after the grants revocation. The job is idempotent and
+retries up to 8 times, backing off from 1 minute to 1 hour. The inline path exists only outside production, because `REDIS_URL` is required in production: without it the erase runs
+inline. When the job cannot be stored, or the inline erase fails, the sign-in fails. Watch the logs `erase-replaced: <error>` and
+`sign-in: the erase of the replaced holder was not queued`. A job that exhausts its attempts stays in the failed set for
+30 days and leaves the former holder's values and picture in place: erase them from the console. A retry never erases what the
+new holder wrote: the job carries the time of the replacement and removes only the values and the picture last written
+at or before it.
+
+## Profile pictures
+
+Users' pictures are objects of one private S3-compatible bucket (`CLAVIX_MEDIA_S3_*`, required in production),
+under `<tenantId>/avatar/<uuid>`; the bucket is never opened to browsers. The api serves them: `PUT /media/avatar`
+writes (PNG, JPEG or WebP, 1 MiB at most, throttled by `CLAVIX_AVATAR_*`, Redis only) and `GET /media/avatar/<uuid>`
+reads publicly with an immutable cache. Route `/media/*` to the api (the Caddyfile `@api` matcher and the Traefik
+rule carry it). Without the bucket settings outside production the routes answer 503.
+Erasing a user removes their object and purging a tenant removes its `<tenantId>/` prefix. Replacing or removing a
+picture deletes the former object after the janus event; a rare orphan stays until the tenant is purged.
+Back the bucket up with the storage's own tools; the database backups do not hold the pictures.
+
 ## Webhooks
 
 A tenant's events are posted to its endpoints (`https` only, public addresses only, checked when saved and

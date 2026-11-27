@@ -123,6 +123,19 @@ directive @stream(
   label: String
 ) on FIELD
 
+"""
+A postal address to store. A blank part is left out; an address with no part left is cleared.
+"""
+input AddressInput {
+  """ISO 3166-1 alpha-2."""
+  country: String
+  formatted: String
+  locality: String
+  postalCode: String
+  region: String
+  streetAddress: String
+}
+
 """What a console admin did (ADR-0037): one recorded action."""
 type AdminEvent {
   """The action, `<noun>.<verb>`."""
@@ -187,6 +200,88 @@ enum AgentRegistrationMode {
   Registration at `/register` (RFC 7591) accepts the redirect URIs of the known MCP clients (Claude, ChatGPT, Cursor, VS Code, ...) and `agents.redirectUris`.
   """
   RESTRICTED
+}
+
+"""Who an attribute describes."""
+enum AttributeFamily {
+  """Only the holders of the roles the attribute is linked to."""
+  ROLE
+  """Every user of the tenant."""
+  USER
+}
+
+"""
+One attribute filter of the users list: a choice attribute with `options` (the
+user holds any of them), or a boolean attribute with `boolean`. Exactly one of
+the two, matching the attribute's type.
+"""
+input AttributeFilterInput {
+  attributeId: ID!
+  boolean: Boolean
+  options: [String!]
+}
+
+"""
+Which section a save is about: `roleId` null for the general section, else the
+role whose section is saved (the user must hold it).
+"""
+input AttributeSectionInput {
+  roleId: ID
+}
+
+"""What an attribute holds. Its values are canonical per type."""
+enum AttributeType {
+  BOOLEAN
+  COLOR
+  DATE
+  DATETIME
+  MULTI_SELECT
+  NUMBER
+  SELECT
+  STRING
+  TEXT
+  TIME
+}
+
+"""
+One attribute of a user's section and the value the user holds. Exactly the
+field of the attribute's type is set (`text` for STRING and TEXT, `color`,
+`number`, `date`, `dateTime`, `time`, `options` for SELECT and MULTI_SELECT,
+`boolean`); every field is `null` while the user holds no value.
+"""
+type AttributeValue {
+  attribute: UserAttribute!
+  boolean: Boolean
+  color: HexColorCode
+  date: Date
+  dateTime: DateTime
+  number: Float
+  """The keys of the chosen options (one for SELECT)."""
+  options: [String!] @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  text: String
+  time: LocalTime
+}
+
+"""One change of a save: `value` null clears the attribute's value."""
+input AttributeValueInput {
+  attributeId: ID!
+  value: AttributeValueSetInput
+}
+
+"""
+The value to set, through the one field of the attribute's type (`text` for
+STRING and TEXT, `color`, `number`, `date`, `dateTime`, `time`, `options` for
+SELECT and MULTI_SELECT, `boolean`).
+"""
+input AttributeValueSetInput @oneOf {
+  boolean: Boolean
+  color: HexColorCode
+  date: Date
+  dateTime: DateTime
+  number: Float
+  options: [String!]
+  text: String
+  time: LocalTime
 }
 
 """
@@ -747,6 +842,29 @@ input CreateTenantInput {
   slug: String!
 }
 
+input CreateUserAttributeInput {
+  """300 characters at most each."""
+  description: [TranslationInput!]
+  emissionScope: String
+  """Never changes."""
+  family: AttributeFamily!
+  """
+  Never changes. See `UserAttribute.key`; reserved claim names are refused.
+  """
+  key: String!
+  """At least one language, 100 characters at most each."""
+  label: [TranslationInput!]!
+  """
+  Required (1 to 100) for SELECT and MULTI_SELECT, refused for the other types.
+  """
+  options: [UserAttributeOptionInput!]
+  required: Boolean
+  type: AttributeType!
+  unique: Boolean
+  unit: String
+  userEditable: Boolean
+}
+
 input CreateWebhookEndpointInput {
   description: String
   """Empty or absent: every type."""
@@ -917,6 +1035,39 @@ scalar EmailAddress
 """One emoji, such as 👍."""
 scalar Emoji @specifiedBy(url: "https://www.unicode.org/reports/tr51/")
 
+"""
+One attribute value in a user's data export, hidden ones included (an archived
+attribute, a value written under another type). Exactly the field of the
+attribute's type is set.
+"""
+type ExportedAttributeValue {
+  boolean: Boolean
+  color: HexColorCode
+  date: Date
+  dateTime: DateTime
+  """
+  True when the user does not see the value (its attribute is archived, its type changed, or no role the user holds links it).
+  """
+  hidden: Boolean!
+  key: String!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  number: Float
+  options: [String!] @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  """
+  The names of the held roles whose section holds the attribute; empty for the general section.
+  """
+  roles: [String!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  text: String
+  time: LocalTime
+  updatedAt: DateTime!
+}
+
+"""A role a user holds, by name, with its assignment date."""
+type ExportedRole {
+  assignedAt: DateTime!
+  role: String!
+}
+
 """A GUID: 8-4-4-4-12 hexadecimal digits, with no version check."""
 scalar GUID
 
@@ -1078,10 +1229,21 @@ type Mutation {
   """
   addDomain(host: String!, tenantId: ID!): Domain!
   """
+  Hides the attribute from lists and tokens; its key and values stay (tenant admin). Idempotent. Errors: NOT_FOUND.
+  """
+  archiveUserAttribute(id: ID!, tenantId: ID!): UserAttribute!
+  """
   Gives the user the role (tenant admin). Idempotent: True also when the user
   already holds it. Errors: NOT_FOUND for an unknown role or user.
   """
   assignRole(roleId: ID!, tenantId: ID!, userId: ID!): Boolean!
+  """
+  Links a role-family attribute to one role, `required` for that role only
+  (tenant admin), and returns the attribute. Idempotent: a repeat sets
+  `required`. Errors: NOT_FOUND (role or attribute), ATTRIBUTE_FAMILY_MISMATCH
+  (400, a user-family attribute) and ATTRIBUTE_ARCHIVED (409).
+  """
+  assignRoleAttribute(attributeId: ID!, required: Boolean = false, roleId: ID!, tenantId: ID!): UserAttribute!
   """
   Gives a member another role (tenant owner). Idempotent. Errors: NOT_FOUND for
   a user who is not a member, LAST_OWNER (409) when it would leave the tenant
@@ -1119,6 +1281,14 @@ type Mutation {
   SLUG_TAKEN (409; a deleted or purged tenant keeps its slug for ever).
   """
   createTenant(input: CreateTenantInput!): Tenant!
+  """
+  Creates an attribute at the end of its family (tenant admin). Errors:
+  ATTRIBUTE_KEY_INVALID, ATTRIBUTE_KEY_RESERVED, ATTRIBUTE_UNIQUE_UNSUPPORTED,
+  ATTRIBUTE_EDITABLE_EMITTED and ATTRIBUTE_SCOPE_UNKNOWN (400),
+  ATTRIBUTE_KEY_TAKEN (409, an archived attribute keeps its key) and
+  ATTRIBUTE_LIMIT (409, 100 per tenant).
+  """
+  createUserAttribute(input: CreateUserAttributeInput!, tenantId: ID!): UserAttribute!
   """
   Adds an endpoint and mints its secret. Needs `edit` on the tenant. Errors:
   BAD_USER_INPUT (400, `extensions.field` `url` or `types`: not https, holds
@@ -1164,6 +1334,12 @@ type Mutation {
   """
   deleteUser(tenantId: ID!, userId: ID!): Boolean!
   """
+  Deletes an archived attribute and every value it holds, and frees its key
+  (tenant owner). `confirmKey` must be its key. True also when it is already
+  gone. Errors: ATTRIBUTE_NOT_ARCHIVED (409), ATTRIBUTE_DELETE_UNCONFIRMED (400).
+  """
+  deleteUserAttribute(confirmKey: String!, id: ID!, tenantId: ID!): Boolean!
+  """
   Removes the endpoint; what waits for it is given up. `false` when it was already gone.
   """
   deleteWebhookEndpoint(id: ID!, tenantId: ID!): Boolean!
@@ -1201,6 +1377,10 @@ type Mutation {
   unknown tenant.
   """
   inviteUser(email: EmailAddress!, tenantId: ID!): UserInvitation!
+  """
+  Puts the attribute at `position` (0-based) among the live ones of its family (tenant admin). Errors: NOT_FOUND, ATTRIBUTE_ARCHIVED.
+  """
+  moveUserAttribute(id: ID!, position: Int!, tenantId: ID!): UserAttribute!
   """Drops a domain, verified or not. Errors: NOT_FOUND (404)."""
   removeConnectionDomain(domain: String!, id: ID!, tenantId: ID!): Connection!
   """
@@ -1243,6 +1423,10 @@ type Mutation {
   (unknown, or already purged).
   """
   restoreTenant(id: ID!): Tenant!
+  """
+  Brings an archived attribute back (tenant admin). Idempotent. Errors: NOT_FOUND.
+  """
+  restoreUserAttribute(id: ID!, tenantId: ID!): UserAttribute!
   """
   Lifts a suspension. Needs `edit` on the platform. Idempotent. Errors: NOT_FOUND (a tenant in the trash is restored, not resumed).
   """
@@ -1320,11 +1504,30 @@ type Mutation {
   """
   setTenantPlan(id: ID!, input: SetTenantPlanInput!): Tenant!
   """
+  Sets and clears a user's values in one section (tenant admin) and returns
+  the sections as they stand. A bad value writes nothing. Required attributes
+  (the role link's flag in a role section) cannot be cleared here. Errors:
+  NOT_FOUND (user, or attribute at `values.<i>`), ATTRIBUTE_ARCHIVED,
+  ATTRIBUTE_FAMILY_MISMATCH (400, field `values.<i>`: a role attribute in the
+  general section, a user attribute or one not linked to the role in a role's),
+  ATTRIBUTE_VALUE_INVALID (400, field `values.<i>`), ATTRIBUTE_REQUIRED (400),
+  ATTRIBUTE_VALUE_TAKEN (409, a `unique` attribute) and ATTRIBUTE_ROLE_NOT_HELD
+  (409, field `section.roleId`: the user does not hold the role).
+  """
+  setUserAttributeValues(section: AttributeSectionInput!, tenantId: ID!, userId: ID!, values: [AttributeValueInput!]!): UserAttributeSections!
+  """
   Marks the user's address verified or not (tenant admin), touching nothing
   else: no session, password or second factor changes. Idempotent. Errors:
   NOT_FOUND for an unknown user.
   """
   setUserEmailVerified(tenantId: ID!, userId: ID!, verified: Boolean!): TenantUser!
+  """
+  Marks the user's phone number proved or not (tenant admin): the only way a
+  phone becomes verified, there is no SMS. Touches nothing else. Idempotent.
+  Errors: PROFILE_FIELD_INVALID (400) when the user has no phone, NOT_FOUND
+  for an unknown user, CONFLICT (409) when the user changed meanwhile.
+  """
+  setUserPhoneVerified(tenantId: ID!, userId: ID!, verified: Boolean!): TenantUser!
   """
   Suspends a tenant (ADR-0039). Needs `edit` on the platform. Idempotent.
   Errors: NOT_FOUND, PLATFORM_TENANT_PROTECTED (409) for the `clavix` tenant.
@@ -1334,6 +1537,11 @@ type Mutation {
   Takes the role from the user (tenant admin). True when it was held, false on a repeat.
   """
   unassignRole(roleId: ID!, tenantId: ID!, userId: ID!): Boolean!
+  """
+  Removes the link (tenant admin); `true` when there was one. The users' values
+  stay stored and hidden: nothing else is written. Idempotent.
+  """
+  unassignRoleAttribute(attributeId: ID!, roleId: ID!, tenantId: ID!): Boolean!
   """
   Sets the tenant's brand. Needs `edit` on the tenant. A theme that fails AA
   is refused with BRANDING_CONTRAST (422, `extensions.failures`); a bad value
@@ -1373,11 +1581,22 @@ type Mutation {
   the change again).
   """
   updateOAuthPolicy(input: OAuthPolicyInput!, tenantId: ID!): OAuthPolicy!
+  """
+  Replaces the tenant's locked profile fields (tenant admin), at the `version`
+  the caller read: a stale one is CONFLICT (409), so two admins never overwrite
+  each other. A repeat of the same list stores nothing. Errors: NOT_FOUND for an
+  unknown tenant.
+  """
+  updateProfilePolicy(locked: [ProfileField!]!, tenantId: ID!, version: Int!): ProfilePolicy!
   updateResource(id: ID!, input: UpdateResourceInput!, tenantId: ID!): Resource!
   """
   Changes a role's name or description (tenant admin). Errors: NOT_FOUND, CONFLICT, BAD_USER_INPUT, ROLE_MANAGED (403) for a managed role.
   """
   updateRole(id: ID!, input: UpdateRoleInput!, tenantId: ID!): TenantRole!
+  """
+  Changes the `required` flag of a link (tenant admin) and returns the attribute. Errors: NOT_FOUND (role, attribute, or no such link).
+  """
+  updateRoleAttribute(attributeId: ID!, required: Boolean!, roleId: ID!, tenantId: ID!): UserAttribute!
   updateScope(id: ID!, input: UpdateScopeInput!, tenantId: ID!): Scope!
   """
   Turns methods on or off; a type left out keeps its value. Needs edit on the
@@ -1400,11 +1619,23 @@ type Mutation {
   """
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
   """
-  Renames a user (tenant admin). Errors: BAD_USER_INPUT (400) for a name that is
-  empty once trimmed or over 200 characters, NOT_FOUND for an unknown user.
+  Updates a user's name and standard profile fields (tenant admin); the tenant's
+  locks bind the user's own edits, not this one. Errors: BAD_USER_INPUT (400) for
+  a name that is empty once trimmed or over 200 characters,
+  PROFILE_FIELD_INVALID (400, with the field) for a malformed phone, locale,
+  zoneinfo, birthdate, country or text, NOT_FOUND for an unknown user, CONFLICT
+  (409) when the user changed meanwhile.
   The e-mail address and the verified flag are not editable.
   """
   updateUser(input: UpdateUserInput!, tenantId: ID!, userId: ID!): TenantUser!
+  """
+  Changes an attribute at the `version` read (tenant admin); nothing is written
+  when nothing changes. Errors: CONFLICT (stale version), NOT_FOUND,
+  ATTRIBUTE_ARCHIVED, ATTRIBUTE_TYPE_LOCKED and ATTRIBUTE_OPTION_IN_USE
+  (users hold values), ATTRIBUTE_NOT_UNIQUE (stored values repeat), plus the
+  400 refusals of `createUserAttribute`.
+  """
+  updateUserAttribute(id: ID!, input: UpdateUserAttributeInput!, tenantId: ID!, version: Int!): UserAttribute!
   """Needs `edit`. Errors: NOT_FOUND (404), BAD_USER_INPUT (400)."""
   updateWebhookEndpoint(id: ID!, input: UpdateWebhookEndpointInput!, tenantId: ID!): WebhookEndpoint!
   """
@@ -1546,6 +1777,39 @@ scalar PositiveFloat
 """An integer from 1 to 2147483647."""
 scalar PositiveInt
 
+"""
+A standard profile field a tenant may lock. A locked field cannot be changed by
+the users themselves (their own `updateMyProfile`); the console admins still
+edit it.
+"""
+enum ProfileField {
+  ADDRESS
+  BIRTHDATE
+  FAMILY_NAME
+  GIVEN_NAME
+  LOCALE
+  NAME
+  NICKNAME
+  PHONE
+  PICTURE
+  ZONEINFO
+}
+
+"""
+The profile fields a tenant locks for its users' own edits. `version` rises on
+every change (0 while the tenant never set one): pass the one you read back to
+`updateProfilePolicy`. It is a document of its own: it never bumps the tenant's
+`version`.
+"""
+type ProfilePolicy {
+  """The locked fields, in the order of the enum."""
+  locked: [ProfileField!]!
+  tenantId: ID!
+  """When the locks last changed; null while the tenant never set any."""
+  updatedAt: DateTime
+  version: Int!
+}
+
 type Query {
   """
   One console event of a tenant by id (tenant viewer). `null` for an unknown
@@ -1623,6 +1887,10 @@ type Query {
   The platform operators (platform viewer): the users holding a role on the platform itself. Owners first, one entry per user with their strongest role; an account that is gone is left out.
   """
   platformOperators: [TenantMember!]!
+  """
+  The tenant's profile locks (tenant viewer): nothing locked while it set none. NOT_FOUND for an unknown tenant.
+  """
+  profilePolicy(tenantId: ID!): ProfilePolicy!
   resource(id: ID!, tenantId: ID!): Resource
   """Needs `view` on the tenant."""
   resources(tenantId: ID!): [Resource!]!
@@ -1667,6 +1935,20 @@ type Query {
   """
   user(id: ID!, tenantId: ID!): TenantUser
   """
+  One attribute (tenant viewer), or `null`: unknown, or of another tenant.
+  """
+  userAttribute(id: ID!, tenantId: ID!): UserAttribute
+  """
+  The tenant's attributes by position (tenant viewer), the live ones or, with `archived`, the archived ones. All families unless `family` is given.
+  """
+  userAttributes(archived: Boolean = false, family: AttributeFamily, tenantId: ID!): [UserAttribute!]!
+  """
+  The data the console holds about a user, for their access request. Needs
+  `edit` (it exposes personal data) and is recorded as `user.export`.
+  Errors: NOT_FOUND (no such user).
+  """
+  userDataExport(tenantId: ID!, userId: ID!): UserDataExport!
+  """
   The user's standing grants, oldest first (tenant viewer). Empty for an unknown user.
   """
   userGrants(tenantId: ID!, userId: ID!): [UserGrant!]!
@@ -1699,8 +1981,16 @@ type Query {
   with it (any case; plain text, never a pattern); blank means no filter. Give
   one of the two: both is BAD_USER_INPUT (400). `totalCount` follows the same
   filter.
+  
+  `roleId` keeps the users who hold the role; `attributes` keeps those whose
+  value matches each filter (a choice or a boolean attribute, at most 5; a role
+  attribute counts only while a held role links it). Every condition must hold,
+  together with `emailPrefix` (at most 1 000 addresses may match the prefix, else
+  BAD_USER_INPUT). Filtered pages follow the creation order; their cursor is the
+  one the previous filtered page gave. A filter on an unknown, archived or
+  unfit attribute, or an invalid option, is BAD_USER_INPUT (400).
   """
-  users(after: String, email: String, emailPrefix: String, first: Int, tenantId: ID!): TenantUserPage!
+  users(after: String, attributes: [AttributeFilterInput!], email: String, emailPrefix: String, first: Int, roleId: ID, tenantId: ID!): TenantUserPage!
   """
   One endpoint of the tenant; null when there is none with this id or it belongs to another tenant. Needs `view` on the tenant.
   """
@@ -1797,6 +2087,29 @@ enum Role {
   ADMIN
   OWNER
   VIEWER
+}
+
+"""
+The link between a role-family attribute and one precise role (a role is per
+tenant and per resource): a user shows the attribute while it holds the role.
+`required` is this role's own flag: a console save cannot clear the value in
+the role's section. Removing the role (or the link) hides the values without
+deleting them; they show again when the link comes back.
+"""
+type RoleAttributeLink {
+  required: Boolean!
+  role: TenantRole!
+}
+
+"""
+The values of one role's attributes, for a user who holds the role. Each
+attribute's `required` is the role link's. One value per user and attribute
+whatever the number of roles: two roles that link the same attribute show the
+same value.
+"""
+type RoleAttributeSection {
+  role: TenantRole!
+  values: [AttributeValue!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
 }
 
 """A user holding a role."""
@@ -2042,11 +2355,23 @@ An end user of a tenant: someone who signs in through that tenant's issuer (not 
 type TenantUser {
   """False once a console admin disabled the user: no sign-in."""
   active: Boolean!
+  """
+  The user's attribute values by section, hidden ones left out (tenant viewer).
+  """
+  attributes: UserAttributeSections!
+  """
+  False while the user lacks a value of a live required attribute: of the general section, or of a role section (a held role, a required link). Accounts are flagged, never blocked (tenant viewer).
+  """
+  attributesComplete: Boolean!
   createdAt: DateTime!
   email: EmailAddress!
   emailVerified: Boolean!
   id: ID!
   name: String
+  """
+  The standard profile fields (OpenID Connect Core 5.1); a field not set is null.
+  """
+  profile: UserProfile!
   """
   Whether the user holds a TOTP second factor (tenant viewer). Never the secret or the codes.
   """
@@ -2231,11 +2556,52 @@ input UpdateTenantInput {
 }
 
 """
-What a tenant admin may change on a user. The e-mail address is not editable; its verified flag is `setUserEmailVerified`.
+A field left out keeps its value; `null` clears `unit` and `emissionScope`.
+"""
+input UpdateUserAttributeInput {
+  description: [TranslationInput!]
+  emissionScope: String
+  """
+  Sets or replaces the languages it names and keeps the others; a blank text removes one.
+  """
+  label: [TranslationInput!]
+  """Replaces the whole list."""
+  options: [UserAttributeOptionInput!]
+  required: Boolean
+  type: AttributeType
+  unique: Boolean
+  unit: String
+  userEditable: Boolean
+}
+
+"""
+What a tenant admin may change on a user: the name and the standard profile
+fields. The e-mail address is not editable; its verified flag is
+`setUserEmailVerified`, the phone's `setUserPhoneVerified`. A field left out is
+kept; null (or a blank text) clears a profile field.
 """
 input UpdateUserInput {
-  """The display name: 1 to 200 characters once trimmed."""
-  name: String!
+  address: AddressInput
+  """`YYYY-MM-DD`, a real date that is not in the future."""
+  birthdate: String
+  """1 to 100 characters once trimmed."""
+  familyName: String
+  """1 to 100 characters once trimmed."""
+  givenName: String
+  """A BCP 47 language tag (stored canonical)."""
+  locale: String
+  """
+  The display name: 1 to 200 characters once trimmed. Left out or null keeps it.
+  """
+  name: String
+  """1 to 100 characters once trimmed."""
+  nickname: String
+  """
+  E.164 (`+14165550123`). A number that differs from the stored one starts unverified.
+  """
+  phone: String
+  """An IANA time zone name."""
+  zoneinfo: String
 }
 
 """Fields left out stay as they are."""
@@ -2279,6 +2645,102 @@ type UsageMeter {
   used: Int!
 }
 
+"""A postal address; every part is optional."""
+type UserAddress {
+  """ISO 3166-1 alpha-2, upper case."""
+  country: String
+  formatted: String
+  locality: String
+  postalCode: String
+  region: String
+  streetAddress: String
+}
+
+"""
+An extra field of the tenant's users (family `USER`) or of the holders of some
+roles (family `ROLE`). The `key` is the claim name and never changes; it stays
+taken while the attribute is archived, and only the permanent delete frees it.
+"""
+type UserAttribute {
+  """When the attribute was archived, or `null` while it is live."""
+  archivedAt: DateTime
+  description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  """
+  The scope whose access token, ID token and userinfo carry the value as a claim (it is also listed in `claims_supported`), or `null` when it is not emitted.
+  """
+  emissionScope: String
+  family: AttributeFamily!
+  id: ID!
+  """
+  2 to 64 characters: a lower-case letter, then lower-case letters, digits and `_`.
+  """
+  key: String!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  """
+  The choices of a SELECT or MULTI_SELECT attribute, in order; empty for the other types.
+  """
+  options: [UserAttributeOption!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  required: Boolean!
+  """
+  The roles the attribute is linked to (family `ROLE`), by role name; empty for a user attribute.
+  """
+  roles: [RoleAttributeLink!]! @listSize(assumedSize: 10, requireOneSlicingArgument: false)
+  type: AttributeType!
+  """Whether two users may not hold the same value. Only STRING and NUMBER."""
+  unique: Boolean!
+  """The unit a value is shown with (`kg`, `%`), or `null`."""
+  unit: String
+  """
+  Whether the user may set its own value (profile or `/userinfo` write); never with an emission scope.
+  """
+  userEditable: Boolean!
+  """How many users hold a value of the attribute."""
+  valueCount: Int!
+  """The version to send back to `updateUserAttribute`."""
+  version: Int!
+}
+
+"""
+One choice of a SELECT or MULTI_SELECT attribute. Its `key` is the stored (and emitted) value.
+"""
+type UserAttributeOption {
+  key: String!
+  label: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+}
+
+input UserAttributeOptionInput {
+  """
+  1 to 63 characters: a lower-case letter or digit, then lower-case letters, digits, `_` and `-`.
+  """
+  key: String!
+  label: [TranslationInput!]!
+}
+
+"""
+What a user holds, by section: `general` is every live attribute of family
+`USER`, by position; `roles` has one section per held role (by name) that is
+linked to live attributes. The values of an archived attribute, of a role no
+longer held or whose link was removed are not shown (they stay stored).
+"""
+type UserAttributeSections {
+  general: [AttributeValue!]! @listSize(assumedSize: 100, requireOneSlicingArgument: false)
+  roles: [RoleAttributeSection!]! @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+}
+
+"""
+Everything the console holds about one user, for a data-access (GDPR) request:
+their profile, the values of their attributes (hidden ones included, flagged),
+their roles, their grants and their sessions. Never a secret or a code.
+"""
+type UserDataExport {
+  attributes: [ExportedAttributeValue!]!
+  exportedAt: DateTime!
+  grants: [UserGrant!]!
+  profile: TenantUser!
+  roles: [ExportedRole!]!
+  sessions: [UserSession!]!
+}
+
 """
 What a user allowed an application to do (an OAuth grant), standing only.
 """
@@ -2313,6 +2775,36 @@ type UserLookupResult {
   email: EmailAddress!
   id: ID!
   name: String
+}
+
+"""
+A phone number, E.164, and whether a console admin marked it proved (no SMS).
+"""
+type UserPhone {
+  number: String!
+  verified: Boolean!
+}
+
+"""
+The standard profile fields of a user. A field that is not set is null; the
+picture is its storage key, never a URL.
+"""
+type UserProfile {
+  address: UserAddress
+  """`YYYY-MM-DD`."""
+  birthdate: String
+  familyName: String
+  givenName: String
+  """A BCP 47 language tag, canonical (`fr-CA`)."""
+  locale: String
+  nickname: String
+  phone: UserPhone
+  """The key of the user's picture, or null. Never a URL."""
+  pictureKey: String
+  """When the user record last changed."""
+  updatedAt: DateTime!
+  """An IANA time zone name (`America/Toronto`)."""
+  zoneinfo: String
 }
 
 """A user's TOTP second factor, as an admin may know it."""

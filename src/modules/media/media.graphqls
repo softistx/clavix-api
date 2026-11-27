@@ -1,0 +1,11 @@
+extend type Mutation {
+  """
+  Removes the signed-in user's profile picture: true when this call removed
+  one, false when there was none. The picture is uploaded with
+  `PUT /media/avatar` (a PNG, JPEG or WebP of at most 1 MiB, as the raw body),
+  never through GraphQL; the answer is its key. The `picture` claim of the
+  user's tokens is the picture's URL. A tenant that locks PICTURE refuses it with
+  PROFILE_FIELD_LOCKED (403): only an administrator changes it then.
+  """
+  removeMyPicture: Boolean!
+}

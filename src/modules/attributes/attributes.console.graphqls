@@ -1,0 +1,156 @@
+"Who an attribute describes."
+enum AttributeFamily {
+  "Every user of the tenant."
+  USER
+  "Only the holders of the roles the attribute is linked to."
+  ROLE
+}
+
+"What an attribute holds. Its values are canonical per type."
+enum AttributeType {
+  STRING
+  TEXT
+  COLOR
+  NUMBER
+  DATE
+  DATETIME
+  TIME
+  SELECT
+  MULTI_SELECT
+  BOOLEAN
+}
+
+"One choice of a SELECT or MULTI_SELECT attribute. Its `key` is the stored (and emitted) value."
+type UserAttributeOption {
+  key: String!
+  label: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+}
+
+"""
+An extra field of the tenant's users (family `USER`) or of the holders of some
+roles (family `ROLE`). The `key` is the claim name and never changes; it stays
+taken while the attribute is archived, and only the permanent delete frees it.
+"""
+type UserAttribute {
+  id: ID!
+  "2 to 64 characters: a lower-case letter, then lower-case letters, digits and `_`."
+  key: String!
+  family: AttributeFamily!
+  type: AttributeType!
+  label: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  description: [Translation!]!
+    @listSize(assumedSize: 3, requireOneSlicingArgument: false)
+  "The unit a value is shown with (`kg`, `%`), or `null`."
+  unit: String
+  "The choices of a SELECT or MULTI_SELECT attribute, in order; empty for the other types."
+  options: [UserAttributeOption!]!
+    @listSize(assumedSize: 20, requireOneSlicingArgument: false)
+  required: Boolean!
+  "Whether the user may set its own value (profile or `/userinfo` write); never with an emission scope."
+  userEditable: Boolean!
+  "Whether two users may not hold the same value. Only STRING and NUMBER."
+  unique: Boolean!
+  "The scope whose access token, ID token and userinfo carry the value as a claim (it is also listed in `claims_supported`), or `null` when it is not emitted."
+  emissionScope: String
+  "When the attribute was archived, or `null` while it is live."
+  archivedAt: DateTime
+  "How many users hold a value of the attribute."
+  valueCount: Int!
+  "The roles the attribute is linked to (family `ROLE`), by role name; empty for a user attribute."
+  roles: [RoleAttributeLink!]!
+    @listSize(assumedSize: 10, requireOneSlicingArgument: false)
+  "The version to send back to `updateUserAttribute`."
+  version: Int!
+}
+
+input UserAttributeOptionInput {
+  "1 to 63 characters: a lower-case letter or digit, then lower-case letters, digits, `_` and `-`."
+  key: String!
+  label: [TranslationInput!]!
+}
+
+input CreateUserAttributeInput {
+  "Never changes. See `UserAttribute.key`; reserved claim names are refused."
+  key: String!
+  "Never changes."
+  family: AttributeFamily!
+  type: AttributeType!
+  "At least one language, 100 characters at most each."
+  label: [TranslationInput!]!
+  "300 characters at most each."
+  description: [TranslationInput!]
+  unit: String
+  "Required (1 to 100) for SELECT and MULTI_SELECT, refused for the other types."
+  options: [UserAttributeOptionInput!]
+  required: Boolean
+  userEditable: Boolean
+  unique: Boolean
+  emissionScope: String
+}
+
+"A field left out keeps its value; `null` clears `unit` and `emissionScope`."
+input UpdateUserAttributeInput {
+  type: AttributeType
+  "Sets or replaces the languages it names and keeps the others; a blank text removes one."
+  label: [TranslationInput!]
+  description: [TranslationInput!]
+  unit: String
+  "Replaces the whole list."
+  options: [UserAttributeOptionInput!]
+  required: Boolean
+  userEditable: Boolean
+  unique: Boolean
+  emissionScope: String
+}
+
+extend type Query {
+  "The tenant's attributes by position (tenant viewer), the live ones or, with `archived`, the archived ones. All families unless `family` is given."
+  userAttributes(
+    tenantId: ID!
+    family: AttributeFamily
+    archived: Boolean = false
+  ): [UserAttribute!]!
+  "One attribute (tenant viewer), or `null`: unknown, or of another tenant."
+  userAttribute(tenantId: ID!, id: ID!): UserAttribute
+}
+
+extend type Mutation {
+  """
+  Creates an attribute at the end of its family (tenant admin). Errors:
+  ATTRIBUTE_KEY_INVALID, ATTRIBUTE_KEY_RESERVED, ATTRIBUTE_UNIQUE_UNSUPPORTED,
+  ATTRIBUTE_EDITABLE_EMITTED and ATTRIBUTE_SCOPE_UNKNOWN (400),
+  ATTRIBUTE_KEY_TAKEN (409, an archived attribute keeps its key) and
+  ATTRIBUTE_LIMIT (409, 100 per tenant).
+  """
+  createUserAttribute(
+    tenantId: ID!
+    input: CreateUserAttributeInput!
+  ): UserAttribute!
+  """
+  Changes an attribute at the `version` read (tenant admin); nothing is written
+  when nothing changes. Errors: CONFLICT (stale version), NOT_FOUND,
+  ATTRIBUTE_ARCHIVED, ATTRIBUTE_TYPE_LOCKED and ATTRIBUTE_OPTION_IN_USE
+  (users hold values), ATTRIBUTE_NOT_UNIQUE (stored values repeat), plus the
+  400 refusals of `createUserAttribute`.
+  """
+  updateUserAttribute(
+    tenantId: ID!
+    id: ID!
+    version: Int!
+    input: UpdateUserAttributeInput!
+  ): UserAttribute!
+  "Puts the attribute at `position` (0-based) among the live ones of its family (tenant admin). Errors: NOT_FOUND, ATTRIBUTE_ARCHIVED."
+  moveUserAttribute(tenantId: ID!, id: ID!, position: Int!): UserAttribute!
+  "Hides the attribute from lists and tokens; its key and values stay (tenant admin). Idempotent. Errors: NOT_FOUND."
+  archiveUserAttribute(tenantId: ID!, id: ID!): UserAttribute!
+  "Brings an archived attribute back (tenant admin). Idempotent. Errors: NOT_FOUND."
+  restoreUserAttribute(tenantId: ID!, id: ID!): UserAttribute!
+  """
+  Deletes an archived attribute and every value it holds, and frees its key
+  (tenant owner). `confirmKey` must be its key. True also when it is already
+  gone. Errors: ATTRIBUTE_NOT_ARCHIVED (409), ATTRIBUTE_DELETE_UNCONFIRMED (400).
+  """
+  deleteUserAttribute(tenantId: ID!, id: ID!, confirmKey: String!): Boolean!
+}

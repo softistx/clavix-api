@@ -1,4 +1,6 @@
+import { accountService } from "@/config/account";
 import { agentClientsService } from "@/config/agent-clients";
+import { attributesService } from "@/config/attributes";
 import { authEventsService } from "@/config/audit";
 import { authService } from "@/config/auth";
 import { brandingService } from "@/config/branding";
@@ -11,9 +13,11 @@ import {
 import { consentService } from "@/config/consent";
 import { invitationsService } from "@/config/invitations";
 import { keysService } from "@/config/keys";
+import { avatarsService } from "@/config/media";
 import { mfaService } from "@/config/mfa";
 import { oauthPolicyService } from "@/config/oauth-policy";
 import { passkeysService } from "@/config/passkeys";
+import { profilePoliciesService } from "@/config/profile";
 import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { signInPolicyService } from "@/config/sign-in-policy";
@@ -35,8 +39,11 @@ import { webhooksService } from "@/config/webhooks-service";
  * needs a per-request one (D10 follow-up).
  */
 export const services = () => ({
+  account: accountService,
   agents: agentClientsService,
   audit: authEventsService,
+  attributes: attributesService,
+  avatars: avatarsService,
   auth: authService,
   branding: brandingService,
   clientPolicies: clientPoliciesService,
@@ -50,6 +57,7 @@ export const services = () => ({
   mfa: mfaService,
   oauthPolicy: oauthPolicyService,
   passkeys: passkeysService,
+  profilePolicies: profilePoliciesService,
   resources: resourcesService,
   roles: rolesService,
   signInPolicy: signInPolicyService,

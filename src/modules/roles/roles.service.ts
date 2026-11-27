@@ -159,7 +159,7 @@ export class RolesService {
   }
 
   /**
-   * Deletes the role and its assignments; `false` when it was not there. A
+   * Deletes the role, its assignments and its attribute links; `false` when it was not there. A
    * managed role is refused (`ROLE_MANAGED`). The role goes first, then the
    * sweep, and the sweep runs on a repeat too: an `assign` that re-checks the
    * role after its write then sees it gone, in every ordering, and a run that
@@ -179,6 +179,8 @@ export class RolesService {
     const removed =
       (await this.rolesOf(tenantId).hardDeleteMany({ _id: id })) > 0;
     await this.assignmentsOf(tenantId).hardDeleteMany({ roleId: id });
+    // The role's attribute links go too; the users' values stay, hidden.
+    await this.options.roleLinks.removeForRole(tenantId, id);
     return removed;
   }
 
@@ -257,6 +259,27 @@ export class RolesService {
   async membersCount(tenantId: ObjectId, roleId: string): Promise<number> {
     if (!ObjectId.isValid(roleId)) return 0;
     return this.assignmentsOf(tenantId).count({ roleId: new ObjectId(roleId) });
+  }
+
+  /**
+   * What the roles module holds about a user, for a data export: each role they
+   * hold, by name, with the date it was assigned. Nothing about the roles themselves.
+   */
+  async personalDataOf(
+    tenantId: ObjectId,
+    userId: string,
+  ): Promise<{ role: string; assignedAt: Date }[]> {
+    const held = await this.assignmentsOf(tenantId).findMany({
+      filter: { userId },
+    });
+    const roles = await this.rolesOf(tenantId).findMany();
+    const names = new Map(roles.map((r) => [r._id.toHexString(), r.name]));
+    return held
+      .map((a) => ({
+        role: names.get(a.roleId.toHexString()) ?? a.roleId.toHexString(),
+        assignedAt: a.createdAt,
+      }))
+      .sort((a, b) => a.role.localeCompare(b.role));
   }
 
   /** The roles a user holds, by name. */

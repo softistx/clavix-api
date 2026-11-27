@@ -25,6 +25,17 @@ nxgt-janus release says which.
   language, then the first stored translation. Breaking for the console UI
   ([#484](https://github.com/softistx/clavix-api/issues/484)).
 
+- **User attributes** — a tenant defines the extra fields of its users (text, number, date, choice,
+  yes/no…) in a catalogue: key, label and description per language, unit, options, required,
+  user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
+  restored and deleted for good. The catalogue and the stored values come first (an admin sets a user's
+  values, the data export and the erase on deletion are in; a role attribute is linked to a role, filled in
+  that role's section, and hidden, never erased, when the user loses the role); the standard profile fields
+  (name parts, phone with an admin-proved flag, locale, zone, birthdate, address) and the tenant's locks on
+  them are in, released as claims by the `profile`, `phone` and `address` scopes; the claims of the
+  attributes are in the access tokens, the ID token and userinfo, and in discovery's `claims_supported`; a user's profile picture is stored through the media routes (PNG, JPEG or WebP up to 1 MiB, an own upload or an admin's, the `picture` claim, erased with the user); a signed-in user edits their own profile (the tenant's locks bind it) and the attributes marked user-editable, and changes their e-mail address through a link mailed to the new one, on a recent sign-in
+  ([#507](https://github.com/softistx/clavix-api/issues/507)); ([#501](https://github.com/softistx/clavix-api/issues/501)).
+
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
   the `<name>.<role>.ts` shape with the console's resolvers inside their owning module; errors go

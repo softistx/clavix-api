@@ -1,5 +1,6 @@
 import { agentsFor } from "./agent-clients";
 import { env } from "./env";
+import { mediaPorts } from "./media";
 import { detailTextsFor, scopeTextsFor } from "./resources";
 import {
   deviceThrottle,
@@ -28,4 +29,5 @@ export const appPorts = {
   scopeTexts: scopeTextsFor,
   detailTexts: detailTextsFor,
   agents: agentsFor,
+  media: mediaPorts,
 };

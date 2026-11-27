@@ -1,10 +1,12 @@
 import type { Clock } from "@softistx/janus";
+import { RESERVED_ACCESS_TOKEN_CLAIMS } from "@softistx/janus-oauth";
 import { createMongoDPoPReplayCache } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import { DPOP_ALGORITHMS } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import type { RolesFor } from "./ports";
+import type { AttributesFor, RolesFor } from "./ports";
 import { type MetadataTransport, registrationOf } from "./registration";
+import { omitReserved } from "./reserved-claims";
 
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
 export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
@@ -52,39 +54,58 @@ interface TokenGrant {
   /** `client` for a client credentials token: the subject is a client id, not a user. */
   subjectType?: "client" | "user";
   audience: string;
+  scopes: readonly string[];
   authTime?: Date;
   acr?: string;
   amr?: readonly string[];
 }
 
+/** The claims of the grant itself: `auth_time`, `acr` and `amr`, each only when the grant records it. */
+const grantClaims = ({
+  authTime,
+  acr,
+  amr,
+}: {
+  authTime: Date | undefined;
+  acr: string | undefined;
+  amr: readonly string[] | undefined;
+}) => ({
+  ...(authTime === undefined
+    ? {}
+    : { auth_time: Math.floor(authTime.getTime() / 1000) }),
+  ...(acr === undefined ? {} : { acr }),
+  ...(amr === undefined ? {} : { amr: [...amr] }),
+});
+
+const RESERVED: ReadonlySet<string> = new Set(RESERVED_ACCESS_TOKEN_CLAIMS);
+
 /**
  * Runs on every code exchange and refresh: a refreshed token carries the
  * user's current roles. The audience is the token's resource. `acr`, `amr` and
  * `auth_time` are the grant's, the values of the ID token (RFC 9068, RFC
- * 9470); a grant that records none adds none.
+ * 9470); a grant that records none adds none. A machine has no attributes
+ * either. An attribute claim never takes the place of one the server owns:
+ * its key is dropped when reserved, and the claims above win over it.
  */
 export const accessTokenClaims =
-  (tenant: ResolvedTenant, rolesFor: RolesFor) =>
+  (tenant: ResolvedTenant, rolesFor: RolesFor, attributesFor: AttributesFor) =>
   async ({
     subject,
     audience,
+    scopes,
     authTime,
     acr,
     amr,
     subjectType,
-  }: TokenGrant) => ({
-    // A machine has no roles: its subject is a client id, not a user.
-    ...(subjectType === "client"
-      ? {}
-      : {
-          roles: await rolesFor(tenant)(
-            subject,
-            audience === userinfoOf(tenant.issuer) ? null : audience,
-          ),
-        }),
-    ...(authTime === undefined
-      ? {}
-      : { auth_time: Math.floor(authTime.getTime() / 1000) }),
-    ...(acr === undefined ? {} : { acr }),
-    ...(amr === undefined ? {} : { amr: [...amr] }),
-  });
+  }: TokenGrant) => {
+    if (subjectType === "client") return grantClaims({ authTime, acr, amr });
+    const resource = audience === userinfoOf(tenant.issuer) ? null : audience;
+    return {
+      ...omitReserved(
+        RESERVED,
+        await attributesFor(tenant)(subject, scopes, resource),
+      ),
+      roles: await rolesFor(tenant)(subject, resource),
+      ...grantClaims({ authTime, acr, amr }),
+    };
+  };

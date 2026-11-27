@@ -57,6 +57,8 @@ export const noCustomDomains = {
 export const quietOAuth = {
   resourcesFor: () => ({}),
   rolesFor: () => async (): Promise<string[]> => [],
+  attributesFor: () => async (): Promise<Record<string, unknown>> => ({}),
+  attributeScopesFor: () => async (): Promise<Record<string, never>> => ({}),
   exchangeRulesFor: () => async () => null,
   agentCheckFor: () => async () => false,
   eventsFor: () => () => {},

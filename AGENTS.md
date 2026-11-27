@@ -52,14 +52,14 @@ in `~/.claude/CLAUDE.md`; this file states only what is clavix-api's own.
 - **Generated and printed files**: generated code is in `src/generated/` and `test/generated/` (`bun run generate`, gitignored), never committed. The
   printed schemas `schema.graphql` (hosted) and `console.schema.graphql` (console) are committed: `bun run schema:print` rewrites
   them (sorted, with directives) and `verify` runs `schema:print --check`, which fails when either is stale. clavix-ui syncs its schema copies from them.
-- **Import cycles**: `bunx madge --circular --extensions ts --ts-config tsconfig.json src` reports 6 today
-  (`webhooks` events/delivery, two cycles; `i18n/codes` with `auth.errors` (through `shared/errors`), one; `i18n/codes` with `sign-in-methods.errors`, one; `console/budgets` with `console/context`,
+- **Import cycles**: `bunx madge --circular --extensions ts --ts-config tsconfig.json src` reports 7 today
+  (`webhooks` events/delivery, two cycles; `i18n/codes` with `auth.errors` (through `shared/errors`), one; `i18n/codes` with `sign-in-methods.errors`, one; `i18n/codes` with `media.errors`, one; `console/budgets` with `console/context`,
   `config/connections` with `config/users`); a change adds none (not run by `verify`).
 - **Cross-module imports go through the owning module's `index.ts`** (A24, A29). Every import of another module is `@/modules/<m>`, and a module's own files import each other relatively, never through their own barrel; a barrel exports only names another module (or its spec) imports. A deep import (`@/modules/<m>/<m>.<role>`) is allowed only for these, each in the module's `index.ts` header:
   - **the registries** load a role file by file so the barrel never loads it: `modules/index.ts` (the hosted `*.resolver.ts`), `console/modules/index.ts` (the `*.console-resolver.ts`), `http/graphql-mount.ts` and `http/schema.ts` (`auth.plugin`, `consent.plugin`, `consent.resolver`), and `modules/collections.ts` (the models registry, keyed as `mongo.db` exposes them);
-  - **queues, workers and Redis throttles**, wired by `server.ts`, `config/redis.ts`, `config/redis-limits.ts` and `config/domains-job.ts` (a barrel would load Redis or the worker): `keys.queue`, `keys.worker`, `agents.prune-*`, `audit.retention-*`, `consent.queue`, `domains.recheck-*`, `tenants.purge-*`, `webhooks.secrets-prune-*`, `auth.throttle`, `auth.verification-throttle`, `consent.device-throttle`, `passkeys.throttle` (their limit configs, which the barrel cannot export without closing cycles through `config/redis.ts`);
-  - **leaf files** (one rule, A29): a file that imports no service, resolver or barrel of the app, only packages, `shared/` or other leaves (`.errors`, `.schema`, `.model`, `.challenge`), may be imported by file from another module. Importing one never loads the module's services, so it cannot close a cycle through the barrel. Used by `i18n/codes.ts` (the `.errors` of `auth`, `connections`, `consent`, `invitations`, `mfa`, `passkeys`), `admins.errors.ts` (`invitations.errors`), `auth.service.ts` (`mfa.challenge`), `events/types.ts` (`audit.model`), `tenancy/resolved-tenant.ts` and the tenants model and service (`sign-in-methods.schema`, `oauth-policy.schema`); generated code (`src/generated/`) is exempt, its type imports follow the schema;
-  - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 6 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and the `services` folder (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `keys.reseal.spec.ts` and `test/connections-service.ts` take the connections `services` folder (specs only); `lock-order.spec.ts` takes `users.console-mutations`, a console-resolver part loaded by file like the registry's.
+  - **queues, workers and Redis throttles**, wired by `server.ts`, `config/redis.ts`, `config/redis-limits.ts` and `config/domains-job.ts` (a barrel would load Redis or the worker): `keys.queue`, `keys.worker`, `agents.prune-*`, `audit.retention-*`, `consent.queue`, `sign-in-methods.queue`, `domains.recheck-*`, `tenants.purge-*`, `webhooks.secrets-prune-*`, `auth.throttle`, `auth.verification-throttle`, `media.throttle`, `consent.device-throttle`, `passkeys.throttle` (their limit configs, which the barrel cannot export without closing cycles through `config/redis.ts`);
+  - **leaf files** (one rule, A29): a file that imports no service, resolver or barrel of the app, only packages, `shared/` or other leaves (`.errors`, `.schema`, `.model`, `.challenge`), may be imported by file from another module. Importing one never loads the module's services, so it cannot close a cycle through the barrel. Used by `i18n/codes.ts` (the `.errors` of `account`, `attributes`, `auth`, `connections`, `consent`, `invitations`, `media`, `mfa`, `passkeys`, `profile`; `attributes.errors` holds the codes only, its `refuse` helpers are in `attributes.refusals`), `admins.errors.ts` (`invitations.errors`), `auth.service.ts` (`mfa.challenge`), `events/types.ts` (`audit.model`), `users.schema.ts` (`profile.schema`), `users.tenant-auth.ts` (`media.utils`), `tenancy/resolved-tenant.ts` and the tenants model and service (`sign-in-methods.schema`, `oauth-policy.schema`); generated code (`src/generated/`) is exempt, its type imports follow the schema;
+  - **service-level edges kept deep**, each because the barrel makes madge report a cycle (the 7 cycles of "Import cycles" stay): `config/connections.ts` takes `connections.discovery` and the `services` folder (`config/connections` > `connections/index` > `connections.sso-gate` > `config/connections`); `console/context.ts` takes `admins.service` (`console/context` > `admins/index` > `admins.janus` > `console/context`); `http/context.ts`, `invitations.types.ts` and `invitations.service.ts` take the type `TenantJanus` of `users.tenant-janus` (`users/index` > `users.service` > `users.types` > `invitations/index` > `invitations.types` > `users/index`; `TenantJanus` derives from the janus builder and cannot move out of `users`); `keys.reseal.spec.ts` and `test/connections-service.ts` take the connections `services` folder (specs only); `lock-order.spec.ts` takes `users.console-mutations` and `attributes.console-resolver`, console-resolver parts loaded by file like the registry's.
     `scripts/`, `load/` and `package.json` are not modules. Tests import fixtures as `~/<file>` (`test/`), never a relative path to `test/`.
 - **Named exceptions** (owner decisions D1, D2 and D8 of the alignment plan, not the RAR D1/D2 below; each is deliberate, not drift):
   - **D1, two schemas**: the hosted `/graphql` (cookie, tenant from the Host) and the console `/console/graphql` (bearer or DPoP JWT of the
@@ -120,8 +120,8 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
 
 - **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description` (a list of translations, `[{ locale, text }]`),
   `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
-  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`
-  or `email` (`resources.rules.ts`); it exists once a tenant describes it. `claims` is stored only.
+  have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`,
+  `email`, `phone` or `address` (`resources.rules.ts`); it exists once a tenant describes it. `claims` is stored only.
 - **`ResourcesService`** (one service for resources, scopes and detail types: they are one domain, the cascade of a resource's delete and the scope and type lookups all cross them) is the one writer of scopes and the console's writer of resources
   (`registerResource` upserts the resource itself, then calls `replaceResourceScopes`); it throws `CatalogError`
   (`NOT_FOUND`, `CONFLICT`, `BAD_USER_INPUT`), which the console maps to `extensions.code`. Sizes are
@@ -146,7 +146,7 @@ URL cannot be registered: it is built in, with the OpenID Connect scopes.
 `src/oauth/issuers.ts` also builds each issuer's `@softistx/janus-oidc` provider (one hook per
 issuer, `tokenResponse({ issuer, keys })`, the same key store as the access tokens) and
 serves discovery and userinfo before the janus routes. The userinfo URL (`userinfoOf(issuer)`,
-`<issuer>/userinfo`) is a resource of every issuer offering `openid`, `profile` and `email`,
+`<issuer>/userinfo`) is a resource of every issuer offering `openid`, `profile`, `email`, `phone` and `address`,
 and the issuer's `defaultResource`, so a client that sends no `resource` gets a token userinfo
 accepts. User claims come in through the `ClaimsFor` port (`src/oauth/ports.ts`): janus gives
 `claims` only the issuer, which `build` maps back to its tenant (`issuer -> ResolvedTenant`),
@@ -203,10 +203,23 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   doubling to 1 h, `grantsRevokeQueue` in `config/grants-revoke.ts`) and the sign-in succeeds once the job is
   stored; the worker (`ConsentService.startRevokeWorker`, started in `server.ts`) finds the tenant's
   server by its issuer URL and repeats the idempotent `revokeAll`. With no Redis, or when the job cannot be
-  added, the original error fails the sign-in as before.
+  added, the original error fails the sign-in as before. The revocation runs first, then the erase of the former holder's attribute values and picture goes on the
+  `erase-replaced` queue (`sign-in-methods.queue.ts`, `{ tenantId, userId, replacedAt }`, same policy as `grants-revoke`: 8
+  attempts, backoff 1 min doubling to 1 h; `config/erase-replaced.ts`: `eraseOnReplace`, the job `createEraseReplaced`
+  and its worker, started in `server.ts` beside the revoke worker). Both steps are fatal: `settleReplaced` runs
+  revoke, the profile clearing (best effort, inline, before the enqueue so the worker's version bump cannot defeat its `ifVersion`) and the erase, whatever the previous did, then throws the first failure; a queue that cannot
+  be written is reported (`reportError`) and fails the sign-in. With no Redis (outside production) the erase runs inline; a failed inline erase fails the sign-in. The job is idempotent (`eraseReplacedValues` under the user's lock, then the picture
+  removal), so it may run twice. A retry never wipes what the new holder wrote (owner decision): the job carries `replacedAt`
+  (the clock at enqueue), removes only the values whose `updatedAt` is at or before it (`removeUser(…, writtenUntil)`)
+  and the picture only when janus's `avatar.updatedAt` is at or before it (`AvatarsService.remove(…, setUntil)`,
+  written with `ifVersion`, so queued, a write in between retries the job; inline, it fails the sign-in). The standard profile clearing (`clearReplacedProfile`) is
+  best effort inline, caught and reported, not queued. janus keeps the required `name` and the e-mail, which Clavix
+  cannot clear.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
 - **Console** (`src/modules/sign-in-methods/`, folded in by A15: `sign-in-methods.console.graphqls`, `sign-in-methods.console-resolver.ts` with its `-guards` and `-support` (`policyOf`; `issuerFor` lives in `src/console/modules/issuer.ts`, shared with connections), the enum maps and `policyShape` in `sign-in-methods.utils.ts`, `sign-in-methods.console.spec.ts`): `signInPolicy` needs `view`, the three mutations `edit`, on the tenant of `tenantId`. Each mutation records its admin event after the write (`signInPolicy.update`, `socialProvider.set`, `socialProvider.remove`; target ids only, never a client id or secret). A change that loses the optimistic lock three times is `CONFLICT` (409).
-- **Console users** (`src/modules/users/`, folded in by A13: `users.console.graphqls`, `users.console-resolver.ts` with its `-queries`, `-mutations`, `-support` and `-guards` (guards and audits maps), `users.data-loader.ts`, `users.owners.ts`, `users.errors.ts`, `users.utils.ts`, `users.types.ts`; the console schema loads `src/modules/**/*.console.graphqls` beside `src/console/**/*.graphqls`, the hosted one leaves both out): reads need `view`, the mutations `edit` (`updateUser` renames only; `setUserEmailVerified` writes the flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port, implemented by `UsersService` (`users.service.ts`, one service per domain: users, sessions, second factor, invitations and grants; built in `src/config/console.ts` over a `UsersSource`, since it needs the OAuth handle), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `deviceOptions` in `src/modules/auth/auth.utils.ts` on the e-mail code and magic-link sign-ins). Per-request loaders (`oncePerRequest`, one per tenant, no cache across requests; `users.data-loader.ts`): `secondFactorLoader` (`TenantUser.secondFactor`) and `userLoader` (`roleMembers` reads a page's pool users with ONE `ConsoleUsers.findMany`, `null` for an id the pool lacks). `clients` and `tenants` lists have no per-row read (no field resolver; the tenant page carries its documents), so they have no loader. Each mutation records its admin event (`user.*`; ids only), repeats included.
+- **Console users** (`src/modules/users/`, folded in by A13: `users.console.graphqls`, `users.console-resolver.ts` with its `-queries`, `-mutations`, `-support` and `-guards` (guards and audits maps), `users.data-loader.ts`, `users.owners.ts`, `users.export.ts` (the `userDataExport` read), `users.errors.ts`, `users.utils.ts`, `users.types.ts`; the console schema loads `src/modules/**/*.console.graphqls` beside `src/console/**/*.graphqls`, the hosted one leaves both out): reads need `view`, the mutations `edit` (`updateUser` writes the name and the standard profile fields of `src/modules/profile/`, under the user's `exclusive` lock and at janus's `ifVersion`; `setUserEmailVerified` and `setUserPhoneVerified` write their flag only), on the tenant of `tenantId`; the tenant must be active. Janus is reached only through the `ConsoleUsers` port, implemented by `UsersService` (`users.service.ts`, one service per domain: users, sessions, second factor, invitations and grants; built in `src/config/console.ts` over a `UsersSource`, since it needs the OAuth handle), per tenant. `users` searches by `emailPrefix` (case-insensitive, also a username) with a `totalCount`; `userLookup` (`edit`, the role member picker: e-mail/username prefix through janus, name prefix through janus's indexed `namePrefix`; at most 20, id/email/name only) feeds the Add member picker; `userSessions` lists a user's sessions (`device` is the sign-in's User-Agent, set by `deviceOptions` in `src/modules/auth/auth.utils.ts` on the e-mail code and magic-link sign-ins). Per-request loaders (`oncePerRequest`, one per tenant, no cache across requests; `users.data-loader.ts`): `secondFactorLoader` (`TenantUser.secondFactor`) and `userLoader` (`roleMembers` reads a page's pool users with ONE `ConsoleUsers.findMany`, `null` for an id the pool lacks). `clients` and `tenants` lists have no per-row read (no field resolver; the tenant page carries its documents), so they have no loader. Each mutation records its admin event (`user.*`; ids only), repeats included.
+- **Profile** (`src/modules/profile/`): the standard OIDC fields of a janus user (`givenName`, `familyName`, `nickname`, `phone {number, verified}`, `locale`, `zoneinfo`, `birthdate`, `address`) are checked and normalised by `profile.rules.ts` (E.164, BCP 47 through `canonicalLocale`, IANA zones, ISO 3166-1 countries) and refused with `PROFILE_FIELD_INVALID` (`profile.errors.ts`, `profile.refusals.ts`). `ProfilePoliciesService` (`profile.service.ts`, built in `config/profile.ts`, registered as `profilePolicies` in `services()`) holds the locks; the console SDL, resolver and guards are `profile.console.graphqls`, `profile.console-resolver.ts` and `profile.console-guards.ts`, with `setUserPhoneVerified` declared there; `utils/` holds `profile.utils.ts` (the patch and claims) and `countries.utils.ts`. A different phone number resets `verified`; only `setUserPhoneVerified` (admin) proves one, there is no SMS. `standardClaims` feeds `claimsFor`; janus-oidc releases them by scope (`profile`, `phone`, `address`). `profilePolicies {tenantId, locked, version}` is a document of its own (unique `tenantId`, not the tenant's `version`), read and written through `profilePolicy` / `updateProfilePolicy`, its view `version` being the stored one plus one (0: nothing stored); the locks bind a user's own edits (`PROFILE_FIELD_LOCKED`, checked by `checkUnlocked` in the account module, slice A7), never the console admin.
+- **Profile picture** (`src/modules/media/`, `src/http/media-mount.ts`, `src/console/avatar-access.ts`): `@softistx/alxia-media` over `@softistx/s3`, a `/media` group beside `/graphql` (`mountMedia`, the Caddyfile `@api` matcher and the Traefik rule carry `/media/*`). Kind `avatar` (`media.kinds.ts`): PNG, JPEG or WebP sniffed from the bytes, at most 1 MiB, throttled per user, address and tenant on write (`CLAVIX_AVATAR_*`, carried in `AppPorts.media`, fails open without Redis). `PUT /media/avatar` is the signed-in user's own picture on a tenant host (session cookie, `Sec-Fetch-Site: cross-site` refused), or a tenant admin's with `?tenantId=&userId=` and a console bearer token (`avatar-access.ts`: verified e-mail, `edit` on the tenant, the platform's `edit` for Clavix's own or a suspended tenant). `GET /media/avatar/<uuid>` is public, immutable and `nosniff`; the object key is `<tenantId>/avatar/<uuid>` and a key of another tenant is 404. Bytes first (S3); an admin's upload then records its event; then janus `avatar.set` with the key; `user.avatarChanged` / `user.avatarRemoved` delete the former object (`janus-listener.ts`, best effort, the tenant prefix purge cleans a rare orphan). `removeMyPicture` (hosted, `Boolean!`, idempotent). The `picture` claim is `<issuer>/media/avatar/<key>` (`pictureUrl`, `users.tenant-auth.ts`); the schema holds `pictureKey`, never a URL. Erasing a user (`deleteUser`) removes the object before `users.delete`; the tenant purge removes the `<tenantId>/` prefix (`config/purge.ts`); a social replacement removes the former holder's picture. An admin's upload records the admin event `user.setPicture` (target the user, ids only) before the picture is set (a failed audit write leaves the picture untouched and fails the upload: audit or nothing; if `avatar.set` then fails with something other than a refusal, it is reported; it is always rethrown, with no compensating event; the event's `requestId` is its own UUID, the media route sits outside the console plugin's request ids): `admin` of `AvatarAccessPorts` resolves with the caller's recorder, kept on the upload's target (`AvatarWrite.record`, `null` for the owner's own). `AvatarAccessService` stays apart from `AvatarsService` (a deliberate split, not an `-access` layer): it is built in `mountMedia` over the console's `admin` port, which the services registry that builds `AvatarsService` does not hold. Without `CLAVIX_MEDIA_S3_*` (outside production) read and write answer 503 and delete and list are no-ops. Specs run against a real S3 (`@softistx/s3/testing`) or fakes.
 - **What is offered is what can be opened**: `hostedSignInMethods` and `socialSignInStart` use `offeredSocial(policy, secretBox.opens)`, so a provider sealed under a key outside the `CLAVIX_KEYS_MASTER_KEY` keyring is not shown (with a keyring the first key seals and every key opens; `keys:reseal` wraps them again under the first).
 
 `src/modules/users/` holds the end users of a tenant (ADR-0008): `createTenantJanusIssuers` (janus
@@ -560,7 +573,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 - **Console** (`roles` module): reads `onTenant("view")`, writes `onTenant("edit")`; audit actions
   `role.create|update|delete|assign|unassign` (assign and unassign record the role and the user). `deleteRole`
   and `unassignRole` are idempotent; `assignRole` needs a user of the tenant's pool (`NOT_FOUND` else).
-  `deleteRole` removes the assignments first, `deleteUser` and `deleteResource` remove theirs (a retry
+  `deleteRole` removes the assignments first, then the role's attribute links (the `RoleLinks` port, bound in `config/roles.ts`), `deleteUser` and `deleteResource` remove theirs (a retry
   finishes a half run). `assignRole` (check the user, write) and `deleteUser` (delete, sweep) run under
   `ctx.exclusive(userKey(tenant, user))` (`console/modules/user-key.ts`), so no assignment outlives its
   user; `disableUser` (platform users) and the `clavix` invitation accept hooks (`userLock`) take it too. `memberCount` of a list comes from one grouped query (`memberCounts`), not one count per role (it counts rows, so a user janus no longer has still counts until swept). `delete` removes the role first, then sweeps its assignments (on a repeat too), so `assign`'s re-check covers every ordering.
@@ -592,6 +605,121 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   wiring.
 - `test/oauth-flow.ts` runs a real authorize/approve/token flow against the test database (specs that
   read a token's content; its request and code-flow steps are in `test/oauth-flow-steps.ts`).
+
+## User attributes (`src/modules/attributes`, with its `attributes.console-*` files; `src/config/attributes.ts`)
+
+A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices A1 to A3; the plan is
+`spec/plans/user-attributes.md`). One tenant-owned collection, `userAttributes` (`attributes.model.ts`,
+purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
+reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slice A6 adds
+the token claims, slices A4 and A5 the profile.
+
+- **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
+  with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
+  `values.service.ts`, `role-attributes.service.ts`, `user-filter.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`, `user-filter.utils.ts`); the single-file roles (`attributes.model.ts`,
+  `attributes.errors.ts`, `attributes.refusals.ts`, `attributes.data-loader.ts`, the console files and the
+  `*.types.ts`, `role-attributes.types.ts`, `user-filter.types.ts`) stay at the root; the SDL is three files (`attributes`, `attributes.values`, `attributes.roles` `.console.graphqls`). Files import each other relatively and through these barrels.
+- **Key and family never change.** The key is the claim name (`^[a-z][a-z0-9_]{1,63}$`, not one of
+  `RESERVED_CLAIMS`: janus's reserved access-token claims, the OIDC standard and ID token claims,
+  and Clavix's own). It stays taken while the attribute is archived (`ATTRIBUTE_KEY_TAKEN`); only the
+  permanent delete frees it. A tenant has at most 100 attributes (`ATTRIBUTE_LIMIT`; a creation that lost
+  the race is taken back).
+- **Settings.** `family` (`USER` or `ROLE`), `type` (STRING, TEXT, COLOR, NUMBER, DATE, DATETIME, TIME,
+  SELECT, MULTI_SELECT, BOOLEAN), a label and a description as `[{ locale, text }]` lists (at least one
+  label language), a unit, options (SELECT and MULTI_SELECT only, 100 at most), `required` (USER family
+  only), `userEditable`, `unique` (STRING and NUMBER only) and `emissionScope` (a scope of the tenant or a
+  standard OIDC one: `ATTRIBUTE_SCOPE_UNKNOWN`). An emitted attribute is never user-editable
+  (`ATTRIBUTE_EDITABLE_EMITTED`). The rules are in `rules/attributes.rules.ts`.
+- **The stored values** (slice A2) are the tenant-owned collection `attributeValues` (`attributes.model.ts`: one
+  document per user and attribute, unique on `{tenantId, userId, attributeId}`, a partial unique index
+  on `uniqueKey` for `unique` attributes; purged with the tenant, in the allow list of
+  `tenancy/guards.spec.ts`), reached only through `AttributeValuesService` (`services/values.service.ts`, built in
+  `src/config/attributes.ts` before `AttributesService`, which takes it as its `AttributeValues` port:
+  counts, `setUnique`, `removeAll`). With values, the type is locked (`ATTRIBUTE_TYPE_LOCKED`, checked
+  again after the write), a removed option in use is refused (`ATTRIBUTE_OPTION_IN_USE`), `unique` over
+  duplicates is refused (`ATTRIBUTE_NOT_UNIQUE`; the flag is put back), and the permanent delete removes
+  the values and the role links first. `UserAttribute.roles` lists the roles a ROLE attribute is linked to.
+- **Values** (`rules/values.rules.ts`, `utils/values.utils.ts`): a value is exactly the one typed field of its
+  attribute (`text` for STRING and TEXT, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`,
+  `time`, `options` for SELECT and MULTI_SELECT; the SDL input is `@oneOf`), canonicalised on write
+  (NFC-trimmed text, lower-cased hex colour, `-0` as `0`, UTC-midnight dates, `HH:mm:ss` times, SELECT as a
+  one-item array). `uniqueKey` is the lower-cased text or the number, set only on a `unique` attribute.
+  The SDL is split by role: `attributes.console.graphqls` (catalogue), `attributes.values.console.graphqls` (values, sections,
+  `attributesComplete`, the export) and `attributes.roles.console.graphqls` (role links).
+  Refusals: `ATTRIBUTE_VALUE_INVALID` (field `values.<i>`), `ATTRIBUTE_FAMILY_MISMATCH`,
+  `ATTRIBUTE_VALUE_TAKEN` (a race on the unique index is rolled back by hand: no transactions),
+  `ATTRIBUTE_REQUIRED` (the console refuses a clear of a required value; `TenantUser.attributesComplete`
+  reports the rest: a missing value of a required general attribute, or of a required link of a held role; a role not held or an archived attribute counts for nothing), `ATTRIBUTE_ROLE_NOT_HELD` (`section.roleId` names a role the user does not hold, or an unknown one). A save checks every change
+  first and writes nothing when one is refused; at most 100 changes. The counts use `.raw` with the
+  tenant put in the match by hand (grouped counts, as `roles.service.ts` does). The erase on a replaced
+  social holder (`eraseReplacedValues`) runs under the user's `userKey` lock, like every write of the values.
+- **Claims** (slice A6, `AttributeClaimsService` in `services/claims.service.ts`, which also reads the `resources` collection, pure parts in
+  `utils/claims.utils.ts`): the `AttributesFor` port (`src/oauth/ports.ts`, required, bound in
+  `src/config/attributes.ts`, passed through `createClavixOAuthIssuers` like `rolesFor`) gives the
+  `accessTokens.claims` hook the attribute claims of a user; `accessTokenClaims` (`oauth/building-parts.ts`)
+  runs it on every issue and refresh, so a removed role or an archived attribute leaves the next token. A value is
+  emitted only when the attribute is live and its `emissionScope` is among the token's scopes, the stored
+  `type` is the attribute's current one, and, for a ROLE attribute, a held role that links it is
+  tenant-wide or belongs to the resource whose `uri` is the token's `aud` (a token with no resource, the
+  userinfo one, counts tenant-wide roles only). Encoding: a choice is its option key (an array for
+  MULTI_SELECT), a DATE is `YYYY-MM-DD`, a DATETIME is RFC 3339, NUMBER and BOOLEAN are native. A
+  `client_credentials` token carries none; a reserved key is dropped and `roles`, `auth_time`, `acr` and
+  `amr` win over an attribute claim. 100 STRING values weigh under 8 KiB (spec), so TEXT stays emittable.
+  **ID token and userinfo too** (janus-oidc 0.5 `scopeClaims` as a function; the user's own claims, `picture` included, win over an attribute: `RESERVED_CLAIMS` drops it from the catalogue and `issuers-oidc.ts` spreads `own` last): the `AttributeScopesFor` port
+  (same wiring) gives `oidcProviderOf` (`oauth/issuers-oidc.ts`) the tenant's scope table (emission scope to
+  claim keys, `AttributeClaimsService.scopeClaims`, `claimTable`), seeded with `openid: [roles]` and janus's standard `profile`, `email`, `address` and `phone` lists (janus replaces a listed scope's list, so an attribute on `profile` would otherwise stop `name` and `picture`; temporary, until softistx/janus#1049) and unioned with the attribute keys. Janus asks
+  it on every discovery document, userinfo request and ID token, so the claims are released by their scope and
+  listed in `claims_supported`; it is one small tenant-scoped read, uncached (the discovery document itself is
+  cached for 60 s by `withPublicDocuments`, which bounds how late a new attribute shows there). The `claims`
+  hook adds `attributesFor(tenant)(sub, scopes, null)` under the user's own claims and `roles`, reserved
+  keys dropped. Specs: `claims.service.spec.ts`, `claims.utils.spec.ts`, `oauth/building-parts.spec.ts`,
+  `oauth/attributes-claims.spec.ts`, `oauth/attributes-oidc-claims.spec.ts`, `oauth/issuers-oidc.spec.ts`.
+- **Role attributes** (slice A3): the tenant-owned collection `roleAttributes` (`{tenantId, roleId,
+  attributeId, required}`, unique on the three ids, purged with the tenant) links a ROLE-family attribute
+  to one precise role, `required` for that role only. `RoleAttributesService`
+  (`services/role-attributes.service.ts`, built first in `src/config/attributes.ts`, it reads `roles` and
+  `roleAssignments` read-only) assigns (idempotent: a repeat sets `required`; a user-family attribute is
+  `ATTRIBUTE_FAMILY_MISMATCH`, an archived one `ATTRIBUTE_ARCHIVED`), updates, unassigns, and answers the
+  reads. A value is one per user and attribute, shared by every role that links it. **Hiding is computed,
+  never written**: `unassignRole`, `deleteRole` and an unassigned link delete nothing; a role section
+  shows only while a held role links the attribute, and the export flags the value `hidden` with
+  `roles` naming the held roles that link it. A `roleId` save reads the role's links under the user's
+  lock (`linksHeld`) and refuses an attribute the role does not link (`ATTRIBUTE_FAMILY_MISMATCH`); the
+  required flag is the link's. `assignRoleAttribute` re-checks the role and attribute after its write and
+  takes the link back when either is gone (a race with `deleteRole` or the permanent delete); `deleteRole`
+  (and the roles of a deleted resource) and the permanent attribute delete sweep their links through the
+  `RoleLinks` and `AttributeRoleLinks` ports.
+- **Console**: `setUserAttributeValues` (`edit`, audit `user.setAttributes`, under the user's lock only, rank
+  2 of `lock-order.spec.ts`), `assignRoleAttribute`, `updateRoleAttribute` and `unassignRoleAttribute` (`edit`,
+  audit `roleAttribute.assign|update|unassign`, ids only, on the role and on the attribute; no lock: each
+  is idempotent and the race is closed inside the service), `TenantUser.attributes` and `attributesComplete` (per-request loaders in
+  `attributes.data-loader.ts`), and `userDataExport` (`users.export.ts`, `edit`, recorded as `user.export`
+  by an explicit `ctx.audit`, since `Audits` covers mutations only).
+- **Personal data (GDPR)**: the export holds the profile, every stored value (an archived attribute's or a
+  changed type's flagged `hidden`), the roles (`RolesService.personalDataOf`), the grants and the sessions.
+  A user's values are erased with `deleteUser` and when a social sign-in replaces an unverified holder
+  (`completedAnswer`); a tenant purge removes them with the collection.
+- **Updates** send the `version` read (a stale one is `CONFLICT`); nothing is written when nothing
+  changes; an archived attribute is refused (`ATTRIBUTE_ARCHIVED`) until restored. `position` is a
+  gapped number: a move writes one document, and renumbers the family only when two neighbours are too
+  close. Archive and restore are idempotent; the delete needs the archived attribute and its key as
+  `confirmKey` (`ATTRIBUTE_NOT_ARCHIVED`, `ATTRIBUTE_DELETE_UNCONFIRMED`) and is true on a repeat.
+- **Refusals** go through `refuse` / `refuseCommon` (`attributes.refusals.ts`: the helpers and each code's status; `attributes.errors.ts`: the codes);
+  the label and description cleaning raise `CatalogError`, which the console's `refusing()` maps.
+- **Console**: reads need `view`, writes `edit`, `deleteUserAttribute` `manage` (owner). Audit events,
+  ids only: `userAttribute.create`, `.update`, `.move`, `.archive`, `.restore`, `.delete`, `roleAttribute.assign`, `.update`, `.unassign`, and on a user
+  `user.setAttributes` and `user.export` (never a value).
+- **Users list filters (A8)**: `users(roleId, attributes)` keeps the users that satisfy every condition (AND),
+  with `emailPrefix` as one more (the janus ids of the prefix, at most `MAX_PREFIX_IDS` = 1 000, else
+  `BAD_USER_INPUT`). At most `MAX_FILTERS` = 5 attribute filters, each a SELECT, MULTI_SELECT (`options`, any of
+  them) or BOOLEAN (`boolean`) live attribute; any other filter is `BAD_USER_INPUT`. A value counts under the
+  type it was written with (risk 3), and a role attribute's only while a held role links it. `UserFilterService`
+  reads `userAttributes` and `roleAttributes` through `scopeToTenant` and runs one `.raw` aggregation over
+  `attributeValues` with a `$unionWith` over `roleAssignments` (the roles module's collection, named by string,
+  read only); the tenant is put in every condition's match by hand, as for the counts. A filtered page follows
+  the creation order and its cursor is `f1.<userId>` (the unfiltered list keeps janus's cursor); a user the
+  directory no longer knows is left out of the page but still counted. The resolver side is in
+  `users.console-support.ts` (`filteredUsers`).
 
 ## Branding (`src/modules/branding`, with its `branding.console-*` files)
 
@@ -716,7 +844,7 @@ comparison is `domains.check.ts`.
   `BrandingService` (read, `view`, `update`), each built in `src/config/<name>.ts`, registered in `services()` and called
   by a thin `<name>.resolver.ts` (consent's builds janus-oauth's `oauthResolvers`). Each has `.errors.ts` (codes and
   refusal builders), `.types.ts`, `.utils.ts` (invitations and consent), `.rules.ts` (invitations) and specs (each file that holds code, the thin resolvers apart, is covered by a spec in the module, such as `consent.approve.spec.ts` and `consent.device.spec.ts` for the flows). The barrels (`index.ts`) leave out the resolvers (`modules/index.ts` and `http/schema.ts`
-  import them by file). Deep imports are the ones listed under "Cross-module imports" above (A29): `consent.device-throttle`, `consent.queue`,
+  import them by file). Deep imports are the ones listed under "Cross-module imports" above (A29): `consent.device-throttle`, `consent.queue`, `sign-in-methods.queue`,
   `consent.plugin` (`http/graphql-mount.ts`), and `.errors` files (`i18n/codes.ts`); the leaf readers, `invitations.rules`,
   `invitations.types` and `branding.logo-route` are now exported by their barrels. Behaviour, throttles, error codes and mail timing are unchanged.
 - Layout (A12, roles): `roles` is a flat `<name>.<role>.ts` module with one service, `RolesService` (every method of
@@ -957,3 +1085,29 @@ the status under `application/json`); no plugin of this API carries it. `useWith
 `x-graphql-csrf: 1`. The JSON plugins match `application/json` and `application/graphql-response+json` (parameters
 ignored); a `text/event-stream` answer carries no status, as it is sent before any error is known. Unexpected resolver errors and janus 5xx errors go to the app's telemetry
 logger (`src/http/unexpected.ts`, `report` of `janusGraxiaMaskError`).
+
+## Account (`src/modules/account`; `src/config/account.ts`)
+
+The signed-in user's own account on the tenant's hosted schema (slice A7 of `feat/user-attributes`; not console).
+`CurrentUser` gains `profile`, `lockedFields` and `attributes`, and four mutations: `updateMyProfile`,
+`setMyAttributeValues`, `requestEmailChange`, `confirmEmailChange` (`removeMyPicture` is the media module's).
+One `AccountService` (`account.service.ts`, `accountService` in `config/account.ts`, registered as `account` in `services()`).
+
+- **`CurrentUser.profile`, `lockedFields` and `attributes` are field resolvers**, not part of `currentUserOf`: `codegen.ts` maps
+  `CurrentUser` to `CurrentUserParent` (`auth.types.ts`, no profile) and `UserProfile` to `ProfileView`, so the many hand-built
+  `CurrentUser` objects of other modules stay as they are.
+- **`updateMyProfile`**: `cleanProfile` (and `cleanName`: `name` cannot be cleared, only changed) then `checkUnlocked` against the
+  tenant's locks (`PROFILE_FIELD_LOCKED` 403 names the field, nothing is written), then under the user's `userKey` lock `patchOf` and
+  `auth.update` with `ifVersion` (`CONFLICT` when it moved). A changed phone number is unverified, the same number keeps its flag;
+  a repeat writes nothing. `updateMyProfile` carries no picture: the PICTURE lock is enforced on the picture routes, which are media's (`removeMyPicture` and the own `PUT /media/avatar`, below).
+- **`setMyAttributeValues`** (`@oneOf` input, `null` clears): `AttributeValuesService.checkEditable` refuses an attribute whose
+  `userEditable` is off (`ATTRIBUTE_NOT_EDITABLE` 403, field `values.<i>`) before the save, which is the console's save with a
+  `user` actor; `required` never blocks. `editableOf` lists the live general attributes the user may edit, with their values
+  (`ownAttributeView`: no `attributeId`, only what the user may see).
+- **`requestEmailChange`** needs a proof less than 10 minutes old (`requireFresh`, `STEP_UP_REQUIRED` 403, the plan's FRESH_PROOF);
+  janus `auth.changeEmail.send` throttles (`MAIL_THROTTLED` 429); the link goes to the NEW address (`CHANGE_EMAIL_PATH`, `/account/email`
+  on the tenant host, `links.changeEmail` in `mail/tenant-mail.ts`) after the answer (`afterAnswer`); whether the address is held is told only on confirm.
+- **`confirmEmailChange(token)`** needs a signed-in session; it redeems the token (`EMAIL_CHANGE_INVALID` 400 for an unknown, spent, expired or stale
+  token, `LOGIN_TAKEN` 409 when another account took the address, the token spent), the address counts as verified, the session stays, and the service
+  mails the FORMER address (`emailChanged`; janus does not). A token of another account still redeems for its owner until `@softistx/janus#1054` (refuse before spending) ships; the answer is then the session's own user and no notice is sent. `requestEmailChange` also counts against `ctx.verifyThrottle` (per user, client address and tenant, `CLAVIX_VERIFY_*`, `EMAIL_VERIFICATION_THROTTLED` 429), on top of janus's per-address limit. The PICTURE lock covers the self-service picture too: `removeMyPicture` and the own `PUT /media/avatar` answer `PROFILE_FIELD_LOCKED` 403; an administrator's upload is not locked.
+- Specs: `account.profile.spec.ts`, `account.email-change.spec.ts` (e2e through `test/account-session.ts`), `account.service.spec.ts`.

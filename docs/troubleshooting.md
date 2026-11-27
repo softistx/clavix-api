@@ -928,12 +928,59 @@ On `updateRole` or `deleteRole` of a role whose `managed` field is `true`: Clavi
 tenant and keeps it as it is. Nothing was written. Hide Edit and Delete on such a role; assigning
 it with `assignRole` still works. A tenant's own roles (`managed: false`) are not affected.
 
+### `ATTRIBUTE_*` codes on a user attribute and its values
+
+Every refusal on the attribute catalogue or on a user's values writes nothing.
+
+- `ATTRIBUTE_KEY_INVALID` (400): the key is not 2 to 64 characters of a lower-case letter, then lower-case letters, digits and `_`.
+- `ATTRIBUTE_KEY_RESERVED` (400): the key is a claim name tokens already carry (`email`, `roles`, `scope`...). Pick another.
+- `ATTRIBUTE_KEY_TAKEN` (409): the tenant has an attribute with that key, an archived one included. Restore it, or delete it for good to free the key.
+- `ATTRIBUTE_LIMIT` (409): a tenant has at most 100 attributes. Delete one for good.
+- `ATTRIBUTE_UNIQUE_UNSUPPORTED` (400): only STRING and NUMBER attributes can be unique.
+- `ATTRIBUTE_EDITABLE_EMITTED` (400): an attribute the user can edit cannot be emitted as a claim; turn one off.
+- `ATTRIBUTE_SCOPE_UNKNOWN` (400): `emissionScope` is neither a scope of the tenant nor a standard OpenID Connect scope.
+- `ATTRIBUTE_TYPE_LOCKED` (409): users hold values, so the type cannot change.
+- `ATTRIBUTE_OPTION_IN_USE` (409): users hold an option you removed; keep it.
+- `ATTRIBUTE_NOT_UNIQUE` (409): stored values already repeat, so `unique` cannot be turned on.
+- `ATTRIBUTE_ARCHIVED` (409): an archived attribute cannot be updated, moved, linked to a role (`assignRoleAttribute`) or given a value; restore it first.
+- `ATTRIBUTE_NOT_ARCHIVED` (409): `deleteUserAttribute` needs the attribute archived first.
+- `ATTRIBUTE_DELETE_UNCONFIRMED` (400): `confirmKey` is not the attribute's key.
+- `CONFLICT` on `updateUserAttribute`: the `version` is stale (or another edit landed while a refused type change was being put back); read the attribute again and resend.
+- `NOT_FOUND` `No such attribute`: the id names no attribute of this tenant (another tenant's id is not found either).
+- `ATTRIBUTE_VALUE_INVALID` (400): a value does not fit its attribute; `field` is `values.<i>`, the index of the change. Set exactly the one field of the attribute's type (`text`, `color`, `number`, `boolean`, `date` as `YYYY-MM-DD`, `dateTime`, `time`, `options`), within its limits (200 characters, 2000 for TEXT, a known option, at most 100 options).
+- `ATTRIBUTE_FAMILY_MISMATCH` (400): the attribute is not in the section being set (a ROLE attribute in the general section, a USER attribute in a role section, or a ROLE attribute the role does not link), or `assignRoleAttribute` was given a USER-family attribute.
+- `ATTRIBUTE_VALUE_TAKEN` (409): another user holds that value of a `unique` attribute (text compares in lower case).
+- `ATTRIBUTE_REQUIRED` (400): a console save cannot clear a required attribute's value.
+- `ATTRIBUTE_NOT_EDITABLE` (403): `setMyAttributeValues` named an attribute whose `userEditable` is off; only an administrator sets it (console `setUserAttributeValues`). `field` is `values.<i>`.
+- Values of a ROLE attribute vanished after `unassignRole` or `unassignRoleAttribute`: they are stored, only hidden (the export flags them `hidden`); assigning the role again, or linking the attribute again, shows them.
+- `NOT_FOUND` on `assignRoleAttribute`, `updateRoleAttribute`, `unassignRoleAttribute`: the role or attribute is unknown, or (`updateRoleAttribute`) the role is not linked to the attribute; `unassignRoleAttribute` answers `false` when there is no link.
+- `ATTRIBUTE_ROLE_NOT_HELD` (409): `section.roleId` is given and the user does not hold that role, or no such role exists. Assign the role to the user first (`assignRole`); a role the user lost is no longer a section.
+- `BAD_USER_INPUT` on `setUserAttributeValues`: more than 100 changes in one call.
+- `BAD_USER_INPUT` on an attribute: a label needs at least one language, a unit holds at most 20 characters, a list holds at most 100 options, each option needs a label and a key of 1 to 63 characters (lower-case letters, digits, `_`, `-`) that no other option uses, options belong only to SELECT and MULTI_SELECT attributes, and `required` is for USER-family attributes only; the message names the field.
+
+### `PROFILE_FIELD_INVALID` (400) and `PROFILE_FIELD_LOCKED` (403) on a user's profile
+
+- `PROFILE_FIELD_INVALID` (400): `updateUser` refused a value; `field` names it (`phone`, `locale`,
+  `zoneinfo`, `birthdate`, `nickname`, `address.country`...) and nothing was stored, the other fields
+  of the call included. A phone is E.164 (`+14165550123`, a `+`, then 7 to 15 digits; spaces and
+  dashes are dropped), a locale a BCP 47 tag (`fr-CA`), a zone an IANA name (`America/Toronto`), a
+  birthdate a real `YYYY-MM-DD` between 1900 and today, a country two letters from ISO 3166-1, a
+  nickname 1 to 100 characters. `setUserPhoneVerified` also answers it (field `phone`) for a user
+  with no phone number: set the number first.
+- `PROFILE_FIELD_LOCKED` (403): the tenant's profile policy locks that field against the user's own
+  edits. Raised by `updateMyProfile`, `removeMyPicture` and the own `PUT /media/avatar` (field `PICTURE`). The console admin is not bound by locks; change them with `updateProfilePolicy`.
+- `CONFLICT` (409) on `updateUser`, `setUserPhoneVerified` or `updateProfilePolicy`: the user, or the
+  policy, changed since it was read. Read it again (the policy's `version` comes from `profilePolicy`)
+  and retry.
+- A phone number that shows `verified: false` after an edit is expected: a different number always
+  starts unverified, and only `setUserPhoneVerified` proves one (Clavix sends no SMS).
+
 ### `NOT_FOUND` `No such role`, `No such resource`, `No such user`
 
 `No such role`: the id names no role of this tenant (another tenant's id is not found either), or the
 role was deleted while `assignRole` ran. `No such resource`: `createRole` was given a `resourceId`
 that is not a resource of this tenant, or the resource was deleted at that moment. `No such user`:
-`assignRole` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
+`assignRole`, `setUserAttributeValues` or `userDataExport` names a user who is not in this tenant's pool (or was deleted at that moment). Nothing
 was written. List the roles, resources or users again and send an id from there. `deleteRole` and
 `unassignRole` never answer `NOT_FOUND`: they are repeatable and answer `false` when there is nothing
 to remove.
@@ -1076,3 +1123,15 @@ The token-store 503 with the same message has another cause (see above).
 **Why:** the API refuses it before parsing, so no resolver runs. Every first-party caller sends the header (clavix-ui sends `clavix-ui`).
 
 **Fix:** add `x-clavix-client: <your client name>` (any non-empty value) to the request, or leave the flag `false` until the caller is updated.
+
+## Profile pictures: 415 `MEDIA_UNSUPPORTED_TYPE`, 413 `MEDIA_TOO_LARGE`, 503 on `/media/avatar`
+
+**When:** `PUT /media/avatar` is refused, or `GET /media/avatar/<key>` answers 503.
+
+**Why:** the body is not a PNG, JPEG or WebP (the bytes are sniffed, the `content-type` header is not trusted): 415 `MEDIA_UNSUPPORTED_TYPE`; it is over 1 MiB: 413 `MEDIA_TOO_LARGE`; the user, address or tenant passed `CLAVIX_AVATAR_*`: 429 with `Retry-After`; no `CLAVIX_MEDIA_S3_*` is set (outside production), so the bucket is absent: 503. A key of another tenant is a 404.
+
+**Fix:** send a smaller PNG, JPEG or WebP, wait `Retry-After`, or set the `CLAVIX_MEDIA_S3_*` variables (docs/operations.md, "Profile pictures").
+
+## `EMAIL_CHANGE_INVALID`, `LOGIN_TAKEN`, `STEP_UP_REQUIRED` and `MAIL_THROTTLED` on an e-mail change
+
+`requestEmailChange` needs a sign-in proved less than 10 minutes ago: an older session is `STEP_UP_REQUIRED` (403), so the page asks the user to sign in again. The link goes to the new address; janus throttles the requests per address (`MAIL_THROTTLED`, 429, with `retryAfter`), and the API counts them per user, client address and tenant with the verification budget (`EMAIL_VERIFICATION_THROTTLED`, 429). `confirmEmailChange` refuses an unknown, spent, expired or stale token as `EMAIL_CHANGE_INVALID` (400): the user asks for a new link. When another account took the address meanwhile it is `LOGIN_TAKEN` (409) and the token is spent, so the user picks another address and asks again.

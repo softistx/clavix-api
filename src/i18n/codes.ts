@@ -1,12 +1,16 @@
 import { codes as console } from "@/console/console.errors";
+import { codes as account } from "@/modules/account/account.errors";
+import { codes as attributes } from "@/modules/attributes/attributes.errors";
 import { codes as auth } from "@/modules/auth/auth.errors";
 import { codes as branding } from "@/modules/branding";
 import { codes as connections } from "@/modules/connections/connections.errors";
 import { codes as consent } from "@/modules/consent/consent.errors";
 import { codes as domains } from "@/modules/domains";
 import { codes as invitations } from "@/modules/invitations/invitations.errors";
+import { codes as media } from "@/modules/media/media.errors";
 import { codes as mfa } from "@/modules/mfa/mfa.errors";
 import { codes as passkeys } from "@/modules/passkeys/passkeys.errors";
+import { codes as profile } from "@/modules/profile/profile.errors";
 import { codes as resources } from "@/modules/resources";
 import { codes as roles } from "@/modules/roles";
 import { codes as signInMethods } from "@/modules/sign-in-methods";
@@ -28,6 +32,8 @@ export const common = defineCodes("common", [
 // Every module's declaration, in module order.
 export const groups = [
   common,
+  account,
+  attributes,
   auth,
   branding,
   connections,
@@ -35,8 +41,10 @@ export const groups = [
   console,
   domains,
   invitations,
+  media,
   mfa,
   passkeys,
+  profile,
   resources,
   roles,
   signInMethods,

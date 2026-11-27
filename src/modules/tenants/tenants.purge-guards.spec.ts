@@ -37,6 +37,14 @@ describe("the tenant purge guards", () => {
     expect(names).toContain("detailTypes");
     // The agents (dynamic and metadata clients) go with the tenant too.
     expect(names).toContain("agentClients");
+    // The user attributes catalogue goes with the tenant too.
+    expect(names).toContain("userAttributes");
+    // The role links go with the tenant too.
+    expect(names).toContain("roleAttributes");
+    // Their values are personal data: they go with the tenant too.
+    expect(names).toContain("attributeValues");
+    // The profile locks are the tenant's too.
+    expect(names).toContain("profilePolicies");
   });
   test("the purge empties a tenant's detailTypes and no other's", async () => {
     const purger = ownedPurgers().find((p) => p.name === "detailTypes");

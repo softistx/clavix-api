@@ -8,10 +8,12 @@ import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { access } from "@/config/access";
+import { attributesService, attributeValuesService } from "@/config/attributes";
 import { createConsoleDeps } from "@/config/console";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
 import { mailer } from "@/config/mail";
+import { avatarObjects } from "@/config/media-objects";
 import { oauthDb } from "@/config/oauth-db";
 import { resourcesFor } from "@/config/resources";
 import { rolesService } from "@/config/roles";
@@ -197,6 +199,8 @@ afterAll(async () => {
   await mongo.db.adminEvents.raw.deleteMany({});
   await mongo.db.roles.raw.deleteMany({});
   await mongo.db.roleAssignments.raw.deleteMany({});
+  await mongo.db.userAttributes.raw.deleteMany({});
+  await mongo.db.attributeValues.raw.deleteMany({});
 });
 
 const MUTATIONS = (tenant: string, user: string) => [
@@ -209,6 +213,7 @@ const MUTATIONS = (tenant: string, user: string) => [
   `revokeUserSessions(tenantId: "${tenant}", userId: "${user}")`,
   `revokeUserSession(tenantId: "${tenant}", userId: "${user}", sessionId: "s")`,
   `setUserEmailVerified(tenantId: "${tenant}", userId: "${user}", verified: true) { id }`,
+  `setUserPhoneVerified(tenantId: "${tenant}", userId: "${user}", verified: true) { id }`,
   `revokeGrant(tenantId: "${tenant}", userId: "${user}", grantId: "g")`,
   `resetUserSecondFactor(tenantId: "${tenant}", userId: "${user}") { id }`,
 ];
@@ -1183,6 +1188,29 @@ describe("disabling, sessions, grants and deletion", () => {
     }
   });
 
+  test("deleteUser removes the user's picture object, and none for a user without one", async () => {
+    const a = await poolOf(slugA);
+    const removed = spyOn(avatarObjects, "remove");
+    try {
+      const without = (await a.auth.create({ email: "nopic@end.test" })).id;
+      await asConsole(
+        ownA,
+        `mutation { deleteUser(tenantId: "${tenantA}", userId: "${without}") }`,
+      );
+      expect(removed).not.toHaveBeenCalled();
+      const holder = (await a.auth.create({ email: "withpic@end.test" })).id;
+      const key = crypto.randomUUID();
+      await a.auth.avatar.set(holder, { id: key });
+      await asConsole(
+        ownA,
+        `mutation { deleteUser(tenantId: "${tenantA}", userId: "${holder}") }`,
+      );
+      expect(removed).toHaveBeenCalledWith(tenantA, key);
+    } finally {
+      removed.mockRestore();
+    }
+  });
+
   test("deleteUser removes the user's role assignments too, on a repeat as well", async () => {
     const a = await poolOf(slugA);
     const holder = (await a.auth.create({ email: "holder@end.test" })).id;
@@ -1267,5 +1295,95 @@ describe("admin events", () => {
       ["user.setEmailVerified", "user", uA2, ownA],
       ["user.resetSecondFactor", "user", uA2, ownA],
     ]);
+  });
+});
+
+describe("a user's attribute values: export and erase", () => {
+  const tenant = () => new ObjectId(tenantA);
+  const giveValue = async (userId: string, key: string, text: string) => {
+    const attribute = await attributesService.create(tenant(), {
+      key,
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: key }],
+    });
+    await attributeValuesService.save(
+      tenant(),
+      userId,
+      [{ attributeId: attribute._id.toHexString(), value: { text } }],
+      { kind: "admin", id: ownA },
+      false,
+    );
+    return attribute;
+  };
+
+  test("userDataExport gathers the profile, values (an archived one flagged hidden), roles, grants and sessions, and is recorded", async () => {
+    const a = await poolOf(slugA);
+    const subject = (await a.auth.create({ email: "export@end.test" })).id;
+    const live = await giveValue(subject, "exp_live", "kept");
+    const old = await giveValue(subject, "exp_old", "archived-secret");
+    await attributesService.archive(tenant(), old._id.toHexString());
+    const role = await rolesService.create(tenant(), { name: "exp-role" });
+    await rolesService.assign(tenant(), role._id.toHexString(), subject);
+    await seedGrant(slugA, subject, "grant-export");
+    await sessionsOf(slugA, subject);
+    await asConsole(
+      ownA,
+      `mutation { updateUser(tenantId: "${tenantA}", userId: "${subject}", input: { givenName: "Exported", phone: "+14165550123" }) { id } }`,
+    );
+    await mongo.db.adminEvents.raw.deleteMany({});
+    const answer = await asConsole(
+      ownA,
+      `{ userDataExport(tenantId: "${tenantA}", userId: "${subject}") { profile { id email profile { givenName phone { number verified } } } attributes { key hidden text } roles { role } grants { id } sessions { id } } }`,
+    );
+    expect(answer.errors).toBeUndefined();
+    expect(answer.data).toMatchObject({
+      userDataExport: {
+        profile: {
+          id: subject,
+          email: "export@end.test",
+          profile: {
+            givenName: "Exported",
+            phone: { number: "+14165550123", verified: false },
+          },
+        },
+        attributes: [
+          { key: "exp_live", hidden: false, text: "kept" },
+          { key: "exp_old", hidden: true, text: "archived-secret" },
+        ],
+        roles: [{ role: "exp-role" }],
+        grants: [{ id: "grant-export" }],
+      },
+    });
+    expect(live.key).toBe("exp_live");
+    const recorded = await mongo.db.adminEvents.raw.find({}).toArray();
+    expect(recorded.map((e) => [e.action, e.target.id])).toEqual([
+      ["user.export", subject],
+    ]);
+    expect(JSON.stringify(recorded)).not.toContain("archived-secret");
+  });
+
+  test("userDataExport needs edit; an unknown user is NOT_FOUND", async () => {
+    const query = (user: string) =>
+      `{ userDataExport(tenantId: "${tenantA}", userId: "${user}") { exportedAt } }`;
+    expect(code(await asConsole(vwA, query(uA1)))).toBe("FORBIDDEN");
+    expect(code(await asConsole(ownA, query("ghost")))).toBe("NOT_FOUND");
+  });
+
+  test("deleteUser erases the user's attribute values, and a repeat is true", async () => {
+    const a = await poolOf(slugA);
+    const holder = (await a.auth.create({ email: "erase@end.test" })).id;
+    await giveValue(holder, "erase_me", "personal");
+    const held = () =>
+      mongo.db.attributeValues.raw.countDocuments({ userId: holder });
+    expect(await held()).toBe(1);
+    const del = () =>
+      asConsole(
+        ownA,
+        `mutation { deleteUser(tenantId: "${tenantA}", userId: "${holder}") }`,
+      );
+    expect((await del()).data).toEqual({ deleteUser: true });
+    expect(await held()).toBe(0);
+    expect((await del()).data).toEqual({ deleteUser: true });
   });
 });
