@@ -62,7 +62,9 @@ nxgt-janus release says which.
   ([#37](https://github.com/softistx/clavix-api/issues/37)). The SDK part
   (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
   and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
-  Waits on `@softistx/security` `remotePolicy`.
+  Builds on `@softistx/limix` 0.1: `remotePolicy` and `verifyRules` in
+  `@softistx/limix/remote`, signing and the JWKS in `@softistx/limix-publish`,
+  and janus relations in `@softistx/limix-janus`.
 
 ## Later
 
