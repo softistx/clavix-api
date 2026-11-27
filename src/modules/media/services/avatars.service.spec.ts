@@ -31,8 +31,15 @@ function janusWith(options: { avatar: boolean; setError?: Error }) {
         if (options.setError !== undefined) throw options.setError;
         return signed.user;
       },
-      remove: async () => {
-        calls.push("remove");
+      remove: async (_user, options) => {
+        calls.push(
+          options?.ifVersion === undefined
+            ? "remove"
+            : `remove ifVersion ${options.ifVersion}`,
+        );
+        if (options?.ifVersion !== undefined && options.ifVersion < 0) {
+          throw failure("VERSION_CONFLICT");
+        }
         return signed.user;
       },
     },
@@ -110,7 +117,7 @@ describe("AvatarsService.remove", () => {
     expect(await service.remove(target, new Date(-1))).toBe(false);
     expect(calls).toEqual([]);
     expect(await service.remove(target, new Date(0))).toBe(true);
-    expect(calls).toEqual(["remove"]);
+    expect(calls).toEqual([`remove ifVersion ${signedAs("u1").user.version}`]);
   });
 
   test("a user with no picture, or none, is false and nothing is written", async () => {

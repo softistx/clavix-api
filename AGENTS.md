@@ -210,7 +210,7 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   removal), so it may run twice. A retry never wipes what the new holder wrote (owner decision): the job carries `replacedAt`
   (the clock at enqueue), removes only the values whose `updatedAt` is at or before it (`removeUser(…, writtenUntil)`)
   and the picture only when janus's `avatar.updatedAt` is at or before it (`AvatarsService.remove(…, setUntil)`,
-  written with `ifVersion`, so a write in between retries the job). The standard profile clearing (`clearReplacedProfile`) is
+  written with `ifVersion`, so queued, a write in between retries the job; inline, it fails the sign-in). The standard profile clearing (`clearReplacedProfile`) is
   best effort inline, caught and reported, not queued. janus keeps the required `name` and the e-mail, which Clavix
   cannot clear.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.
