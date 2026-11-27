@@ -163,6 +163,13 @@ describe("updateUser with profile fields", () => {
     );
   });
 
+  test("the name refusal names the `name` field", async () => {
+    for (const name of ["  ", "x".repeat(201)]) {
+      const answer = await update({ name });
+      expect(answer.errors?.[0]?.extensions?.field).toBe("name");
+    }
+  });
+
   test("an unknown user is NOT_FOUND; a viewer and a stranger cannot write", async () => {
     expect(codeOf(await update({ nickname: "x" }, "nobody"))).toBe("NOT_FOUND");
     const args = { t: tenant, u: user, input: { nickname: "x" } };

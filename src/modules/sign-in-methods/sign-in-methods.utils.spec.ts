@@ -98,44 +98,47 @@ describe("settleReplaced", () => {
     return {
       revoke: step("revoke"),
       erase: step("erase"),
-      removePicture: step("picture"),
       clearProfile: step("profile"),
     };
   };
 
-  test("the revocation runs first, then every other step", async () => {
+  test("the revocation runs first, then the erase, then the profile", async () => {
     const calls: string[] = [];
     await settleReplaced(stepsOf(calls), () => {});
-    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
+    expect(calls).toEqual(["revoke", "erase", "profile"]);
   });
 
-  test("an erase that rejects is reported and the revocation, picture and profile still happen", async () => {
+  test("a failed erase (its enqueue) is thrown after the revocation and the profile ran", async () => {
     const calls: string[] = [];
-    const reported: unknown[] = [];
-    await settleReplaced(stepsOf(calls, ["erase"]), (_, cause) =>
-      reported.push(cause),
-    );
-    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
-    expect(reported).toHaveLength(1);
+    await expect(
+      settleReplaced(stepsOf(calls, ["erase"]), () => {}),
+    ).rejects.toThrow("erase down");
+    expect(calls).toEqual(["revoke", "erase", "profile"]);
   });
 
-  test("each best-effort step fails on its own", async () => {
-    const calls: string[] = [];
-    const reported: string[] = [];
-    await settleReplaced(
-      stepsOf(calls, ["erase", "picture", "profile"]),
-      (message) => reported.push(message),
-    );
-    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
-    expect(reported).toHaveLength(3);
-  });
-
-  test("a failed revocation still lets the rest run, then is thrown", async () => {
+  test("a failed revocation still lets the erase and the profile run, then is thrown", async () => {
     const calls: string[] = [];
     await expect(
       settleReplaced(stepsOf(calls, ["revoke"]), () => {}),
     ).rejects.toThrow("revoke down");
-    expect(calls).toEqual(["revoke", "erase", "picture", "profile"]);
+    expect(calls).toEqual(["revoke", "erase", "profile"]);
+  });
+
+  test("the first failure is the one thrown", async () => {
+    const calls: string[] = [];
+    await expect(
+      settleReplaced(stepsOf(calls, ["revoke", "erase"]), () => {}),
+    ).rejects.toThrow("revoke down");
+  });
+
+  test("the profile clearing is best effort: reported, never thrown", async () => {
+    const calls: string[] = [];
+    const reported: unknown[] = [];
+    await settleReplaced(stepsOf(calls, ["profile"]), (_, cause) =>
+      reported.push(cause),
+    );
+    expect(calls).toEqual(["revoke", "erase", "profile"]);
+    expect(reported).toHaveLength(1);
   });
 });
 

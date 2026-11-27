@@ -131,43 +131,39 @@ export async function clearReplacedProfile(
 
 /** What a replaced holder leaves on the user, as steps the caller binds. */
 export interface ReplacedSteps {
-  /** The previous holder's OAuth grants and refresh tokens. */
+  /** The previous holder's OAuth grants and refresh tokens (queued for a retry by the caller when it fails). */
   readonly revoke: () => Promise<unknown>;
-  /** Their attribute values. */
+  /** Their attribute values and picture: queued for a retry, or erased now without a queue. */
   readonly erase: () => Promise<unknown>;
-  /** Their picture. */
-  readonly removePicture: () => Promise<unknown>;
   /** Their standard profile fields. */
   readonly clearProfile: () => Promise<unknown>;
 }
 
 /**
- * Runs what a replacement leaves to clean. The revocation is first and the one
- * that matters (a failure, once unqueued, fails the sign-in, and is thrown
- * after the rest ran); each other step is best effort, caught and reported on
- * its own, so one failing never skips the others nor the revocation.
+ * Runs what a replacement leaves to clean, janus never repeating `replaced`.
+ * The revocation is first, then the erase; both are fatal, and every step runs
+ * whatever the one before did: the first failure is thrown once the rest ran.
+ * The profile clearing is best effort, caught and reported.
  */
 export async function settleReplaced(
   steps: ReplacedSteps,
   report: (message: string, cause: unknown) => void,
 ): Promise<void> {
-  try {
-    await steps.revoke();
-  } finally {
-    const rest = {
-      "attribute values": steps.erase,
-      picture: steps.removePicture,
-      "profile fields": steps.clearProfile,
-    };
-    for (const [what, step] of Object.entries(rest)) {
-      try {
-        await step();
-      } catch (cause) {
-        report(
-          `sign-in: the replaced holder's ${what} were not cleared`,
-          cause,
-        );
-      }
+  let failure: { cause: unknown } | null = null;
+  for (const step of [steps.revoke, steps.erase]) {
+    try {
+      await step();
+    } catch (cause) {
+      failure ??= { cause };
     }
   }
+  try {
+    await steps.clearProfile();
+  } catch (cause) {
+    report(
+      "sign-in: the replaced holder's profile fields were not cleared",
+      cause,
+    );
+  }
+  if (failure !== null) throw failure.cause;
 }

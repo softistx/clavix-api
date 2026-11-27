@@ -37,6 +37,7 @@ import {
   passkeyLimits,
 } from "@/modules/passkeys/passkeys.throttle";
 import { ssoLimits } from "@/modules/sign-in-methods";
+import { eraseReplaced } from "@/modules/sign-in-methods/sign-in-methods.queue";
 import { tenantPurge } from "@/modules/tenants/tenants.purge-queue";
 import { monthlyActiveUsers } from "@/modules/usage";
 import { webhookSecretsPrune } from "@/modules/webhooks/webhooks.secrets-prune-queue";
@@ -114,6 +115,7 @@ export async function openAppRedis(
         domainRecheck,
         agentsPrune,
         grantsRevoke,
+        eraseReplaced,
         auditRetention,
         webhookSecretsPrune,
       },

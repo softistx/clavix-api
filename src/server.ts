@@ -18,6 +18,11 @@ import { createConsoleDeps } from "./config/console";
 import { closeMongo, connectMongo } from "./config/db";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
+import {
+  createEraseReplaced,
+  eraseReplacedValues,
+  startEraseReplacedWorker,
+} from "./config/erase-replaced";
 import { createGrantsRevoke } from "./config/grants-revoke";
 import { keysService } from "./config/keys";
 import { noQueue } from "./config/no-ops";
@@ -92,6 +97,13 @@ if (redis !== undefined) {
   services().consent.startRevokeWorker(
     createGrantsRevoke(oauth.serverFor),
     redis.queues.grantsRevoke,
+  );
+  // What a social replace leaves of the previous holder is erased from a
+  // queue and retried with backoff.
+  startEraseReplacedWorker(
+    createEraseReplaced(eraseReplacedValues),
+    redis.queues.eraseReplaced,
+    warn,
   );
 }
 const app = createApp({
