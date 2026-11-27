@@ -5,6 +5,7 @@ tenant at `https://<slug>.<CLAVIX_DOMAIN>`, with its own users, clients, resourc
 The product spec lives with the project's planning folder, outside this repository.
 
 Today it serves:
+
 - the OAuth 2.1 / OpenID Connect endpoints of each tenant (authorization code with PKCE, refresh,
   JWT access tokens, discovery, userinfo, introspection, JWKS);
 - on `POST /graphql`, `GET /healthz`, `GET /readyz` and `health { status version }`, the e-mail code sign-in, the
@@ -134,6 +135,7 @@ one needs on top:
 
 They stop anyone sending codes to many addresses through the shared no-reply sender (#59). The `CLAVIX_CODE_*` values are whole numbers of at least 1;
 `CLAVIX_TRUSTED_PROXIES` a whole number of at least 0.
+
 - They use `@softistx/redis` rate limits (GCRA: the bucket starts full and refills evenly over the
   window), under the `clavix` prefix: `clavix:signin-ip:<tenantId>/<ip>`, `clavix:signin-tenant:<tenantId>`.
   Keys carry the tenant id, so a tenant's traffic never spends another's budget, and one address has
@@ -161,6 +163,7 @@ Each tenant has its own signing keys (ADR-0010), kept in the `oauthSigningKeys` 
 `@softistx/janus-oauth-mongo`: the private JWK is encrypted with `CLAVIX_KEYS_MASTER_KEY`
 (AES-256-GCM) and the store of a tenant, partitioned by its id, cannot read another's. Janus signs;
 Clavix adds no `jose`.
+
 - `signingKeysFor(tenantId)` and `jwksFor(tenantId)` (methods of `KeysService`, built in `src/config/keys.ts`; `tenantId` is the
   tenant's id in hex, `partitionOf`) give the OAuth endpoints the `SigningKeyStore` and the public JWKS.
 - A tenant gets its first key when it is created (`TenantsService.create`). If that call fails it is
@@ -484,6 +487,7 @@ The job (`tenant-purge`, a Redis queue with a daily cron at 03:17 UTC, plus one 
 without Redis only the start pass runs) takes only tenants whose 30 days are over, never a live,
 suspended or restored one. Per tenant it claims it first (from then on it resolves nowhere and
 cannot be restored), then removes:
+
 - the janus partition: OAuth clients, requests, codes, grants, access and refresh tokens and the
   signing keys, then users, sessions, tokens, social links, passkeys and invitations (the counts per
   collection are logged);
@@ -569,6 +573,7 @@ module declares no action.
 
 Each tenant chooses how its users sign in
 ([docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md) has every operation and error).
+
 - **Methods**: `PASSKEY` and `EMAIL_CODE` are on for a new tenant, `MAGIC_LINK` is off, and
   `PASSWORD` is listed but not available yet. A method that is off answers 404
   `SIGN_IN_METHOD_DISABLED` (`MAGIC_LINK_DISABLED` for the link) on the tenant's host.
@@ -630,6 +635,7 @@ query {
 ```
 
 `hostedHomeRealm` answers the one enabled connection that owns the address's verified domain, or `null` (no connection, an unverified domain, two claimants). It has its own limits per client address and per tenant (`CLAVIX_SSO_*`, `MAIL_THROTTLED` 429 past them; `socialSignInStart` has the same, counted apart, and neither spends the sign-in code budget) and is `no-store`. The page then calls `socialSignInStart(provider: <connectionId>)` and `socialSignInComplete`, as for a social app; the session's `amr` is `["fed"]`.
+
 - **Just-in-time creation**: a user unknown to the tenant is created on the first federated sign-in only when the connection's `jit` is on, even where the tenant's sign-up is closed; otherwise `SIGN_UP_DISABLED` (403). A known user (same address, or the one already linked) is linked, never duplicated.
 - **`SSO_REQUIRED` (403)**: when the connection has `requireSso`, `requestSignInCode` and `requestMagicLink` refuse an address of its domain, and `verifySignInCode`, `confirmMagicLink` and `signInWithPasskey` end with it (no cookie for a code or link; the session a passkey opened is revoked). Static social apps and `acceptInvitation`'s sign-in are not gated yet.
 - **Upstream step-up**: a connection's `upstreamMfa.acr` makes the identity provider's ID token carry that `acr`, else `SOCIAL_STEP_UP_UNMET`.
@@ -640,6 +646,7 @@ Each tenant host serves `POST /par` (RFC 9126, `@softistx/janus-oauth`): a clien
 the back channel, pushes its authorization request, gets a one-use `request_uri` (60 s) and sends
 the user to `/authorize?client_id=…&request_uri=…`. Discovery advertises
 `pushed_authorization_request_endpoint`, and `require_pushed_authorization_requests` when the tenant requires it.
+
 - **Per tenant** (`oauthPolicy`, `updateOAuthPolicy`; `view` / `edit` on the tenant): `par.required`
   makes every client push; an `/authorize` without a `request_uri` is refused `invalid_request`. A new
   tenant starts with it **on**; a tenant that existed before it (migration `2026-11-16-oauth-policy`)
@@ -681,6 +688,7 @@ same key. One that sends none still gets a `Bearer` token, unless DPoP is requir
 refresh token issued before DPoP was on stays unbound, so the client signs in again to get a bound one.
 Discovery
 advertises `dpop_signing_alg_values_supported` (`ES256`, `EdDSA`).
+
 - **Proofs are single-use and carry a server nonce**: the replay cache is `oauthDpopReplay` in Mongo
   (shared by every instance) and the nonces are stateless HMACs under a secret derived from
   `CLAVIX_KEYS_MASTER_KEY` (HKDF-SHA256, info `dpop-nonce`; nothing to configure). A client's first
@@ -723,6 +731,7 @@ browser or keyboard (a TV, a CLI, a device): the client gets a `device_code`, a 
 `verification_uri` (`https://<tenant host>/device`), shows the code, and polls `/token` with
 `grant_type=urn:ietf:params:oauth:grant-type:device_code` while the user decides on another device.
 Discovery advertises `device_authorization_endpoint`.
+
 - **A client opts in.** The grant is never implied: the client must list it (`clients:create --grants urn:ietf:params:oauth:grant-type:device_code`, or
   `grantTypes: [DEVICE_CODE]` on `CreateClientInput` / `UpdateClientInput`). Any other client gets
   `unauthorized_client` on `/device_authorization`. Add `REFRESH_TOKEN` to get a refresh token. The grant is
@@ -756,6 +765,7 @@ bun run clients:create --tenant acme --name "Living room TV" --grants urn:ietf:p
 
 A confidential client (a service, an agent) trades a user's access token for another one, `POST /token` with
 `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (`@softistx/janus-oauth`), on every tenant host.
+
 - **Opt-in twice.** The client lists the grant (`clients:create --confidential --grants urn:ietf:params:oauth:grant-type:token-exchange`, or
   `grantTypes: [TOKEN_EXCHANGE]`) and the tenant's operator gives it rules (`setClientTokenExchange`). Without the
   grant: `unauthorized_client`. Without rules, or a request they do not allow: `access_denied`. A public client is
@@ -1123,6 +1133,7 @@ Each tenant has its own user pool (ADR-0008): one `@softistx/janus` instance per
 partition = the tenant's id in hex; `bun run db:sync` creates them). The same e-mail is two users in
 two tenants, and a user id, a session or a token of one tenant is unknown to another. An unknown
 or suspended host has no instance.
+
 - **Session cookie**: `__Host-clavix-session`, host-only (no `Domain`), `Secure`, `HttpOnly`,
   `SameSite=Lax`, `Path=/`: a browser never sends one tenant's session to another host.
 - **Lifetime**: 14 days, sliding (renewed once a day), and never more than 30 days after sign-in
@@ -1215,6 +1226,7 @@ The page sends the user agent to `redirectTo` (the client's redirect URI with `c
 code, then come back to `/consent`), `NOT_FOUND` (404: unknown, decided, lapsed or another tenant's
 request, a host with no tenant, or a consent request that is not same-origin JSON, see "Same origin on /graphql"), `BAD_USER_INPUT` (a
 scope not asked for, or `invalid_authorization_details` on an approval while `detailsComplete` is false), `STEP_UP_REQUIRED` (403) or `UNMET_AUTHENTICATION_REQUIREMENTS` (403, `extensions.missing`; see "Authentication level and step-up").
+
 - **Authorization details**: `details` lists what the client asked for beyond scopes, one block per detail (`title` and `description`
   are the type's name and description in the viewer's language, `rows` its locations, actions, fields, `identifier` and `datatypes`: a stable `kind` (the page words the fixed ones from its own
   catalogue) and typed `values`; an enum value is the tenant's label, a boolean and a number stay raw for the page to word and format), `[]` when it asked for none. Never raw JSON: a field the
@@ -1559,6 +1571,7 @@ suspension therefore takes effect within 60 s at worst, even when Redis was down
 write. A Redis failure is logged and MongoDB is read, so the API runs, slower, without Redis.
 
 Operating the cache:
+
 - Give Redis a `maxmemory` and an eviction policy (`allkeys-lru`, or `volatile-ttl` since
   every entry carries a TTL), so that the cache cannot grow without bound.
 - Null entries are bounded by the valid-slug shape, not by the tenants that exist: a client
@@ -1568,5 +1581,5 @@ Operating the cache:
 The Redis spec (`src/tenancy/tenant-cache.spec.ts`) starts a real Redis through
 `@softistx/redis/testing`, compiled from source on its first run (about two minutes, then
 cached in `node_modules/.cache/redis-memory-server` unless `REDISMS_DOWNLOAD_DIR` is set, which
-moves the cache there: CI sets it to a per-runner folder under `~/.cache/nxgt/`, so the path above
+moves the cache there: CI sets it to `~/.cache/nxgt/redis-binaries`, restored through `actions/cache`, so the path above
 is the local default only; needs `make` and a C compiler).

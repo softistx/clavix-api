@@ -117,6 +117,7 @@ in `src/tenancy/guards.spec.ts` allows `src/modules/resources/` and `src/config/
 `ResourcesFor` is read on every request in the issuer's `resolve`, and its fingerprint is part of the
 cache version, so a script-registered resource serves at once, no restart. A tenant's own userinfo
 URL cannot be registered: it is built in, with the OpenID Connect scopes.
+
 - **A scope is a document** (`resources.model.ts`, ADR-0025): `name`, `description` (a list of translations, `[{ locale, text }]`),
   `resourceId` and `claims`, unique on `(tenantId, resourceId, name)`, so two resources may each
   have a `read`. `resourceId: null` is a standard OpenID Connect scope and only `openid`, `profile`,
@@ -157,6 +158,7 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 ## OAuth policy (`src/modules/oauth-policy`, with its `oauth-policy.console-*` files)
 
 `tenant.oauth` (`oauthPolicySchema`: `{ par: { required }, dpop: { required } }`, every flag defaults to `false`) is on the tenant document and on `ResolvedTenant`, so an entry cached before the field parses off. `building.ts` passes `pushedAuthorizationRequests: { required: tenant.oauth.par.required }` (`/par` is always served, and is in `OAUTH_PATHS`, `REFUSED_PATHS` and the Caddyfile `@api` matcher).
+
 - **Every write goes through `OAuthPolicyService`** (over `TenantsService.updateOAuth`, optimistic lock, no write when nothing changes, `version` bump), modelled on `SignInPolicyService`. The `clavix` tenant accepts `par.required` / `dpop.required` like any tenant (the 409 guard is lifted, #233): migration `2026-11-17-console-par-dpop` sets both on the tenant and marks the `console` client `requirePar` + `dpopBound` (idempotent, version bumped only on a change; its `down` relaxes them). The console (clavix-ui#228) pushes (PAR) and proves (DPoP ES256), so **deploy clavix-ui first or together**: an older console is locked out once the migration has run. `test/setup.ts` relaxes the platform tenant after the migrations, so the specs keep minting plain tokens; `console.spec.ts` sets `dpop.required` itself and restores it.
 - `TenantsService.create` writes `par.required: true` for a new tenant (not the platform one); migration `2026-11-16-oauth-policy` writes an explicit `false` on the existing ones (`db:sync` first). Specs that authorize directly on a tenant made by `createFlow().setUp` get PAR turned off there (`{ par: true }` keeps it).
 - **Device grant** (`deviceAuthorization: { verificationUri: \`${issuer}/device\` }`in`building.ts`for every tenant;`/device_authorization`is in`OAUTH_PATHS`, `REFUSED_PATHS`and the Caddyfile`@api`matcher). It is never implied: a client lists`DEVICE_GRANT`in`grantTypes`. `registerClient`requires redirect URIs only when the grants include`authorization_code` (`usesRedirect`); default grants are `DEFAULT_GRANTS`, not `OFFERED_GRANTS`. The verification page's operations are janus's `oauthResolvers` (`modules/consent/consent.resolver.ts`) with `beforeUserCodeLookup`=`deviceThrottle` (`modules/consent/consent.device-throttle.ts`, `CLAVIX_DEVICE_*`, on the shared `createUserThrottle`of`http/throttle/core.ts`). The hook runs before the store is read, so it counts every lookup, not only misses. The device approve guard looks the code up first, so it runs the hook itself and marks the call (`counted`) so janus's hook does not count it twice. Specs that call `/authorize`on a new tenant use`createTenantParOff`.
@@ -172,6 +174,7 @@ too (janus answers it itself). The `roles` claim: see "End-user roles" below.
 ## Users and sessions
 
 Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-in-methods/`; README "Sign-in methods and social providers"), never an environment switch:
+
 - Layout (A8): `sign-in-methods.resolver.ts` (+ `.resolver-support.ts`: the tenant's janus per request, the social
   resolvers, the hosted page and the completed-flow answer), `.errors.ts` (the codes, `refusal`,
   `methodDisabled`; `badInput` is the shared `src/shared/errors.ts` one), `.rules.ts` (input checks, the method change, the first-party and usable rules, the reseal of
@@ -233,6 +236,7 @@ enterprise connections of a tenant), `users.sso.ts` (home-realm discovery, the c
 `users.session.ts` (the cookie and session constants), `users.rp.ts` (rpId, origin), `users.schema.ts`
 (the user schema), `users.second-factor-keys.ts`, `users.verified-email.ts` and `users.tenant-auth.ts`
 (`authFor`, `claimsFor`). `index.ts` is the import surface (registered as `services().users`); the console resolvers are imported by file (`console/modules/index.ts`, and `users.console-mutations.ts` by `lock-order.spec.ts`), the rest through the barrel.
+
 - **Cookie**: `__Host-clavix-session`, no `Domain`, Secure, SameSite=Lax. Session 14 days sliding,
   capped at 30 days after sign-in (`session.absolute`, janus 0.53).
 - **Assumed, not answered (2026-11-12), confirm before first production passkey**: the passkey rpId is
@@ -253,6 +257,7 @@ The hosted pages' GraphQL (`auth.graphqls`: `requestSignInCode`, `verifySignInCo
 per request (unknown host: `NOT_FOUND`). janus-graphql ships no sign-in-code SDL and no session
 cookie setter, so the mutations are ours, on documented janus APIs (`signInCode.prepare`/`confirm`,
 `cookie.serialize`/`clear`) and `ctx.set.headers`.
+
 - **No enumeration**: `prepare` mints the challenge before any lookup; user creation, `send()` and the
   mail run after the answer (`src/modules/auth/auth.outbox.ts`, `afterAnswer`); a closed tenant creates and mails nothing
   for an unknown address; every verify refusal is the same `CODE_INVALID` 401. An open tenant creates
@@ -288,6 +293,7 @@ always `true`, an already verified user is mailed nothing, and the token must be
 user. Confirm: `verifyEmail.confirm(token, { user })`, **never** `firstProof` and never unbound; every
 janus refusal except `STORE_FAILED` is `EMAIL_VERIFICATION_INVALID` 400. janus's `MAIL_THROTTLED` becomes
 `EMAIL_VERIFICATION_THROTTLED` too (stable code for the UI).
+
 - Limits (`src/modules/auth/auth.verification-throttle.ts`, `CLAVIX_VERIFY_*`): per user (`tenantId/userId`,
   10 / hour), then the shared core pair per IP and tenant and per tenant. `ctx.verifyThrottle`, injected with
   `createApp({ verifyThrottle })`; Redis down: fail open, logged.
@@ -301,6 +307,7 @@ registration"). janus passkeys are the first factor (`passkeys.firstFactor: true
 `@softistx/janus-passkeys`), rpId and origin from `src/modules/users/users.rp.ts`; janus-graphql's passkey SDL is
 not used: its resolvers bind to one janus instance and it has no first-factor sign-in, and ours is
 per tenant, so the operations sit on `auth.passkeys` like the sign-in code's.
+
 - The passkey sign-in is janus-graphql's `passkeyResolvers({ auth, firstFactor: true })`, called from
   our own `passkeySignInOptions` (a Mutation, behind the throttle) and `signInWithPasskey`: our SDL keeps
   its names, arguments and errors, so the janus refusals (`CREDENTIALS_INVALID`, `TOKEN_*`, a non-JSON
@@ -386,6 +393,7 @@ The console's own GraphQL API, `POST /console/graphql`, apart from the hosted pa
 `server.authenticate(request, { resource })` (`auth.ts`; no crypto of ours, a store outage is a 503,
 every other failure a 401). Only the console's own client (`CONSOLE_CLIENT_ID`, `identity.ts`) is
 accepted: a console-audience token minted for another client of `clavix` is a 401, whatever its scopes.
+
 - **Permissions** are a janus `defineModel` (`model.ts`) over the relation store in `oauthDb`
   (`config/access.ts`; `db:sync` creates its collection): platform and tenant `owner` / `admin` /
   `viewer`, permits `manage` / `edit` / `view`, a platform role inherited by every tenant through the
@@ -493,6 +501,7 @@ accepted: a console-audience token minted for another client of `clavix` is a 40
 
 Every console mutation writes an append-only admin event (ADR-0037). The platform's own changes with no console user write one too, under a `system:<module>:<job>` actor (`domain.lapse`, `domain.evict`: see Custom domains). A slice that adds a mutation
 does two things, and nothing else touches the collection:
+
 - **Declare** the action beside the module's guards, `export const <name>Audits: Audits = {
   "Mutation.renameTenant": "tenant.rename" }`, and spread it into `audits` in `modules/index.ts`
   (one line). `audit.spec.ts` walks the schema and fails on a `Mutation` root field with no action,
@@ -553,6 +562,7 @@ A role is a named claim value a tenant gives to its end users (not a console adm
 `roleAssignments` (`roleId`, `userId`, unique `{tenantId, roleId, userId}`). Everything goes through
 `RolesService` (`src/config/roles.ts`, `scopeToTenant`); the module is in the direct-access allow list of
 `tenancy/guards.spec.ts`.
+
 - **The claim**: `claimRoles(tenantId, userId, audience)` returns the sorted, de-duplicated names of the
   tenant-wide roles plus those scoped to the resource whose `uri` is the audience. `RolesFor`
   (`oauth/ports.ts`) is the port; `building.ts` puts it in janus's `accessTokens.claims` (runs on every
@@ -603,6 +613,7 @@ A tenant's catalogue of extra user fields (effort `feat/user-attributes`, slices
 purged with the tenant by `ownedPurgers`, in the direct-access allow list of `tenancy/guards.spec.ts`),
 reached only through `AttributesService` (`scopeToTenant`, `optimisticLock: true`). Slice A6 adds
 the token claims, slices A4 and A5 the profile.
+
 - **Layout (two entities, folder per role).** The module holds the catalogue and the values, so every role
   with several files is a folder with a barrel, as in `connections/`: `services/` (`attributes.service.ts`,
   `values.service.ts`, `role-attributes.service.ts`, `user-filter.service.ts`), `rules/`, `utils/` (with `role-attributes.utils.ts`, `user-filter.utils.ts`); the single-file roles (`attributes.model.ts`,
@@ -714,6 +725,7 @@ the token claims, slices A4 and A5 the profile.
 
 A tenant's brand is one tenant-owned document (`branding`, unique on `tenantId`), reached only through
 `BrandingService` (`branding.service.ts`, built in `config/branding.ts`), which scopes every read and write with `scopeToTenant`.
+
 - **The theme is compiled on write, served as stored** (`branding.theme.ts`): `validateThemeInput`, then
   `defineTheme` and `themeToCss({ scope: "attribute" })` of `@softistx/material-core`, measured by
   `checkThemeContrast` in light and dark. A failing pair is `BRANDING_CONTRAST` and nothing is stored.
@@ -802,6 +814,7 @@ A tenant adds a host (`addDomain`), publishes `_clavix.<host> TXT clavix-verify=
 `src/config/domains.ts` wires the real resolver). `DomainsService` (`domains.service.ts`) is the
 only way into the `domains` collection and runs the periodic recheck (`recheckAll`) too; the DNS
 comparison is `domains.check.ts`.
+
 - Layout (A9): `domains.model.ts`, `.errors.ts` (the codes and the refusal builders), `.rules.ts` (the host rules
   `normalizeDomainHost` / `txtNameOf`, the cooldown, the recheck grace decision `recheckOutcome`, the cache host
   lists), `.utils.ts` (`mintToken`), `.check.ts`, `.dns.ts`, `.events.ts`, `.notice.ts`, `.tls-ask.ts`, `.tls-limit.ts`,
@@ -908,6 +921,7 @@ comparison is `domains.check.ts`.
 ## Webhooks (`src/modules/webhooks`, console side folded in by A15: `webhooks.console.graphqls`, `webhooks.console-resolver.ts`, `-guards`, `-support`, `-parent`; `src/config/webhooks.ts`)
 
 A tenant posts its events to its own endpoints (M4 W1, D19-D22, issue #22).
+
 - Layout (A6): `webhooks.model.ts` (both collections), `.errors.ts`, `.rules.ts` (input rules, the roll, `TEST_EVENT_TYPE`, `DISABLE_ACTOR`),
   `.utils.ts` (the queue names and caps, the endpoint naming, the attempt record, the test event), `.types.ts`, `.events.ts`, `.notice.ts`, `.url-policy.ts`, `.delivery.ts`, the secrets-prune
   files (`.secrets-prune.ts`, `.secrets-prune-queue.ts`, `.secrets-prune-worker.ts`), and `webhooks.service.ts`:
@@ -1078,6 +1092,7 @@ The signed-in user's own account on the tenant's hosted schema (slice A7 of `fea
 `CurrentUser` gains `profile`, `lockedFields` and `attributes`, and four mutations: `updateMyProfile`,
 `setMyAttributeValues`, `requestEmailChange`, `confirmEmailChange` (`removeMyPicture` is the media module's).
 One `AccountService` (`account.service.ts`, `accountService` in `config/account.ts`, registered as `account` in `services()`).
+
 - **`CurrentUser.profile`, `lockedFields` and `attributes` are field resolvers**, not part of `currentUserOf`: `codegen.ts` maps
   `CurrentUser` to `CurrentUserParent` (`auth.types.ts`, no profile) and `UserProfile` to `ProfileView`, so the many hand-built
   `CurrentUser` objects of other modules stay as they are.

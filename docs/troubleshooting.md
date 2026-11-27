@@ -1,6 +1,7 @@
 # Troubleshooting
 
 Find the message you see, then read when it appears, why, and the fix.
+
 - [`temporarily_unavailable`: the issuer has no signing key yet](#temporarily_unavailable-the-issuer-has-no-signing-key-yet)
 - [`CLAVIX_TRUSTED_PROXIES is required in production`](#clavix_trusted_proxies-is-required-in-production-set-the-number-of-reverse-proxies-in-front-of-the-app-0-if-none)
 - [Client registration refusals (`clients:create`)](#client-registration-refusals-clientscreate)
@@ -140,6 +141,7 @@ Also refused: an unknown tenant slug or a suspended tenant, a missing `--name`, 
 **When:** a request carries `authorization_details` (RFC 9396) and an entry is refused. The error
 description names the entry and the reason.
 **Why:** one of these:
+
 - the `type` is not one the tenant describes on that `resource`, or the client does not list it
   (`authorizationDetailsTypes`);
 - a key the type does not define (a detail is a strict object: only `type`, `locations`, `identifier`,
@@ -221,6 +223,7 @@ name in either language.
 ### `BAD_USER_INPUT` (400) on `createClient` / `updateClient` with `authorizationDetailsTypes`
 
 The message says which rule broke, and nothing was written:
+
 - `unknown detail type "x"`: the name is not a type of this tenant (a type of another tenant is unknown too). List
   them with `Resource.detailTypes`, or create it first.
 - `a client that lists detail types must require PAR`: set `requirePushedAuthorizationRequests: true` (CLI
@@ -523,6 +526,7 @@ admin cannot touch another tenant), or the field has no guard. Grant the role, f
 role `bun run operators:grant --email <address> --role <role>`.
 
 Two cases ask for more than the tenant role on the `clavix` tenant:
+
 - a write there, and the sign-in log (`authEvents`, `GET /console/audit/export?log=auth`), need the
   **platform** role (`edit`: a platform admin or owner); a tenant-level role on `clavix` only reads;
 - changing the account of a `clavix` user who holds a platform role or owns a tenant (`disableUser`,
@@ -565,6 +569,7 @@ the claims differ.
 ### `client_credentials` refusals
 
 [Guide](guide/client-credentials.md). At registration (`clients:create`, `createClient`, `updateClient`):
+
 - `the client credentials grant needs a confidential client (--confidential)`: a public client cannot hold it.
 - `the client credentials grant needs at least one allowed scope`: janus answers `invalid_scope` to every
   request of a client with no `allowedScopes`; give `--allowed-scopes`.
@@ -573,6 +578,7 @@ the claims differ.
 - `BAD_USER_INPUT` on `updateResource` with `allowClientCredentials: true` for the console's own resource.
 
 At `/token`:
+
 - `unsupported_grant_type` (400): no resource of the tenant has opted in. Turn `allowClientCredentials` on in
   the resource's edit section.
 - `invalid_target` (400): no `resource` in the request (the default resource is userinfo and never opts in), or
@@ -925,6 +931,7 @@ it with `assignRole` still works. A tenant's own roles (`managed: false`) are no
 ### `ATTRIBUTE_*` codes on a user attribute and its values
 
 Every refusal on the attribute catalogue or on a user's values writes nothing.
+
 - `ATTRIBUTE_KEY_INVALID` (400): the key is not 2 to 64 characters of a lower-case letter, then lower-case letters, digits and `_`.
 - `ATTRIBUTE_KEY_RESERVED` (400): the key is a claim name tokens already carry (`email`, `roles`, `scope`...). Pick another.
 - `ATTRIBUTE_KEY_TAKEN` (409): the tenant has an attribute with that key, an archived one included. Restore it, or delete it for good to free the key.

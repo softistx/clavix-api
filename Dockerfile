@@ -4,7 +4,7 @@
 # docs/operations.md). @softistx packages come from npmjs with a read token (BuildKit secret npm_read, never baked in).
 
 # Runtime dependencies only (the scripts and the bundle's externals need them).
-FROM oven/bun:1.4.4 AS prod
+FROM oven/bun:1.4.5 AS prod
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 RUN --mount=type=secret,id=npm_read,env=NPM_SOFTISTX_READ_TOKEN bun install --frozen-lockfile --production --ignore-scripts
@@ -17,7 +17,7 @@ RUN --mount=type=secret,id=npm_read,env=NPM_SOFTISTX_READ_TOKEN bun install --fr
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.4.4-slim AS run
+FROM oven/bun:1.4.5-slim AS run
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
 # The bundle holds the server; the scripts (db:sync, db:migrate, tenants:create,

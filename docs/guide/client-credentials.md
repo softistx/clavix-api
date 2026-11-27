@@ -5,6 +5,7 @@ served on the tenant's `/token`. The token's `sub` is the client id; it carries 
 and no `roles` claim.
 
 The grant is opt-in at three levels, and all three are needed:
+
 1. **the resource** opts in (`allowClientCredentials`, off by default). A tenant whose resources have not opted in
    answers `unsupported_grant_type`;
 2. **the client** is confidential (`client_secret_basic`) and lists the grant;
