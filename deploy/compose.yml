@@ -1,5 +1,6 @@
 # Clavix on one host: api, ui, mongo (one-node replica set: transactions),
-# redis and caddy (the only published ports: 80 and 443).
+# redis, minio (the private bucket of the profile pictures) and caddy (the
+# only published ports: 80 and 443).
 #
 #   cp deploy/.env.example deploy/.env   # then fill it; it is never committed
 #   docker compose -f deploy/compose.yml --env-file deploy/.env up -d
@@ -41,6 +42,16 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
       # Caddy is the one proxy in front.
       CLAVIX_TRUSTED_PROXIES: "1"
+      # The private bucket of the profile pictures: minio, by container name, on
+      # the private network only. minio-init creates the bucket and this user.
+      CLAVIX_MEDIA_S3_ENDPOINT: ${CLAVIX_MEDIA_S3_ENDPOINT:-http://clavix-minio:9000}
+      CLAVIX_MEDIA_S3_BUCKET: ${CLAVIX_MEDIA_S3_BUCKET:-clavix-media}
+      CLAVIX_MEDIA_S3_REGION: ${CLAVIX_MEDIA_S3_REGION:-us-east-1}
+      CLAVIX_MEDIA_S3_ACCESS_KEY_ID: ${CLAVIX_MEDIA_S3_ACCESS_KEY_ID:?set CLAVIX_MEDIA_S3_ACCESS_KEY_ID}
+      CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY: ${CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY:?set CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY}
+      # The api gets the whole .env but does not need minio's root credentials.
+      MINIO_ROOT_USER: ""
+      MINIO_ROOT_PASSWORD: ""
     # No `ports`: the api is reachable by caddy and the ui on the private network only.
     expose: ["3000"]
     volumes:
@@ -49,6 +60,7 @@ services:
     depends_on:
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
     stop_grace_period: 20s
     deploy:
       resources:
@@ -140,6 +152,81 @@ services:
       resources:
         limits: { cpus: "0.25", memory: 256M }
 
+  # Private object store: no `ports`, no router, reachable by container name
+  # (clavix-minio:9000) from the api only. Pinned by digest, as schoolz-api does.
+  minio:
+    <<: *restart
+    image: cgr.dev/chainguard/minio@sha256:268d68a2a3b6fc65f905a61f84d7eab6345ce6bff14f551e2b028ec31e6a1341
+    container_name: clavix-minio
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER: "off"
+    expose: ["9000"]
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # No curl in the image: bash opens the socket itself.
+      test:
+        - CMD
+        - bash
+        - -c
+        - |-
+          exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && read -r line <&3 && [[ $$line == *' 200 '* ]]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+      start_interval: 2s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
+
+  # One-shot, idempotent: creates the private bucket, a policy limited to it and
+  # the user the api runs with (CLAVIX_MEDIA_S3_ACCESS_KEY_ID / _SECRET_ACCESS_KEY),
+  # then exits. The minio-client image has no shell, so `mc` is copied into a
+  # Wolfi base that has one.
+  minio-init:
+    restart: "no"
+    image: clavix-minio-init:${TAG:-local}
+    build:
+      dockerfile_inline: |
+        FROM cgr.dev/chainguard/minio-client@sha256:59f1924e417b6fcfdc0aca321e3bdebe8a56fd0efa7da80037d5eb65a203d687 AS mc
+        FROM cgr.dev/chainguard/wolfi-base@sha256:88a20e2d017bd20cdc0cb3910de603e7bea9512a6c351a8dd3c9df212ab03d73
+        COPY --from=mc /usr/bin/mc /usr/local/bin/mc
+    container_name: clavix-minio-init
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER:?set MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}@clavix-minio:9000
+      BUCKET: ${CLAVIX_MEDIA_S3_BUCKET:-clavix-media}
+      APP_ACCESS_KEY: ${CLAVIX_MEDIA_S3_ACCESS_KEY_ID:?set CLAVIX_MEDIA_S3_ACCESS_KEY_ID}
+      APP_SECRET_KEY: ${CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY:?set CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY}
+    command:
+      - sh
+      - -ec
+      - |
+        mc mb --ignore-existing "local/$$BUCKET"
+        cat > /tmp/policy.json <<POLICY
+        {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
+          "Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:ListBucket","s3:GetBucketLocation"],
+          "Resource":["arn:aws:s3:::$$BUCKET","arn:aws:s3:::$$BUCKET/*"]}]}
+        POLICY
+        mc admin policy create local clavix-media /tmp/policy.json
+        mc admin user add local "$$APP_ACCESS_KEY" "$$APP_SECRET_KEY"
+        # Only an "already applied" answer is tolerated; any other failure fails the job.
+        out=$$(mc admin policy attach local clavix-media --user "$$APP_ACCESS_KEY" 2>&1) || {
+          case "$$out" in
+            *[Aa]lready*) echo "policy already attached" ;;
+            *) echo "$$out" >&2; exit 1 ;;
+          esac
+        }
+        echo "minio ready"
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256M }
+
   caddy:
     <<: *restart
     image: caddy:2
@@ -220,5 +307,6 @@ secrets:
 volumes:
   mongo-data:
   redis-data:
+  minio-data:
   caddy-data:
   caddy-config:

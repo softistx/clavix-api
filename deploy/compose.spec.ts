@@ -67,7 +67,39 @@ describe("compose.yml", () => {
     const blocks = services
       .split(/\n {2}(?=[a-z][a-z-]*:\n)/)
       .filter((b) => b.trim());
-    expect(blocks.length).toBeGreaterThanOrEqual(7);
+    expect(blocks.length).toBeGreaterThanOrEqual(9);
     for (const block of blocks) expect(block).toContain("limits:");
+  });
+
+  test("minio is private (no ports, no router) and has the stated limits", () => {
+    const block = (name: string) =>
+      base
+        .split(new RegExp(`\\n {2}${name}:\\n`))[1]
+        ?.split(/\n {2}[a-z][a-z-]*:\n/)[0] ?? "";
+    const minio = block("minio");
+    expect(minio).toContain("container_name: clavix-minio");
+    expect(minio).not.toMatch(/\n {4}ports:/);
+    expect(minio).toContain('limits: { cpus: "0.5", memory: 512M }');
+    expect(minio).toMatch(/interval: (30|[4-9][0-9])s/);
+    expect(block("minio-init")).toContain(
+      'limits: { cpus: "0.25", memory: 256M }',
+    );
+    expect(minio).not.toContain("proxy");
+    expect(base).toContain(
+      "minio-init: { condition: service_completed_successfully }",
+    );
+    expect(base).toContain('MINIO_ROOT_PASSWORD: ""');
+    expect(overlay).toMatch(/minio:\n {4}labels:\n {6}traefik.enable: "false"/);
+  });
+
+  test("the api reaches the bucket by container name, with required credentials", () => {
+    expect(base).toContain(":-http://clavix-minio:9000}");
+    for (const name of [
+      "CLAVIX_MEDIA_S3_ACCESS_KEY_ID",
+      "CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY",
+      "MINIO_ROOT_USER",
+      "MINIO_ROOT_PASSWORD",
+    ])
+      expect(base).toContain(v(`${name}:?`).slice(0, -1));
   });
 });

@@ -72,6 +72,20 @@ const REQUIRED = [
   "MONGO_APP_PASSWORD",
   "MONGO_KEYFILE",
   "CONSOLE_SESSION_SECRET",
+  "MINIO_ROOT_USER",
+  "MINIO_ROOT_PASSWORD",
+  "CLAVIX_MEDIA_S3_ACCESS_KEY_ID",
+  "CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY",
+] as const;
+
+const MINIO_SECRETS = [
+  "MINIO_ROOT_PASSWORD",
+  "CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY",
+] as const;
+const MINIO_VALUES = [
+  "MINIO_ROOT_USER",
+  "CLAVIX_MEDIA_S3_ACCESS_KEY_ID",
+  ...MINIO_SECRETS,
 ] as const;
 
 /** What is wrong with the env file's values, one line each (empty when fine). */
@@ -91,6 +105,19 @@ export function envProblems(values: Record<string, string>): string[] {
       problems.push(
         `${key}=${image} names a registry: staging builds its images on the host, use a local name (clavix-api:staging)`,
       );
+  }
+  // These sit in a URL (MC_HOST_local) and MinIO wants secrets of 8+ characters.
+  for (const key of MINIO_VALUES) {
+    const value = values[key];
+    if (value && !/^[A-Za-z0-9._~-]+$/.test(value))
+      problems.push(
+        `${key} may only hold letters, digits and . _ ~ - (use hex)`,
+      );
+  }
+  for (const key of MINIO_SECRETS) {
+    const value = values[key];
+    if (value && value.length < 8)
+      problems.push(`${key} needs 8 characters or more`);
   }
   return problems;
 }

@@ -2,8 +2,8 @@
 /**
  * Deploys the Clavix staging stack on this host (the shared VPS), by hand and
  * idempotently: git pull both checkouts, build the api and ui images here (no
- * registry), start mongo and redis, db:sync + db:migrate, `up`, wait until every
- * service is healthy, then clean the replaced images. A rerun with nothing
+ * registry), start mongo, redis and minio, db:sync + db:migrate, `up`, wait
+ * until every service is healthy, then clean the replaced images. A rerun with nothing
  * changed pulls nothing, rebuilds from cache, migrates nothing and recreates no
  * container.
  *
@@ -67,10 +67,10 @@ const imageId = async (image: string): Promise<string> =>
     .text()
     .trim();
 
-step("build", "api, ui (cached layers make a rerun cheap)");
-await stack.compose("build", "api", "ui");
+step("build", "api, ui, minio-init (cached layers make a rerun cheap)");
+await stack.compose("build", "api", "ui", "minio-init");
 
-step("data", "mongo, redis");
+step("data", "mongo, redis, minio");
 await stack.compose(
   "up",
   "-d",
@@ -79,6 +79,7 @@ await stack.compose(
   timeout,
   "mongo",
   "redis",
+  "minio",
 );
 
 step("migrate", "db:sync then db:migrate (one-shot api container)");
