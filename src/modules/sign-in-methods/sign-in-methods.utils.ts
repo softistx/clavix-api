@@ -152,15 +152,17 @@ export async function settleReplaced(
   steps: ReplacedSteps,
   report: (message: string, cause: unknown) => void,
 ): Promise<void> {
-  let failure: { cause: unknown } | null = null;
-  const fatal = async (step: () => Promise<unknown>) => {
+  const fatal = async (
+    step: () => Promise<unknown>,
+  ): Promise<{ cause: unknown } | null> => {
     try {
       await step();
+      return null;
     } catch (cause) {
-      failure ??= { cause };
+      return { cause };
     }
   };
-  await fatal(steps.revoke);
+  const revoked = await fatal(steps.revoke);
   try {
     await steps.clearProfile();
   } catch (cause) {
@@ -169,6 +171,7 @@ export async function settleReplaced(
       cause,
     );
   }
-  await fatal(steps.erase);
-  if (failure !== null) throw (failure as { cause: unknown }).cause;
+  const erased = await fatal(steps.erase);
+  const failure = revoked ?? erased;
+  if (failure !== null) throw failure.cause;
 }
