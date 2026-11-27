@@ -62,7 +62,9 @@ connection's callback to the route that received it; a public client could other
    `openssl rand -hex 32` for `CLAVIX_TLS_ASK_SECRET`, `openssl rand -hex 24` for
    `REDIS_PASSWORD`, `MONGO_ROOT_PASSWORD` and `MONGO_APP_PASSWORD`,
    `openssl rand -hex 64` for `MONGO_KEYFILE`, `openssl rand -base64 48` for
-   `CONSOLE_SESSION_SECRET`.
+   `CONSOLE_SESSION_SECRET`, `openssl rand -hex 16` for `MINIO_ROOT_USER` and
+   `CLAVIX_MEDIA_S3_ACCESS_KEY_ID`, `openssl rand -hex 24` for `MINIO_ROOT_PASSWORD`
+   and `CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY` (hex only: they sit in a URL).
    `CONSOLE_CLIENT_SECRET` stays a placeholder until step 5.
 4. **Master key custody.** `CLAVIX_KEYS_MASTER_KEY` encrypts every tenant's
    signing keys and social secrets. Store it in a secret manager apart from the
@@ -132,6 +134,9 @@ Beyond them, the deployment reads, in `deploy/.env`:
 | `MONGO_APP_USER`, `MONGO_APP_PASSWORD`                                   | mongo, api, backup, restore | the application user (default `clavix`), `readWrite` and `dbAdmin` on the `clavix` database; its credentials are in `MONGO_URI`                                |
 | `MONGO_KEYFILE`                                                          | mongo                       | the replica set's internal authentication key, 6 to 1024 characters                                                                                            |
 | `MONGO_TLS_DIR`, `MONGO_URI_OPTIONS`                                     | mongo, api, backup, restore | optional TLS, see "MongoDB"                                                                                                                                    |
+| `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`                                 | minio, minio-init           | the object store's root user, used only to create the bucket and the api's user ("Profile pictures")                                                           |
+| `CLAVIX_MEDIA_S3_ACCESS_KEY_ID`, `CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY`     | api, minio-init             | the api's user of the private bucket, created by `minio-init` with a policy limited to it; required                                                            |
+| `CLAVIX_MEDIA_S3_BUCKET`, `CLAVIX_MEDIA_S3_REGION`                       | api, minio-init             | optional: the bucket (default `clavix-media`) and its region (default `us-east-1`)                                                                             |
 | `CLAVIX_KEYS_MASTER_KEY`, `CLAVIX_SMTP_URL`                              | api                         | required in production                                                                                                                                         |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`              | api                         | optional: where traces and logs go, see "Telemetry"                                                                                                            |
 | `CLAVIX_TLS_ASK_SECRET`                                                  | api, caddy                  | the token of the `ask` URL, 32 characters or more                                                                                                              |
@@ -393,7 +398,25 @@ reads publicly with an immutable cache. Route `/media/*` to the api (the Caddyfi
 rule carry it). Without the bucket settings outside production the routes answer 503.
 Erasing a user removes their object and purging a tenant removes its `<tenantId>/` prefix. Replacing or removing a
 picture deletes the former object after the janus event; a rare orphan stays until the tenant is purged.
-Back the bucket up with the storage's own tools; the database backups do not hold the pictures.
+
+The deployment runs its own store: `compose.yml` starts `minio` (container `clavix-minio`, volume `minio-data`,
+limits 0.5 CPU / 512M, no published port and no router: only the api reaches it, as
+`http://clavix-minio:9000`) and the one-shot `minio-init`, which creates the private bucket, a policy limited to it
+and the api's user, idempotently on every `up`. The api waits for it to complete. The compose file sets
+`CLAVIX_MEDIA_S3_ENDPOINT` itself. To provision the credentials on the host, add four lines to `deploy/.env`
+(mode 600), hex values since they sit in a URL:
+
+```sh
+MINIO_ROOT_USER=$(openssl rand -hex 16)
+MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)
+CLAVIX_MEDIA_S3_ACCESS_KEY_ID=$(openssl rand -hex 16)
+CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY=$(openssl rand -hex 24)
+```
+
+(write the generated values, not the commands). `deploy.ts` refuses to run without them. The root credentials are read at each
+start. Rotating the api's key adds the new user on the next `up` but does not revoke the old one: remove it with
+`mc admin user remove local <old key>`.
+Back the bucket up with the storage's own tools (the `minio-data` volume); the database backups do not hold the pictures.
 
 ## Webhooks
 
@@ -641,10 +664,10 @@ bun deploy/deploy.ts
 In `deploy/.env`, set `CLAVIX_DOMAIN=clavixid.com`, local image names
 (`CLAVIX_API_IMAGE=clavix-api:staging`, `CLAVIX_UI_IMAGE=clavix-ui:staging`) and
 no registry token. The script reads `NPM_SOFTISTX_READ_TOKEN` from the environment, else `~/.config/secrets/npm-sofistx-read-token` on the host, and passes it to the image builds as a compose secret; it only warns when neither exists (the installs work only while the packages are public). The script refuses to run when the file is missing, readable by
-others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
+others (not mode 600 or 400) or incomplete (it checks the domain, the two image names and the secrets of "First boot", step 3: `CLAVIX_KEYS_MASTER_KEY`, `REDIS_PASSWORD`, the two Mongo passwords, `MONGO_KEYFILE`, `CONSOLE_SESSION_SECRET`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `CLAVIX_MEDIA_S3_ACCESS_KEY_ID`, `CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY`; `CLAVIX_TLS_ASK_SECRET` and `ACME_EMAIL` must still hold any value, `compose.yml` requires them), or when the `proxy` network does not exist.
 
 One run does, in order: `git pull --ff-only` of both checkouts (`--no-pull` skips it), builds the api
-and ui images on the host (no registry), starts `mongo` and `redis`, runs `db:sync` and `db:migrate`
+and ui images and the `minio-init` helper on the host (no registry), starts `mongo`, `redis` and `minio`, runs `db:sync` and `db:migrate`
 in a one-shot api container, `up -d --wait` for the whole stack (`--timeout <s>`, default 300), then
 cleans: the images the build replaced (and any other id under the two image names), dangling images
 (`docker image prune -f`) and the build cache older than 24 hours

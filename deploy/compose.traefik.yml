@@ -87,6 +87,14 @@ services:
     labels:
       traefik.enable: "false"
 
+  minio:
+    labels:
+      traefik.enable: "false"
+
+  minio-init:
+    labels:
+      traefik.enable: "false"
+
   # Staging terminates TLS in traefik: no caddy, no on-demand certificates.
   caddy:
     profiles: ["standalone"]

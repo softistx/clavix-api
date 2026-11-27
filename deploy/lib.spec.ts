@@ -26,6 +26,10 @@ const good = {
   MONGO_APP_PASSWORD: "a",
   MONGO_KEYFILE: "f",
   CONSOLE_SESSION_SECRET: "s",
+  MINIO_ROOT_USER: "root",
+  MINIO_ROOT_PASSWORD: "password1",
+  CLAVIX_MEDIA_S3_ACCESS_KEY_ID: "id",
+  CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY: "secret-12",
 };
 
 describe("parseEnv", () => {
@@ -76,6 +80,27 @@ describe("envProblems", () => {
       "REDIS_PASSWORD is not set",
       "MONGO_KEYFILE is not set",
     ]);
+  });
+
+  test("names the missing minio variables", () => {
+    const {
+      MINIO_ROOT_USER: _u,
+      CLAVIX_MEDIA_S3_ACCESS_KEY_ID: _k,
+      ...rest
+    } = good;
+    expect(envProblems(rest)).toEqual([
+      "MINIO_ROOT_USER is not set",
+      "CLAVIX_MEDIA_S3_ACCESS_KEY_ID is not set",
+    ]);
+  });
+
+  test("refuses minio values that break a URL or are too short", () => {
+    expect(
+      envProblems({ ...good, MINIO_ROOT_PASSWORD: "p@ss/word1" }),
+    ).toHaveLength(1);
+    expect(
+      envProblems({ ...good, CLAVIX_MEDIA_S3_SECRET_ACCESS_KEY: "short" }),
+    ).toHaveLength(1);
   });
 
   test("refuses a domain with a scheme, a port or a wildcard", () => {
