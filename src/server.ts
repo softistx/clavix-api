@@ -19,12 +19,14 @@ import { closeMongo, connectMongo } from "./config/db";
 import { domainRecheckDeps } from "./config/domains-job";
 import { env } from "./config/env";
 import {
+  authOfTenant,
   createEraseReplaced,
   eraseReplacedValues,
   startEraseReplacedWorker,
 } from "./config/erase-replaced";
-import { createGrantsRevoke } from "./config/grants-revoke";
+import { createGrantsRevoke, slugOfTenant } from "./config/grants-revoke";
 import { keysService } from "./config/keys";
+import { avatarsService } from "./config/media";
 import { noQueue } from "./config/no-ops";
 import { createIssuers } from "./config/oauth";
 import { createTenantPurge } from "./config/purge";
@@ -95,13 +97,13 @@ if (redis !== undefined) {
   // A grant revocation that failed at a social replace is retried with backoff
   // (#353).
   services().consent.startRevokeWorker(
-    createGrantsRevoke(oauth.serverFor),
+    createGrantsRevoke(oauth.serverFor, slugOfTenant),
     redis.queues.grantsRevoke,
   );
   // What a social replace leaves of the previous holder is erased from a
   // queue and retried with backoff.
   startEraseReplacedWorker(
-    createEraseReplaced(eraseReplacedValues),
+    createEraseReplaced(eraseReplacedValues, authOfTenant, avatarsService),
     redis.queues.eraseReplaced,
     warn,
   );

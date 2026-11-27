@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { userKey } from "@/console/modules/user-key";
+import type { AvatarsService } from "@/modules/media";
 import type { TenantJanus } from "@/modules/users";
 import { attributeValuesService } from "./attributes";
 import { env } from "./env";
@@ -35,7 +36,7 @@ export const eraseReplacedQueue: { current: EraseEnqueuer | undefined } = {
 };
 
 /** The janus of a tenant by id, outside a request; `null` for a tenant that is gone or purged. */
-const authOfTenant = async (tenantId: string) => {
+export const authOfTenant = async (tenantId: string) => {
   const slug = (await tenantsService.anyById(tenantId))?.slug;
   if (slug === undefined) return null;
   const resolved = await tenantResolver.resolveHost(
@@ -57,16 +58,15 @@ export const createEraseReplaced =
       userId: string,
       writtenUntil: Date,
     ) => Promise<void>,
-    authOf: (
-      tenantId: string,
-    ) => ReturnType<typeof authOfTenant> = authOfTenant,
+    authOf: (tenantId: string) => ReturnType<typeof authOfTenant>,
+    avatars: Pick<AvatarsService, "remove">,
   ) =>
   async ({ tenantId, userId, replacedAt }: EraseJob): Promise<void> => {
     const auth = await authOf(tenantId);
     if (auth === null) return;
     const until = new Date(replacedAt);
     await erase(tenantId, userId, until);
-    await avatarsService.remove({ tenantId, userId, auth }, until);
+    await avatars.remove({ tenantId, userId, auth }, until);
   };
 
 /** Runs each queued erase; a failure throws so the queue retries it with backoff. */

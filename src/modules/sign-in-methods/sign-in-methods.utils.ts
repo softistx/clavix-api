@@ -141,22 +141,28 @@ export interface ReplacedSteps {
 
 /**
  * Runs what a replacement leaves to clean, janus never repeating `replaced`.
- * The revocation is first, then the erase; both are fatal, and every step runs
- * whatever the one before did: the first failure is thrown once the rest ran.
- * The profile clearing is best effort, caught and reported.
+ * The order is the revocation, the profile clearing, then the erase: the
+ * clearing runs inline with a version check, so it goes before the erase is
+ * queued, whose worker raises the user's version. The revocation and the erase
+ * are fatal, and every step runs whatever the one before did: the first
+ * failure is thrown once the rest ran. The profile clearing is best effort,
+ * caught and reported.
  */
 export async function settleReplaced(
   steps: ReplacedSteps,
   report: (message: string, cause: unknown) => void,
 ): Promise<void> {
-  let failure: { cause: unknown } | null = null;
-  for (const step of [steps.revoke, steps.erase]) {
+  const fatal = async (
+    step: () => Promise<unknown>,
+  ): Promise<{ cause: unknown } | null> => {
     try {
       await step();
+      return null;
     } catch (cause) {
-      failure ??= { cause };
+      return { cause };
     }
-  }
+  };
+  const revoked = await fatal(steps.revoke);
   try {
     await steps.clearProfile();
   } catch (cause) {
@@ -165,5 +171,7 @@ export async function settleReplaced(
       cause,
     );
   }
+  const erased = await fatal(steps.erase);
+  const failure = revoked ?? erased;
   if (failure !== null) throw failure.cause;
 }

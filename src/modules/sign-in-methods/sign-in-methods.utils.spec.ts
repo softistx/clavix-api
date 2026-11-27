@@ -102,10 +102,10 @@ describe("settleReplaced", () => {
     };
   };
 
-  test("the revocation runs first, then the erase, then the profile", async () => {
+  test("the revocation runs first, then the profile, then the erase", async () => {
     const calls: string[] = [];
     await settleReplaced(stepsOf(calls), () => {});
-    expect(calls).toEqual(["revoke", "erase", "profile"]);
+    expect(calls).toEqual(["revoke", "profile", "erase"]);
   });
 
   test("a failed erase (its enqueue) is thrown after the revocation and the profile ran", async () => {
@@ -113,7 +113,7 @@ describe("settleReplaced", () => {
     await expect(
       settleReplaced(stepsOf(calls, ["erase"]), () => {}),
     ).rejects.toThrow("erase down");
-    expect(calls).toEqual(["revoke", "erase", "profile"]);
+    expect(calls).toEqual(["revoke", "profile", "erase"]);
   });
 
   test("a failed revocation still lets the erase and the profile run, then is thrown", async () => {
@@ -121,7 +121,7 @@ describe("settleReplaced", () => {
     await expect(
       settleReplaced(stepsOf(calls, ["revoke"]), () => {}),
     ).rejects.toThrow("revoke down");
-    expect(calls).toEqual(["revoke", "erase", "profile"]);
+    expect(calls).toEqual(["revoke", "profile", "erase"]);
   });
 
   test("the first failure is the one thrown", async () => {
@@ -137,7 +137,7 @@ describe("settleReplaced", () => {
     await settleReplaced(stepsOf(calls, ["profile"]), (_, cause) =>
       reported.push(cause),
     );
-    expect(calls).toEqual(["revoke", "erase", "profile"]);
+    expect(calls).toEqual(["revoke", "profile", "erase"]);
     expect(reported).toHaveLength(1);
   });
 });

@@ -12,6 +12,7 @@ import {
   startEraseReplacedWorker,
 } from "@/config/erase-replaced";
 import { exclusive } from "@/config/exclusive";
+import { avatarsService } from "@/config/media";
 import { userKey } from "@/console/modules/user-key";
 import { janusOver } from "~/janus-double";
 
@@ -157,6 +158,7 @@ describe("the erase of a replaced holder, queued", () => {
         erased.push(userId);
       },
       async () => auth,
+      avatarsService,
     );
     startEraseReplacedWorker(run, queue, () => {});
     const job = {
@@ -180,6 +182,7 @@ describe("the erase of a replaced holder, queued", () => {
         erased.push(userId);
       },
       async () => null,
+      avatarsService,
     );
     await run({
       tenantId: "gone",
@@ -218,8 +221,10 @@ describe("a retried erase never wipes what the new holder wrote", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     // The new holder sets a value, then the retried job runs.
     await write(fresh._id, "new holder's");
-    const run = createEraseReplaced(eraseReplacedValues, async () =>
-      janusOver(),
+    const run = createEraseReplaced(
+      eraseReplacedValues,
+      async () => janusOver(),
+      avatarsService,
     );
     await run({ tenantId: tenant.toHexString(), userId: "heir", replacedAt });
     const left = await mongo.db.attributeValues.raw
