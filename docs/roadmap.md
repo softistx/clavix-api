@@ -53,18 +53,13 @@ nxgt-janus release says which.
   resources, clients and app wiring are split into smaller modules, with no change in behaviour
   ([#266](https://github.com/softistx/clavix-api/issues/266)).
 
-- **Access rules** — an application publishes its OpenAPI and SDL from CI
-  ([#34](https://github.com/softistx/clavix-api/issues/34)); a tenant drafts, publishes,
-  versions and rolls back the access rules of a resource, with coverage and a simulator
-  ([#35](https://github.com/softistx/clavix-api/issues/35)); Clavix serves them signed, with a
-  `policy.published` event ([#36](https://github.com/softistx/clavix-api/issues/36)); and a guide
-  goes from schema publication to enforced rules
-  ([#37](https://github.com/softistx/clavix-api/issues/37)). The SDK part
-  (`clavixPolicy()`, `clavixRelations()`) is [#38](https://github.com/softistx/clavix-api/issues/38)
-  and [softistx/alxia#700](https://github.com/softistx/alxia/issues/700).
-  Builds on `@softistx/limix` 0.1: `remotePolicy` and `verifyRules` in
-  `@softistx/limix/remote`, signing and the JWKS in `@softistx/limix-publish`,
-  and janus relations in `@softistx/limix-janus`.
+- **Authorization (RBAC)** — a tenant authors the permission catalogue of each resource (its
+  scopes, [#29](https://github.com/softistx/clavix-api/issues/29)); roles group permissions, a
+  resource can enforce them, and tokens carry `permissions`, `roles` and `scope` (a permission
+  holds when it is in `scope` and, when present, in `permissions`,
+  [#30](https://github.com/softistx/clavix-api/issues/30)); and a guide shows how to protect a
+  resource server with Clavix tokens and `@softistx/limix`
+  ([#37](https://github.com/softistx/clavix-api/issues/37)).
 
 ## Later
 
@@ -73,10 +68,15 @@ nxgt-janus release says which.
 - Follow-ups of custom domains ([#127](https://github.com/softistx/clavix-api/issues/127)) and
   going live ([#134](https://github.com/softistx/clavix-api/issues/134)).
 
-**Authorization authoring**
+## Not planned
 
-- Roles, permissions and relations defined per tenant in the console, as the vocabulary
-  the access rules refer to.
+Resource servers enforce their own rules with limix, so Clavix does not host them:
+
+- ReBAC model, check API and SDK ([#31](https://github.com/softistx/clavix-api/issues/31)).
+- Schema publication from CI ([#34](https://github.com/softistx/clavix-api/issues/34)).
+- Access rules: drafts, versions, coverage, simulator ([#35](https://github.com/softistx/clavix-api/issues/35)).
+- Signed rules endpoint and `policy.published` ([#36](https://github.com/softistx/clavix-api/issues/36)).
+- `clavixPolicy()` and `clavixRelations()` in `@alxia/clavix` ([#38](https://github.com/softistx/clavix-api/issues/38)).
 
 ## Shipped
 
