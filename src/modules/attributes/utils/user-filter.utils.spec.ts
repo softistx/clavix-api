@@ -3,6 +3,8 @@ import { ObjectId } from "mongodb";
 import type { AttributeDoc } from "../attributes.types";
 import {
   afterOf,
+  askedIds,
+  attributeConditions,
   cursorOf,
   filterConditions,
   filterIssue,
@@ -129,6 +131,81 @@ describe("conditions", () => {
       from: "roleAssignments",
       match: { tenantId, roleId: { $in: [linked] } },
     });
+  });
+});
+
+describe("askedIds", () => {
+  test("reads the ids, a string that is no id is null", () => {
+    const id = new ObjectId();
+    expect(
+      askedIds([{ attributeId: id.toHexString() }, { attributeId: "nope" }]),
+    ).toEqual({ ids: [id, null] });
+  });
+
+  test("more than the most filters is refused on attributes", () => {
+    const many = Array.from({ length: 6 }, () => ({
+      attributeId: new ObjectId().toHexString(),
+    }));
+    expect(askedIds(many)).toEqual({
+      issue: "At most 5 attribute filters",
+      field: "attributes",
+    });
+  });
+});
+
+describe("attributeConditions", () => {
+  const select = attribute({});
+  const key = select._id.toHexString();
+
+  test("builds the conditions of every filter, a role attribute with its linked roles", () => {
+    const linked = new ObjectId();
+    const role = attribute({ family: "ROLE", type: "BOOLEAN", options: [] });
+    const built = attributeConditions(
+      tenantId,
+      [
+        { attributeId: key, options: ["a"] },
+        { attributeId: role._id.toHexString(), boolean: true },
+      ],
+      [select._id, role._id],
+      new Map([
+        [key, select],
+        [role._id.toHexString(), role],
+      ]),
+      [
+        { attributeId: role._id, roleId: linked },
+        { attributeId: new ObjectId(), roleId: new ObjectId() },
+      ],
+    );
+    expect("conditions" in built && built.conditions).toHaveLength(3);
+  });
+
+  test("refuses the first filter that cannot apply, on its index", () => {
+    const built = attributeConditions(
+      tenantId,
+      [
+        { attributeId: key, options: ["a"] },
+        { attributeId: key, options: ["zzz"] },
+      ],
+      [select._id, select._id],
+      new Map([[key, select]]),
+      [],
+    );
+    expect(built).toEqual({
+      issue: "An option is not one of the attribute's",
+      field: "attributes.1",
+    });
+  });
+
+  test("an id that names no known attribute is `No such attribute`", () => {
+    expect(
+      attributeConditions(
+        tenantId,
+        [{ attributeId: "nope" }],
+        [null],
+        new Map(),
+        [],
+      ),
+    ).toEqual({ issue: "No such attribute", field: "attributes.0" });
   });
 });
 

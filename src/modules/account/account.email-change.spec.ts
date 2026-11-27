@@ -179,18 +179,20 @@ describe("confirmEmailChange", () => {
     );
   });
 
-  test("a token of another account is a bearer proof: it moves its owner, the session answers its own user", async () => {
+  test("another account's token is EMAIL_CHANGE_INVALID and stays unspent for its owner", async () => {
     const owner = await signedIn(SLUG);
     const other = await signedIn(SLUG);
     const target = fresh();
     const { token } = await ask(owner, target);
-    const done = await gql(SLUG, CONFIRM, { token }, other.cookie);
-    await settled();
-    expect(done.data).toMatchObject({
-      confirmEmailChange: { id: other.user.id, email: other.user.email },
+    const refused = await gql(SLUG, CONFIRM, { token }, other.cookie);
+    expect(refused.status).toBe(400);
+    expect(codeOf(refused)).toBe("EMAIL_CHANGE_INVALID");
+    const janus = await janusOf(SLUG);
+    expect((await janus.findUser(owner.user.id))?.email).toBe(owner.user.email);
+    expect((await janus.findUser(other.user.id))?.email).toBe(other.user.email);
+    const own = await gql(SLUG, CONFIRM, { token }, owner.cookie);
+    expect(own.data).toMatchObject({
+      confirmEmailChange: { id: owner.user.id, email: target },
     });
-    expect((await (await janusOf(SLUG)).findUser(owner.user.id))?.email).toBe(
-      target,
-    );
   });
 });

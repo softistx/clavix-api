@@ -39,6 +39,17 @@ const drifted = createFlow({
   attributeScopesFor,
 });
 
+// The same drift on the access token's own reserved names.
+const driftedAccess = createFlow({
+  rolesFor,
+  attributesFor: () => async () => ({
+    roles: ["evil"],
+    iss: "evil",
+    nick: "ok",
+  }),
+  attributeScopesFor,
+});
+
 let tenant = new ObjectId();
 
 const create = (
@@ -74,6 +85,7 @@ const stringsOf = (document: Record<string, unknown>, key: string) =>
 
 beforeAll(async () => {
   await drifted.setUp("attrs-drift", []);
+  await driftedAccess.setUp("attrs-drift-access", []);
   tenant = new ObjectId((await flow.setUp(SLUG, [API])).tenantId);
   await save((await create("nick"))._id, "bob", USER);
   await save((await create("quiet", "USER", null))._id, "hidden", USER);
@@ -213,6 +225,20 @@ describe("a claim the server owns", () => {
     const body = await jsonOf(response, recordBody);
     expect(body["roles"]).toEqual([]);
     expect(body["email"]).not.toBe("evil@attrs.test");
+  });
+});
+
+describe("a claim the access token owns", () => {
+  test("is never overridden by an attribute, while the others pass", async () => {
+    const tokens = await driftedAccess.tokensOf(
+      "attrs-drift-access",
+      `openid ${SCOPE}`,
+      { userId: USER },
+    );
+    const claims = decodeJwt(tokens.access_token ?? "");
+    expect(claims["iss"]).not.toBe("evil");
+    expect(claims["roles"]).toEqual([]);
+    expect(claims["nick"]).toBe("ok");
   });
 });
 

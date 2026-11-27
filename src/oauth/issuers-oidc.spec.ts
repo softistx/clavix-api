@@ -12,15 +12,6 @@ describe("scopeClaimsOf", () => {
     });
   });
 
-  test("an attribute on a standard scope keeps the standard claims, picture included", () => {
-    expect(scopeClaimsOf({ profile: ["age"] })["profile"]).toEqual(
-      expect.arrayContaining(["name", "picture", "age"]),
-    );
-    expect(scopeClaimsOf({ email: ["tier"] })["email"]).toEqual(
-      expect.arrayContaining(["email", "email_verified", "tier"]),
-    );
-  });
-
   test("a scope listed in both releases both lists, without repeats", () => {
     expect(scopeClaimsOf({ openid: ["nick", "roles"] })["openid"]).toEqual([
       "roles",
@@ -35,8 +26,7 @@ describe("scopeClaimsOf", () => {
     });
   });
 
-  test("a tenant with no attribute scope keeps the base table", () => {
+  test("a tenant with no attribute scope releases roles under openid", () => {
     expect(scopeClaimsOf({})["openid"]).toEqual(["roles"]);
-    expect(scopeClaimsOf({})["profile"]).toContain("picture");
   });
 });

@@ -223,6 +223,16 @@ describe("a user's own save", () => {
     ).toBeNull();
   });
 
+  test("refuses more than 100 changes before checking editability", async () => {
+    const shut = await make("v_own_cap");
+    const over = Array.from({ length: 101 }, () =>
+      set(shut._id, { text: "no" }),
+    );
+    expect(await code(() => values.checkEditable(tenant, over))).toBe(
+      "BAD_USER_INPUT",
+    );
+  });
+
   test("leaves an unknown id to the save", async () => {
     await values.checkEditable(tenant, [
       set(new ObjectId(), { text: "ghost" }),
@@ -458,6 +468,20 @@ describe("erase and export", () => {
     expect(await values.personalDataOf(tenant, "x1")).toEqual([]);
     expect(await values.personalDataOf(tenant, "x2")).toHaveLength(1);
     expect(await values.removeUser(tenant, "x1")).toBe(0);
+  });
+
+  test("removeUser with a date keeps what was written after it", async () => {
+    const a = await make("v_rm_until_a");
+    const b = await make("v_rm_until_b");
+    await values.save(tenant, "w1", [set(a._id, { text: "old" })], admin, true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const until = new Date();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await values.save(tenant, "w1", [set(b._id, { text: "new" })], admin, true);
+    expect(await values.removeUser(tenant, "w1", until)).toBe(1);
+    const left = await values.personalDataOf(tenant, "w1");
+    expect(left.map((v) => v.value)).toEqual(["new"]);
+    expect(await values.removeUser(tenant, "w1", until)).toBe(0);
   });
 
   test("deleting an attribute removes its values", async () => {

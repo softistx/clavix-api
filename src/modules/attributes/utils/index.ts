@@ -20,7 +20,10 @@ export {
 } from "./role-attributes.utils";
 export {
   afterOf,
+  askedIds,
+  attributeConditions,
   cursorOf,
+  type FilterRefusal,
   filterConditions,
   filterIssue,
   isFilterable,

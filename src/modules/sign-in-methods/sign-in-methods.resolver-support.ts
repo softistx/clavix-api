@@ -1,12 +1,10 @@
 import { socialResolvers } from "@softistx/janus-graphql";
-import { ObjectId } from "mongodb";
-import { attributeValuesService } from "@/config/attributes";
-import { exclusive } from "@/config/exclusive";
+import { eraseOnReplace } from "@/config/erase-replaced";
 import { grantsRevokeQueue } from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
+import { reportError } from "@/config/runtime";
 import { usageService } from "@/config/usage";
 import { janusIssuers } from "@/config/users";
-import { userKey } from "@/console/modules/user-key";
 import type { Context } from "@/http/context";
 import { challengeAnswer } from "@/modules/mfa";
 import { services } from "@/modules/services";
@@ -24,6 +22,7 @@ import {
   offeredSocial,
   SOCIAL_LABELS,
 } from "./sign-in-methods.schema";
+import { clearReplacedProfile, settleReplaced } from "./sign-in-methods.utils";
 
 /** Set by the BFF from the path of its callback route (`/sign-in/social/:provider/callback`), never from the browser's own claim. */
 const SSO_CONNECTION_HEADER = "x-sso-connection";
@@ -164,21 +163,6 @@ export async function requireOfferedProvider(
   }
 }
 
-/**
- * The previous holder's attribute values are personal data of someone else:
- * the new holder starts with none. Under the user's lock, the one every write
- * of that user's values takes (`setUserAttributeValues`, `deleteUser`), so a
- * concurrent save cannot land after the erase and outlive it.
- */
-export function eraseReplacedValues(
-  tenantId: string,
-  userId: string,
-): Promise<void> {
-  return exclusive(userKey(tenantId, userId), async () => {
-    await attributeValuesService.removeUser(new ObjectId(tenantId), userId);
-  });
-}
-
 /** What a completed social flow answers with. */
 type Completed = Awaited<
   ReturnType<(typeof social)["Mutation"]["socialSignInComplete"]>
@@ -207,17 +191,19 @@ export async function completedAnswer(
   // `replaced`, a retried sign-in would not revoke. A failed revocation is
   // queued and retried (clavix-api #353); unqueued, the sign-in fails.
   if (done.replaced) {
-    // The erase is idempotent and runs first: a failed revocation must not
-    // leave the previous holder's attribute values on the new owner.
-    await eraseReplacedValues(tenantId, done.userId);
-    // Their picture goes too: the janus removal fires the event that
-    // deletes the object.
-    await services().avatars.remove({ tenantId, userId: done.userId, auth });
-    await services().consent.revokeOnReplace(
-      ctx,
-      tenantId,
-      done.userId,
-      grantsRevokeQueue.current,
+    await settleReplaced(
+      {
+        revoke: () =>
+          services().consent.revokeOnReplace(
+            ctx,
+            tenantId,
+            done.userId,
+            grantsRevokeQueue.current,
+          ),
+        erase: () => eraseOnReplace(tenantId, done.userId, auth),
+        clearProfile: () => clearReplacedProfile(auth, done.userId),
+      },
+      reportError,
     );
   }
   // janus types the user as an id and a type only: read the profile.

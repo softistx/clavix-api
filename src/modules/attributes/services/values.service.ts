@@ -175,9 +175,19 @@ export class AttributeValuesService implements AttributeValues {
       );
   }
 
+  /** Refuses (`BAD_USER_INPUT`, field `values`) more than `MAX_CHANGES` changes in one call. */
+  private requireWithinCap(changes: readonly ValueChange[]): void {
+    if (changes.length > MAX_CHANGES)
+      refuseCommon(
+        "BAD_USER_INPUT",
+        `Set at most ${MAX_CHANGES} values at once`,
+        "values",
+      );
+  }
+
   /**
-   * Refuses, before a user's own save, a change that names an attribute the
-   * user may not set (`ATTRIBUTE_NOT_EDITABLE`, field `values.<i>`). An id that
+   * Refuses, before a user's own save, an oversized call (the cap comes first), then a change that
+   * names an attribute the user may not set (`ATTRIBUTE_NOT_EDITABLE`, field `values.<i>`). An id that
    * names no live general attribute is left to `save` (not found, archived,
    * family), so the answer for it does not depend on who asks.
    */
@@ -185,6 +195,7 @@ export class AttributeValuesService implements AttributeValues {
     tenantId: ObjectId,
     changes: readonly ValueChange[],
   ): Promise<void> {
+    this.requireWithinCap(changes);
     const general = await this.general(tenantId);
     for (const [index, change] of changes.entries()) {
       const attribute = general.find(
@@ -248,12 +259,7 @@ export class AttributeValuesService implements AttributeValues {
     enforceRequired: boolean,
     section: SaveSection = GENERAL,
   ): Promise<ValueDoc[]> {
-    if (changes.length > MAX_CHANGES)
-      refuseCommon(
-        "BAD_USER_INPUT",
-        `Set at most ${MAX_CHANGES} values at once`,
-        "values",
-      );
+    this.requireWithinCap(changes);
     const stored = await this.own(tenantId).findMany({ filter: { userId } });
     const planned = await this.plan(
       tenantId,
@@ -435,9 +441,21 @@ export class AttributeValuesService implements AttributeValues {
     else await own.update(now._id, { type, value, uniqueKey, updatedBy });
   }
 
-  /** Removes every value of a deleted user (or of a replaced account); returns how many. */
-  removeUser(tenantId: ObjectId, userId: string): Promise<number> {
-    return this.own(tenantId).hardDeleteMany({ userId });
+  /**
+   * Removes every value of a deleted user (or of a replaced account); returns
+   * how many. With `writtenUntil`, only the values last written at or before
+   * it: what the new holder wrote since is theirs and stays.
+   */
+  removeUser(
+    tenantId: ObjectId,
+    userId: string,
+    writtenUntil?: Date,
+  ): Promise<number> {
+    return this.own(tenantId).hardDeleteMany(
+      writtenUntil === undefined
+        ? { userId }
+        : { userId, updatedAt: { $lte: writtenUntil } },
+    );
   }
 
   /**

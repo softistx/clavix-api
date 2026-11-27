@@ -8,10 +8,9 @@ import type {
   UserIdPage,
 } from "../user-filter.types";
 import {
+  askedIds,
+  attributeConditions,
   cursorOf,
-  filterConditions,
-  filterIssue,
-  MAX_FILTERS,
   matchPipeline,
   roleCondition,
 } from "../utils";
@@ -31,44 +30,31 @@ export class UserFilterService {
     filter: UserFilter,
   ): Promise<Condition[]> {
     const asked = filter.attributes ?? [];
-    if (asked.length > MAX_FILTERS) {
-      return refuseCommon(
-        "BAD_USER_INPUT",
-        `At most ${MAX_FILTERS} attribute filters`,
-        "attributes",
-      );
+    const parsed = askedIds(asked);
+    if ("issue" in parsed) {
+      return refuseCommon("BAD_USER_INPUT", parsed.issue, parsed.field);
     }
-    const ids = asked.map((item) =>
-      ObjectId.isValid(item.attributeId)
-        ? new ObjectId(item.attributeId)
-        : null,
-    );
     const known = new Map(
       (
         await scopeToTenant(this.options.attributes, tenantId).findMany({
-          filter: { _id: { $in: ids.filter((id) => id !== null) } },
+          filter: { _id: { $in: parsed.ids.filter((id) => id !== null) } },
         })
       ).map((attribute) => [attribute._id.toHexString(), attribute]),
     );
     const links = await scopeToTenant(this.options.links, tenantId).findMany({
       filter: { attributeId: { $in: [...known.values()].map((a) => a._id) } },
     });
-    const conditions: Condition[] = [];
-    for (const [index, item] of asked.entries()) {
-      const attribute = known.get(ids[index]?.toHexString() ?? "");
-      const issue = filterIssue(attribute, item);
-      if (issue !== null || attribute === undefined) {
-        return refuseCommon(
-          "BAD_USER_INPUT",
-          issue ?? "No such attribute",
-          `attributes.${index}`,
-        );
-      }
-      const linked = links
-        .filter((link) => link.attributeId.equals(attribute._id))
-        .map((link) => link.roleId);
-      conditions.push(...filterConditions(tenantId, attribute, item, linked));
+    const built = attributeConditions(
+      tenantId,
+      asked,
+      parsed.ids,
+      known,
+      links,
+    );
+    if ("issue" in built) {
+      return refuseCommon("BAD_USER_INPUT", built.issue, built.field);
     }
+    const { conditions } = built;
     if (filter.roleId !== null && filter.roleId !== undefined) {
       if (!ObjectId.isValid(filter.roleId)) {
         return refuseCommon("BAD_USER_INPUT", "roleId is not an id", "roleId");

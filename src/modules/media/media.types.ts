@@ -1,10 +1,18 @@
 import type { TenantJanus } from "@/modules/users";
 
+/** Records the `user.setPicture` admin event of the console caller, for the user whose picture was written. */
+export type AvatarRecorder = (userId: string) => Promise<void>;
+
 /** Whose picture a request writes: the tenant, the user and the tenant's janus instance. */
 export interface AvatarTarget {
   readonly tenantId: string;
   readonly userId: string;
   readonly auth: TenantJanus;
+}
+
+/** An upload's target: the picture's owner, and the recorder when a console caller writes it (`null` for the owner's own). */
+export interface AvatarWrite extends AvatarTarget {
+  readonly record: AvatarRecorder | null;
 }
 
 /** What `AvatarAccessService` is built over. */
@@ -14,10 +22,10 @@ export interface AvatarAccessPorts {
   /** The janus instance of a tenant by id; `null` once the tenant is gone. */
   janusOf(tenantId: string): Promise<TenantJanus | null>;
   /**
-   * Whether the console caller may edit the tenant's users' pictures: resolves when so,
-   * throws the media refusal that says why not (no console: `not_found`).
+   * Whether the console caller may edit the tenant's users' pictures: resolves with the
+   * recorder of that caller's admin event when so, throws the media refusal that says why not (no console: `not_found`).
    */
-  admin(request: Request, tenantId: string): Promise<void>;
+  admin(request: Request, tenantId: string): Promise<AvatarRecorder>;
   /** Whether the tenant locks the `PICTURE` profile field for its users' self-service. */
   pictureLocked(tenantId: string): Promise<boolean>;
 }

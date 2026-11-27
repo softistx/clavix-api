@@ -30,11 +30,21 @@ export class AvatarsService {
     }
   }
 
-  /** Removes the user's picture: `true` when there was one, `false` when there was none. */
-  async remove(target: AvatarTarget): Promise<boolean> {
+  /**
+   * Removes the user's picture: `true` when there was one, `false` when there
+   * was none. With `setUntil`, a picture set after it is kept (`false`), and
+   * the removal is conditional on the user not having changed since the read.
+   */
+  async remove(target: AvatarTarget, setUntil?: Date): Promise<boolean> {
     const user = await target.auth.findUser(target.userId);
     if (user === null || user.avatar === null) return false;
-    await target.auth.avatar.remove(target.userId);
+    if (setUntil !== undefined && user.avatar.updatedAt > setUntil) {
+      return false;
+    }
+    await target.auth.avatar.remove(
+      target.userId,
+      setUntil === undefined ? undefined : { ifVersion: user.version },
+    );
     return true;
   }
 

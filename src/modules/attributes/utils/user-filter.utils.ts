@@ -1,4 +1,4 @@
-import type { Document, ObjectId } from "mongodb";
+import { type Document, ObjectId } from "mongodb";
 import type { AttributeDoc } from "../attributes.types";
 import type { AttributeFilter, Condition } from "../user-filter.types";
 
@@ -49,6 +49,57 @@ export function filterIssue(
   return options.every((key) => known.has(key))
     ? null
     : "An option is not one of the attribute's";
+}
+
+/** What `askedIds` and `attributeConditions` answer when a filter is refused: the message and the field it is on. */
+export interface FilterRefusal {
+  issue: string;
+  field: string;
+}
+
+/** The ids the filters name (`null` for a string that is no id), or the refusal of too many filters. */
+export function askedIds(
+  asked: readonly AttributeFilter[],
+): { ids: (ObjectId | null)[] } | FilterRefusal {
+  if (asked.length > MAX_FILTERS) {
+    return {
+      issue: `At most ${MAX_FILTERS} attribute filters`,
+      field: "attributes",
+    };
+  }
+  return {
+    ids: asked.map((item) =>
+      ObjectId.isValid(item.attributeId)
+        ? new ObjectId(item.attributeId)
+        : null,
+    ),
+  };
+}
+
+/** The conditions of every attribute filter, or the refusal of the first one that cannot apply. */
+export function attributeConditions(
+  tenantId: ObjectId,
+  asked: readonly AttributeFilter[],
+  ids: readonly (ObjectId | null)[],
+  known: ReadonlyMap<string, AttributeDoc>,
+  links: readonly { attributeId: ObjectId; roleId: ObjectId }[],
+): { conditions: Condition[] } | FilterRefusal {
+  const conditions: Condition[] = [];
+  for (const [index, item] of asked.entries()) {
+    const attribute = known.get(ids[index]?.toHexString() ?? "");
+    const issue = filterIssue(attribute, item);
+    if (issue !== null || attribute === undefined) {
+      return {
+        issue: issue ?? "No such attribute",
+        field: `attributes.${index}`,
+      };
+    }
+    const linked = links
+      .filter((link) => link.attributeId.equals(attribute._id))
+      .map((link) => link.roleId);
+    conditions.push(...filterConditions(tenantId, attribute, item, linked));
+  }
+  return { conditions };
 }
 
 /** The conditions of one filter: the value, and for a role attribute a held linked role. */

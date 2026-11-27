@@ -6,6 +6,7 @@ import { DPOP_ALGORITHMS } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { AttributesFor, RolesFor } from "./ports";
 import { type MetadataTransport, registrationOf } from "./registration";
+import { omitReserved } from "./reserved-claims";
 
 /** The userinfo endpoint of an issuer, also the resource of OIDC clients that send none. */
 export const userinfoOf = (issuer: string) => `${issuer}/userinfo`;
@@ -78,12 +79,6 @@ const grantClaims = ({
 
 const RESERVED: ReadonlySet<string> = new Set(RESERVED_ACCESS_TOKEN_CLAIMS);
 
-/** The claims without the names the server owns (a catalogue refuses them at creation; this keeps a token valid whatever the data). */
-const omitReserved = (claims: Record<string, unknown>) =>
-  Object.fromEntries(
-    Object.entries(claims).filter(([name]) => !RESERVED.has(name)),
-  );
-
 /**
  * Runs on every code exchange and refresh: a refreshed token carries the
  * user's current roles. The audience is the token's resource. `acr`, `amr` and
@@ -106,7 +101,10 @@ export const accessTokenClaims =
     if (subjectType === "client") return grantClaims({ authTime, acr, amr });
     const resource = audience === userinfoOf(tenant.issuer) ? null : audience;
     return {
-      ...omitReserved(await attributesFor(tenant)(subject, scopes, resource)),
+      ...omitReserved(
+        RESERVED,
+        await attributesFor(tenant)(subject, scopes, resource),
+      ),
       roles: await rolesFor(tenant)(subject, resource),
       ...grantClaims({ authTime, acr, amr }),
     };
