@@ -830,7 +830,7 @@ comparison is `domains.check.ts`.
   `BrandingService` (read, `view`, `update`), each built in `src/config/<name>.ts`, registered in `services()` and called
   by a thin `<name>.resolver.ts` (consent's builds janus-oauth's `oauthResolvers`). Each has `.errors.ts` (codes and
   refusal builders), `.types.ts`, `.utils.ts` (invitations and consent), `.rules.ts` (invitations) and specs (each file that holds code, the thin resolvers apart, is covered by a spec in the module, such as `consent.approve.spec.ts` and `consent.device.spec.ts` for the flows). The barrels (`index.ts`) leave out the resolvers (`modules/index.ts` and `http/schema.ts`
-  import them by file). Deep imports are the ones listed under "Cross-module imports" above (A29): `consent.device-throttle`, `consent.queue`,
+  import them by file). Deep imports are the ones listed under "Cross-module imports" above (A29): `consent.device-throttle`, `consent.queue`, `sign-in-methods.queue`,
   `consent.plugin` (`http/graphql-mount.ts`), and `.errors` files (`i18n/codes.ts`); the leaf readers, `invitations.rules`,
   `invitations.types` and `branding.logo-route` are now exported by their barrels. Behaviour, throttles, error codes and mail timing are unchanged.
 - Layout (A12, roles): `roles` is a flat `<name>.<role>.ts` module with one service, `RolesService` (every method of
