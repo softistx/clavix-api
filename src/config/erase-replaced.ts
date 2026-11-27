@@ -6,14 +6,15 @@ import { env } from "./env";
 import { exclusive } from "./exclusive";
 import { avatarsService } from "./media";
 import { redis } from "./redis";
-import { reportError } from "./runtime";
+import { clock, reportError } from "./runtime";
 import { tenantResolver, tenantsService } from "./tenancy";
 import { forTenant } from "./users";
 
-/** What a queued erase carries: ids only. */
+/** What a queued erase carries: ids and when the holder was replaced (ISO 8601). */
 export interface EraseJob {
   tenantId: string;
   userId: string;
+  replacedAt: string;
 }
 
 /** The queue surface the sign-in needs (`redis.queues.eraseReplaced`). */
@@ -45,21 +46,27 @@ const authOfTenant = async (tenantId: string) => {
 
 /**
  * The job: the replaced holder's attribute values (`erase`, under the user's
- * lock) and picture. Both are idempotent. A tenant that is gone has nothing
+ * lock) and picture, as they stood at `replacedAt`: what the new holder wrote
+ * or set since is kept, so a late retry never wipes it. Both are idempotent. A tenant that is gone has nothing
  * left to erase.
  */
 export const createEraseReplaced =
   (
-    erase: (tenantId: string, userId: string) => Promise<void>,
+    erase: (
+      tenantId: string,
+      userId: string,
+      writtenUntil: Date,
+    ) => Promise<void>,
     authOf: (
       tenantId: string,
     ) => ReturnType<typeof authOfTenant> = authOfTenant,
   ) =>
-  async ({ tenantId, userId }: EraseJob): Promise<void> => {
+  async ({ tenantId, userId, replacedAt }: EraseJob): Promise<void> => {
     const auth = await authOf(tenantId);
     if (auth === null) return;
-    await erase(tenantId, userId);
-    await avatarsService.remove({ tenantId, userId, auth });
+    const until = new Date(replacedAt);
+    await erase(tenantId, userId, until);
+    await avatarsService.remove({ tenantId, userId, auth }, until);
   };
 
 /** Runs each queued erase; a failure throws so the queue retries it with backoff. */
@@ -84,9 +91,14 @@ export function startEraseReplacedWorker(
 export function eraseReplacedValues(
   tenantId: string,
   userId: string,
+  writtenUntil?: Date,
 ): Promise<void> {
   return exclusive(userKey(tenantId, userId), async () => {
-    await attributeValuesService.removeUser(new ObjectId(tenantId), userId);
+    await attributeValuesService.removeUser(
+      new ObjectId(tenantId),
+      userId,
+      writtenUntil,
+    );
   });
 }
 
@@ -101,14 +113,15 @@ export async function eraseOnReplace(
   auth: TenantJanus,
 ): Promise<void> {
   const queue = eraseReplacedQueue.current;
+  const replacedAt = clock();
   if (queue === undefined) {
-    await eraseReplacedValues(tenantId, userId);
+    await eraseReplacedValues(tenantId, userId, replacedAt);
     // The janus removal fires the event that deletes the object.
-    await avatarsService.remove({ tenantId, userId, auth });
+    await avatarsService.remove({ tenantId, userId, auth }, replacedAt);
     return;
   }
   try {
-    await queue.add({ tenantId, userId });
+    await queue.add({ tenantId, userId, replacedAt: replacedAt.toISOString() });
   } catch (cause) {
     reportError(
       "sign-in: the erase of the replaced holder was not queued",

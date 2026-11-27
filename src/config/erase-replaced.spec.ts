@@ -104,7 +104,7 @@ describe("eraseReplacedValues", () => {
 describe("the erase of a replaced holder, queued", () => {
   const auth = janusOver();
 
-  test("a replacement enqueues the job with ids only", async () => {
+  test("a replacement enqueues the job with the ids and the time of the replacement", async () => {
     const added: EraseJob[] = [];
     const before = eraseReplacedQueue.current;
     eraseReplacedQueue.current = {
@@ -117,7 +117,12 @@ describe("the erase of a replaced holder, queued", () => {
     } finally {
       eraseReplacedQueue.current = before;
     }
-    expect(added).toEqual([{ tenantId: "t1", userId: "u1" }]);
+    expect(added).toEqual([
+      { tenantId: "t1", userId: "u1", replacedAt: expect.any(String) },
+    ]);
+    expect(new Date(added[0]?.replacedAt ?? "").getTime()).toBeLessThanOrEqual(
+      Date.now(),
+    );
   });
 
   test("a queue that cannot be written fails the sign-in", async () => {
@@ -154,7 +159,13 @@ describe("the erase of a replaced holder, queued", () => {
       async () => auth,
     );
     startEraseReplacedWorker(run, queue, () => {});
-    const job = { data: { tenantId: "t1", userId: "u1" } };
+    const job = {
+      data: {
+        tenantId: "t1",
+        userId: "u1",
+        replacedAt: new Date().toISOString(),
+      },
+    };
     await expect(handler?.(job)).rejects.toThrow("mongo down");
     expect(erased).toEqual([]);
     // The queue gives the job back after its backoff.
@@ -170,7 +181,51 @@ describe("the erase of a replaced holder, queued", () => {
       },
       async () => null,
     );
-    await run({ tenantId: "gone", userId: "u1" });
+    await run({
+      tenantId: "gone",
+      userId: "u1",
+      replacedAt: new Date().toISOString(),
+    });
     expect(erased).toEqual([]);
+  });
+});
+
+describe("a retried erase never wipes what the new holder wrote", () => {
+  test("a value set after replacedAt is kept when the job runs", async () => {
+    const old = await attributesService.create(tenant, {
+      key: "before",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    const fresh = await attributesService.create(tenant, {
+      key: "after",
+      family: "USER",
+      type: "STRING",
+      label: [{ locale: "en", text: "Label" }],
+    });
+    const write = (attributeId: ObjectId, text: string) =>
+      attributeValuesService.save(
+        tenant,
+        "heir",
+        [{ attributeId: attributeId.toHexString(), value: { text } }],
+        admin,
+        true,
+      );
+    await write(old._id, "former holder's");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const replacedAt = new Date().toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The new holder sets a value, then the retried job runs.
+    await write(fresh._id, "new holder's");
+    const run = createEraseReplaced(eraseReplacedValues, async () =>
+      janusOver(),
+    );
+    await run({ tenantId: tenant.toHexString(), userId: "heir", replacedAt });
+    const left = await mongo.db.attributeValues.raw
+      .find({ tenantId: tenant, userId: "heir" })
+      .toArray();
+    expect(left).toHaveLength(1);
+    expect(left[0]?.attributeId.equals(fresh._id)).toBe(true);
   });
 });

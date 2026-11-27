@@ -201,14 +201,16 @@ Sign-in methods are the tenant's own policy (`tenant.signIn`, `src/modules/sign-
   stored; the worker (`ConsentService.startRevokeWorker`, started in `server.ts`) finds the tenant's
   server by its issuer URL and repeats the idempotent `revokeAll`. With no Redis, or when the job cannot be
   added, the original error fails the sign-in as before. The revocation runs first, then the erase of the former holder's attribute values and picture goes on the
-  `erase-replaced` queue (`sign-in-methods.queue.ts`, `{ tenantId, userId }`, same policy as `grants-revoke`: 8
+  `erase-replaced` queue (`sign-in-methods.queue.ts`, `{ tenantId, userId, replacedAt }`, same policy as `grants-revoke`: 8
   attempts, backoff 1 min doubling to 1 h; `config/erase-replaced.ts`: `eraseOnReplace`, the job `createEraseReplaced`
   and its worker, started in `server.ts` beside the revoke worker). Both steps are fatal: `settleReplaced` runs
   revoke, erase and the profile clearing whatever the previous did, then throws the first failure; a queue that cannot
   be written is reported (`reportError`) and fails the sign-in. With no Redis (outside production) the erase runs
   inline and fails the sign-in. The job is idempotent (`eraseReplacedValues` under the user's lock, then the picture
-  removal), so it may run twice; a retried job after minutes may erase values the new holder has set meanwhile (accepted:
-  the values of a replaced account are the former holder's). The standard profile clearing (`clearReplacedProfile`) is
+  removal), so it may run twice. A retry never wipes what the new holder wrote (owner decision): the job carries `replacedAt`
+  (the clock at enqueue), removes only the values whose `updatedAt` is at or before it (`removeUser(…, writtenUntil)`)
+  and the picture only when janus's `avatar.updatedAt` is at or before it (`AvatarsService.remove(…, setUntil)`,
+  written with `ifVersion`, so a write in between retries the job). The standard profile clearing (`clearReplacedProfile`) is
   best effort inline, caught and reported, not queued. janus keeps the required `name` and the e-mail, which Clavix
   cannot clear.
 - **The social flow is janus's**: `socialSignInStart` / `socialSignInComplete` delegate to janus-graphql's `socialResolvers` with a per-request auth function (the tenant of the host, null when it has no provider); the providers are `@softistx/janus-social` presets. A new user is created only where the tenant's `signUp` is open (`SIGN_UP_DISABLED` otherwise). No provider code is written here.

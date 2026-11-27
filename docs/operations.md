@@ -376,12 +376,13 @@ failed set for 30 days and the user's grants stay live: revoke them from the con
 ## Erase of a replaced holder
 
 When a social sign-in replaces an unverified holder, the former holder's attribute values and picture are erased by
-the `erase-replaced` queue (Redis, `{ tenantId, userId }`), right after the grants revocation. The job is idempotent and
+the `erase-replaced` queue (Redis, `{ tenantId, userId, replacedAt }`), right after the grants revocation. The job is idempotent and
 retries up to 8 times, backing off from 1 minute to 1 hour. Without `REDIS_URL`, the erase runs inline; when the job
 cannot be stored, or the inline erase fails, the sign-in fails. Watch the logs `erase-replaced: <error>` and
 `sign-in: the erase of the replaced holder was not queued`. A job that exhausts its attempts stays in the failed set for
-30 days and leaves the former holder's values and picture in place: erase them from the console. A retry that comes
-minutes later may erase values the new holder set meanwhile (accepted, see AGENTS.md).
+30 days and leaves the former holder's values and picture in place: erase them from the console. A retry never erases what the
+new holder wrote: the job carries the time of the replacement and removes only the values and the picture last written
+at or before it.
 
 ## Profile pictures
 

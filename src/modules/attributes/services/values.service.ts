@@ -441,9 +441,21 @@ export class AttributeValuesService implements AttributeValues {
     else await own.update(now._id, { type, value, uniqueKey, updatedBy });
   }
 
-  /** Removes every value of a deleted user (or of a replaced account); returns how many. */
-  removeUser(tenantId: ObjectId, userId: string): Promise<number> {
-    return this.own(tenantId).hardDeleteMany({ userId });
+  /**
+   * Removes every value of a deleted user (or of a replaced account); returns
+   * how many. With `writtenUntil`, only the values last written at or before
+   * it: what the new holder wrote since is theirs and stays.
+   */
+  removeUser(
+    tenantId: ObjectId,
+    userId: string,
+    writtenUntil?: Date,
+  ): Promise<number> {
+    return this.own(tenantId).hardDeleteMany(
+      writtenUntil === undefined
+        ? { userId }
+        : { userId, updatedAt: { $lte: writtenUntil } },
+    );
   }
 
   /**

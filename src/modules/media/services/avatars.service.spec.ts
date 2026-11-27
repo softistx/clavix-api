@@ -103,6 +103,16 @@ describe("AvatarsService.remove", () => {
     expect(calls).toEqual(["remove"]);
   });
 
+  test("a picture set after `setUntil` is the new holder's and stays", async () => {
+    const { auth, calls } = janusWith({ avatar: true }); // set at Date(0)
+    const target = { tenantId: "t1", userId: "u1", auth };
+    const service = serviceOver(auth);
+    expect(await service.remove(target, new Date(-1))).toBe(false);
+    expect(calls).toEqual([]);
+    expect(await service.remove(target, new Date(0))).toBe(true);
+    expect(calls).toEqual(["remove"]);
+  });
+
   test("a user with no picture, or none, is false and nothing is written", async () => {
     const { auth, calls } = janusWith({ avatar: false });
     const service = serviceOver(auth);

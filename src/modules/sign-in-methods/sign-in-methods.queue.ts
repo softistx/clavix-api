@@ -9,7 +9,13 @@ import { z } from "zod";
 // 1 min doubling, capped at 1 h).
 export const eraseReplaced = defineQueue({
   name: "erase-replaced",
-  schema: z.object({ tenantId: z.string(), userId: z.string() }),
+  schema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
+    // When the holder was replaced (ISO 8601): a retry erases only what was
+    // written at or before it, never what the new holder wrote since.
+    replacedAt: z.iso.datetime(),
+  }),
   attempts: 8,
   backoff: { base: "1m", max: "1h" },
   keepFailed: "30d",
