@@ -1401,6 +1401,14 @@ type Mutation {
   """
   removeSocialProvider(provider: SocialProviderKind!, tenantId: ID!): SignInPolicy!
   """
+  Removes a user's profile picture (tenant admin): true when this call removed
+  one, false when there was none. The stored object is erased and the user's
+  `pictureKey` and `picture` claim are cleared. The tenant's PICTURE lock binds
+  the user's own edits, not this one. Errors: NOT_FOUND for an unknown user,
+  CONFLICT (409) when the user changed meanwhile.
+  """
+  removeUserPicture(tenantId: ID!, userId: ID!): Boolean!
+  """
   Sends a pending invitation again (tenant owner): a new code and lifetime
   (the old code stops working) and a new mail, naming the caller. Allowed on a
   lapsed invitation too. Errors: NOT_FOUND (404) for an unknown tenant or an

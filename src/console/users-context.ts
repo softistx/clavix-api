@@ -147,6 +147,11 @@ export interface ConsoleUsers {
     id: string,
     sessionId: string,
   ): Promise<boolean>;
+  /**
+   * Removes the user's picture: `true` when this call removed one, `false`
+   * when there was none; `null` for an unknown user.
+   */
+  removePicture(tenantId: string, id: string): Promise<boolean | null>;
   /** Deletes the user, their sessions and grants; `false` when already gone. */
   delete(tenantId: string, id: string): Promise<boolean>;
   invite(input: {

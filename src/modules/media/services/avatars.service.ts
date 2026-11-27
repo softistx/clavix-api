@@ -6,6 +6,7 @@ import { fail } from "@/shared/errors";
 import { requireLive } from "@/tenancy/live";
 import { PICTURE_LOCKED_MESSAGE } from "../media.errors";
 import type { AvatarsPorts, AvatarTarget } from "../media.types";
+import { removePicture } from "../media.utils";
 
 /**
  * A user's picture in janus. The bytes are written first (the media routes), then
@@ -36,16 +37,7 @@ export class AvatarsService {
    * the removal is conditional on the user not having changed since the read.
    */
   async remove(target: AvatarTarget, setUntil?: Date): Promise<boolean> {
-    const user = await target.auth.findUser(target.userId);
-    if (user === null || user.avatar === null) return false;
-    if (setUntil !== undefined && user.avatar.updatedAt > setUntil) {
-      return false;
-    }
-    await target.auth.avatar.remove(
-      target.userId,
-      setUntil === undefined ? undefined : { ifVersion: user.version },
-    );
-    return true;
+    return removePicture(target, setUntil);
   }
 
   /** `removeMyPicture`: the signed-in user's own picture, on the tenant host's session. */

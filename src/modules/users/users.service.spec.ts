@@ -207,3 +207,45 @@ describe("update and setPhoneVerified", () => {
     });
   });
 });
+
+describe("removePicture", () => {
+  const overPool = (
+    user: ReturnType<typeof poolUser> | null,
+    avatar: { id: string; updatedAt: Date } | null,
+    removed: string[],
+  ) => {
+    const auth: TenantJanus = {
+      ...acmeJanus(),
+      findUser: async () => (user === null ? null : { ...user, avatar }),
+      avatar: {
+        ...acmeJanus().avatar,
+        remove: async (id) => {
+          removed.push(typeof id === "string" ? id : id.id);
+          return poolUser("1", "ada@x.test", "Ada");
+        },
+      },
+    };
+    return new UsersService({
+      janusOf: async () => auth,
+      grantsOf: async () => null,
+      invitationsOf: () => away,
+    });
+  };
+
+  test("true when it removed a picture, false when there was none, null for an unknown user", async () => {
+    const removed: string[] = [];
+    const ada = poolUser("1", "ada@x.test", "Ada");
+    const picture = { id: "k", updatedAt: new Date(0) };
+    expect(await overPool(ada, picture, removed).removePicture("t", "1")).toBe(
+      true,
+    );
+    expect(removed).toEqual(["1"]);
+    expect(await overPool(ada, null, removed).removePicture("t", "1")).toBe(
+      false,
+    );
+    expect(removed).toEqual(["1"]);
+    expect(
+      await overPool(null, null, removed).removePicture("t", "9"),
+    ).toBeNull();
+  });
+});
