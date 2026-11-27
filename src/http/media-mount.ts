@@ -39,7 +39,8 @@ export interface MediaPorts {
  * bucket (`<tenantId>/avatar/<key>`): a write goes to the target's tenant, a
  * read to the host's, so a key of another tenant is a 404. The picture is
  * recorded in janus once its bytes are stored (an admin's event is recorded
- * before that); if either fails, the object is removed. Refusals are the API's own `{ errors }` body, never cached.
+ * before that); if either fails, the object is removed. Refusals are the
+ * API's own `{ errors }` body, never cached.
  */
 export function mountMedia(
   app: Base,
@@ -73,13 +74,16 @@ export function mountMedia(
       uploaded: async (uploaded, ctx) => {
         const target = await access.targetOf(ctx);
         // A console caller's write is an admin event, recorded first: a failed
-        // audit leaves the picture untouched (audit or nothing). The event marks
-        // the requested change; if the set then fails, it is reported and thrown.
+        // audit leaves the picture untouched (audit or nothing). The event
+        // marks the requested change; if the set then fails, it is reported
+        // (unless it is a refusal) and thrown.
         if (target.record !== null) await target.record(target.userId);
         try {
           await avatars.set(target, uploaded.key);
         } catch (cause) {
-          report("media: the picture was not set after its audit", cause);
+          if (target.record !== null && !(cause instanceof MediaRefusal)) {
+            report("media: the picture was not set after its audit", cause);
+          }
           throw cause;
         }
         return {

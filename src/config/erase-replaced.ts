@@ -115,9 +115,12 @@ export async function eraseOnReplace(
   const queue = eraseReplacedQueue.current;
   const replacedAt = clock();
   if (queue === undefined) {
-    await eraseReplacedValues(tenantId, userId, replacedAt);
     // The janus removal fires the event that deletes the object.
-    await avatarsService.remove({ tenantId, userId, auth }, replacedAt);
+    await createEraseReplaced(
+      eraseReplacedValues,
+      async () => auth,
+      avatarsService,
+    )({ tenantId, userId, replacedAt: replacedAt.toISOString() });
     return;
   }
   try {

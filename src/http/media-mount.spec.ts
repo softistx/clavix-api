@@ -58,7 +58,7 @@ interface Wiring {
   pictureLocked?: boolean;
   throttle?: AvatarThrottle;
   admin?: (tenantId: string) => Promise<void>;
-  setFails?: MediaRefusal;
+  setFails?: Error;
   recordFails?: MediaRefusal;
 }
 
@@ -292,7 +292,27 @@ suite("/media/avatar over S3", () => {
     expect((await objects()).length).toBe(before);
   });
 
-  test("a set that fails after the audit is reported and rethrown", async () => {
+  test("a set that fails after the audit is reported, rethrown and its object removed", async () => {
+    const tenantId = "c".repeat(24);
+    const cause = new Error("janus down");
+    const before = (await objects()).length;
+    const { app, audited, reported } = appOver({
+      admin: async () => {},
+      setFails: cause,
+    });
+    const response = await put(
+      app,
+      PNG,
+      "image/png",
+      `?tenantId=${tenantId}&userId=u7`,
+    );
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(audited).toEqual([{ tenantId, userId: "u7" }]);
+    expect(reported).toEqual([cause]);
+    expect((await objects()).length).toBe(before);
+  });
+
+  test("a refusal of the set after the audit is not reported", async () => {
     const tenantId = "c".repeat(24);
     const { app, audited, reported } = appOver({
       admin: async () => {},
@@ -306,6 +326,16 @@ suite("/media/avatar over S3", () => {
     );
     expect(response.status).toBe(404);
     expect(audited).toEqual([{ tenantId, userId: "u7" }]);
-    expect(reported).toHaveLength(1);
+    expect(reported).toEqual([]);
+  });
+
+  test("the owner's own failed upload (no audit) is not reported", async () => {
+    const { app, audited, reported } = appOver({
+      setFails: new Error("janus down"),
+    });
+    const response = await put(app, PNG);
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(audited).toEqual([]);
+    expect(reported).toEqual([]);
   });
 });
