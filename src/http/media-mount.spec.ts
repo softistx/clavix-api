@@ -59,12 +59,15 @@ interface Wiring {
   throttle?: AvatarThrottle;
   admin?: (tenantId: string) => Promise<void>;
   setFails?: MediaRefusal;
+  recordFails?: MediaRefusal;
 }
 
 /** The app of a spec: the caller `u1` (or nobody), and what janus was told. */
 function appOver(wiring: Wiring = {}) {
   const recorded: Array<{ tenantId: string; userId: string; key: string }> = [];
   const audited: Array<{ tenantId: string; userId: string }> = [];
+  const reported: unknown[] = [];
+  let setCalls = 0;
   const auth: TenantJanus = janusOver({
     authenticate: async () =>
       wiring.signedIn === false ? null : signedAs("u1"),
@@ -75,6 +78,7 @@ function appOver(wiring: Wiring = {}) {
       store,
       avatars: {
         set: async (target, key) => {
+          setCalls++;
           if (wiring.setFails !== undefined) throw wiring.setFails;
           recorded.push({
             tenantId: target.tenantId,
@@ -87,15 +91,17 @@ function appOver(wiring: Wiring = {}) {
       janusOf: async () => auth,
       pictureLocked: async () => wiring.pictureLocked === true,
       throttle: wiring.throttle ?? { check: async () => {} },
+      report: (_message, cause) => reported.push(cause),
     },
     async (_request, tenantId) => {
       await wiring.admin?.(tenantId);
       return async (userId) => {
+        if (wiring.recordFails !== undefined) throw wiring.recordFails;
         audited.push({ tenantId, userId });
       };
     },
   );
-  return { app, recorded, audited };
+  return { app, recorded, audited, reported, setCalls: () => setCalls };
 }
 
 const put = (
@@ -266,5 +272,40 @@ suite("/media/avatar over S3", () => {
     const { app } = appOver({ setFails: new MediaRefusal("not_found") });
     const response = await put(app, PNG);
     expect(response.status).toBe(404);
+  });
+
+  test("a failed audit sets nothing: the former picture is intact and the object is removed", async () => {
+    const tenantId = "c".repeat(24);
+    const before = (await objects()).length;
+    const { app, recorded, setCalls } = appOver({
+      recordFails: new MediaRefusal("forbidden"),
+    });
+    const response = await put(
+      app,
+      PNG,
+      "image/png",
+      `?tenantId=${tenantId}&userId=u7`,
+    );
+    expect(response.status).toBe(403);
+    expect(setCalls()).toBe(0);
+    expect(recorded).toEqual([]);
+    expect((await objects()).length).toBe(before);
+  });
+
+  test("a set that fails after the audit is reported and rethrown", async () => {
+    const tenantId = "c".repeat(24);
+    const { app, audited, reported } = appOver({
+      admin: async () => {},
+      setFails: new MediaRefusal("not_found"),
+    });
+    const response = await put(
+      app,
+      PNG,
+      "image/png",
+      `?tenantId=${tenantId}&userId=u7`,
+    );
+    expect(response.status).toBe(404);
+    expect(audited).toEqual([{ tenantId, userId: "u7" }]);
+    expect(reported).toHaveLength(1);
   });
 });

@@ -28,6 +28,8 @@ export interface MediaPorts {
   pictureLocked: AvatarAccessPorts["pictureLocked"];
   /** The upload budget, per user, client address and tenant. */
   throttle: AvatarThrottle;
+  /** Reports a failure that is rethrown (the app logs it). */
+  report: (message: string, cause: unknown) => void;
 }
 
 /**
@@ -36,15 +38,15 @@ export interface MediaPorts {
  * enforce their own size. Objects live under the tenant's folder of the
  * bucket (`<tenantId>/avatar/<key>`): a write goes to the target's tenant, a
  * read to the host's, so a key of another tenant is a 404. The picture is
- * recorded in janus once its bytes are stored; if that fails, the object is
- * removed. Refusals are the API's own `{ errors }` body, never cached.
+ * recorded in janus once its bytes are stored (an admin's event is recorded
+ * before that); if either fails, the object is removed. Refusals are the API's own `{ errors }` body, never cached.
  */
 export function mountMedia(
   app: Base,
   ports: MediaPorts,
   admin: AvatarAccessPorts["admin"],
 ) {
-  const { avatars, store, throttle } = ports;
+  const { avatars, report, store, throttle } = ports;
   const access = new AvatarAccessService({
     issuers: ports.issuers,
     janusOf: ports.janusOf,
@@ -70,9 +72,16 @@ export function mountMedia(
       },
       uploaded: async (uploaded, ctx) => {
         const target = await access.targetOf(ctx);
-        await avatars.set(target, uploaded.key);
-        // A console caller's write is an admin event, once it is stored.
+        // A console caller's write is an admin event, recorded first: a failed
+        // audit leaves the picture untouched (audit or nothing). The event marks
+        // the requested change; if the set then fails, it is reported and thrown.
         if (target.record !== null) await target.record(target.userId);
+        try {
+          await avatars.set(target, uploaded.key);
+        } catch (cause) {
+          report("media: the picture was not set after its audit", cause);
+          throw cause;
+        }
         return {
           key: uploaded.key,
           contentType: uploaded.contentType,

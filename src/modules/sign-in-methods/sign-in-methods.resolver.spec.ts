@@ -15,7 +15,11 @@ import { connectionRecordsService } from "@/config/connections";
 import { consentService } from "@/config/consent";
 import { mongo } from "@/config/db";
 import { env } from "@/config/env";
-import { createGrantsRevoke, grantsRevokeQueue } from "@/config/grants-revoke";
+import {
+  createGrantsRevoke,
+  grantsRevokeQueue,
+  slugOfTenant,
+} from "@/config/grants-revoke";
 import { secretBox } from "@/config/keys";
 import { oauthDb } from "@/config/oauth-db";
 import { tenantResolver } from "@/config/tenancy";
@@ -683,7 +687,7 @@ describe("social sign-in", () => {
       },
     };
     consentService.startRevokeWorker(
-      createGrantsRevoke(flow.issuers.serverFor),
+      createGrantsRevoke(flow.issuers.serverFor, slugOfTenant),
       {
         work: (fn) => {
           handler = fn;
@@ -708,7 +712,7 @@ describe("social sign-in", () => {
     }
     // The first run of the job fails (the store is still down for it), the retry succeeds.
     revokeDown.on = true;
-    const down = createGrantsRevoke(issuers.serverFor);
+    const down = createGrantsRevoke(issuers.serverFor, slugOfTenant);
     const job = defined(jobs[0], "the queued revocation");
     await expect(down(job)).rejects.toThrow("store down");
     revokeDown.on = false;

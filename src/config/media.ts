@@ -4,6 +4,7 @@ import { AvatarsService } from "@/modules/media";
 import { tenantJanusById } from "./console";
 import { mediaStore } from "./media-objects";
 import { profilePoliciesService } from "./profile";
+import { reportError } from "./runtime";
 import { avatarThrottle } from "./throttle";
 import { janusIssuers } from "./users";
 
@@ -27,4 +28,5 @@ export const mediaPorts: MediaPorts = {
   janusOf: tenantJanusById,
   pictureLocked,
   throttle: avatarThrottle,
+  report: reportError,
 };
