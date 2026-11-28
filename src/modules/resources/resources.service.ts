@@ -29,6 +29,7 @@ import {
   cleanName,
   isOidcScope,
   listed,
+  SCRIPT_ACTOR,
   MAX_DESCRIPTION,
   MAX_LABEL,
   MAX_LISTED,
@@ -320,7 +321,18 @@ export class ResourcesService {
   ): Promise<void> {
     const late = await this.clientsListing(tenantId, existing.name);
     if (late.ids.length === 0) return;
-    await this.scopesOf(tenantId).update(renamed._id, { name: existing.name });
+    // Only while the scope still carries the new name; a failed revert is
+    // logged (ids only) and the refusal still says why.
+    try {
+      await this.scopesOf(tenantId).updateMany(
+        { _id: renamed._id, name: renamed.name },
+        { $set: { name: existing.name } },
+      );
+    } catch {
+      this.options.warn(
+        `scope ${renamed._id.toHexString()} of tenant ${tenantId.toHexString()} kept its new name: a client listed the old one and the revert failed`,
+      );
+    }
     throw this.scopeInUse(existing.name, late);
   }
 
@@ -360,7 +372,11 @@ export class ResourcesService {
   }
 
   /** `false` when it was not there. */
-  async deleteScope(tenantId: ObjectId, scopeId: string): Promise<boolean> {
+  async deleteScope(
+    tenantId: ObjectId,
+    scopeId: string,
+    actor: string,
+  ): Promise<boolean> {
     const existing = await this.findScope(tenantId, scopeId);
     if (existing === undefined) return false;
     const roles = listed(
@@ -379,7 +395,7 @@ export class ResourcesService {
     // delete: pull the dangling id with the cascade's atomic $pull.
     const late = await this.options.rolesGranting(tenantId, existing._id, 1);
     if (late.length > 0)
-      await this.options.scopesDropped(tenantId, [existing._id]);
+      await this.options.scopesDropped(tenantId, [existing._id], actor);
     return true;
   }
 
@@ -401,6 +417,7 @@ export class ResourcesService {
       await this.options.scopesDropped(
         tenantId,
         dropped.map((scope) => scope._id),
+        SCRIPT_ACTOR,
       );
     }
     for (const scope of dropped) {

@@ -99,7 +99,11 @@ export interface ResourcesServiceOptions {
   scopesDropped: (
     tenantId: ObjectId,
     scopeIds: readonly ObjectId[],
+    /** Who caused it, for the audit of the roles changed (a user id, or `SCRIPT_ACTOR`). */
+    actor: string,
   ) => Promise<void>;
+  /** Logs a failure the service swallows (no values; `reportError`'s sibling `warn` in `config/runtime.ts`). */
+  warn: (message: string) => void;
 }
 
 export interface RegisterResourceInput {

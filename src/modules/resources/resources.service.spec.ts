@@ -28,6 +28,7 @@ const service = new ResourcesService({
   findTenant: async () => undefined,
   scopeClients: { listing: async () => scopeUsers },
   rolesGranting: async () => granting,
+  warn: () => {},
   scopesDropped: async (_tenantId, scopeIds) => {
     scopesDropped.push(scopeIds.map((scopeId) => scopeId.toHexString()));
   },
@@ -233,8 +234,8 @@ describe("scopes", () => {
     ).toEqual(["admin", "write"]);
     const [first] = await service.listScopes(A);
     const id = String(first?._id);
-    expect(await service.deleteScope(A, id)).toBe(true);
-    expect(await service.deleteScope(A, id)).toBe(false);
+    expect(await service.deleteScope(A, id, "u1")).toBe(true);
+    expect(await service.deleteScope(A, id, "u1")).toBe(false);
     expect(await service.findScope(A, id)).toBeUndefined();
   });
 });

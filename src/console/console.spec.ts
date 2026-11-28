@@ -272,6 +272,7 @@ beforeAll(async () => {
     scopesDropped: async () => {},
     scopeClients: { listing: async () => [] },
     rolesGranting: async () => [],
+    warn: () => {},
   }).registerResource({
     tenant: PLATFORM_TENANT_SLUG,
     uri: OTHER,

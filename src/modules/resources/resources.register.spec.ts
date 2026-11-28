@@ -48,6 +48,7 @@ const build = (resources = mongo.db.resources) =>
     scopesDropped: async () => {},
     scopeClients: { listing: async () => [] },
     rolesGranting: async () => [],
+    warn: () => {},
   });
 const service = build();
 

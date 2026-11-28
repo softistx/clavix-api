@@ -105,7 +105,11 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
           ),
         );
       }
-      return resourcesService.deleteScope(tenant._id, id);
+      return resourcesService.deleteScope(
+        tenant._id,
+        id,
+        ctx.principal.userId,
+      );
     });
     if (ObjectId.isValid(id)) {
       await ctx.audit(

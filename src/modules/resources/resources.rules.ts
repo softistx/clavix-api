@@ -10,6 +10,8 @@ export const MAX_DESCRIPTION = 300;
 /** The longest label (a type or a field name, an enum value or an action label). */
 export const MAX_LABEL = 100;
 const MAX_CLAIMS = 50;
+/** The actor of the changes the `resources:create` script (and the seed) makes. */
+export const SCRIPT_ACTOR = "script:resources:create";
 /** The most ids a refusal lists in its extensions (the console's default page size). */
 export const MAX_LISTED = 25;
 

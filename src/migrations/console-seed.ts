@@ -61,6 +61,7 @@ export async function seedConsole(
     // Nothing exists yet to rename or to grant.
     scopeClients: { listing: async () => [] },
     rolesGranting: async () => [],
+    warn: () => {},
   });
   await service.registerResource({
     tenant: PLATFORM_TENANT_SLUG,
