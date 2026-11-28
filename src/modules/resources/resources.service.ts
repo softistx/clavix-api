@@ -405,8 +405,9 @@ export class ResourcesService {
     // A setRolePermissions may have granted it between the check and the
     // delete: pull the dangling id with the cascade's atomic $pull.
     const late = await this.options.rolesGranting(tenantId, existing._id, 1);
-    if (late.length > 0)
+    if (late.length > 0) {
       await this.options.scopesDropped(tenantId, [existing._id], actor);
+    }
     return true;
   }
 

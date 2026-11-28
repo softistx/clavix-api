@@ -39,8 +39,9 @@ export const resourcesService = new ResourcesService({
   userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
   findTenant: tenantBySlug,
   warn,
-  // The `resources:create` script's replace of the scopes: the roles let go of
-  // the dropped ones, each recorded like the console's own cascade.
+  // The roles let go of the dropped scopes, each recorded like the console's
+  // own cascade: the `resources:create` script's replace of the scopes, and
+  // `deleteScope`'s late pull (with the console actor).
   scopesDropped: async (tenantId, scopeIds, actor) => {
     const pulled = await rolesService.pullScopes(tenantId, scopeIds);
     const requestId = crypto.randomUUID();
