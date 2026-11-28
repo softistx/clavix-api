@@ -10,8 +10,10 @@ import {
 } from "jose";
 import {
   authorize,
+  challenge,
   handler,
   remoteKeys,
+  scopeFor,
   verifyAccessToken,
 } from "../../docs/guide/examples/resource-server";
 
@@ -106,6 +108,15 @@ describe("the guide's resource server, refusals and failures", () => {
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(
       'Bearer error="invalid_token"',
+    );
+  });
+
+  test("the challenge's scope mirrors the invoice rules, none for a role rule", () => {
+    expect(scopeFor("GET", "/invoices")).toBe("invoices:read");
+    expect(scopeFor("DELETE", "/invoices/1")).toBe("invoices:delete");
+    expect(scopeFor("GET", "/reports")).toBeUndefined();
+    expect(challenge("insufficient_scope", scopeFor("GET", "/reports"))).toBe(
+      'Bearer error="insufficient_scope"',
     );
   });
 

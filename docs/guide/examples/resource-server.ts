@@ -179,13 +179,15 @@ export function failure(error: unknown): Response {
   throw error;
 }
 
-/** The scope a method needs on this API, as the rules above say (for the `scope` of the challenge). */
-const scopeFor = (method: string) =>
-  method === "GET"
-    ? "invoices:read"
-    : method === "DELETE"
-      ? "invoices:delete"
-      : "invoices:write";
+/** The scope a request needs, mirroring the invoice rules; none for a rule decided on a role. */
+export const scopeFor = (method: string, path: string) =>
+  path.startsWith("/reports")
+    ? undefined
+    : method === "GET"
+      ? "invoices:read"
+      : method === "DELETE"
+        ? "invoices:delete"
+        : "invoices:write";
 
 /** Step 5: the HTTP edge. 401 for a missing or bad token, 403 for a refusal, else your code. */
 export const handler =
@@ -222,7 +224,7 @@ export const handler =
               ? {
                   "www-authenticate": challenge(
                     "insufficient_scope",
-                    scopeFor(request.method),
+                    scopeFor(request.method, new URL(request.url).pathname),
                   ),
                 }
               : {},

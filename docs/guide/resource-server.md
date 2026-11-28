@@ -290,27 +290,27 @@ export function failure(error: unknown): Response {
 }
 ```
 
-- `401` with `WWW-Authenticate: Bearer error="invalid_token"`: `ERR_JWT_EXPIRED`,
-  `ERR_JWT_CLAIM_VALIDATION_FAILED` (issuer, audience, typ),
-  `ERR_JWS_SIGNATURE_VERIFICATION_FAILED`, `ERR_JWS_INVALID`, `ERR_JWT_INVALID`
-  (no `sub`), `ERR_JWKS_NO_MATCHING_KEY` and `ERR_JOSE_ALG_NOT_ALLOWED`.
-- `503` with `Retry-After`, nothing wrong with the token: `ERR_JWKS_TIMEOUT`,
-  `ERR_JWKS_INVALID`, `ERR_JOSE_GENERIC` (a non-200 or non-JSON JWKS) and a
-  `TypeError` from `fetch`.
-
-Any other error is yours and propagates (a `500`).
+The first list in the snippet is the caller's fault: an expired token, a failed
+issuer, audience or `typ` check, a bad signature, a malformed token, a token with
+no `sub`, an unknown key or a disallowed algorithm. The second is the issuer's:
+a JWKS request that timed out, answered a non-200 or non-JSON body, or failed on
+the network. Any other jose code (`ERR_JOSE_NOT_SUPPORTED`,
+`ERR_JWKS_MULTIPLE_MATCHING_KEYS`, `ERR_JWK_INVALID`) is rethrown on purpose and
+becomes your server's own `500`.
 
 The HTTP edge, with the answers:
 
 ```ts
 // docs/guide/examples/resource-server.ts
-/** The scope a method needs on this API, as the rules above say (for the `scope` of the challenge). */
-const scopeFor = (method: string) =>
-  method === "GET"
-    ? "invoices:read"
-    : method === "DELETE"
-      ? "invoices:delete"
-      : "invoices:write";
+/** The scope a request needs, mirroring the invoice rules; none for a rule decided on a role. */
+export const scopeFor = (method: string, path: string) =>
+  path.startsWith("/reports")
+    ? undefined
+    : method === "GET"
+      ? "invoices:read"
+      : method === "DELETE"
+        ? "invoices:delete"
+        : "invoices:write";
 
 /** Step 5: the HTTP edge. 401 for a missing or bad token, 403 for a refusal, else your code. */
 export const handler =
@@ -347,7 +347,7 @@ export const handler =
               ? {
                   "www-authenticate": challenge(
                     "insufficient_scope",
-                    scopeFor(request.method),
+                    scopeFor(request.method, new URL(request.url).pathname),
                   ),
                 }
               : {},
@@ -458,7 +458,4 @@ example; use your janus store. More in the
 
 ## 7. What is coming
 
-Planned: the token's `scope` narrowed to the user's permissions on the token
-itself, see [the roadmap](../roadmap.md). Until then `scope` is what the client
-requested and the `permissions` claim is what filters; the rules above keep
-working unchanged, since limix already requires both.
+Planned: the token's `scope` narrowed to the user's permissions, see [the roadmap](../roadmap.md#next).
