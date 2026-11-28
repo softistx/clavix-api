@@ -356,7 +356,24 @@ export class RolesService {
     });
     if (held.length === 0) return [];
     const ids = new Set(held.map((a) => a.roleId.toHexString()));
-    return heldRoles(await this.rolesOf(tenantId).findMany(), ids);
+    const found = await this.rolesOf(tenantId).findMany({
+      filter: { _id: { $in: held.map((a) => a.roleId) } },
+    });
+    return heldRoles(found, ids);
+  }
+
+  /** The roles a user holds and the resource of the token's audience (`undefined` for none or an unknown URI), read once. */
+  private async heldFor(
+    tenantId: ObjectId,
+    userId: string,
+    audience: string | null,
+  ) {
+    const held = await this.rolesOfUser(tenantId, userId);
+    const resource =
+      audience === null
+        ? undefined
+        : await this.resourcesOf(tenantId).findFirst({ uri: audience });
+    return { held, resource };
   }
 
   /**
@@ -369,16 +386,8 @@ export class RolesService {
     userId: string,
     audience: string | null,
   ): Promise<string[]> {
-    const held = await this.rolesOfUser(tenantId, userId);
-    if (held.length === 0) return [];
-    let resourceId: string | null = null;
-    if (audience !== null) {
-      const resource = await this.resourcesOf(tenantId).findFirst({
-        uri: audience,
-      });
-      resourceId = resource?._id.toHexString() ?? null;
-    }
-    return claimNames(held, resourceId);
+    const { held, resource } = await this.heldFor(tenantId, userId, audience);
+    return claimNames(held, resource?._id.toHexString() ?? null);
   }
 
   /**
@@ -395,11 +404,7 @@ export class RolesService {
     userId: string,
     audience: string | null,
   ): Promise<{ roles: string[]; permissions: string[] | null }> {
-    const held = await this.rolesOfUser(tenantId, userId);
-    const resource =
-      audience === null
-        ? undefined
-        : await this.resourcesOf(tenantId).findFirst({ uri: audience });
+    const { held, resource } = await this.heldFor(tenantId, userId, audience);
     const roles = claimNames(held, resource?._id.toHexString() ?? null);
     if (resource === undefined || resource.enforceRbac !== true) {
       return { roles, permissions: null };

@@ -1,9 +1,9 @@
+import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { RolesService } from "@/modules/roles";
 import type { PermissionsFor, RolesFor } from "@/oauth/ports";
 import { roleAttributesService } from "./attributes";
 import { mongo } from "./db";
-import { resourcesService } from "./resources";
 
 /** The real roles store. The collections are tenant-owned: only this wiring and its module reach them. */
 export const rolesService = new RolesService({
@@ -11,9 +11,15 @@ export const rolesService = new RolesService({
   assignments: mongo.db.roleAssignments,
   resources: mongo.db.resources,
   roleLinks: roleAttributesService,
-  // Lazy: config/resources binds the roles back (the cascade of a dropped scope).
+  // Read from the collection, not through the resources service: config/resources
+  // binds the roles back (the cascade of a dropped scope), so this would close a cycle.
   scopes: {
-    find: (tenantId, ids) => resourcesService.findScopes(tenantId, ids),
+    find: async (tenantId, ids) =>
+      ids.length === 0
+        ? []
+        : scopeToTenant(mongo.db.scopes, tenantId).findMany({
+            filter: { _id: { $in: [...ids] } },
+          }),
   },
 });
 
