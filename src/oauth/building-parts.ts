@@ -4,7 +4,7 @@ import { createMongoDPoPReplayCache } from "@softistx/janus-oauth-mongo";
 import type { Db } from "mongodb";
 import { DPOP_ALGORITHMS } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
-import type { AttributesFor, RolesFor } from "./ports";
+import type { AttributesFor, PermissionsFor, RolesFor } from "./ports";
 import { type MetadataTransport, registrationOf } from "./registration";
 import { omitReserved } from "./reserved-claims";
 
@@ -77,18 +77,33 @@ const grantClaims = ({
   ...(amr === undefined ? {} : { amr: [...amr] }),
 });
 
-const RESERVED: ReadonlySet<string> = new Set(RESERVED_ACCESS_TOKEN_CLAIMS);
+// The catalogue refuses these names at creation; `roles` and `permissions` are
+// the server's own, so a stored attribute of that key is dropped at token time.
+const RESERVED: ReadonlySet<string> = new Set([
+  ...RESERVED_ACCESS_TOKEN_CLAIMS,
+  "roles",
+  "permissions",
+]);
 
 /**
  * Runs on every code exchange and refresh: a refreshed token carries the
  * user's current roles. The audience is the token's resource. `acr`, `amr` and
  * `auth_time` are the grant's, the values of the ID token (RFC 9068, RFC
  * 9470); a grant that records none adds none. A machine has no attributes
- * either. An attribute claim never takes the place of one the server owns:
- * its key is dropped when reserved, and the claims above win over it.
+ * either, and no `permissions` claim. An attribute claim never takes the place
+ * of one the server owns: its key is dropped when reserved, and the claims
+ * above win over it. `enforcing` holds the URIs of the resources that enforce
+ * RBAC: only for those does the token carry `permissions`, read with the roles
+ * in one lookup; any other audience costs nothing more than `roles`.
  */
 export const accessTokenClaims =
-  (tenant: ResolvedTenant, rolesFor: RolesFor, attributesFor: AttributesFor) =>
+  (
+    tenant: ResolvedTenant,
+    rolesFor: RolesFor,
+    attributesFor: AttributesFor,
+    permissionsFor: PermissionsFor,
+    enforcing: ReadonlySet<string>,
+  ) =>
   async ({
     subject,
     audience,
@@ -100,12 +115,22 @@ export const accessTokenClaims =
   }: TokenGrant) => {
     if (subjectType === "client") return grantClaims({ authTime, acr, amr });
     const resource = audience === userinfoOf(tenant.issuer) ? null : audience;
+    const access =
+      resource !== null && enforcing.has(resource)
+        ? await permissionsFor(tenant)(subject, resource)
+        : {
+            roles: await rolesFor(tenant)(subject, resource),
+            permissions: null,
+          };
     return {
       ...omitReserved(
         RESERVED,
         await attributesFor(tenant)(subject, scopes, resource),
       ),
-      roles: await rolesFor(tenant)(subject, resource),
+      roles: access.roles,
+      ...(access.permissions === null
+        ? {}
+        : { permissions: access.permissions }),
       ...grantClaims({ authTime, acr, amr }),
     };
   };

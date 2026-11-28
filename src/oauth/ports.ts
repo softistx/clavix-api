@@ -31,8 +31,15 @@ export type AuthFor = (tenant: ResolvedTenant) => OAuthAuth;
 export type ResourcesFor = (
   tenant: ResolvedTenant,
 ) =>
-  | Readonly<Record<string, OAuthResource>>
-  | Promise<Readonly<Record<string, OAuthResource>>>;
+  | Readonly<Record<string, KeyedResource>>
+  | Promise<Readonly<Record<string, KeyedResource>>>;
+
+/**
+ * A stored resource as `ResourcesFor` answers it: janus's, plus Clavix's own
+ * `enforceRbac` flag (set only when on). It is part of the issuer's
+ * fingerprint and never reaches janus (`building.ts` strips it).
+ */
+export type KeyedResource = OAuthResource & { enforceRbac?: true | undefined };
 
 /**
  * The claims of a tenant's users (slice 1.4): looks the subject up in that
@@ -56,6 +63,22 @@ export type ClaimsFor = (
 export type RolesFor = (
   tenant: ResolvedTenant,
 ) => (userId: string, audience: string | null) => Promise<string[]>;
+
+/**
+ * The `roles` and `permissions` claims of a tenant's users for a resource that
+ * enforces RBAC (`Resource.enforceRbac`, slice 5.2a), read together so the
+ * resource and the held roles are resolved once. `permissions` is the sorted
+ * scope names of the resource whose URI is `audience`, granted by the roles
+ * the user holds (tenant-wide ones and those scoped to it); `[]` when none, and
+ * `null` (no claim) for an unknown resource or one that does not enforce RBAC.
+ * Called only for an audience that enforces it. Required: no default.
+ */
+export type PermissionsFor = (
+  tenant: ResolvedTenant,
+) => (
+  userId: string,
+  audience: string,
+) => Promise<{ roles: string[]; permissions: string[] | null }>;
 
 /**
  * The attribute claims of a tenant's users (user-attributes slice A6): each

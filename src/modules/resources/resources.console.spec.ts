@@ -23,7 +23,7 @@ let tenantA = "";
 let tenantB = "";
 
 const SCOPE = "id name description { locale text } resourceId claims";
-const RESOURCE = `id uri name createdAt allowClientCredentials scopes { ${SCOPE} }`;
+const RESOURCE = `id uri name createdAt allowClientCredentials enforceRbac scopes { ${SCOPE} }`;
 const CREATE = `mutation($tenantId: ID!, $input: CreateResourceInput!) {
   createResource(tenantId: $tenantId, input: $input) { ${RESOURCE} }
 }`;
@@ -187,6 +187,41 @@ describe("resources", () => {
       "updateResource",
     );
     expect(off["allowClientCredentials"]).toBe(false);
+  });
+
+  test("enforceRbac is off by default, set by an update, and kept by other updates", async () => {
+    const before = one(
+      await admin(GET, { tenantId: tenantA, id: api }),
+      "resource",
+    );
+    expect(before["enforceRbac"]).toBe(false);
+    const on = one(
+      await admin(UPDATE, {
+        tenantId: tenantA,
+        id: api,
+        input: { enforceRbac: true },
+      }),
+      "updateResource",
+    );
+    expect(on["enforceRbac"]).toBe(true);
+    const renamed = one(
+      await admin(UPDATE, {
+        tenantId: tenantA,
+        id: api,
+        input: { name: "Orders API" },
+      }),
+      "updateResource",
+    );
+    expect(renamed["enforceRbac"]).toBe(true);
+    const off = one(
+      await admin(UPDATE, {
+        tenantId: tenantA,
+        id: api,
+        input: { enforceRbac: false },
+      }),
+      "updateResource",
+    );
+    expect(off["enforceRbac"]).toBe(false);
   });
 
   test("resource reads one, null when unknown", async () => {
@@ -751,6 +786,14 @@ describe("the console's own resource", () => {
         }),
       ),
     ).toBe("BAD_USER_INPUT");
+    // Nor does it enforce role-based access: its own rules guard it.
+    const refused = await operator(UPDATE, {
+      tenantId,
+      id: found.id,
+      input: { enforceRbac: true },
+    });
+    expect(codeOf(refused)).toBe("BAD_USER_INPUT");
+    expect(JSON.stringify(refused.errors)).toContain("enforceRbac");
   });
 });
 

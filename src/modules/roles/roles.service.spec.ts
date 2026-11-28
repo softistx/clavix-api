@@ -350,3 +350,59 @@ describe("permissions", () => {
     ).toEqual([]);
   });
 });
+
+describe("claimAccess", () => {
+  const ON = "https://on.access.example/v1";
+  const OFF = "https://off.access.example/v1";
+  const user = "access-user";
+
+  test("no audience, a resource that does not enforce RBAC and another resource's role give the right claims", async () => {
+    const on = await resourcesService.createResource(tenant, "on", { uri: ON });
+    const off = await resourcesService.createResource(tenant, "off", {
+      uri: OFF,
+    });
+    await resourcesService.updateResource(tenant, on._id.toHexString(), {
+      enforceRbac: true,
+    });
+    const scopeOf = async (resourceId: ObjectId, name: string) =>
+      (
+        await resourcesService.createScope(tenant, {
+          name,
+          resourceId: resourceId.toHexString(),
+        })
+      )._id.toHexString();
+    const onRead = await scopeOf(on._id, "read");
+    const offWrite = await scopeOf(off._id, "write");
+    const wide = await rolesService.create(tenant, { name: "acc-wide" });
+    await rolesService.setPermissions(tenant, wide._id.toHexString(), [onRead]);
+    const elsewhere = await rolesService.create(tenant, {
+      name: "acc-off",
+      resourceId: off._id.toHexString(),
+    });
+    await rolesService.setPermissions(tenant, elsewhere._id.toHexString(), [
+      offWrite,
+    ]);
+    for (const role of [wide, elsewhere]) {
+      await rolesService.assign(tenant, role._id.toHexString(), user);
+    }
+    expect(await rolesService.claimAccess(tenant, user, null)).toEqual({
+      roles: ["acc-wide"],
+      permissions: null,
+    });
+    expect(await rolesService.claimAccess(tenant, user, OFF)).toEqual({
+      roles: ["acc-off", "acc-wide"],
+      permissions: null,
+    });
+    expect(await rolesService.claimAccess(tenant, user, ON)).toEqual({
+      roles: ["acc-wide"],
+      permissions: ["read"],
+    });
+    expect(await rolesService.claimAccess(tenant, "nobody", ON)).toEqual({
+      roles: [],
+      permissions: [],
+    });
+    expect(
+      await rolesService.claimAccess(tenant, user, "https://unknown.example"),
+    ).toEqual({ roles: ["acc-wide"], permissions: null });
+  });
+});

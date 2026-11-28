@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import { unique } from "@/shared/values";
-import type { RoleDoc, TenantRoleParent } from "./roles.types";
+import type { RoleDoc, ScopeRef, TenantRoleParent } from "./roles.types";
 
 /** A copy of the roles sorted by name. */
 export function sortedByName(found: readonly RoleDoc[]): RoleDoc[] {
@@ -51,6 +51,35 @@ export function permissionsOf<T extends { name: string }>(
     (scope): scope is T => scope !== null && !(scope instanceof Error),
   );
   return found.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/**
+ * The scopes the held roles grant on one resource: the permissions of the
+ * tenant-wide roles and of those scoped to `resourceId`, one id each.
+ */
+export function permissionIdsOf(
+  held: readonly RoleDoc[],
+  resourceId: ObjectId,
+): ObjectId[] {
+  const byHex = new Map<string, ObjectId>();
+  for (const role of held) {
+    if (role.resourceId !== null && !role.resourceId.equals(resourceId)) {
+      continue;
+    }
+    for (const id of role.permissionIds) byHex.set(id.toHexString(), id);
+  }
+  return [...byHex.values()];
+}
+
+/** The names of the scopes that belong to `resourceId`, sorted, one per name. */
+export function scopeNamesOf(
+  scopes: readonly ScopeRef[],
+  resourceId: ObjectId,
+): string[] {
+  const names = scopes
+    .filter((scope) => scope.resourceId?.equals(resourceId) === true)
+    .map((scope) => scope.name);
+  return unique(names).sort();
 }
 
 /** Whether two lists hold the same ids, in any order. */

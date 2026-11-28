@@ -121,5 +121,6 @@ export const resourceShape = (
   metadataUrl: document?.metadataUrl ?? null,
   protectedResourceMetadata: document?.metadata ?? null,
   allowClientCredentials: resource.allowClientCredentials === true,
+  enforceRbac: resource.enforceRbac === true,
   createdAt: resource.createdAt,
 });

@@ -570,6 +570,18 @@ A role is a named claim value a tenant gives to its end users (not a console adm
   and `/userinfo` (`scopeClaims: { openid: ["roles"] }`, `idToken.includeClaims`). No scope is needed. A
   role scoped to resource X is in a token for X only; the id_token and userinfo have no audience, so they
   carry the tenant-wide roles only. `includeClaims` also puts the e-mail and profile claims in the id_token.
+- **`permissions` claim** (slice 5.2a, #550): `Resource.enforceRbac` (stored `z.boolean().optional()`, absent
+  is false; set by `updateResource`, refused on the console's own resource by `refuseMachineConsole` as
+  `BAD_USER_INPUT` at `enforceRbac`; the `resource.update` audit records no value). `PermissionsFor`
+  (`oauth/ports.ts`, required, bound in `config/roles.ts` to `RolesService.claimPermissions`) feeds
+  `accessTokenClaims` in `building-parts.ts`: the claim is the sorted, de-duplicated scope names of the Resource
+  whose `uri` equals `aud`, granted by the roles the user holds (tenant-wide or scoped to that Resource), `[]`
+  when there are none, and absent when the Resource does not enforce RBAC. Only access tokens carry it: never
+  the id_token, userinfo or a `client_credentials` token; a token exchange uses the subject user's roles; each
+  issue and refresh recomputes it. `enforceRbac` is stripped before the resources reach janus and `fingerprintOf`
+  adds `rbac` when it is on, so the cached issuer rebuilds. `permissions` stays in `RESERVED_CLAIMS` (the catalogue
+  refuses the name; the token path also drops a stored attribute of that key, as it does `roles`). Access to the flag-on
+  audience goes through one `claimAccess` lookup (roles and permissions together); a flag-off audience costs only `roles`. Specs: `src/oauth/permissions-claims.spec.ts`, `resolution.spec.ts`.
 - **Console** (`roles` module): reads `onTenant("view")`, writes `onTenant("edit")`; audit actions
   `role.create|update|delete|assign|unassign` (assign and unassign record the role and the user). `deleteRole`
   and `unassignRole` are idempotent; `assignRole` needs a user of the tenant's pool (`NOT_FOUND` else).
