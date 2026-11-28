@@ -193,8 +193,13 @@ describe("setRolePermissions", () => {
     await mongo.db.adminEvents.raw.deleteMany({});
     await registerStoredResource({ tenant: "rp-a", uri, scopes: ["keep"] });
     expect(await permissionsOf(id)).toEqual(["keep"]);
-    expect(
-      (await events()).filter((e) => e["action"] === "role.setPermissions"),
-    ).toHaveLength(1);
+    const recorded = (await events()).filter(
+      (e) => e["action"] === "role.setPermissions",
+    );
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      actor: "script:resources:create",
+      target: { type: "role", id },
+    });
   });
 });
