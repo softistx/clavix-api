@@ -22,6 +22,10 @@ export const resources = defineCollection({
     // (RFC 6749 section 4.4), which have no user behind them. Absent is
     // `false`, so a stored resource needs no migration.
     allowClientCredentials: z.boolean().optional(),
+    // Whether the resource enforces role-based access (ADR-0025): its access
+    // tokens then carry a `permissions` claim. Absent is `false`: a stored
+    // resource needs no migration and its tokens stay as they were.
+    enforceRbac: z.boolean().optional(),
   }),
   indexes: [
     {

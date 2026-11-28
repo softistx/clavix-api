@@ -62,6 +62,7 @@ export const consoleRules = {
     setClientTokenExchange: onTenant("edit", "tenantId"),
     setConnectionSecret: onTenant("edit", "tenantId"),
     setPrimaryDomain: onTenant("edit", "tenantId"),
+    setRolePermissions: onTenant("edit", "tenantId"),
     setSocialProvider: onTenant("edit", "tenantId"),
     setTenantPlan: onPlatform("edit"),
     setUserAttributeValues: onTenant("edit", "tenantId"),

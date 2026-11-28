@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
+import { resourcesService } from "@/config/resources";
 import { rolesService } from "@/config/roles";
 import { RolesError } from "./roles.errors";
 
@@ -24,6 +25,7 @@ afterAll(async () => {
     await mongo.db.roles.raw.deleteMany({ tenantId });
     await mongo.db.roleAssignments.raw.deleteMany({ tenantId });
     await mongo.db.resources.raw.deleteMany({ tenantId });
+    await mongo.db.scopes.raw.deleteMany({ tenantId });
     await mongo.db.roleAttributes.raw.deleteMany({ tenantId });
   }
 });
@@ -186,5 +188,221 @@ describe("personalDataOf", () => {
     expect(held[0]?.assignedAt).toBeInstanceOf(Date);
     expect(await rolesService.personalDataOf(other, "pd-user")).toEqual([]);
     expect(await rolesService.personalDataOf(tenant, "nobody")).toEqual([]);
+  });
+});
+
+describe("permissions", () => {
+  const field = async (run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (error) {
+      return error instanceof RolesError ? error.field : String(error);
+    }
+    return undefined;
+  };
+
+  test("setPermissions replaces the set, is idempotent and checks each scope", async () => {
+    const api = await resourcesService.createResource(tenant, "svc", {
+      uri: "https://api.svc-perm.example/v1",
+    });
+    const read = await resourcesService.createScope(tenant, {
+      name: "read",
+      resourceId: api._id.toHexString(),
+    });
+    const write = await resourcesService.createScope(tenant, {
+      name: "write",
+      resourceId: api._id.toHexString(),
+    });
+    const wide = await rolesService.create(tenant, { name: "perm-wide" });
+    const wideId = wide._id.toHexString();
+    expect(wide.permissionIds).toEqual([]);
+    const both = [read._id.toHexString(), write._id.toHexString()];
+    const set = await rolesService.setPermissions(tenant, wideId, [
+      ...both,
+      both[0] ?? "",
+    ]);
+    expect(set.permissionIds).toEqual([read._id, write._id]);
+    const again = await rolesService.setPermissions(tenant, wideId, both);
+    expect(again.updatedAt).toEqual(set.updatedAt);
+    const replaced = await rolesService.setPermissions(tenant, wideId, [
+      both[1] ?? "",
+    ]);
+    expect(replaced.permissionIds).toEqual([write._id]);
+    expect(
+      (await rolesService.setPermissions(tenant, wideId, [])).permissionIds,
+    ).toEqual([]);
+
+    const own = await rolesService.create(tenant, {
+      name: "perm-own",
+      resourceId: api._id.toHexString(),
+    });
+    const ownId = own._id.toHexString();
+    expect(
+      (await rolesService.setPermissions(tenant, ownId, both)).permissionIds,
+    ).toHaveLength(2);
+    const otherApi = await resourcesService.createResource(tenant, "svc", {
+      uri: "https://api.svc-perm.example/v2",
+    });
+    const foreign = await resourcesService.createScope(tenant, {
+      name: "read",
+      resourceId: otherApi._id.toHexString(),
+    });
+    expect(
+      await field(() =>
+        rolesService.setPermissions(tenant, ownId, [
+          both[0] ?? "",
+          foreign._id.toHexString(),
+        ]),
+      ),
+    ).toBe("permissionIds.1");
+    const standard = await resourcesService.createScope(tenant, {
+      name: "openid",
+    });
+    expect(
+      await field(() =>
+        rolesService.setPermissions(tenant, wideId, [
+          standard._id.toHexString(),
+        ]),
+      ),
+    ).toBe("permissionIds.0");
+    expect(
+      await field(() =>
+        rolesService.setPermissions(tenant, wideId, [
+          new ObjectId().toHexString(),
+        ]),
+      ),
+    ).toBe("permissionIds.0");
+    // Another tenant's scope is unknown here.
+    expect(
+      await code(() =>
+        rolesService.setPermissions(other, wideId, [read._id.toHexString()]),
+      ),
+    ).toBe("NOT_FOUND");
+  });
+
+  test("a managed role is refused and an unknown role is not found", async () => {
+    const managed = await rolesService.create(tenant, {
+      name: "perm-managed",
+      managed: true,
+    });
+    expect(
+      await code(() =>
+        rolesService.setPermissions(tenant, managed._id.toHexString(), []),
+      ),
+    ).toBe("ROLE_MANAGED");
+    expect(
+      await code(() =>
+        rolesService.setPermissions(tenant, new ObjectId().toHexString(), []),
+      ),
+    ).toBe("NOT_FOUND");
+  });
+
+  test("pullScopes takes the ids out of the roles that hold them, and only those", async () => {
+    const api = await resourcesService.createResource(tenant, "svc", {
+      uri: "https://api.svc-pull.example/v1",
+    });
+    const keep = await resourcesService.createScope(tenant, {
+      name: "keep",
+      resourceId: api._id.toHexString(),
+    });
+    const drop = await resourcesService.createScope(tenant, {
+      name: "drop",
+      resourceId: api._id.toHexString(),
+    });
+    const holder = await rolesService.create(tenant, { name: "pull-holder" });
+    const bystander = await rolesService.create(tenant, { name: "pull-other" });
+    await rolesService.setPermissions(tenant, holder._id.toHexString(), [
+      keep._id.toHexString(),
+      drop._id.toHexString(),
+    ]);
+    await rolesService.setPermissions(tenant, bystander._id.toHexString(), [
+      keep._id.toHexString(),
+    ]);
+    const changed = await rolesService.pullScopes(tenant, [drop._id]);
+    expect(changed.map((r) => r.name)).toEqual(["pull-holder"]);
+    expect(
+      (await rolesService.find(tenant, holder._id.toHexString()))
+        ?.permissionIds,
+    ).toEqual([keep._id]);
+    expect(await rolesService.pullScopes(tenant, [drop._id])).toEqual([]);
+    expect(await rolesService.pullScopes(tenant, [])).toEqual([]);
+  });
+
+  test("rolesGranting lists the ids of the roles that hold a scope", async () => {
+    const api = await resourcesService.createResource(tenant, "svc", {
+      uri: "https://api.svc-granting.example/v1",
+    });
+    const scope = await resourcesService.createScope(tenant, {
+      name: "granted",
+      resourceId: api._id.toHexString(),
+    });
+    const holder = await rolesService.create(tenant, { name: "grant-holder" });
+    await rolesService.create(tenant, { name: "grant-other" });
+    expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([]);
+    await rolesService.setPermissions(tenant, holder._id.toHexString(), [
+      scope._id.toHexString(),
+    ]);
+    expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([
+      holder._id.toHexString(),
+    ]);
+    expect(
+      await rolesService.rolesGranting(new ObjectId(), scope._id, 26),
+    ).toEqual([]);
+  });
+});
+
+describe("claimAccess", () => {
+  const ON = "https://on.access.example/v1";
+  const OFF = "https://off.access.example/v1";
+  const user = "access-user";
+
+  test("no audience, a resource that does not enforce RBAC and another resource's role give the right claims", async () => {
+    const on = await resourcesService.createResource(tenant, "on", { uri: ON });
+    const off = await resourcesService.createResource(tenant, "off", {
+      uri: OFF,
+    });
+    await resourcesService.updateResource(tenant, on._id.toHexString(), {
+      enforceRbac: true,
+    });
+    const scopeOf = async (resourceId: ObjectId, name: string) =>
+      (
+        await resourcesService.createScope(tenant, {
+          name,
+          resourceId: resourceId.toHexString(),
+        })
+      )._id.toHexString();
+    const onRead = await scopeOf(on._id, "read");
+    const offWrite = await scopeOf(off._id, "write");
+    const wide = await rolesService.create(tenant, { name: "acc-wide" });
+    await rolesService.setPermissions(tenant, wide._id.toHexString(), [onRead]);
+    const elsewhere = await rolesService.create(tenant, {
+      name: "acc-off",
+      resourceId: off._id.toHexString(),
+    });
+    await rolesService.setPermissions(tenant, elsewhere._id.toHexString(), [
+      offWrite,
+    ]);
+    for (const role of [wide, elsewhere]) {
+      await rolesService.assign(tenant, role._id.toHexString(), user);
+    }
+    expect(await rolesService.claimAccess(tenant, user, null)).toEqual({
+      roles: ["acc-wide"],
+      permissions: null,
+    });
+    expect(await rolesService.claimAccess(tenant, user, OFF)).toEqual({
+      roles: ["acc-off", "acc-wide"],
+      permissions: null,
+    });
+    expect(await rolesService.claimAccess(tenant, user, ON)).toEqual({
+      roles: ["acc-wide"],
+      permissions: ["read"],
+    });
+    expect(await rolesService.claimAccess(tenant, "nobody", ON)).toEqual({
+      roles: [],
+      permissions: [],
+    });
+    expect(
+      await rolesService.claimAccess(tenant, user, "https://unknown.example"),
+    ).toEqual({ roles: ["acc-wide"], permissions: null });
   });
 });

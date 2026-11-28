@@ -25,6 +25,7 @@ export const resourcesAudits: Audits = {
   "Mutation.updateResource": "resource.update",
   "Mutation.deleteResource": "resource.delete",
   "Mutation.createScope": "scope.create",
+  // A rename records `scope.rename` instead (resources.console-mutations.ts).
   "Mutation.updateScope": "scope.update",
   "Mutation.deleteScope": "scope.delete",
   "Mutation.createDetailType": "detailType.create",

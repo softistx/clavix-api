@@ -36,6 +36,13 @@ const noDetailTypes: ClientDetailTypes = {
   namesOf: async () => new Set<string>(),
 };
 
+// The same for the ports of a first registration: no role can hold the scopes
+// yet, no client lists one, and nothing exists yet to rename or to grant.
+const noScopesDropped = async (): Promise<void> => {};
+const noScopeClients = { listing: async () => [] };
+const noRolesGranting = async (): Promise<string[]> => [];
+const noWarn = (): void => {};
+
 /**
  * Seeds what the console signs in with, in the `clavix` tenant: the console
  * API as a resource (`aud` `https://console.<domain>/api`) and the console as a
@@ -56,6 +63,12 @@ export async function seedConsole(
     clients: mongoDetailTypeClients(db),
     userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
     findTenant,
+    // A first registration: no role can hold its scopes yet, no client lists
+    // one, and nothing exists yet to rename or to grant.
+    scopesDropped: noScopesDropped,
+    scopeClients: noScopeClients,
+    rolesGranting: noRolesGranting,
+    warn: noWarn,
   });
   await service.registerResource({
     tenant: PLATFORM_TENANT_SLUG,

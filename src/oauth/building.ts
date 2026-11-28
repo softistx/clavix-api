@@ -1,6 +1,7 @@
 import type { Clock } from "@softistx/janus";
 import type {
   OAuthEventListener,
+  OAuthResource,
   SigningKeyStore,
 } from "@softistx/janus-oauth";
 import { createMongoOAuth } from "@softistx/janus-oauth-mongo";
@@ -21,6 +22,8 @@ import type {
   AttributesFor,
   AuthFor,
   ExchangeRulesFor,
+  KeyedResource,
+  PermissionsFor,
   RolesFor,
   SigningKeysFor,
 } from "./ports";
@@ -30,6 +33,17 @@ import { exchangePolicy } from "./token-exchange";
 
 export { userinfoOf };
 
+// `enforceRbac` is Clavix's own: janus is given its resources as it knows them.
+export const withoutRbacFlag = (
+  resources: Readonly<Record<string, KeyedResource>>,
+): Record<string, OAuthResource> =>
+  Object.fromEntries(
+    Object.entries(resources).map(([uri, { enforceRbac: _, ...rest }]) => [
+      uri,
+      rest,
+    ]),
+  );
+
 export interface BuildDeps {
   db: Db;
   signingKeysFor: SigningKeysFor;
@@ -38,6 +52,7 @@ export interface BuildDeps {
   oidc: ReturnType<typeof createOidcProvider>;
   clock: Clock;
   rolesFor: RolesFor;
+  permissionsFor: PermissionsFor;
   attributesFor: AttributesFor;
   exchangeRulesFor: ExchangeRulesFor;
   agentCheckFor: AgentCheckFor;
@@ -63,6 +78,7 @@ export const buildIssuer =
     oidc,
     clock,
     rolesFor,
+    permissionsFor,
     attributesFor,
     exchangeRulesFor,
     agentCheckFor,
@@ -78,7 +94,7 @@ export const buildIssuer =
       store: createMongoOAuth(db, { partition: tenant.partition }),
       issuer: tenant.issuer,
       resources: {
-        ...resources,
+        ...withoutRbacFlag(resources),
         [userinfo]: { scopes: [...OIDC_SCOPES] },
       },
       defaultResource: userinfo,
@@ -105,7 +121,17 @@ export const buildIssuer =
       accessTokens: {
         format: "jwt" as const,
         keys,
-        claims: accessTokenClaims(tenant, rolesFor, attributesFor),
+        claims: accessTokenClaims(
+          tenant,
+          rolesFor,
+          attributesFor,
+          permissionsFor,
+          new Set(
+            Object.entries(resources)
+              .filter(([, resource]) => resource.enforceRbac === true)
+              .map(([uri]) => uri),
+          ),
+        ),
       },
       tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),
       clock,

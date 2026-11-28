@@ -16,6 +16,21 @@ describe("CatalogError", () => {
     );
   });
 
+  test("carries the field and the ids of the in-use codes", () => {
+    const error = new CatalogError("SCOPE_IN_USE", "listed", undefined, {
+      clients: ["c1"],
+    });
+    expect(error.extra).toEqual({ clients: ["c1"] });
+    expect(new CatalogError("PERMISSION_IN_USE", "granted").extra).toBe(
+      undefined,
+    );
+    try {
+      refuse("nope", "name");
+    } catch (thrown) {
+      expect(thrown).toMatchObject({ field: "name" });
+    }
+  });
+
   test("refuse throws BAD_USER_INPUT with its message", () => {
     expect(() => refuse("nope")).toThrow(CatalogError);
     try {

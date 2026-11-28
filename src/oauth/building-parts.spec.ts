@@ -19,6 +19,8 @@ describe("accessTokenClaims", () => {
         calls.push(args);
         return { nick: "bob", sub: "evil", aud: "evil", scope: "all" };
       },
+    () => async () => ({ roles: ["member"], permissions: null }),
+    new Set<string>(),
   );
 
   test("an attribute claim never takes the place of a claim the server owns", async () => {
@@ -50,5 +52,54 @@ describe("accessTokenClaims", () => {
     });
     expect(result).toEqual({});
     expect(calls).toHaveLength(before);
+  });
+});
+
+describe("accessTokenClaims and RBAC", () => {
+  const forged = async () => ({ permissions: ["x"], roles: ["root"] });
+  const calls: string[] = [];
+  const build = (enforcing: string[]) =>
+    accessTokenClaims(
+      tenant,
+      () => async () => {
+        calls.push("rolesFor");
+        return ["from-roles"];
+      },
+      () => forged,
+      () => async () => {
+        calls.push("permissionsFor");
+        return { roles: ["from-access"], permissions: ["read"] };
+      },
+      new Set(enforcing),
+    );
+
+  test("with the flag off an attribute named permissions or roles is dropped, and only rolesFor is asked", async () => {
+    calls.length = 0;
+    const result: Record<string, unknown> = await build([])(grant);
+    expect(result).not.toHaveProperty("permissions");
+    expect(result["roles"]).toEqual(["from-roles"]);
+    expect(calls).toEqual(["rolesFor"]);
+  });
+
+  test("with the flag on the token has the computed permissions and roles, and only permissionsFor is asked", async () => {
+    calls.length = 0;
+    const result: Record<string, unknown> = await build([grant.audience])(
+      grant,
+    );
+    expect(result["permissions"]).toEqual(["read"]);
+    expect(result["roles"]).toEqual(["from-access"]);
+    expect(calls).toEqual(["permissionsFor"]);
+  });
+
+  test("the userinfo audience and a client token never carry permissions", async () => {
+    const enforcing = build([grant.audience, userinfoOf(tenant.issuer)]);
+    calls.length = 0;
+    expect(
+      await enforcing({ ...grant, audience: userinfoOf(tenant.issuer) }),
+    ).not.toHaveProperty("permissions");
+    expect(
+      await enforcing({ ...grant, subjectType: "client" }),
+    ).not.toHaveProperty("permissions");
+    expect(calls).toEqual(["rolesFor"]);
   });
 });

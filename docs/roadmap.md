@@ -13,14 +13,16 @@ nxgt-janus release says which.
   language, then the first stored translation. Breaking for the console UI
   ([#484](https://github.com/softistx/clavix-api/issues/484)).
 
-- **Authorization (RBAC)** — roles hold a Resource's permissions (its scopes, authored by the tenant,
+- **Authorization (RBAC)** — what exists today: roles hold a Resource's permissions (its scopes,
+  authored by the tenant, with catalogue rules,
   [#549](https://github.com/softistx/clavix-api/issues/549),
-  [#29](https://github.com/softistx/clavix-api/issues/29)); a per-Resource RBAC flag puts a
-  `permissions` claim in its access tokens, and granted scopes are narrowed to what the roles allow
-  ([#550](https://github.com/softistx/clavix-api/issues/550),
-  [#30](https://github.com/softistx/clavix-api/issues/30)); a guide shows how to protect a resource
-  server with Clavix tokens and `@softistx/limix`
-  ([#37](https://github.com/softistx/clavix-api/issues/37)). With the flag off, tokens are unchanged.
+  [#29](https://github.com/softistx/clavix-api/issues/29)); a per-Resource `enforceRbac` flag puts a
+  `permissions` claim in its access tokens, and with it off tokens are unchanged
+  ([#550](https://github.com/softistx/clavix-api/issues/550)); a guide shows how to protect a
+  resource server with Clavix tokens and `@softistx/limix`
+  ([#37](https://github.com/softistx/clavix-api/issues/37)). Still open: narrowing the access
+  token's `scope` to the roles' permissions
+  ([#30](https://github.com/softistx/clavix-api/issues/30)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take

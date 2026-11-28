@@ -5,6 +5,10 @@ import {
   claimNames,
   countsByRole,
   heldRoles,
+  permissionIdsOf,
+  permissionsOf,
+  sameIds,
+  scopeNamesOf,
   shape,
   sortedByName,
   target,
@@ -20,6 +24,7 @@ const stored = (over: Partial<RoleDoc>): RoleDoc => {
     description: "",
     resourceId: null,
     managed: false,
+    permissionIds: [],
     createdAt: new Date(0),
     updatedAt: new Date(0),
     ...over,
@@ -96,6 +101,40 @@ describe("shape", () => {
   });
 });
 
+describe("permissions", () => {
+  test("shape carries the tenant and the scope ids as hex", () => {
+    const scopeId = new ObjectId();
+    const found = stored({ permissionIds: [scopeId] });
+    const shown = shape(found, 0);
+    expect(shown.tenantId).toBe(found.tenantId.toHexString());
+    expect(shown.permissionIds).toEqual([scopeId.toHexString()]);
+  });
+
+  test("sameIds compares the lists as sets", () => {
+    const a = new ObjectId();
+    const b = new ObjectId();
+    expect(sameIds([a, b], [a, b])).toBe(true);
+    expect(sameIds([a, b], [b, a])).toBe(true);
+    expect(sameIds([a, a], [a, b])).toBe(false);
+    expect(sameIds([a], [a, b])).toBe(false);
+  });
+
+  test("permissionsOf drops the missing and sorts by name", () => {
+    expect(permissionsOf([{ name: "write" }, null, { name: "read" }])).toEqual([
+      { name: "read" },
+      { name: "write" },
+    ]);
+  });
+
+  test("permissionsOf sorts by code point, not by locale", () => {
+    expect(
+      permissionsOf([{ name: "b" }, { name: "B" }, { name: "a" }]).map(
+        (scope) => scope.name,
+      ),
+    ).toEqual(["B", "a", "b"]);
+  });
+});
+
 describe("target", () => {
   test("names the type, the id and the tenant", () => {
     expect(target("user", "u1", "t1")).toEqual({
@@ -103,5 +142,41 @@ describe("target", () => {
       id: "u1",
       tenantId: "t1",
     });
+  });
+});
+
+describe("the permissions claim", () => {
+  const resource = new ObjectId();
+  const other = new ObjectId();
+  const read = new ObjectId();
+  const write = new ObjectId();
+  const foreign = new ObjectId();
+
+  test("permissionIdsOf unites the tenant-wide roles and those scoped to the resource", () => {
+    const held = [
+      stored({ permissionIds: [read] }),
+      stored({ resourceId: resource, permissionIds: [read, write] }),
+      stored({ resourceId: other, permissionIds: [foreign] }),
+    ];
+    expect(
+      permissionIdsOf(held, resource)
+        .map((id) => id.toHexString())
+        .sort(),
+    ).toEqual([read, write].map((id) => id.toHexString()).sort());
+  });
+
+  test("permissionIdsOf is empty when no role grants anything", () => {
+    expect(permissionIdsOf([], resource)).toEqual([]);
+  });
+
+  test("scopeNamesOf keeps the resource's scopes, de-duplicated and sorted", () => {
+    const scopes = [
+      { _id: write, name: "write", resourceId: resource },
+      { _id: read, name: "read", resourceId: resource },
+      { _id: new ObjectId(), name: "read", resourceId: resource },
+      { _id: foreign, name: "other", resourceId: other },
+      { _id: new ObjectId(), name: "openid", resourceId: null },
+    ];
+    expect(scopeNamesOf(scopes, resource)).toEqual(["read", "write"]);
   });
 });

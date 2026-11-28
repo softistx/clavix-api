@@ -1,7 +1,13 @@
 import { ConflictError, scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { conflict, managedRefusal, refuse } from "./roles.errors";
-import { checkUserId, cleanDescription, cleanName } from "./roles.rules";
+import {
+  checkPermissions,
+  checkUserId,
+  cleanDescription,
+  cleanName,
+  permissionObjectIds,
+} from "./roles.rules";
 import type {
   AssignmentDoc,
   CreateRoleInput,
@@ -14,6 +20,9 @@ import {
   claimNames,
   countsByRole,
   heldRoles,
+  permissionIdsOf,
+  sameIds,
+  scopeNamesOf,
   sortedByName,
 } from "./roles.utils";
 
@@ -184,6 +193,64 @@ export class RolesService {
     return removed;
   }
 
+  /**
+   * Replaces the scopes the role holds (`permissionIds`, ids of the tenant's
+   * scopes). Idempotent: the same set writes nothing. `NOT_FOUND` for an
+   * unknown role, `ROLE_MANAGED` for a managed one, `BAD_USER_INPUT` at
+   * `permissionIds.<i>` for a scope the role may not hold (see `checkPermissions`).
+   */
+  async setPermissions(
+    tenantId: ObjectId,
+    roleId: string,
+    permissionIds: readonly string[],
+  ): Promise<RoleDoc> {
+    const found = await this.find(tenantId, roleId);
+    if (found === undefined) return refuse("NOT_FOUND", "No such role");
+    if (found.managed) throw managedRefusal(found.name);
+    const wanted = permissionObjectIds(permissionIds);
+    checkPermissions(
+      permissionIds,
+      found.resourceId,
+      await this.options.scopes.find(tenantId, wanted),
+    );
+    if (sameIds(found.permissionIds, wanted)) return found;
+    return this.rolesOf(tenantId).update(found._id, { permissionIds: wanted });
+  }
+
+  /**
+   * The cascade of a deleted resource: its scope ids leave the tenant-wide
+   * roles that hold them (a role scoped to the resource is deleted with it).
+   * Returns the roles changed.
+   */
+  async pullScopes(
+    tenantId: ObjectId,
+    scopeIds: readonly ObjectId[],
+  ): Promise<RoleDoc[]> {
+    if (scopeIds.length === 0) return [];
+    const held = { permissionIds: { $in: [...scopeIds] } };
+    const holders = await this.rolesOf(tenantId).findMany({ filter: held });
+    if (holders.length === 0) return [];
+    // One atomic $pull, so a concurrent setRolePermissions is never rewritten.
+    await this.rolesOf(tenantId).updateMany(held, {
+      $pull: { permissionIds: { $in: [...scopeIds] } },
+    });
+    return holders;
+  }
+
+  /** At most `limit` ids (hex) of the tenant's roles that grant the scope. */
+  async rolesGranting(
+    tenantId: ObjectId,
+    scopeId: ObjectId,
+    limit: number,
+  ): Promise<string[]> {
+    const holders = await this.rolesOf(tenantId).findMany({
+      filter: { permissionIds: scopeId },
+      projection: { _id: 1 },
+      limit,
+    });
+    return holders.map((role) => role._id.toHexString());
+  }
+
   /** The roles scoped to a resource that is being deleted, removed with their assignments; the roles removed. */
   async deleteForResource(
     tenantId: ObjectId,
@@ -289,7 +356,17 @@ export class RolesService {
     });
     if (held.length === 0) return [];
     const ids = new Set(held.map((a) => a.roleId.toHexString()));
-    return heldRoles(await this.rolesOf(tenantId).findMany(), ids);
+    const found = await this.rolesOf(tenantId).findMany({
+      filter: { _id: { $in: held.map((a) => a.roleId) } },
+    });
+    return heldRoles(found, ids);
+  }
+
+  /** The resource whose URI is a token's audience, shared by both claims: `undefined` for no audience or an unknown URI. */
+  private async resourceAt(tenantId: ObjectId, audience: string | null) {
+    return audience === null
+      ? undefined
+      : await this.resourcesOf(tenantId).findFirst({ uri: audience });
   }
 
   /**
@@ -304,13 +381,33 @@ export class RolesService {
   ): Promise<string[]> {
     const held = await this.rolesOfUser(tenantId, userId);
     if (held.length === 0) return [];
-    let resourceId: string | null = null;
-    if (audience !== null) {
-      const resource = await this.resourcesOf(tenantId).findFirst({
-        uri: audience,
-      });
-      resourceId = resource?._id.toHexString() ?? null;
+    const resource = await this.resourceAt(tenantId, audience);
+    return claimNames(held, resource?._id.toHexString() ?? null);
+  }
+
+  /**
+   * The `roles` and `permissions` claims of a user for a resource that enforces
+   * RBAC, with the resource and the held roles read once (slice 5.2a).
+   * `roles` is as `claimRoles`. `permissions` holds the sorted, de-duplicated
+   * names of the scopes of the resource whose URI is `audience`, granted by the
+   * roles held there (tenant-wide and scoped to it): `[]` when none, `null`
+   * (no claim) when there is no audience, no such resource, or it does not
+   * enforce RBAC.
+   */
+  async claimAccess(
+    tenantId: ObjectId,
+    userId: string,
+    audience: string | null,
+  ): Promise<{ roles: string[]; permissions: string[] | null }> {
+    const held = await this.rolesOfUser(tenantId, userId);
+    const resource = await this.resourceAt(tenantId, audience);
+    const roles = claimNames(held, resource?._id.toHexString() ?? null);
+    if (resource === undefined || resource.enforceRbac !== true) {
+      return { roles, permissions: null };
     }
-    return claimNames(held, resourceId);
+    const ids = permissionIdsOf(held, resource._id);
+    if (ids.length === 0) return { roles, permissions: [] };
+    const scopes = await this.options.scopes.find(tenantId, ids);
+    return { roles, permissions: scopeNamesOf(scopes, resource._id) };
   }
 }

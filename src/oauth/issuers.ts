@@ -18,6 +18,7 @@ import type {
   AuthFor,
   ClaimsFor,
   ExchangeRulesFor,
+  PermissionsFor,
   ResourcesFor,
   RolesFor,
   SigningKeysFor,
@@ -52,6 +53,11 @@ export interface ClavixOAuthOptions {
    * (tenant-wide plus the roles of the token's resource).
    */
   rolesFor: RolesFor;
+  /**
+   * The `permissions` claim (slice 5.2a): in the JWT access tokens of a
+   * resource that enforces RBAC only, never in the id_token or userinfo.
+   */
+  permissionsFor: PermissionsFor;
   /**
    * The attribute claims (slice A6) of the JWT access tokens, the id_token and
    * userinfo: the attributes whose emission scope the token holds.
@@ -109,6 +115,7 @@ export function createClavixOAuthIssuers(
     oidc,
     clock,
     rolesFor: options.rolesFor,
+    permissionsFor: options.permissionsFor,
     attributesFor: options.attributesFor,
     exchangeRulesFor: options.exchangeRulesFor,
     agentCheckFor: options.agentCheckFor,

@@ -8,6 +8,9 @@ import type { DetailTypeDraft } from "./resources.types";
 
 let listing: string[] = [];
 const dropped: string[][] = [];
+let granting: string[] = [];
+let scopeUsers: string[] = [];
+const scopesDropped: string[][] = [];
 const clients: DetailTypeClients = {
   using: async (_tenantId, types) =>
     listing.filter((type) => types.includes(type)),
@@ -23,6 +26,12 @@ const service = new ResourcesService({
   clients,
   userinfoOf: (slug) => `https://${slug}.clavix.test/userinfo`,
   findTenant: async () => undefined,
+  scopeClients: { listing: async () => scopeUsers },
+  rolesGranting: async () => granting,
+  warn: () => {},
+  scopesDropped: async (_tenantId, scopeIds) => {
+    scopesDropped.push(scopeIds.map((scopeId) => scopeId.toHexString()));
+  },
 });
 const A = new ObjectId();
 const B = new ObjectId();
@@ -48,6 +57,9 @@ const refusal = async (promise: Promise<unknown>) => {
 afterEach(async () => {
   listing = [];
   dropped.length = 0;
+  scopesDropped.length = 0;
+  granting = [];
+  scopeUsers = [];
   for (const tenantId of [A, B]) {
     await mongo.db.detailTypes.raw.deleteMany({
       tenantId: new ObjectId(tenantId),
@@ -147,23 +159,35 @@ describe("scopes", () => {
       description: [{ locale: "en", text: "Read" }],
       claims: ["email"],
     });
-    const updated = await service.updateScope(A, scope._id.toHexString(), {
-      description: [{ locale: "fr", text: "Lire" }],
-    });
+    const { scope: updated } = await service.updateScope(
+      A,
+      scope._id.toHexString(),
+      {
+        description: [{ locale: "fr", text: "Lire" }],
+      },
+    );
     expect(updated.description).toEqual([
       { locale: "en", text: "Read" },
       { locale: "fr", text: "Lire" },
     ]);
     expect(updated.claims).toEqual(["email"]);
     // A write sets the locales it names and keeps the others; blank removes one.
-    const replaced = await service.updateScope(A, scope._id.toHexString(), {
-      description: [
-        { locale: "en", text: "Read it" },
-        { locale: "fr", text: "  " },
-      ],
-    });
+    const { scope: replaced } = await service.updateScope(
+      A,
+      scope._id.toHexString(),
+      {
+        description: [
+          { locale: "en", text: "Read it" },
+          { locale: "fr", text: "  " },
+        ],
+      },
+    );
     expect(replaced.description).toEqual([{ locale: "en", text: "Read it" }]);
-    const kept = await service.updateScope(A, scope._id.toHexString(), {});
+    const { scope: kept } = await service.updateScope(
+      A,
+      scope._id.toHexString(),
+      {},
+    );
     expect(kept.description).toEqual([{ locale: "en", text: "Read it" }]);
   });
 
@@ -222,9 +246,42 @@ describe("scopes", () => {
     ).toEqual(["admin", "write"]);
     const [first] = await service.listScopes(A);
     const id = String(first?._id);
-    expect(await service.deleteScope(A, id)).toBe(true);
-    expect(await service.deleteScope(A, id)).toBe(false);
+    expect(await service.deleteScope(A, id, "u1")).toBe(true);
+    expect(await service.deleteScope(A, id, "u1")).toBe(false);
     expect(await service.findScope(A, id)).toBeUndefined();
+  });
+});
+
+describe("scopes of a replace and findScopes", () => {
+  test("a replace tells the port which scopes it drops, once, before removing them", async () => {
+    const resource = await service.createResource(A, "acme", { uri: API });
+    const rid = resource._id;
+    await service.replaceResourceScopes(A, rid, ["read", "write"]);
+    expect(scopesDropped).toEqual([]);
+    const before = await service.listScopes(A, { resourceId: rid });
+    const write = before.find((scope) => scope.name === "write");
+    await service.replaceResourceScopes(A, rid, ["read", "admin"]);
+    expect(scopesDropped).toEqual([[String(write?._id)]]);
+    await service.replaceResourceScopes(A, rid, ["read", "admin"]);
+    expect(scopesDropped).toHaveLength(1);
+  });
+
+  test("findScopes returns the tenant's scopes among the ids, leaving out unknown and foreign ones", async () => {
+    const resource = await service.createResource(A, "acme", { uri: API });
+    await service.replaceResourceScopes(A, resource._id, ["read", "write"]);
+    const [read, write] = await service.listScopes(A, {
+      resourceId: resource._id,
+    });
+    const other = await service.createResource(B, "beta", { uri: API });
+    await service.replaceResourceScopes(B, other._id, ["read"]);
+    const [foreign] = await service.listScopes(B, { resourceId: other._id });
+    const ids = [read, write, foreign].map((scope) => scope?._id);
+    const found = await service.findScopes(A, [
+      ...ids.filter((id): id is ObjectId => id !== undefined),
+      new ObjectId(),
+    ]);
+    expect(found.map((scope) => scope.name).sort()).toEqual(["read", "write"]);
+    expect(await service.findScopes(A, [])).toEqual([]);
   });
 });
 

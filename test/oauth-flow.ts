@@ -20,6 +20,7 @@ import type {
   AttributesFor,
   AuthFor,
   ClaimsFor,
+  PermissionsFor,
   RolesFor,
 } from "@/oauth/ports";
 import type {
@@ -44,6 +45,7 @@ interface FlowOptions {
   /** The user's own claims (the user's e-mail by default). */
   claimsFor?: ClaimsFor;
   rolesFor?: RolesFor;
+  permissionsFor?: PermissionsFor;
   attributesFor?: AttributesFor;
   attributeScopesFor?: AttributeScopesFor;
   /** What the `/register` route throttles with (none by default). */
@@ -99,6 +101,9 @@ function issuersOf(
       ? {}
       : { eventsFor: options.eventsFor }),
     ...(options.rolesFor === undefined ? {} : { rolesFor: options.rolesFor }),
+    ...(options.permissionsFor === undefined
+      ? {}
+      : { permissionsFor: options.permissionsFor }),
     ...(options.attributesFor === undefined
       ? {}
       : { attributesFor: options.attributesFor }),

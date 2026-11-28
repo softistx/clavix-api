@@ -24,7 +24,7 @@ language, then the first translation; the name when there is none).
 """
 type Scope {
   id: ID!
-  "The OAuth scope token. Unique in its resource (or among the standard scopes); never changes."
+  "The OAuth scope token. Unique in its resource (or among the standard scopes). Only a resource's scope can be renamed (`updateScope`), and not while a client lists it."
   name: String!
   description: [Translation!]!
     @listSize(assumedSize: 3, requireOneSlicingArgument: false)
@@ -65,6 +65,14 @@ type Resource {
   refused by default).
   """
   allowClientCredentials: Boolean!
+  """
+  Whether the resource enforces role-based access control. When on, the access
+  tokens issued for it carry a `permissions` claim: the sorted names of the
+  scopes of this resource that the roles the user holds grant (`[]` when the
+  user holds none). When off (the default) the claim is absent. Never in the
+  id_token, userinfo or a client credentials token.
+  """
+  enforceRbac: Boolean!
   createdAt: DateTime!
 }
 
@@ -184,14 +192,20 @@ input UpdateResourceInput {
   name: String
   "Let clients with `CLIENT_CREDENTIALS` ask for tokens for this resource; turning it off refuses new token requests at once. Refused on the console's own resource."
   allowClientCredentials: Boolean
+  "Turn role-based access on or off: the resource's access tokens then carry (or no longer carry) a `permissions` claim, from the next token on. Refused on the console's own resource (BAD_USER_INPUT at `enforceRbac`)."
+  enforceRbac: Boolean
 }
 
 """
 Fields left out stay as they are; `description` sets or replaces the locales it
-lists and keeps the others (a blank text removes a locale). The name and the
-resource never change.
+lists and keeps the others (a blank text removes a locale). The resource never
+changes. `name` renames a resource's scope (a standard OpenID Connect scope
+keeps its name: BAD_USER_INPUT at `name`); a name the resource already has is a
+CONFLICT, and a name a client still lists in its allowed or default scopes is
+SCOPE_IN_USE (`extensions.clients`).
 """
 input UpdateScopeInput {
+  name: String
   description: [TranslationInput!]
   claims: [String!]
 }
@@ -213,7 +227,7 @@ type Mutation {
   "A name another scope has is a CONFLICT."
   createScope(tenantId: ID!, input: CreateScopeInput!): Scope!
   updateScope(tenantId: ID!, id: ID!, input: UpdateScopeInput!): Scope!
-  "`false` when it was already gone."
+  "`false` when it was already gone. A scope a role still grants is PERMISSION_IN_USE (`extensions.roles` lists the role ids)."
   deleteScope(tenantId: ID!, id: ID!): Boolean!
   "A name the tenant already has is a CONFLICT; an invalid definition is BAD_USER_INPUT; another tenant's resource is NOT_FOUND."
   createDetailType(tenantId: ID!, input: CreateDetailTypeInput!): DetailType!

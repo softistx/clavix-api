@@ -25,6 +25,8 @@ const config: CodegenConfig = {
           Me: "@/modules/me/me.types#MeParent",
           // A tenant by id, slug and name, and its stored document when read.
           Tenant: "@/modules/tenants/tenants.console-parent#TenantParent",
+          // A role with its tenant and scope ids, which `permissions` reads.
+          TenantRole: "@/modules/roles/roles.types#TenantRoleParent",
           // A user with its tenant, for the fields read from its pool.
           TenantUser: "@/modules/users/users.types#TenantUserParent",
           // An endpoint with its tenant, which its `deliveries` read through.

@@ -22,6 +22,7 @@ const role = (name: string): RoleDoc => {
     description: "",
     resourceId: null,
     managed: false,
+    permissionIds: [],
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

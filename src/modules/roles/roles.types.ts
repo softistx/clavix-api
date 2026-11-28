@@ -12,6 +12,35 @@ export interface RoleLinks {
   removeForRole(tenantId: ObjectId, roleId: ObjectId): Promise<void>;
 }
 
+/** What a role needs to know of a scope (a document of the resources module). */
+export interface ScopeRef {
+  _id: ObjectId;
+  /** The OAuth scope token. */
+  name: string;
+  /** The resource it belongs to; `null` for a standard OpenID Connect scope. */
+  resourceId: ObjectId | null;
+}
+
+/** The roles module's read-only view of the tenant's scopes. Required: bound in `src/config/roles.ts`. */
+export interface RoleScopes {
+  /** The scopes of the tenant among `ids`; an id that names none is left out. */
+  find(tenantId: ObjectId, ids: readonly ObjectId[]): Promise<ScopeRef[]>;
+}
+
+/** What the console's `TenantRole` resolvers read: the shape and what its fields need. */
+export interface TenantRoleParent {
+  id: string;
+  name: string;
+  description: string | null;
+  resourceId: string | null;
+  managed: boolean;
+  memberCount: number;
+  createdAt: Date;
+  tenantId: string;
+  /** Scope ids (hex), for `TenantRole.permissions`. */
+  permissionIds: string[];
+}
+
 export interface RolesOptions {
   roles: TypedCollection<typeof roles>;
   assignments: TypedCollection<typeof roleAssignments>;
@@ -19,6 +48,8 @@ export interface RolesOptions {
   resources: TypedCollection<typeof resources>;
   /** The attribute links of a role, removed with it. Required: bound in `src/config/roles.ts`. */
   roleLinks: RoleLinks;
+  /** Scopes a role may hold, checked on `setPermissions`. Required: bound in `src/config/roles.ts`. */
+  scopes: RoleScopes;
 }
 
 export interface CreateRoleInput {

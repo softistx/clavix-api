@@ -1317,7 +1317,9 @@ type Mutation {
   Deletes a role and its assignments (tenant admin). True also when it was already gone. Errors: ROLE_MANAGED (403) for a managed role.
   """
   deleteRole(id: ID!, tenantId: ID!): Boolean!
-  """`false` when it was already gone."""
+  """
+  `false` when it was already gone. A scope a role still grants is PERMISSION_IN_USE (`extensions.roles` lists the role ids).
+  """
   deleteScope(id: ID!, tenantId: ID!): Boolean!
   """
   Puts a tenant in the trash for 30 days, then its data is purged for good and
@@ -1498,6 +1500,15 @@ type Mutation {
   then on. Idempotent. Errors: NOT_FOUND (404), DOMAIN_NOT_VERIFIED (409).
   """
   setPrimaryDomain(id: ID!, tenantId: ID!): Domain!
+  """
+  Replaces the whole set of scopes the role grants (tenant admin). Idempotent:
+  the same set changes nothing, and repeated ids count once. Errors:
+  NOT_FOUND for an unknown role, ROLE_MANAGED (403) for a managed role,
+  BAD_USER_INPUT with `extensions.field` `permissionIds.<i>` for an id that is
+  no scope of the tenant, a standard OpenID Connect scope, or (for a role
+  scoped to a resource) a scope of another resource. At most 500 ids.
+  """
+  setRolePermissions(permissionIds: [ID!]! @constraint(maxItems: 500), roleId: ID!, tenantId: ID!): TenantRole!
   """
   Sets the tenant's own app for a social provider. Needs edit on the tenant.
   Idempotent. BAD_USER_INPUT (400) for a new provider without `clientId`,
@@ -2066,6 +2077,14 @@ type Resource {
   createdAt: DateTime!
   """The authorization detail types (RFC 9396) it accepts, by name."""
   detailTypes: [DetailType!]!
+  """
+  Whether the resource enforces role-based access control. When on, the access
+  tokens issued for it carry a `permissions` claim: the sorted names of the
+  scopes of this resource that the roles the user holds grant (`[]` when the
+  user holds none). When off (the default) the claim is absent. Never in the
+  id_token, userinfo or a client credentials token.
+  """
+  enforceRbac: Boolean!
   id: ID!
   """
   Where the resource server serves its RFC 9728 protected resource metadata:
@@ -2166,7 +2185,7 @@ type Scope {
   description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   id: ID!
   """
-  The OAuth scope token. Unique in its resource (or among the standard scopes); never changes.
+  The OAuth scope token. Unique in its resource (or among the standard scopes). Only a resource's scope can be renamed (`updateScope`), and not while a client lists it.
   """
   name: String!
   """
@@ -2338,6 +2357,12 @@ type TenantRole {
   The claim value: 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`. Unique per tenant and resource; `updateRole` may rename it.
   """
   name: String!
+  """
+  The scopes the role grants, by name. A role scoped to a resource holds only
+  that resource's scopes; a tenant-wide role may hold the scopes of any
+  resource. Never a standard OpenID Connect scope. Empty by default.
+  """
+  permissions: [Scope!]! @listSize(assumedSize: 500, requireOneSlicingArgument: false)
   """
   The resource (API) the role is scoped to, or `null` for the whole tenant. Fixed at creation.
   """
@@ -2537,6 +2562,10 @@ input UpdateResourceInput {
   Let clients with `CLIENT_CREDENTIALS` ask for tokens for this resource; turning it off refuses new token requests at once. Refused on the console's own resource.
   """
   allowClientCredentials: Boolean
+  """
+  Turn role-based access on or off: the resource's access tokens then carry (or no longer carry) a `permissions` claim, from the next token on. Refused on the console's own resource (BAD_USER_INPUT at `enforceRbac`).
+  """
+  enforceRbac: Boolean
   name: String
 }
 
@@ -2549,12 +2578,16 @@ input UpdateRoleInput {
 
 """
 Fields left out stay as they are; `description` sets or replaces the locales it
-lists and keeps the others (a blank text removes a locale). The name and the
-resource never change.
+lists and keeps the others (a blank text removes a locale). The resource never
+changes. `name` renames a resource's scope (a standard OpenID Connect scope
+keeps its name: BAD_USER_INPUT at `name`); a name the resource already has is a
+CONFLICT, and a name a client still lists in its allowed or default scopes is
+SCOPE_IN_USE (`extensions.clients`).
 """
 input UpdateScopeInput {
   claims: [String!]
   description: [TranslationInput!]
+  name: String
 }
 
 """Fields left out stay as they are. The slug never changes."""

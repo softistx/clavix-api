@@ -47,11 +47,15 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
       refuseMachineConsole(
         tenant,
         await resourcesService.findResource(tenant._id, id),
-        input.allowClientCredentials,
+        {
+          allowClientCredentials: input.allowClientCredentials,
+          enforceRbac: input.enforceRbac,
+        },
       );
       return resourcesService.updateResource(tenant._id, id, {
         name: input.name ?? undefined,
         allowClientCredentials: input.allowClientCredentials ?? undefined,
+        enforceRbac: input.enforceRbac ?? undefined,
       });
     });
     await ctx.audit(
@@ -77,14 +81,20 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
   },
   updateScope: async (_, { tenantId, id, input }, ctx) => {
     const { _id } = await catalogTenant(ctx, tenantId);
-    const updated = await refusing(() =>
+    const { scope, renamed } = await refusing(() =>
       resourcesService.updateScope(_id, id, {
+        name: input.name ?? undefined,
         description: input.description ?? undefined,
         claims: input.claims ?? undefined,
       }),
     );
-    await ctx.audit("scope.update", target("scope", _id, updated._id));
-    return scopeShape(updated);
+    // A rename is its own event; the audit keeps no values (ADR-0037), so the
+    // scope is the target and the old name is not recorded.
+    await ctx.audit(
+      renamed ? "scope.rename" : "scope.update",
+      target("scope", _id, scope._id),
+    );
+    return scopeShape(scope);
   },
   deleteScope: async (_, { tenantId, id }, ctx) => {
     const tenant = await catalogTenant(ctx, tenantId);
@@ -99,7 +109,7 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
           ),
         );
       }
-      return resourcesService.deleteScope(tenant._id, id);
+      return resourcesService.deleteScope(tenant._id, id, ctx.principal.userId);
     });
     if (ObjectId.isValid(id)) {
       await ctx.audit(
