@@ -46,7 +46,9 @@ describe("the reader ports stop at their limit", () => {
         { $set: { permissionIds: [scope] } },
       );
     }
-    expect(await rolesService.rolesGranting(tenant, scope, 26)).toHaveLength(26);
+    expect(await rolesService.rolesGranting(tenant, scope, 26)).toHaveLength(
+      26,
+    );
     expect(await rolesService.rolesGranting(tenant, scope, 100)).toHaveLength(
       HOLDERS,
     );

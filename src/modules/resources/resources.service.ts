@@ -29,11 +29,11 @@ import {
   cleanName,
   isOidcScope,
   listed,
-  SCRIPT_ACTOR,
   MAX_DESCRIPTION,
   MAX_LABEL,
   MAX_LISTED,
   OIDC_SCOPES,
+  SCRIPT_ACTOR,
   sameScopeDefinition,
 } from "./resources.rules";
 import {

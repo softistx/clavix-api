@@ -159,23 +159,35 @@ describe("scopes", () => {
       description: [{ locale: "en", text: "Read" }],
       claims: ["email"],
     });
-    const { scope: updated } = await service.updateScope(A, scope._id.toHexString(), {
-      description: [{ locale: "fr", text: "Lire" }],
-    });
+    const { scope: updated } = await service.updateScope(
+      A,
+      scope._id.toHexString(),
+      {
+        description: [{ locale: "fr", text: "Lire" }],
+      },
+    );
     expect(updated.description).toEqual([
       { locale: "en", text: "Read" },
       { locale: "fr", text: "Lire" },
     ]);
     expect(updated.claims).toEqual(["email"]);
     // A write sets the locales it names and keeps the others; blank removes one.
-    const { scope: replaced } = await service.updateScope(A, scope._id.toHexString(), {
-      description: [
-        { locale: "en", text: "Read it" },
-        { locale: "fr", text: "  " },
-      ],
-    });
+    const { scope: replaced } = await service.updateScope(
+      A,
+      scope._id.toHexString(),
+      {
+        description: [
+          { locale: "en", text: "Read it" },
+          { locale: "fr", text: "  " },
+        ],
+      },
+    );
     expect(replaced.description).toEqual([{ locale: "en", text: "Read it" }]);
-    const { scope: kept } = await service.updateScope(A, scope._id.toHexString(), {});
+    const { scope: kept } = await service.updateScope(
+      A,
+      scope._id.toHexString(),
+      {},
+    );
     expect(kept.description).toEqual([{ locale: "en", text: "Read it" }]);
   });
 

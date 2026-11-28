@@ -345,8 +345,8 @@ describe("permissions", () => {
     expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([
       holder._id.toHexString(),
     ]);
-    expect(await rolesService.rolesGranting(new ObjectId(), scope._id, 26)).toEqual(
-      [],
-    );
+    expect(
+      await rolesService.rolesGranting(new ObjectId(), scope._id, 26),
+    ).toEqual([]);
   });
 });
