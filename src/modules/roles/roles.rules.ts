@@ -39,8 +39,15 @@ export function checkUserId(userId: string): void {
 
 export const MAX_PERMISSIONS = 500;
 
-/** The ids of `permissionIds` that are well formed, one per scope (first occurrence), as ObjectIds. */
+/** The ids of `permissionIds` (at most MAX_PERMISSIONS, checked first) that are well formed, one per scope (first occurrence), as ObjectIds. */
 export function permissionObjectIds(ids: readonly string[]): ObjectId[] {
+  if (ids.length > MAX_PERMISSIONS) {
+    refuse(
+      "BAD_USER_INPUT",
+      `a role holds at most ${MAX_PERMISSIONS} permissions`,
+      "permissionIds",
+    );
+  }
   const seen = new Set<string>();
   const out: ObjectId[] = [];
   for (const [index, given] of ids.entries()) {
@@ -66,13 +73,6 @@ export function checkPermissions(
   roleResourceId: ObjectId | null,
   found: readonly ScopeRef[],
 ): void {
-  if (ids.length > MAX_PERMISSIONS) {
-    refuse(
-      "BAD_USER_INPUT",
-      `a role holds at most ${MAX_PERMISSIONS} permissions`,
-      "permissionIds",
-    );
-  }
   const byId = new Map(found.map((scope) => [scope._id.toHexString(), scope]));
   for (const [index, given] of ids.entries()) {
     const field = `permissionIds.${index}`;

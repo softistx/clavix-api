@@ -225,21 +225,14 @@ export class RolesService {
     scopeIds: readonly ObjectId[],
   ): Promise<RoleDoc[]> {
     if (scopeIds.length === 0) return [];
-    const gone = new Set(scopeIds.map((scopeId) => scopeId.toHexString()));
-    const holders = await this.rolesOf(tenantId).findMany({
-      filter: { permissionIds: { $in: [...scopeIds] } },
+    const held = { permissionIds: { $in: [...scopeIds] } };
+    const holders = await this.rolesOf(tenantId).findMany({ filter: held });
+    if (holders.length === 0) return [];
+    // One atomic $pull, so a concurrent setRolePermissions is never rewritten.
+    await this.rolesOf(tenantId).updateMany(held, {
+      $pull: { permissionIds: { $in: [...scopeIds] } },
     });
-    const changed: RoleDoc[] = [];
-    for (const role of holders) {
-      changed.push(
-        await this.rolesOf(tenantId).update(role._id, {
-          permissionIds: role.permissionIds.filter(
-            (scopeId) => !gone.has(scopeId.toHexString()),
-          ),
-        }),
-      );
-    }
-    return changed;
+    return holders;
   }
 
   /** The roles scoped to a resource that is being deleted, removed with their assignments; the roles removed. */

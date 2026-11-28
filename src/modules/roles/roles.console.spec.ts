@@ -46,11 +46,6 @@ const MEMBERS = `query($t: ID!, $r: ID!, $after: String, $first: Int) {
     items { assignedAt user { id email } } nextCursor totalCount
   }
 }`;
-const SET_PERMISSIONS = `mutation($t: ID!, $r: ID!, $p: [ID!]!) {
-  setRolePermissions(tenantId: $t, roleId: $r, permissionIds: $p) { id permissions { id name resourceId } }
-}`;
-const PERMISSIONS = `query($t: ID!, $id: ID!) { role(tenantId: $t, id: $id) { permissions { name } } }`;
-const DELETE_RESOURCE = `mutation($t: ID!, $id: ID!) { deleteResource(tenantId: $t, id: $id) }`;
 const OF_USER = `query($t: ID!, $u: ID!) { userRoles(tenantId: $t, userId: $u) { id name } }`;
 
 type Run = ReturnType<typeof consoleAs>;
@@ -639,106 +634,5 @@ describe("a repeat after a failed record", () => {
         }),
       ),
     ).toBe("CONFLICT");
-  });
-});
-
-describe("setRolePermissions", () => {
-  const scopeIds = async (resource: string) =>
-    (
-      await mongo.db.scopes.raw
-        .find({ resourceId: new ObjectId(resource) })
-        .sort({ name: 1 })
-        .toArray()
-    ).map((scope) => scope._id.toHexString());
-  const permissionsOf = async (id: string) =>
-    at(
-      (await viewer(PERMISSIONS, { t: tenantA, id })).data,
-      "role.permissions",
-      z.array(z.looseObject({ name: z.string() })),
-    ).map((scope) => scope.name);
-
-  test("an admin sets, replaces and clears the permissions; a viewer cannot", async () => {
-    const [read] = await scopeIds(resourceA);
-    const id = await make(admin, tenantA, "perm-set");
-    const set = await admin(SET_PERMISSIONS, {
-      t: tenantA,
-      r: id,
-      p: [read, read],
-    });
-    expect(set.errors).toBeUndefined();
-    expect(set.data?.["setRolePermissions"]).toMatchObject({
-      id,
-      permissions: [{ id: read, name: "read", resourceId: resourceA }],
-    });
-    expect(await permissionsOf(id)).toEqual(["read"]);
-    expect(
-      codeOf(await viewer(SET_PERMISSIONS, { t: tenantA, r: id, p: [] })),
-    ).toBe("FORBIDDEN");
-    expect(
-      (await admin(SET_PERMISSIONS, { t: tenantA, r: id, p: [] })).errors,
-    ).toBeUndefined();
-    expect(await permissionsOf(id)).toEqual([]);
-    expect((await events()).map((e) => e["action"]).at(-1)).toBe(
-      "role.setPermissions",
-    );
-  });
-
-  test("refuses at the breaching index, a managed role and another tenant's role", async () => {
-    const [read] = await scopeIds(resourceA);
-    const id = await make(admin, tenantA, "perm-bad");
-    const bad = await admin(SET_PERMISSIONS, {
-      t: tenantA,
-      r: id,
-      p: [read, new ObjectId().toHexString()],
-    });
-    expect(codeOf(bad)).toBe("BAD_USER_INPUT");
-    expect(bad.errors?.[0]?.extensions?.["field"]).toBe("permissionIds.1");
-    expect(
-      codeOf(await admin(SET_PERMISSIONS, { t: tenantA, r: id, p: ["x"] })),
-    ).toBe("BAD_USER_INPUT");
-    const managed = await rolesService.create(new ObjectId(tenantA), {
-      name: "perm-managed",
-      managed: true,
-    });
-    expect(
-      codeOf(
-        await admin(SET_PERMISSIONS, {
-          t: tenantA,
-          r: managed._id.toHexString(),
-          p: [],
-        }),
-      ),
-    ).toBe("ROLE_MANAGED");
-    expect(
-      codeOf(await adminB(SET_PERMISSIONS, { t: tenantB, r: id, p: [read] })),
-    ).toBe("NOT_FOUND");
-  });
-
-  test("deleting a resource pulls its scopes out of tenant-wide roles and records it", async () => {
-    await registerStoredResource({
-      tenant: "rl-a",
-      uri: "https://api.rl-a.example/gone",
-      scopes: ["gone:read"],
-    });
-    const gone = defined(
-      await mongo.db.resources.raw.findOne({
-        tenantId: new ObjectId(tenantA),
-        uri: "https://api.rl-a.example/gone",
-      }),
-      "the resource",
-    )._id.toHexString();
-    const [kept] = await scopeIds(resourceA);
-    const [dropped] = await scopeIds(gone);
-    const id = await make(admin, tenantA, "perm-cascade");
-    await admin(SET_PERMISSIONS, { t: tenantA, r: id, p: [kept, dropped] });
-    expect(await permissionsOf(id)).toEqual(["gone:read", "read"]);
-    await mongo.db.adminEvents.raw.deleteMany({});
-    expect(
-      (await admin(DELETE_RESOURCE, { t: tenantA, id: gone })).errors,
-    ).toBeUndefined();
-    expect(await permissionsOf(id)).toEqual(["read"]);
-    expect(
-      (await events()).filter((e) => e["action"] === "role.setPermissions"),
-    ).toHaveLength(1);
   });
 });

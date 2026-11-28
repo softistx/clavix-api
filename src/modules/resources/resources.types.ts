@@ -1,4 +1,5 @@
 import type { ReadDocumentOf, TypedCollection } from "@softistx/mongo";
+import type { ObjectId } from "mongodb";
 import type { z } from "zod";
 import type { CliTenant } from "@/shared/cli";
 import type { Translation } from "@/shared/translations";
@@ -77,6 +78,15 @@ export interface ResourcesServiceOptions {
   userinfoOf: (tenantSlug: string) => string;
   /** A tenant by slug, for `registerResource` (the `resources:create` script). */
   findTenant: (slug: string) => Promise<CliTenant | undefined>;
+  /**
+   * Told which scopes a replace of a resource's scopes dropped, before they are
+   * removed, so that no role keeps holding them (the roles' `pullScopes`, which
+   * also records the audit; bound in `config/resources.ts`).
+   */
+  scopesDropped: (
+    tenantId: ObjectId,
+    scopeIds: readonly ObjectId[],
+  ) => Promise<void>;
 }
 
 export interface RegisterResourceInput {

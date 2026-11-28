@@ -108,11 +108,12 @@ describe("permissions", () => {
     expect(shown.permissionIds).toEqual([scopeId.toHexString()]);
   });
 
-  test("sameIds compares the lists in order", () => {
+  test("sameIds compares the lists as sets", () => {
     const a = new ObjectId();
     const b = new ObjectId();
     expect(sameIds([a, b], [a, b])).toBe(true);
-    expect(sameIds([a, b], [b, a])).toBe(false);
+    expect(sameIds([a, b], [b, a])).toBe(true);
+    expect(sameIds([a, a], [a, b])).toBe(false);
     expect(sameIds([a], [a, b])).toBe(false);
   });
 
@@ -121,6 +122,14 @@ describe("permissions", () => {
       { name: "read" },
       { name: "write" },
     ]);
+  });
+
+  test("permissionsOf sorts by code point, not by locale", () => {
+    expect(
+      permissionsOf([{ name: "b" }, { name: "B" }, { name: "a" }]).map(
+        (scope) => scope.name,
+      ),
+    ).toEqual(["B", "a", "b"]);
   });
 });
 

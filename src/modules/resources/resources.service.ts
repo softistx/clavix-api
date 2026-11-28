@@ -306,10 +306,16 @@ export class ResourcesService {
   ): Promise<void> {
     const own = this.scopesOf(tenantId);
     const current = await own.findMany({ filter: { resourceId: resource } });
-    for (const scope of current) {
-      if (!names.includes(scope.name)) {
-        await own.hardDeleteMany({ _id: scope._id });
-      }
+    const dropped = current.filter((scope) => !names.includes(scope.name));
+    if (dropped.length > 0) {
+      // Before the delete, as a deleted resource's: a retry still finds them.
+      await this.options.scopesDropped(
+        tenantId,
+        dropped.map((scope) => scope._id),
+      );
+    }
+    for (const scope of dropped) {
+      await own.hardDeleteMany({ _id: scope._id });
     }
     for (const name of names) {
       if (current.some((scope) => scope.name === name)) continue;

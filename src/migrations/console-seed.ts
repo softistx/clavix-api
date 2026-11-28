@@ -56,6 +56,8 @@ export async function seedConsole(
     clients: mongoDetailTypeClients(db),
     userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
     findTenant,
+    // A first registration: no role can hold its scopes yet.
+    scopesDropped: async () => {},
   });
   await service.registerResource({
     tenant: PLATFORM_TENANT_SLUG,

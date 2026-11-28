@@ -124,7 +124,6 @@ export async function removeResource(
     }
     return resourcesService.deleteResource(tenant._id, id);
   });
-
   for (const scope of scopes) {
     await ctx.audit("scope.delete", target("scope", tenant._id, scope._id));
   }

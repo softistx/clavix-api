@@ -11,7 +11,10 @@ export const rolesService = new RolesService({
   assignments: mongo.db.roleAssignments,
   resources: mongo.db.resources,
   roleLinks: roleAttributesService,
-  scopes: { find: resourcesService.findScopes.bind(resourcesService) },
+  // Lazy: config/resources binds the roles back (the cascade of a dropped scope).
+  scopes: {
+    find: (tenantId, ids) => resourcesService.findScopes(tenantId, ids),
+  },
 });
 
 /** The real `RolesFor`: the `roles` claim of the tokens. */

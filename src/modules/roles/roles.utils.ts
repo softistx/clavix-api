@@ -50,15 +50,16 @@ export function permissionsOf<T extends { name: string }>(
   const found = loaded.filter(
     (scope): scope is T => scope !== null && !(scope instanceof Error),
   );
-  return found.sort((a, b) => a.name.localeCompare(b.name));
+  return found.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-/** Whether two lists hold the same ids in the same order. */
+/** Whether two lists hold the same ids, in any order. */
 export function sameIds(
   a: readonly ObjectId[],
   b: readonly ObjectId[],
 ): boolean {
-  return a.length === b.length && a.every((id, i) => id.equals(b[i]));
+  const held = new Set(a.map((id) => id.toHexString()));
+  return held.size === b.length && b.every((id) => held.has(id.toHexString()));
 }
 
 /** What the console shows of a role, with its member count. */

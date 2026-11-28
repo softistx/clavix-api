@@ -2352,7 +2352,7 @@ type TenantRole {
   that resource's scopes; a tenant-wide role may hold the scopes of any
   resource. Never a standard OpenID Connect scope. Empty by default.
   """
-  permissions: [Scope!]! @listSize(assumedSize: 50, requireOneSlicingArgument: false)
+  permissions: [Scope!]! @listSize(assumedSize: 500, requireOneSlicingArgument: false)
   """
   The resource (API) the role is scoped to, or `null` for the whole tenant. Fixed at creation.
   """

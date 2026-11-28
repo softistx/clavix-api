@@ -115,7 +115,7 @@ describe("checkPermissions", () => {
     const many = Array.from({ length: MAX_PERMISSIONS + 1 }, () =>
       new ObjectId().toHexString(),
     );
-    expect(refusal(() => checkPermissions(many, null, []))?.field).toBe(
+    expect(refusal(() => permissionObjectIds(many))?.field).toBe(
       "permissionIds",
     );
   });
