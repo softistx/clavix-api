@@ -58,6 +58,7 @@
         "@graphql-typed-document-node/core": "^3.2.0",
         "@softistx/graphql-codegen-zod": "^0.6.1",
         "@softistx/limix-codegen": "^0.5.0",
+        "@softistx/limix-janus": "^0.2.4",
         "@types/bun": "^1.4.5",
         "jose": "^6.2.17",
         "mongodb-memory-server-core": "^11.4.0",
@@ -362,6 +363,8 @@
     "@softistx/limix-codegen": ["@softistx/limix-codegen@0.5.0", "", { "peerDependencies": { "@softistx/limix": "^0.8.0", "@softistx/limix-graxia": "^0.3.2", "graphql": "^17.1.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@softistx/limix-graxia", "graphql"], "bin": { "limix-codegen": "dist/cli/main.js" } }, "sha512-nUwr1gDAAND0/FD6l/Hhx4vn7KfJ4tHdv5+DfKDTh2pOby/9uSxyldfcYb/sFDKtYRySuiJp0SvZx+HS96iTyQ=="],
 
     "@softistx/limix-graxia": ["@softistx/limix-graxia@0.3.3", "", { "peerDependencies": { "@softistx/graxia": ">=0.18.0 <1.0.0", "@softistx/limix": "^0.8.0", "graphql": "^17.1.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-NmHJknZMNYFtY5DjqNktbUA/xxK0VE2wnYqzTw2oxEHClWEvFGSgRdwE7FeWR4/OORavExEX7eDigkMvY1Hojg=="],
+
+    "@softistx/limix-janus": ["@softistx/limix-janus@0.2.4", "", { "peerDependencies": { "@softistx/janus": ">=0.84.0 <1.0.0", "@softistx/limix": "^0.8.0", "typescript": "^6.0.3 || ^7.0.0" } }, "sha512-nISyrstnsHqMIBG0yVNIynZ8fxcgJTENNis3XVGABzfN43z5E4OhOmBGIjKYI3tNkQjzuPnM4aHH8roSrcNNLQ=="],
 
     "@softistx/mail": ["@softistx/mail@1.6.1", "", { "peerDependencies": { "@opentelemetry/api": "^1.9.0", "typescript": "^6.0.3 || ^7.0.0" }, "optionalPeers": ["@opentelemetry/api"] }, "sha512-Vqys7bLz6QZpbjiGNezTgpi5VEvPUSCQq4B0ehdrqoCnAxaYXy7ENPZjoUYWu9Lng9AOFDH4qAdJhzujDODPxQ=="],
 

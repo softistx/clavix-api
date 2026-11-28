@@ -47,7 +47,9 @@ nxgt-janus release says which.
   holds when it is in `scope` and, when present, in `permissions`,
   [#30](https://github.com/softistx/clavix-api/issues/30)); and a guide shows how to protect a
   resource server with Clavix tokens and `@softistx/limix`
-  ([#37](https://github.com/softistx/clavix-api/issues/37)).
+  ([#37](https://github.com/softistx/clavix-api/issues/37)); then the access token's `scope` is
+  narrowed to the permissions the user holds, so the token itself shows what the user may do
+  ([#30](https://github.com/softistx/clavix-api/issues/30)).
 
 ## Later
 

@@ -253,6 +253,51 @@ Choose another name, or update the existing type.
 
 The address belongs to a verified domain of an enabled enterprise connection with `requireSso`. Why: the tenant's admin requires its users to sign in through the company's identity provider. Fix: call `hostedHomeRealm(email)` and start `socialSignInStart(provider: connectionId)`; or turn `requireSso` off on the connection. `socialSignInStart` answers `SIGN_IN_METHOD_DISABLED` for a connection id that is unknown, not the tenant's or turned off, and a connection with `jit` off refuses a first sign-in of an unknown user (`SIGN_UP_DISABLED`).
 
+## Resource server refusals
+
+A resource server that verifies Clavix access tokens with `jose` (see the
+[resource server guide](guide/resource-server.md)) answers these. The messages are `jose`'s own.
+
+### `unexpected "aud" claim value` (401)
+
+**Why:** the token was issued for another Resource. The `aud` of a Clavix access token is the Resource's `uri`, in its canonical spelling.
+**Fix:** have the client request the Resource with `resource=<uri>` as registered in Clavix, and verify with `audience: <that same uri>`.
+
+### `"exp" claim timestamp check failed` (401)
+
+**Why:** the token expired, or the two servers' clocks differ by more than `clockTolerance`.
+**Fix:** have the client refresh its token; check the resource server's clock (NTP), and widen `clockTolerance` by a few seconds only if it drifts.
+
+### `unexpected "iss" claim value` (401)
+
+**Why:** the token comes from another tenant (each tenant is its own issuer), or `issuer` has a trailing slash or another host spelling than the discovery document's `issuer`.
+**Fix:** use the `issuer` of `<issuer>/.well-known/openid-configuration` as is.
+
+### `unexpected "typ" JWT header value` (401)
+
+**Why:** the token is not an access token (an id_token, for example); `typ` must be `at+jwt`.
+**Fix:** send the access token, not the id_token.
+
+### `the token has no sub` (401)
+
+**Why:** the guide's own check: a token signed by the right keys without a `sub`, which Clavix never issues.
+**Fix:** none on your side; refuse the token and report the issuer.
+
+### `no applicable key found in the JSON Web Key Set` (401)
+
+**Why:** the token's `kid` is in neither the cached keys nor the issuer's current JWKS, or the token came from another issuer.
+**Fix:** check the issuer. A key rotation needs nothing: `createRemoteJWKSet` refetches on an unknown `kid`.
+
+### `request timed out`, `Expected 200 OK from the JSON Web Key Set HTTP response`, a `TypeError` from `fetch` (503)
+
+**Why:** the JWKS cannot be fetched: Clavix is unreachable or slow, or `jwks_uri` is wrong. The token is not at fault.
+**Fix:** answer `503` with `Retry-After`, never `401` (the client would drop a good token). Check the network from the resource server and the `jwks_uri` of the discovery document.
+
+### `403` with the permission in `scope` but not in `permissions`
+
+**Why:** the Resource has `enforceRbac` on, and the user's roles do not grant that permission. Your limix rule requires both the scope and the `permissions` claim.
+**Fix:** grant the permission to one of the user's roles in Clavix (`setPermissions`, then `assign`), and have the user sign in again for a new token.
+
 ## Resource registration refusals (`resources:create`)
 
 ### `resource URI "<uri>" is not in canonical form: write it as <canonical>`

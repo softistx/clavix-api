@@ -11,6 +11,7 @@
 | [guide/token-exchange.md](guide/token-exchange.md)                               | the token exchange grant: the client's rules, the exchange, its refusals               |
 | [guide/mcp.md](guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document          |
 | [guide/magic-link.md](guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                                      |
+| [guide/resource-server.md](guide/resource-server.md)                             | protect your own API with Clavix tokens: jose verification and limix rules             |
 | [guide/migrating-from-embedded-janus.md](guide/migrating-from-embedded-janus.md) | moving an application from embedded janus to Clavix                                    |
 
 The repository [README](../README.md) is the overview and the reference for the GraphQL surface.

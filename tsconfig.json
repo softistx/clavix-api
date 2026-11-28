@@ -25,5 +25,5 @@
       "~/*": ["./test/*"]
     }
   },
-  "include": ["src", "test", "load", "codegen.ts"]
+  "include": ["src", "test", "load", "codegen.ts", "docs/guide/examples"]
 }
