@@ -16,6 +16,13 @@ type TenantRole {
   managed: Boolean!
   "How many users hold the role."
   memberCount: Int!
+  """
+  The scopes the role grants, by name. A role scoped to a resource holds only
+  that resource's scopes; a tenant-wide role may hold the scopes of any
+  resource. Never a standard OpenID Connect scope. Empty by default.
+  """
+  permissions: [Scope!]!
+    @listSize(assumedSize: 50, requireOneSlicingArgument: false)
   createdAt: DateTime!
 }
 
@@ -84,4 +91,17 @@ extend type Mutation {
   assignRole(tenantId: ID!, roleId: ID!, userId: ID!): Boolean!
   "Takes the role from the user (tenant admin). True when it was held, false on a repeat."
   unassignRole(tenantId: ID!, roleId: ID!, userId: ID!): Boolean!
+  """
+  Replaces the whole set of scopes the role grants (tenant admin). Idempotent:
+  the same set changes nothing, and repeated ids count once. Errors:
+  NOT_FOUND for an unknown role, ROLE_MANAGED (403) for a managed role,
+  BAD_USER_INPUT with `extensions.field` `permissionIds.<i>` for an id that is
+  no scope of the tenant, a standard OpenID Connect scope, or (for a role
+  scoped to a resource) a scope of another resource. At most 500 ids.
+  """
+  setRolePermissions(
+    tenantId: ID!
+    roleId: ID!
+    permissionIds: [ID!]! @constraint(maxItems: 500)
+  ): TenantRole!
 }

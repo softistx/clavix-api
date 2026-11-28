@@ -16,6 +16,7 @@ export const rolesGuards: Guards = {
   "Mutation.deleteRole": edit,
   "Mutation.assignRole": edit,
   "Mutation.unassignRole": edit,
+  "Mutation.setRolePermissions": edit,
 };
 
 // One event per mutation, once its change is stored; a repeat records again
@@ -27,4 +28,5 @@ export const rolesAudits: Audits = {
   "Mutation.deleteRole": "role.delete",
   "Mutation.assignRole": "role.assign",
   "Mutation.unassignRole": "role.unassign",
+  "Mutation.setRolePermissions": "role.setPermissions",
 };

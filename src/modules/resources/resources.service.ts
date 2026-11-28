@@ -179,6 +179,17 @@ export class ResourcesService {
     return found.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** The scopes of the tenant among `ids`; an id that names none is left out. */
+  async findScopes(
+    tenantId: ObjectId,
+    ids: readonly ObjectId[],
+  ): Promise<StoredScopeDoc[]> {
+    if (ids.length === 0) return [];
+    return this.scopesOf(tenantId).findMany({
+      filter: { _id: { $in: [...ids] } },
+    });
+  }
+
   async findScope(
     tenantId: ObjectId,
     scopeId: string,

@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import { unique } from "@/shared/values";
-import type { RoleDoc } from "./roles.types";
+import type { RoleDoc, TenantRoleParent } from "./roles.types";
 
 /** A copy of the roles sorted by name. */
 export function sortedByName(found: readonly RoleDoc[]): RoleDoc[] {
@@ -43,8 +43,29 @@ export function countsByRole(
   return counts;
 }
 
+/** The scopes of a loader's answers, those found, sorted by name. */
+export function permissionsOf<T extends { name: string }>(
+  loaded: readonly (T | null | Error)[],
+): T[] {
+  const found = loaded.filter(
+    (scope): scope is T => scope !== null && !(scope instanceof Error),
+  );
+  return found.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Whether two lists hold the same ids in the same order. */
+export function sameIds(
+  a: readonly ObjectId[],
+  b: readonly ObjectId[],
+): boolean {
+  return a.length === b.length && a.every((id, i) => id.equals(b[i]));
+}
+
 /** What the console shows of a role, with its member count. */
-export const shape = (role: RoleDoc, memberCount: number) => ({
+export const shape = (
+  role: RoleDoc,
+  memberCount: number,
+): TenantRoleParent => ({
   id: role._id.toHexString(),
   name: role.name,
   description: role.description === "" ? null : role.description,
@@ -52,6 +73,8 @@ export const shape = (role: RoleDoc, memberCount: number) => ({
   managed: role.managed,
   memberCount,
   createdAt: role.createdAt,
+  tenantId: role.tenantId.toHexString(),
+  permissionIds: role.permissionIds.map((scopeId) => scopeId.toHexString()),
 });
 
 /** What an admin event names: the role or user id and its tenant. */

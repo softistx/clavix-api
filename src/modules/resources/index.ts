@@ -20,3 +20,4 @@ export {
   mergeTranslations,
 } from "./resources.translation-rules";
 export type { RegisterResourceInput } from "./resources.types";
+export { scopeShape } from "./resources.utils";

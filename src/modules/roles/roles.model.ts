@@ -17,6 +17,9 @@ export const roles = defineCollection({
     // A role Clavix itself created for the tenant: the console cannot rename
     // or delete it. Absent on older documents, so `false`.
     managed: z.boolean().default(false),
+    // The scopes the role grants (ids of `scopes` documents, ADR-0025). Absent
+    // on older documents, so `[]`.
+    permissionIds: z.array(id()).default([]),
   }),
   indexes: [
     {
