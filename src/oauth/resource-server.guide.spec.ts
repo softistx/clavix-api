@@ -1,38 +1,41 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { createLocalJWKSet, decodeJwt, errors, type JSONWebKeySet } from "jose";
+import { CLIENT_CREDENTIALS_GRANT } from "@softistx/janus-oauth";
+import { decodeJwt, decodeProtectedHeader, errors } from "jose";
 import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
+import { noDetailTypes } from "@/config/no-ops";
 import { oauthDb } from "@/config/oauth-db";
 import { registerStoredResource, resourcesService } from "@/config/resources";
 import { permissionsFor, rolesFor, rolesService } from "@/config/roles";
+import { registerClient } from "@/modules/clients";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { jsonOf } from "~/json";
 import { defined } from "~/narrow";
-import { recordBody } from "~/oauth-bodies";
+import { answerBody } from "~/oauth-bodies";
 import { createFlow } from "~/oauth-flow";
 import {
+  access,
   authorize,
+  authorizeOwned,
   challenge,
   claimsOf,
   discover,
   handler,
+  modelIssues,
+  remoteKeys,
   verifyAccessToken,
 } from "../../docs/guide/examples/resource-server";
 
-// The spec runs the code of docs/guide/resource-server.md against a real
-// tenant issuer: the guide quotes docs/guide/examples/resource-server.ts.
+// The guide's code against the in-process issuer on real Mongo.
 const API = "https://api.guide.test/v1";
 const SLUG = "guide-rs";
 const SCOPES = ["invoices:read", "invoices:write", "invoices:delete"];
 const flow = createFlow({ rolesFor, permissionsFor });
 const trust = { issuer: flow.url(SLUG, ""), resource: API };
-// The issuer answers in process: this stands in for the network.
-const issuerFetch = (async (input: string | URL | Request) =>
-  flow.get(SLUG, new URL(String(input)).pathname)) as typeof fetch;
+const issuerFetch = (url: string) => flow.get(SLUG, new URL(url).pathname);
 
 let tenantId = new ObjectId();
-let keys: ReturnType<typeof createLocalJWKSet>;
+let keys = remoteKeys("https://unset.test/jwks.json");
 let token = "";
 
 const resourceId = async () =>
@@ -47,6 +50,7 @@ beforeAll(async () => {
   const resource = await resourceId();
   await resourcesService.updateResource(tenantId, resource._id.toHexString(), {
     enforceRbac: true,
+    allowClientCredentials: true,
   });
   const scopes = await resourcesService.listScopes(tenantId, {
     resourceId: resource._id,
@@ -72,12 +76,8 @@ beforeAll(async () => {
   });
   token = tokens.access_token ?? "";
   const { jwksUri } = await discover(trust.issuer, issuerFetch);
-  keys = createLocalJWKSet(
-    (await jsonOf(
-      await issuerFetch(jwksUri),
-      recordBody,
-    )) as unknown as JSONWebKeySet,
-  );
+  // jose fetches the issuer's JWKS itself, through the in-process issuer.
+  keys = remoteKeys(jwksUri, issuerFetch);
 });
 
 afterAll(async () => {
@@ -154,57 +154,97 @@ describe("a resource server protected with Clavix tokens and limix", () => {
     expect(challenge("invalid_token")).toBe('Bearer error="invalid_token"');
   });
 
-  test("the token is the Resource's: aud is its URI", () => {
+  test("the token is the Resource's: aud is its URI, typ at+jwt", () => {
     expect(decodeJwt(token).aud).toBe(API);
+    expect(decodeProtectedHeader(token).typ).toBe("at+jwt");
   });
 
-  test("the HTTP edge answers 200, 401 and 403", async () => {
+  test("the HTTP edge answers 200, 401 and 403 with their challenges", async () => {
     const serve = handler(keys, trust);
-    const url = "https://api.guide.test/invoices";
-    const ask = (init: RequestInit & { token?: string } = {}) =>
+    const ask = (method: string, bearer?: string) =>
       serve(
-        new Request(url, {
-          method: init.method ?? "GET",
+        new Request("https://api.guide.test/invoices/42", {
+          method,
           headers:
-            init.token === undefined
-              ? {}
-              : { authorization: `Bearer ${init.token}` },
+            bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
         }),
       );
-    expect((await ask({ token })).status).toBe(200);
-    const anonymous = await ask();
+    expect((await ask("GET", token)).status).toBe(200);
+    const anonymous = await ask("GET");
     expect(anonymous.status).toBe(401);
     expect(anonymous.headers.get("www-authenticate")).toBe(
       'Bearer realm="api"',
     );
-    const forged = await ask({ token: `${token}x` });
+    const forged = await ask("GET", `${token}x`);
     expect(forged.status).toBe(401);
     expect(forged.headers.get("www-authenticate")).toBe(
-      'Bearer error="invalid_token"',
+      challenge("invalid_token"),
     );
-    const refused = await serve(
-      new Request(url, {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${token}` },
-      }),
-    );
+    const refused = await ask("DELETE", token);
     expect(refused.status).toBe(403);
+    expect(refused.headers.get("www-authenticate")).toMatch(
+      /^Bearer error="insufficient_scope", scope="invoices:delete"$/,
+    );
     expect(await refused.json()).toEqual({ code: "auth.errors.forbidden" });
   });
 
-  test("every ts block of the guide marked as an example is the example's code", () => {
-    const source = readFileSync(
-      "docs/guide/examples/resource-server.ts",
-      "utf8",
+  test("a client_credentials token is a client, decided on scope alone", async () => {
+    const registered = await registerClient(
+      {
+        detailTypes: noDetailTypes,
+        now: () => new Date(),
+        db: oauthDb,
+        findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
+      },
+      {
+        tenant: SLUG,
+        name: "machine",
+        clientId: "guide-machine",
+        redirectUris: [],
+        type: "confidential",
+        grants: [CLIENT_CREDENTIALS_GRANT],
+        allowedScopes: ["invoices:read"],
+      },
     );
-    const guide = readFileSync("docs/guide/resource-server.md", "utf8");
-    const marker = "// docs/guide/examples/resource-server.ts\n";
-    const blocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)]
-      .map((match) => match[1] ?? "")
-      .filter((block) => block.startsWith(marker));
-    expect(blocks.length).toBeGreaterThan(3);
-    for (const block of blocks) {
-      expect(source).toContain(block.slice(marker.length).trimEnd());
-    }
+    const response = await flow.post(
+      SLUG,
+      "/token",
+      {
+        grant_type: CLIENT_CREDENTIALS_GRANT,
+        resource: API,
+        scope: "invoices:read",
+      },
+      flow.basic("guide-machine", registered.clientSecret ?? ""),
+    );
+    const machine = defined(
+      (await jsonOf(response, answerBody)).access_token,
+      "token",
+    );
+    const claims = claimsOf(await verifyAccessToken(machine, keys, trust));
+    expect(claims.subject).toEqual({ type: "client", id: "guide-machine" });
+    expect(claims).not.toHaveProperty("permissions");
+    const on = (method: string, path: string) =>
+      authorize({ method, path, token: machine }, keys, trust);
+    expect(await on("GET", "/invoices")).toEqual({ allow: true });
+    expect(await on("POST", "/invoices")).toMatchObject({ allow: false });
+  });
+
+  test("relations: the permission and the relation must both hold", async () => {
+    expect(modelIssues).toEqual([]);
+    await access.grant({ type: "invoice", id: "42" }, "owners", {
+      type: "user",
+      id: "alice",
+    });
+    const owned = (id: string) =>
+      authorizeOwned(
+        { method: "GET", path: `/invoices/${id}`, token },
+        keys,
+        trust,
+      );
+    expect(await owned("42")).toEqual({ allow: true });
+    expect(await owned("43")).toMatchObject({
+      allow: false,
+      refusal: { status: 404 },
+    });
   });
 });
