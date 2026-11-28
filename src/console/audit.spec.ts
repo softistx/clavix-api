@@ -11,6 +11,7 @@ import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { verifiedCallers } from "~/console";
 import { type GqlResult, gqlOf } from "~/gql";
+import { consoleLimixWith } from "~/guard-rules";
 import { instance } from "~/narrow";
 import { adminEvents } from "./admin-events/admin-events.model";
 import {
@@ -39,6 +40,12 @@ const specAudits: Audits = {
 };
 const tenantOfArgs = (args: Record<string, unknown>) =>
   String(args["tenantId"]);
+const specGuards = {
+  "Mutation.rename": onTenant("edit", tenantOfArgs),
+  "Mutation.renameTwice": onTenant("edit", tenantOfArgs),
+  "Mutation.removeOperator": onPlatform("manage"),
+};
+const limix = consoleLimixWith(specGuards);
 const schema = createConsoleSchema({
   typeDefs,
   resolvers: {
@@ -75,11 +82,7 @@ const schema = createConsoleSchema({
       },
     },
   },
-  guards: {
-    "Mutation.rename": onTenant("edit", tenantOfArgs),
-    "Mutation.renameTwice": onTenant("edit", tenantOfArgs),
-    "Mutation.removeOperator": onPlatform("manage"),
-  },
+  guards: specGuards,
 });
 
 const deps = createConsoleDeps({ serverFor: async () => null });
@@ -101,6 +104,7 @@ const as = (
         ? {}
         : { adminEvents: options.recorder }),
       schema,
+      limix,
       authenticate: async () => ({
         userId,
         clientId: CONSOLE_CLIENT_ID,

@@ -1,3 +1,5 @@
+import { limixGuard } from "@softistx/limix-alxia";
+import type { LimixGraxiaOptions } from "@softistx/limix-graxia";
 import type { Telemetry } from "@softistx/telemetry";
 import { LOGO_PATH } from "@/modules/branding";
 import type {
@@ -7,6 +9,7 @@ import type {
 } from "@/modules/consent";
 import type { ReadyReport } from "@/modules/health";
 import { version } from "@/modules/health";
+import { restLimix } from "./authz/options";
 import { serveLogo } from "./config/branding";
 import {
   serveTlsAsk,
@@ -19,10 +22,11 @@ import { telemetry as appTelemetry } from "./config/telemetry";
 import { tenantResolver } from "./config/tenancy";
 import { serveAuditExport } from "./console/audit-export/export";
 import { consoleAvatarAccess } from "./console/avatar-access";
-import { mountConsoleGraphql } from "./console/graphql-mount";
+import {
+  type ConsoleGraphqlOptions,
+  mountConsoleGraphql,
+} from "./console/graphql-mount";
 import { CONSOLE_EXPORT_PATH } from "./console/identity";
-import type { ConsoleDeps } from "./console/plugin";
-import type { consoleSchema } from "./console/schema";
 import { createBase } from "./http/context";
 import { mountHostedGraphql } from "./http/graphql-mount";
 import { type MediaPorts, mountMedia } from "./http/media-mount";
@@ -56,22 +60,34 @@ export interface AppOptions extends AppPorts {
   oauth?: OAuthHandle;
   // The console API (`/console/graphql`, src/console): bearer token, its own
   // schema. Off without it, the route does not exist.
-  console?: ConsoleDeps & { schema?: typeof consoleSchema };
+  console?: ConsoleGraphqlOptions;
   // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
   telemetry?: Telemetry;
   // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
   ready?: () => Promise<ReadyReport>;
+  // Spec seam: other limix options for the hosted `/graphql` (the resolvers alone).
+  limix?: LimixGraxiaOptions<object>;
 }
 
 /** The base app: context, health and readiness probes, the logo, the TLS ask, the picture routes and the body limit. */
 function baseOf(options: AppOptions) {
+  const created = createBase(
+    tenantResolver,
+    throttlesOf(options),
+    options.telemetry ?? appTelemetry,
+    options.trustedProxies,
+  );
+  // First, before any route: limix judges every request that reaches one (src/authz).
+  created.use(
+    limixGuard(
+      restLimix(created, {
+        oauth: options.oauth !== undefined,
+        console: options.console !== undefined,
+      }),
+    ),
+  );
   return (
-    createBase(
-      tenantResolver,
-      throttlesOf(options),
-      options.telemetry ?? appTelemetry,
-      options.trustedProxies,
-    )
+    created
       .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
       // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
       .all("/readyz", ({ request }) =>

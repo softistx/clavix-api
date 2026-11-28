@@ -23,6 +23,12 @@ test("GET /healthz answers ok and the version", async () => {
   expect(await response.json()).toEqual({ status: "ok", version });
 });
 
+test("HEAD /healthz answers 200 with no body", async () => {
+  const response = await app.request("/healthz", { method: "HEAD" });
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("");
+});
+
 test("Query.health answers ok and the version through /graphql", async () => {
   const result = await graphqlClient(app, { headers: clientHeaders }).query(
     HEALTH_QUERY,

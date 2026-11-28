@@ -7,6 +7,10 @@ nxgt-janus release says which.
 
 ## Now
 
+- **Limix guards the API** — both GraphQL APIs and the REST routes answer to one local limix rules
+  file, deny by default; the resolver guards stay and a spec compares them with the rules
+  ([#536](https://github.com/softistx/clavix-api/issues/536)).
+
 - **Translations as a list of locales** — scope descriptions and detail type texts are lists of
   `{ locale, text }` (any BCP 47 language, no fixed French and English), a write sets or replaces
   the locales it names, and the consent screen picks the viewer's `Accept-Language`, then its base

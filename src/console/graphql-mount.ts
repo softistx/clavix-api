@@ -1,4 +1,10 @@
 import { graphql } from "@softistx/alxia-graphql";
+import {
+  guardSchema,
+  type LimixGraxiaOptions,
+  limixGraxia,
+} from "@softistx/limix-graxia";
+import { consoleLimix } from "@/authz/options";
 import { useWithoutQuotedValues } from "@/http/coercion";
 import type { Base } from "@/http/context";
 import { useClientHeader } from "@/http/csrf";
@@ -14,7 +20,9 @@ const CONSOLE_MAX_COST = 50_000;
 
 /** The console's deps and the schema to serve (the console's own by default). */
 export type ConsoleGraphqlOptions = ConsoleDeps & {
+  /** Spec seam: a schema with extra root fields, with the limix options holding their rules (`test/guard-rules.ts`). */
   schema?: typeof consoleSchema;
+  limix?: LimixGraxiaOptions<object>;
 };
 
 /** Mounts the console API at `CONSOLE_PATH`: bearer token, its own schema (`./schema`). */
@@ -23,8 +31,10 @@ export function mountConsoleGraphql(
   options: ConsoleGraphqlOptions,
   requireClient: boolean,
 ) {
+  const limix = options.limix ?? consoleLimix;
   return graphql(app, {
-    schema: options.schema ?? consoleSchema,
+    // Limix: every root field answers to the rules of src/authz (the console guards stay).
+    schema: guardSchema(options.schema ?? consoleSchema, limix),
     path: CONSOLE_PATH,
     ide: false,
     // Deliberate: the bearer token is checked first (`useConsole`), so only an authenticated admin introspects.
@@ -42,6 +52,8 @@ export function mountConsoleGraphql(
       useInviteBudget(options.budgets.inviteCaller),
       useWithoutQuotedValues(),
       useConsole(options),
+      // After `useConsole`: the claims read the context it fills.
+      limixGraxia(limix),
     ],
     ...janusMasking,
   });
