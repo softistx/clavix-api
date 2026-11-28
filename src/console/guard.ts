@@ -71,6 +71,9 @@ const ahead = new WeakMap<object, Map<string, Promise<Target | undefined>>>();
  * and keeps it for the guard that follows on the same field, which takes it
  * (`targetOf`): one read, not two. Taken once, never kept for another field, so
  * a later operation of the same request reads the tenant's state afresh.
+ * It relies on limix wrapping outside the guard (`console/graphql-mount.ts`: the
+ * rule runs, then the resolver and its guard on the same field); a refusal by
+ * the rules never reaches the guard, so `forgetAhead` drops the read then.
  */
 export function targetAhead(ctx: ConsoleContext, tenantId: string) {
   const read = readTarget(ctx, tenantId);
@@ -78,6 +81,11 @@ export function targetAhead(ctx: ConsoleContext, tenantId: string) {
   kept.set(tenantId, read);
   ahead.set(ctx.principal, kept);
   return read;
+}
+
+/** Drops the read kept for a tenant, when the rules refused the field and no guard will take it. */
+export function forgetAhead(ctx: ConsoleContext, tenantId: string) {
+  ahead.get(ctx.principal)?.delete(tenantId);
 }
 
 /** The tenant a call names: the one `targetAhead` just read, else read now. */

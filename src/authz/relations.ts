@@ -1,6 +1,11 @@
 import type { RelationChecker } from "@softistx/limix";
 import type { ConsoleContext } from "@/console/context";
-import { callerProved, permitted, targetAhead } from "@/console/guard";
+import {
+  callerProved,
+  forgetAhead,
+  permitted,
+  targetAhead,
+} from "@/console/guard";
 import type { Permission } from "@/console/model";
 import { PERMISSIONS } from "@/console/model";
 import { isOneOf } from "@/shared/values";
@@ -13,10 +18,18 @@ const holds = async (
   ctx: ConsoleContext,
   permission: Permission,
   tenantId: string,
-) =>
-  permission === "view"
-    ? ctx.can(permission, tenantId)
-    : permitted(ctx, permission, tenantId, await targetAhead(ctx, tenantId));
+) => {
+  if (permission === "view") return ctx.can(permission, tenantId);
+  const held = await permitted(
+    ctx,
+    permission,
+    tenantId,
+    await targetAhead(ctx, tenantId),
+  );
+  // Refused here: no guard follows to take the read.
+  if (!held) forgetAhead(ctx, tenantId);
+  return held;
+};
 
 /**
  * The relations port of the console: a rung `{relation: "edit", type:

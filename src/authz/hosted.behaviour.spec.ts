@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { compilePolicy, parseRules } from "@softistx/limix";
 import {
   buildSchema,
   type GraphQLInputType,
@@ -10,11 +11,13 @@ import {
   isNonNullType,
   isObjectType,
 } from "graphql";
+import { hostedLimix } from "@/authz/options";
 import { env } from "@/config/env";
 import { issuerOf, PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { gqlOf } from "~/gql";
+import { conditions } from "./conditions";
 import { hostedPolicy } from "./policy";
 
 // The hosted rules checked against behaviour (like authz.guards.spec for the
@@ -86,6 +89,16 @@ const fields = Object.entries(hostedPolicy.graphql ?? {}).flatMap(
 );
 
 const app = createTestApp();
+// The same app with limix allowing everything: the resolvers alone answer.
+const resolversOnly = createTestApp({
+  limix: {
+    ...hostedLimix,
+    policy: compilePolicy(
+      parseRules({ limix: 1, global: { unmatched: "allow" } }),
+      { conditions },
+    ),
+  },
+});
 
 // The platform tenant's host, which the migrations seed; "localhost" names no tenant.
 const TENANT_HOST = issuerOf(PLATFORM_TENANT_SLUG, {
@@ -94,8 +107,13 @@ const TENANT_HOST = issuerOf(PLATFORM_TENANT_SLUG, {
   port: env.CLAVIX_PUBLIC_PORT,
 });
 
-const anonymous = async (kind: Kind, name: string, host = TENANT_HOST) => {
-  const response = await app.request(`${host}/graphql`, {
+const anonymous = async (
+  kind: Kind,
+  name: string,
+  host = TENANT_HOST,
+  target = app,
+) => {
+  const response = await target.request(`${host}/graphql`, {
     method: "POST",
     headers: { ...clientHeaders, "content-type": "application/json" },
     body: JSON.stringify(documentOf(kind, name)),
@@ -113,6 +131,16 @@ for (const field of fields) {
     const codes = (body.errors ?? []).map((error) => error.extensions?.code);
     if (field.signedIn) {
       expect(codes).toEqual(["UNAUTHENTICATED"]);
+      // The resolver demands the session too: a field wrongly flipped to signedIn fails here.
+      const alone = await anonymous(
+        field.kind,
+        field.name,
+        TENANT_HOST,
+        resolversOnly,
+      );
+      expect(alone.errors?.map((error) => error.extensions?.code)).toEqual([
+        "UNAUTHENTICATED",
+      ]);
     } else {
       expect(codes).not.toContain("UNAUTHENTICATED");
       expect(codes).not.toContain("FORBIDDEN");

@@ -1,5 +1,9 @@
 import { graphql } from "@softistx/alxia-graphql";
-import { guardSchema, limixGraxia } from "@softistx/limix-graxia";
+import {
+  guardSchema,
+  type LimixGraxiaOptions,
+  limixGraxia,
+} from "@softistx/limix-graxia";
 import { hostedLimix } from "@/authz/options";
 import { janusMasking, janusPlugin } from "@/modules/auth/auth.plugin";
 import type {
@@ -27,6 +31,8 @@ export interface HostedGraphqlOptions {
   scopeTexts: ScopeTextsFor;
   detailTexts: DetailTextsFor;
   agents: AgentsFor;
+  /** Spec seam: other limix options than `hostedLimix` (a spec that runs the resolvers alone). */
+  limix?: LimixGraxiaOptions<object>;
 }
 
 /**
@@ -36,9 +42,10 @@ export interface HostedGraphqlOptions {
  */
 export function mountHostedGraphql(app: Base, options: HostedGraphqlOptions) {
   const { ide, oauth } = options;
+  const limix = options.limix ?? hostedLimix;
   return graphql(app, {
     // Limix: every root field answers to the rules of src/authz (the resolvers keep their guards).
-    schema: guardSchema(schema, hostedLimix),
+    schema: guardSchema(schema, limix),
     ide: ide ? "apollo-sandbox" : false,
     sandbox: { initialHeaders: { [CLIENT_HEADER]: "apollo-sandbox" } },
     // Introspection follows the IDE: off wherever the IDE is.
@@ -49,7 +56,7 @@ export function mountHostedGraphql(app: Base, options: HostedGraphqlOptions) {
       useSameOriginJson(),
       useWithoutQuotedValues(),
       janusPlugin(),
-      limixGraxia(hostedLimix),
+      limixGraxia(limix),
       ...(oauth?.serverFor === undefined
         ? []
         : [

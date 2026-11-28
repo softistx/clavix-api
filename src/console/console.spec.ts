@@ -1079,15 +1079,18 @@ describe("the guards over HTTP", () => {
   const specGuards = {
     "Query.tenantEdit": onTenant("edit", (args) => String(args["id"])),
     "Query.platformView": onPlatform("view"),
+    "Mutation.tenantRename": onTenant("edit", (args) => String(args["id"])),
   };
   const limix = consoleLimixWith(specGuards);
   const schema = createConsoleSchema({
     typeDefs: `extend type Query {
       tenantEdit(id: ID!): String!
       platformView: String!
-    }`,
+    }
+    extend type Mutation { tenantRename(id: ID!): String! }`,
     resolvers: {
       Query: { tenantEdit: () => "ok", platformView: () => "ok" },
+      Mutation: { tenantRename: () => "ok" },
     },
     guards: specGuards,
   });
@@ -1140,6 +1143,62 @@ describe("the guards over HTTP", () => {
       "FORBIDDEN",
     );
     expect(code(await as(carol, "{ platformView }"))).toBe("FORBIDDEN");
+  });
+
+  test("a write reads its tenant once, and the next write on it reads afresh", async () => {
+    const eve =
+      (
+        await (
+          await janusIssuers.forRequest(
+            new Request(issuerOf(PLATFORM_TENANT_SLUG, origin)),
+          )
+        )?.create({ email: "eve@console.test" })
+      )?.id ?? "";
+    await verify(eve);
+    await access.grantTenant(tenantA, eve, "admin");
+    let reads = 0;
+    const counting = createTestApp({
+      oauth: issuers,
+      console: {
+        ...deps,
+        directory: {
+          ...deps.directory,
+          tenantsByIds: (ids) => {
+            reads += 1;
+            return deps.directory.tenantsByIds(ids);
+          },
+        },
+        schema,
+        limix,
+        authenticate: async () => ({
+          userId: eve,
+          clientId: CONSOLE_CLIENT_ID,
+          grantId: "g",
+          scopes: ["console"],
+          clientName: null,
+          bound: null,
+          jkt: null,
+          authorizationDetails: [],
+        }),
+      },
+    });
+    const call = (query: string) =>
+      counting.request(`http://localhost${CONSOLE_PATH}`, {
+        method: "POST",
+        headers: {
+          ...clientHeaders,
+          "content-type": "application/json",
+          authorization: "Bearer x",
+        },
+        body: JSON.stringify({ query }),
+      });
+    await call(`mutation { tenantRename(id: "${tenantA}") }`);
+    expect(reads).toBe(1);
+    // Mutations run one after the other: each reads the tenant's state afresh.
+    await call(
+      `mutation { first: tenantRename(id: "${tenantA}") second: tenantRename(id: "${tenantA}") }`,
+    );
+    expect(reads).toBe(3);
   });
 
   test("a viewer cannot edit", async () => {

@@ -1,4 +1,5 @@
 import { limixGuard } from "@softistx/limix-alxia";
+import type { LimixGraxiaOptions } from "@softistx/limix-graxia";
 import type { Telemetry } from "@softistx/telemetry";
 import { LOGO_PATH } from "@/modules/branding";
 import type {
@@ -64,6 +65,8 @@ export interface AppOptions extends AppPorts {
   telemetry?: Telemetry;
   // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).
   ready?: () => Promise<ReadyReport>;
+  // Spec seam: other limix options for the hosted `/graphql` (the resolvers alone).
+  limix?: LimixGraxiaOptions<object>;
 }
 
 /** The base app: context, health and readiness probes, the logo, the TLS ask, the picture routes and the body limit. */

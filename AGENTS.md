@@ -1064,8 +1064,11 @@ Clavix's own tenant, the proved e-mail).
   `policy.ts` (`unmatched: "deny"`: a field with no rule is refused), `claims.ts`, `relations.ts`
   (`ctx.can` as the relations port), `conditions.ts` (the platform checks), `refusal.ts` (limix
   codes worded as Clavix's `ErrorCode`s), `options.ts` (the wiring in `app.ts` and the two mounts).
-- **Adding an operation**: add its rule in `console.rules.ts` or `hosted.rules.ts` (helpers in
-  `console.helpers.ts`), then `bun run generate`. A root field with no rule fails
+- **Adding an operation**: add its rule in `console.rules.ts` or `hosted.rules.ts` (helpers:
+  `rules.helpers.ts` for `signedIn` / `open`, `console.helpers.ts` for the console), then
+  `bun run generate`. A hosted field whose resolver needs a session gets `signedIn`:
+  `hosted.behaviour.spec.ts` calls every hosted root field anonymously (a signedIn one must answer
+  UNAUTHENTICATED, from the rules and from the resolver alone; an open one never). A root field with no rule fails
   `authz.coverage.spec.ts`; a console rule that disagrees with its `guards` entry fails
   `authz.guards.spec.ts`.
 - **A REST route** gets its rule in `rest.rules.ts`; a rule for a route that is not mounted
