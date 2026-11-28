@@ -296,7 +296,7 @@ A resource server that verifies Clavix access tokens with `jose` (see the
 ### `403` with the permission in `scope` but not in `permissions`
 
 **Why:** the Resource has `enforceRbac` on, and the user's roles do not grant that permission. Your limix rule requires both the scope and the `permissions` claim. The refusal is your resource server's own limix rule, not a Clavix or jose message: Clavix issues the token, your server decides.
-**Fix:** grant the permission to one of the user's roles in Clavix (`setRolePermissions`, then `assignRole`), and have the user sign in again for a new token.
+**Fix:** grant the permission to one of the user's roles in Clavix (`setRolePermissions`, then `assignRole`), and have the user refresh the token (or sign in again) to get the new `permissions`.
 
 ## Resource registration refusals (`resources:create`)
 
@@ -989,7 +989,7 @@ it with `assignRole` still works. A tenant's own roles (`managed: false`) are no
 
 The scope at index `i` cannot be a permission of the role: it does not exist in the tenant, it is a standard OIDC
 scope (no resource), or it belongs to another resource than the one the role is scoped to. A tenant-wide role may
-hold the scopes of any resource. A malformed id or more than 500 ids is refused too (field `permissionIds`).
+hold the scopes of any resource. A malformed id is refused at `permissionIds.<i>` too, and more than 500 ids at `permissionIds`.
 Nothing was written. Send the full set again without the offending id. A managed role answers `ROLE_MANAGED`.
 
 Deleting a resource removes its scopes from the tenant-wide roles holding them (audited as `role.setPermissions`).

@@ -200,6 +200,15 @@ A `client_credentials` token is a machine token: its `sub` is the client id (als
 its `client_id`), and it has no `roles` or `permissions`. The mapper gives it the
 subject type `client`, and its calls are decided on `scope` alone.
 
+**When changes take effect.** The `roles` and `permissions` claims are recomputed
+on every token issue and every refresh. A role or permission that is revoked stays
+in the access tokens already issued until they expire (15 minutes) and is gone from
+the next refresh. A scope rename changes its name in `permissions` at once, since
+roles hold scope ids, not names: a rule that checks the old name starts refusing.
+Clavix refuses a rename while a client lists the old name (`SCOPE_IN_USE`), but that
+guard covers clients only, not roles or your own rules, so update your rules file
+with the rename.
+
 ## 4. The rules file
 
 The permission names are the Resource's catalogue in Clavix (its scopes).
