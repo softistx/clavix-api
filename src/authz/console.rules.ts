@@ -1,6 +1,6 @@
 import type { GraphqlRules } from "@/generated/limix";
 import type { PlatformConditionName } from "./conditions";
-import { onPlatform, onTenant, signedIn } from "./console.helpers";
+import { consoleSignedIn, onPlatform, onTenant } from "./console.helpers";
 
 /**
  * The console API's access rules (`/console/graphql`): one entry per root
@@ -103,10 +103,10 @@ export const consoleRules = {
     connections: onTenant("view", "tenantId"),
     domain: onTenant("view", "tenantId"),
     domains: onTenant("view", "tenantId"),
-    me: signedIn,
+    me: consoleSignedIn,
     memberships: onTenant("view", "tenantId"),
     oauthPolicy: onTenant("view", "tenantId"),
-    plans: signedIn,
+    plans: consoleSignedIn,
     platformAdminEvent: onPlatform("view"),
     platformAdminEvents: onPlatform("view"),
     platformOperators: onPlatform("view"),

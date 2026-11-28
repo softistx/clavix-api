@@ -4,7 +4,11 @@ import { ObjectId } from "mongodb";
 import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { requireVerifiedEmail } from "@/modules/users";
 import { fail } from "@/shared/errors";
-import { type ConsoleContext, consoleContextOf } from "./context";
+import {
+  type ConsoleContext,
+  type ConsoleDirectory,
+  consoleContextOf,
+} from "./context";
 import type { Permission } from "./model";
 
 /**
@@ -51,11 +55,37 @@ export const onPlatform = (permission: Permission): Guard => ({
 /** The guards by root field, keyed `Query.me`. */
 export type Guards = Readonly<Record<string, Guard>>;
 
+type Target = Awaited<ReturnType<ConsoleDirectory["tenantsByIds"]>>[number];
+
 /** The tenant a call names, or `undefined` (unknown, malformed or trashed id). */
-export async function targetOf(ctx: ConsoleContext, tenantId: string) {
+async function readTarget(ctx: ConsoleContext, tenantId: string) {
   if (!ObjectId.isValid(tenantId)) return undefined;
   const [found] = await ctx.directory.tenantsByIds([tenantId]);
   return found;
+}
+
+const ahead = new WeakMap<object, Map<string, Promise<Target | undefined>>>();
+
+/**
+ * Reads the tenant a write names for the limix rung (`src/authz/relations.ts`)
+ * and keeps it for the guard that follows on the same field, which takes it
+ * (`targetOf`): one read, not two. Taken once, never kept for another field, so
+ * a later operation of the same request reads the tenant's state afresh.
+ */
+export function targetAhead(ctx: ConsoleContext, tenantId: string) {
+  const read = readTarget(ctx, tenantId);
+  const kept = ahead.get(ctx.principal) ?? new Map();
+  kept.set(tenantId, read);
+  ahead.set(ctx.principal, kept);
+  return read;
+}
+
+/** The tenant a call names: the one `targetAhead` just read, else read now. */
+export function targetOf(ctx: ConsoleContext, tenantId: string) {
+  const kept = ahead.get(ctx.principal);
+  const read = kept?.get(tenantId);
+  kept?.delete(tenantId);
+  return read ?? readTarget(ctx, tenantId);
 }
 
 /**

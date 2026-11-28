@@ -1,17 +1,24 @@
 import type { Permission } from "@/console/model";
 import type { GraphqlRules } from "@/generated/limix";
 import type { PlatformConditionName } from "./conditions";
+import { signedIn } from "./rules.helpers";
 
 type Rule = NonNullable<GraphqlRules<PlatformConditionName>["Query.me"]>;
 
-const platformCondition = {
+export const platformCondition = {
   view: "platformView",
   edit: "platformEdit",
   manage: "platformManage",
 } as const satisfies Record<Permission, PlatformConditionName>;
 
+/** The scope every console token carries (`useConsole` accepts no other): a permission of the claims' `scope`. */
+export const CONSOLE_SCOPE = "console";
+
 /** Any caller with an accepted console token (the guard also asks for a proved e-mail). */
-export const signedIn: Rule = { authenticated: true };
+export const consoleSignedIn: Rule = {
+  ...signedIn,
+  permissions: [[CONSOLE_SCOPE]],
+};
 
 /**
  * `permission` on the tenant the field's `argument` names: a relation of the
@@ -22,7 +29,7 @@ export const onTenant = (
   permission: Permission,
   argument: "tenantId" | "id",
 ): Rule => ({
-  authenticated: true,
+  ...consoleSignedIn,
   relations: [
     {
       require: [
@@ -35,6 +42,6 @@ export const onTenant = (
 
 /** `permission` on the platform (Clavix's operators). */
 export const onPlatform = (permission: Permission): Rule => ({
-  authenticated: true,
+  ...consoleSignedIn,
   when: [platformCondition[permission]],
 });

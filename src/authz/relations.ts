@@ -1,6 +1,6 @@
 import type { RelationChecker } from "@softistx/limix";
 import type { ConsoleContext } from "@/console/context";
-import { callerProved, permitted, targetOf } from "@/console/guard";
+import { callerProved, permitted, targetAhead } from "@/console/guard";
 import type { Permission } from "@/console/model";
 import { PERMISSIONS } from "@/console/model";
 import { isOneOf } from "@/shared/values";
@@ -16,7 +16,7 @@ const holds = async (
 ) =>
   permission === "view"
     ? ctx.can(permission, tenantId)
-    : permitted(ctx, permission, tenantId, await targetOf(ctx, tenantId));
+    : permitted(ctx, permission, tenantId, await targetAhead(ctx, tenantId));
 
 /**
  * The relations port of the console: a rung `{relation: "edit", type:

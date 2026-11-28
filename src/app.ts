@@ -21,10 +21,11 @@ import { telemetry as appTelemetry } from "./config/telemetry";
 import { tenantResolver } from "./config/tenancy";
 import { serveAuditExport } from "./console/audit-export/export";
 import { consoleAvatarAccess } from "./console/avatar-access";
-import { mountConsoleGraphql } from "./console/graphql-mount";
+import {
+  type ConsoleGraphqlOptions,
+  mountConsoleGraphql,
+} from "./console/graphql-mount";
 import { CONSOLE_EXPORT_PATH } from "./console/identity";
-import type { ConsoleDeps } from "./console/plugin";
-import type { consoleSchema } from "./console/schema";
 import { createBase } from "./http/context";
 import { mountHostedGraphql } from "./http/graphql-mount";
 import { type MediaPorts, mountMedia } from "./http/media-mount";
@@ -58,7 +59,7 @@ export interface AppOptions extends AppPorts {
   oauth?: OAuthHandle;
   // The console API (`/console/graphql`, src/console): bearer token, its own
   // schema. Off without it, the route does not exist.
-  console?: ConsoleDeps & { schema?: typeof consoleSchema };
+  console?: ConsoleGraphqlOptions;
   // Where the server spans and logs go (D24); the app's own (`config/telemetry.ts`) by default.
   telemetry?: Telemetry;
   // What `/readyz` checks; Mongo and Redis by default (src/config/ready.ts).

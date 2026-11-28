@@ -1074,7 +1074,16 @@ Clavix's own tenant, the proved e-mail).
   `generate`) against `schema.graphql` and `console.schema.graphql`.
 - The console rules defer to the field guard for a caller whose e-mail is not proved (ADR-0041:
   `EMAIL_UNVERIFIED` is answered there), so for that caller the guard is the only gate.
-- A `schema` passed to the console mount (a spec's extra fields) is served on its guards alone.
+- A spec that serves extra console root fields (`schema` of the console mount) passes the `limix`
+  options of `consoleLimixWith(guards)` (`test/guard-rules.ts`): limix stays on, each extra field
+  ruled from its guard.
+- **Refusals**: a limix refusal is a graxia plugin's, the exception to `fail()` below (graxia
+  plugins such as `src/http/coercion.ts`): `refusal.ts` words it with Clavix's codes and statuses, and
+  limix-graxia adds its own `extensions.status` beside `http.status`.
+- **The hosted session read** (`claims.ts`): only an anonymous caller is "not signed in". A failed
+  read (a host with no tenant: NOT_FOUND; a janus outage) is thrown when a rule asks `authenticated`,
+  so the fields that need the caller answer it as before and a public field is still served.
+- The console's `checkNeeds` does not apply: the schemas carry no `@needs`.
 
 ## Green bar
 

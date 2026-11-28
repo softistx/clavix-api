@@ -1,7 +1,6 @@
 import type { RestRulesInput } from "@softistx/limix";
 import { OAUTH_PATHS } from "@/oauth/routes";
-
-const open = { public: true } as const;
+import { open } from "./rules.helpers";
 
 /**
  * The REST routes' rules. Every route is `public`, and none is unguarded:
@@ -21,7 +20,7 @@ const open = { public: true } as const;
  */
 export const restRulesFor = (mounted: { oauth: boolean; console: boolean }) =>
   ({
-    "/healthz": { GET: open },
+    "/healthz": { GET: open, HEAD: open },
     "/readyz": { "*": open },
     "/branding/logo": { "*": open },
     "/internal/tls/ask": { "*": open },

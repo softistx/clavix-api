@@ -40,6 +40,7 @@ import { createTestApp } from "~/app";
 import { clientHeaders } from "~/client-header";
 import { createDpopKey, type DpopKey, withNonce } from "~/dpop";
 import { type GqlResult, gqlOf } from "~/gql";
+import { consoleLimixWith } from "~/guard-rules";
 import { errorBody, tokenBody } from "~/json";
 import { defined } from "~/narrow";
 import { serverAuthenticating } from "~/oauth-server-double";
@@ -1075,6 +1076,11 @@ describe("operators:grant", () => {
 });
 
 describe("the guards over HTTP", () => {
+  const specGuards = {
+    "Query.tenantEdit": onTenant("edit", (args) => String(args["id"])),
+    "Query.platformView": onPlatform("view"),
+  };
+  const limix = consoleLimixWith(specGuards);
   const schema = createConsoleSchema({
     typeDefs: `extend type Query {
       tenantEdit(id: ID!): String!
@@ -1083,10 +1089,7 @@ describe("the guards over HTTP", () => {
     resolvers: {
       Query: { tenantEdit: () => "ok", platformView: () => "ok" },
     },
-    guards: {
-      "Query.tenantEdit": onTenant("edit", (args) => String(args["id"])),
-      "Query.platformView": onPlatform("view"),
-    },
+    guards: specGuards,
   });
   const as = (userId: string, query: string, scopes = ["console"]) =>
     createTestApp({
@@ -1094,6 +1097,7 @@ describe("the guards over HTTP", () => {
       console: {
         ...deps,
         schema,
+        limix,
         authenticate: async () => ({
           userId,
           clientId: CONSOLE_CLIENT_ID,

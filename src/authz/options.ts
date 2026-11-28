@@ -8,8 +8,9 @@ import { consoleRelations } from "./relations";
 
 /**
  * What guards the hosted `/graphql`: its fields answer to `hostedPolicy`, for
- * the user of the session cookie. A non-null root field (`health`) is let
- * through: the rule's refusal would null its parent, and each is public.
+ * the user of the session cookie. `nonNull: "allow"` turns the setup check for
+ * non-null root fields off (`health`): a refusal on a root field nulls `data`.
+ * Each such field is public.
  */
 export const hostedLimix: LimixGraxiaOptions<object> = {
   policy: hostedPolicy,
