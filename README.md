@@ -962,7 +962,7 @@ Labels hold at most 100 characters and a description 300. The resource must be t
 (another tenant's is `NOT_FOUND`). A name the tenant already has is `CONFLICT`; an invalid definition is
 `BAD_USER_INPUT`. An update changes the texts, `fields` and `actions` (the list is replaced) and never the
 type name; it writes nothing when nothing changes. A type that a client lists cannot be deleted
-(`DETAIL_TYPE_IN_USE`, 409); deleting a resource deletes its types and removes them from the clients' lists.
+(`DETAIL_TYPE_IN_USE`, 409); deleting a scope a role grants is refused (`PERMISSION_IN_USE`, 409, with the role ids), and renaming a resource's scope (`updateScope` `name`, audited `scope.rename`) is refused while a client lists it (`SCOPE_IN_USE`, 409, with the client ids); deleting a resource deletes its types and removes them from the clients' lists.
 
 ```graphql
 mutation {

@@ -213,6 +213,18 @@ A client still lists the type in its `authorizationDetailsTypes`. Remove it from
 gives their number), then delete the type. Deleting the whole resource does not need this: it removes its types
 from the clients' lists.
 
+### `PERMISSION_IN_USE` (409) on `deleteScope`
+
+A role still grants the scope. `extensions.roles` lists their ids: remove the scope from those roles'
+permissions (`setRolePermissions`), then delete it. Deleting the whole resource does not need this: it removes its
+scopes from the roles.
+
+### `SCOPE_IN_USE` (409) on `updateScope` with `name`
+
+A client of the tenant still lists the scope's current name in its allowed or default scopes (`extensions.clients`
+lists their ids). Take the name out of those clients first, then rename. A standard OpenID Connect scope cannot be
+renamed at all (`BAD_USER_INPUT` at `name`).
+
 ### `BAD_USER_INPUT` (400) on `createDetailType` / `updateDetailType`
 
 The definition breaks a bound: a type name of 1 to 64 letters, digits, `_ . : -` starting with a letter; at most

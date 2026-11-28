@@ -4,6 +4,7 @@
 export * from "./resources.cli";
 export { mongoDetailTypeClients } from "./resources.client-lists";
 export * from "./resources.client-opt-in";
+export { mongoScopeClients } from "./resources.client-scopes";
 export { digestOf } from "./resources.compile";
 export { CatalogError, codes } from "./resources.errors";
 export {

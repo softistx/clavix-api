@@ -28,6 +28,9 @@ const service = new ResourcesService({
   userinfoOf: (slug) => `https://${slug}.${DOMAIN}/userinfo`,
   findTenant: (slug) => mongo.db.tenants.findFirst({ slug }),
   scopesDropped: async () => {},
+  scopeClients: { listing: async () => [] },
+  rolesGranting: async () => [],
+  warn: () => {},
 });
 const findTenant = (slug: string) => mongo.db.tenants.findFirst({ slug });
 const text = (en: string) => [

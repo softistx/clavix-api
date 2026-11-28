@@ -327,4 +327,26 @@ describe("permissions", () => {
     expect(await rolesService.pullScopes(tenant, [drop._id])).toEqual([]);
     expect(await rolesService.pullScopes(tenant, [])).toEqual([]);
   });
+
+  test("rolesGranting lists the ids of the roles that hold a scope", async () => {
+    const api = await resourcesService.createResource(tenant, "svc", {
+      uri: "https://api.svc-granting.example/v1",
+    });
+    const scope = await resourcesService.createScope(tenant, {
+      name: "granted",
+      resourceId: api._id.toHexString(),
+    });
+    const holder = await rolesService.create(tenant, { name: "grant-holder" });
+    await rolesService.create(tenant, { name: "grant-other" });
+    expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([]);
+    await rolesService.setPermissions(tenant, holder._id.toHexString(), [
+      scope._id.toHexString(),
+    ]);
+    expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([
+      holder._id.toHexString(),
+    ]);
+    expect(
+      await rolesService.rolesGranting(new ObjectId(), scope._id, 26),
+    ).toEqual([]);
+  });
 });

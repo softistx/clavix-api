@@ -270,6 +270,9 @@ beforeAll(async () => {
     userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
     findTenant,
     scopesDropped: async () => {},
+    scopeClients: { listing: async () => [] },
+    rolesGranting: async () => [],
+    warn: () => {},
   }).registerResource({
     tenant: PLATFORM_TENANT_SLUG,
     uri: OTHER,

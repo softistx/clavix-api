@@ -43,6 +43,9 @@ const build = (resources = mongo.db.resources) =>
     userinfoOf: (slug) => userinfoOf(issuerOf(slug, config)),
     findTenant,
     scopesDropped: async () => {},
+    scopeClients: { listing: async () => [] },
+    rolesGranting: async () => [],
+    warn: () => {},
   });
 const service = build();
 

@@ -3,6 +3,7 @@ import type { DetailTextsFor, ScopeTextsFor } from "@/modules/consent";
 import {
   mongoClientDetailTypes,
   mongoDetailTypeClients,
+  mongoScopeClients,
   type RegisterResourceInput,
   ResourcesService,
 } from "@/modules/resources";
@@ -13,6 +14,7 @@ import { mongo } from "./db";
 import { env } from "./env";
 import { oauthDb } from "./oauth-db";
 import { rolesService } from "./roles";
+import { warn } from "./runtime";
 import { tenantBySlug, tenantResolver } from "./tenancy";
 
 const origin = {
@@ -31,16 +33,20 @@ export const resourcesService = new ResourcesService({
   scopes: mongo.db.scopes,
   detailTypes: mongo.db.detailTypes,
   clients: mongoDetailTypeClients(oauthDb),
+  scopeClients: mongoScopeClients(oauthDb),
+  rolesGranting: (tenantId, scopeId, limit) =>
+    rolesService.rolesGranting(tenantId, scopeId, limit),
   userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
   findTenant: tenantBySlug,
+  warn,
   // The `resources:create` script's replace of the scopes: the roles let go of
   // the dropped ones, each recorded like the console's own cascade.
-  scopesDropped: async (tenantId, scopeIds) => {
+  scopesDropped: async (tenantId, scopeIds, actor) => {
     const pulled = await rolesService.pullScopes(tenantId, scopeIds);
     const requestId = crypto.randomUUID();
     for (const role of pulled) {
       await adminEventRecorder.record({
-        actor: "script:resources:create",
+        actor,
         action: "role.setPermissions",
         tenantId: tenantId.toHexString(),
         target: { type: "role", id: role._id.toHexString() },

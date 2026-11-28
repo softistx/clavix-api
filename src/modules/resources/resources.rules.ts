@@ -10,6 +10,16 @@ export const MAX_DESCRIPTION = 300;
 /** The longest label (a type or a field name, an enum value or an action label). */
 export const MAX_LABEL = 100;
 const MAX_CLAIMS = 50;
+/** The actor of the changes the `resources:create` script makes. */
+export const SCRIPT_ACTOR = "script:resources:create";
+/** The most ids a refusal lists in its extensions (the console's default page size). */
+export const MAX_LISTED = 25;
+
+/** The first `MAX_LISTED` of the ids a port read (it reads one more), and whether more exist. */
+export const listed = (ids: readonly string[]) => ({
+  ids: ids.slice(0, MAX_LISTED),
+  truncated: ids.length > MAX_LISTED,
+});
 
 /**
  * The scopes of the userinfo resource (`src/oauth/building.ts`): the standard

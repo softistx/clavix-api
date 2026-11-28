@@ -58,6 +58,10 @@ export async function seedConsole(
     findTenant,
     // A first registration: no role can hold its scopes yet.
     scopesDropped: async () => {},
+    // Nothing exists yet to rename or to grant.
+    scopeClients: { listing: async () => [] },
+    rolesGranting: async () => [],
+    warn: () => {},
   });
   await service.registerResource({
     tenant: PLATFORM_TENANT_SLUG,

@@ -18,7 +18,7 @@ import {
   detailTypeProblem,
 } from "./resources.compile-rules";
 import { canon, cleanDetailType } from "./resources.detail-rules";
-import { CatalogError } from "./resources.errors";
+import { CatalogError, refuse } from "./resources.errors";
 import type { detailTypes, resources, scopes } from "./resources.model";
 import {
   checkCanonicalRegistration,
@@ -28,9 +28,12 @@ import {
   cleanClaims,
   cleanName,
   isOidcScope,
+  listed,
   MAX_DESCRIPTION,
   MAX_LABEL,
+  MAX_LISTED,
   OIDC_SCOPES,
+  SCRIPT_ACTOR,
   sameScopeDefinition,
 } from "./resources.rules";
 import {
@@ -259,38 +262,147 @@ export class ResourcesService {
     }
   }
 
-  /** The name and the resource of a scope never change: tokens and clients carry them. */
+  /**
+   * Changes a scope's texts, claims and, for a resource's scope, its name. A
+   * standard OpenID Connect scope keeps its name; a rename is refused
+   * (`SCOPE_IN_USE`) while a client lists the old name, since clients and
+   * tokens carry names. Roles hold scope ids, so they follow a rename.
+   */
   async updateScope(
     tenantId: ObjectId,
     scopeId: string,
     input: {
+      name?: string | undefined;
       description?: Texts | undefined;
       claims?: readonly string[] | undefined;
     },
-  ): Promise<StoredScopeDoc> {
+  ): Promise<{ scope: StoredScopeDoc; renamed: boolean }> {
     const existing = await this.findScope(tenantId, scopeId);
     if (existing === undefined) {
       throw new CatalogError("NOT_FOUND", "No such scope");
     }
-    return this.scopesOf(tenantId).update(existing._id, {
-      description: mergeTranslations(
-        existing.description,
-        input.description,
-        MAX_DESCRIPTION,
-        "a description",
-      ),
-      claims:
-        input.claims === undefined
-          ? existing.claims
-          : cleanClaims(input.claims),
-    });
+    const name = await this.renamed(tenantId, existing, input.name);
+    let scope: StoredScopeDoc;
+    try {
+      scope = await this.scopesOf(tenantId).update(existing._id, {
+        name,
+        description: mergeTranslations(
+          existing.description,
+          input.description,
+          MAX_DESCRIPTION,
+          "a description",
+        ),
+        claims:
+          input.claims === undefined
+            ? existing.claims
+            : cleanClaims(input.claims),
+      });
+    } catch (error) {
+      if (!(error instanceof ConflictError)) throw error;
+      throw new CatalogError(
+        "CONFLICT",
+        `The resource already has a scope named "${name}"`,
+        "name",
+      );
+    }
+    const renamed = name !== existing.name;
+    if (renamed) await this.recheckClients(tenantId, existing, scope);
+    return { scope, renamed };
+  }
+
+  /**
+   * A client may have been updated to list the old name between the check and
+   * the write: look again, and put the old name back if so.
+   */
+  private async recheckClients(
+    tenantId: ObjectId,
+    existing: StoredScopeDoc,
+    renamed: StoredScopeDoc,
+  ): Promise<void> {
+    const late = await this.clientsListing(tenantId, existing.name);
+    if (late.ids.length === 0) return;
+    // Only while the scope still carries the new name; a failed revert is
+    // logged (ids only) and the refusal still says why.
+    try {
+      await this.scopesOf(tenantId).updateMany(
+        { _id: renamed._id, name: renamed.name },
+        { $set: { name: existing.name } },
+      );
+    } catch (error) {
+      // The kind only, never the message or a value.
+      const kind =
+        error instanceof ConflictError
+          ? "conflict"
+          : error instanceof Error
+            ? error.name
+            : "unknown";
+      this.options.warn(
+        `scope ${renamed._id.toHexString()} of tenant ${tenantId.toHexString()} kept its new name: a client listed the old one and the revert failed (${kind})`,
+      );
+    }
+    throw this.scopeInUse(existing.name, late);
+  }
+
+  private async clientsListing(tenantId: ObjectId, name: string) {
+    return listed(
+      await this.options.scopeClients.listing(tenantId, name, MAX_LISTED + 1),
+    );
+  }
+
+  private scopeInUse(
+    name: string,
+    clients: { ids: string[]; truncated: boolean },
+  ) {
+    return new CatalogError(
+      "SCOPE_IN_USE",
+      `The scope "${name}" is listed by ${clients.truncated ? "more than " : ""}${clients.ids.length} client(s): remove it from their lists first`,
+      undefined,
+      { clients: clients.ids, truncated: clients.truncated },
+    );
+  }
+
+  /** The name the scope ends with: a rename is checked here (see `updateScope`). */
+  private async renamed(
+    tenantId: ObjectId,
+    existing: StoredScopeDoc,
+    asked: string | undefined,
+  ): Promise<string> {
+    if (asked === undefined) return existing.name;
+    const name = checkScopeName(asked);
+    if (name === existing.name) return name;
+    if (existing.resourceId === null) {
+      refuse(`The standard scope "${existing.name}" cannot be renamed`, "name");
+    }
+    const clients = await this.clientsListing(tenantId, existing.name);
+    if (clients.ids.length > 0) throw this.scopeInUse(existing.name, clients);
+    return name;
   }
 
   /** `false` when it was not there. */
-  async deleteScope(tenantId: ObjectId, scopeId: string): Promise<boolean> {
+  async deleteScope(
+    tenantId: ObjectId,
+    scopeId: string,
+    actor: string,
+  ): Promise<boolean> {
     const existing = await this.findScope(tenantId, scopeId);
     if (existing === undefined) return false;
+    const roles = listed(
+      await this.options.rolesGranting(tenantId, existing._id, MAX_LISTED + 1),
+    );
+    if (roles.ids.length > 0) {
+      throw new CatalogError(
+        "PERMISSION_IN_USE",
+        `The scope "${existing.name}" is granted by ${roles.truncated ? "more than " : ""}${roles.ids.length} role(s): remove it from their permissions first`,
+        undefined,
+        { roles: roles.ids, truncated: roles.truncated },
+      );
+    }
     await this.scopesOf(tenantId).hardDeleteMany({ _id: existing._id });
+    // A setRolePermissions may have granted it between the check and the
+    // delete: pull the dangling id with the cascade's atomic $pull.
+    const late = await this.options.rolesGranting(tenantId, existing._id, 1);
+    if (late.length > 0)
+      await this.options.scopesDropped(tenantId, [existing._id], actor);
     return true;
   }
 
@@ -312,6 +424,7 @@ export class ResourcesService {
       await this.options.scopesDropped(
         tenantId,
         dropped.map((scope) => scope._id),
+        SCRIPT_ACTOR,
       );
     }
     for (const scope of dropped) {

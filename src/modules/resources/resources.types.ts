@@ -4,6 +4,7 @@ import type { z } from "zod";
 import type { CliTenant } from "@/shared/cli";
 import type { Translation } from "@/shared/translations";
 import type { DetailTypeClients } from "./resources.client-lists";
+import type { ScopeClients } from "./resources.client-scopes";
 import type {
   detailTypes,
   FieldKind,
@@ -74,6 +75,18 @@ export interface ResourcesServiceOptions {
   detailTypes: TypedCollection<typeof detailTypes>;
   /** The clients' lists of detail types (D6, and the pruning of a deleted resource's). */
   clients: DetailTypeClients;
+  /** The clients' scope lists: a rename is refused while a client lists the old name. */
+  scopeClients: ScopeClients;
+  /**
+   * The ids (hex) of the tenant's roles that grant a scope: deleting it is
+   * refused with `PERMISSION_IN_USE` while there is one (the roles'
+   * `rolesGranting`, bound in `config/resources.ts`).
+   */
+  rolesGranting: (
+    tenantId: ObjectId,
+    scopeId: ObjectId,
+    limit: number,
+  ) => Promise<string[]>;
   /** The tenant's userinfo URL, a built-in resource that cannot be registered. */
   userinfoOf: (tenantSlug: string) => string;
   /** A tenant by slug, for `registerResource` (the `resources:create` script). */
@@ -86,7 +99,11 @@ export interface ResourcesServiceOptions {
   scopesDropped: (
     tenantId: ObjectId,
     scopeIds: readonly ObjectId[],
+    /** Who caused it, for the audit of the roles changed (a user id, or `SCRIPT_ACTOR`). */
+    actor: string,
   ) => Promise<void>;
+  /** Logs a failure the service swallows (no values; `reportError`'s sibling `warn` in `config/runtime.ts`). */
+  warn: (message: string) => void;
 }
 
 export interface RegisterResourceInput {

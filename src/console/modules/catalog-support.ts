@@ -10,6 +10,8 @@ const STATUS = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   DETAIL_TYPE_IN_USE: 409,
+  PERMISSION_IN_USE: 409,
+  SCOPE_IN_USE: 409,
   BAD_USER_INPUT: 400,
   ROLE_MANAGED: 403,
 } as const;
@@ -18,7 +20,8 @@ const STATUS = {
 export const catalogError = (error: CatalogError | RolesError) =>
   fail(error.code, error.message, {
     status: STATUS[error.code],
-    field: error instanceof RolesError ? error.field : undefined,
+    field: error.field,
+    extra: error instanceof CatalogError ? error.extra : undefined,
   });
 
 /** Runs a catalog or roles call, turning its refusals into GraphQL errors. */
