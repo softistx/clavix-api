@@ -328,9 +328,16 @@ export class ResourcesService {
         { _id: renamed._id, name: renamed.name },
         { $set: { name: existing.name } },
       );
-    } catch {
+    } catch (error) {
+      // The kind only, never the message or a value.
+      const kind =
+        error instanceof ConflictError
+          ? "conflict"
+          : error instanceof Error
+            ? error.name
+            : "unknown";
       this.options.warn(
-        `scope ${renamed._id.toHexString()} of tenant ${tenantId.toHexString()} kept its new name: a client listed the old one and the revert failed`,
+        `scope ${renamed._id.toHexString()} of tenant ${tenantId.toHexString()} kept its new name: a client listed the old one and the revert failed (${kind})`,
       );
     }
     throw this.scopeInUse(existing.name, late);

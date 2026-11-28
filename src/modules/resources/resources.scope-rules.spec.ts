@@ -197,6 +197,7 @@ describe("updateScope name", () => {
     expect((await service.findScope(T, id))?.name).toBe("write");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(id);
+    expect(warnings[0]).toContain("(conflict)");
   });
 
   test("puts the old name back when a client lists it right after the write", async () => {
