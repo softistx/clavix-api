@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { mongo } from "@/config/db";
 import { oauthDb } from "@/config/oauth-db";
 import { rolesService } from "@/config/roles";
+import { clientRow, clientRows } from "~/oauth-clients";
 import { mongoScopeClients } from "./resources.client-scopes";
 
 const tenant = new ObjectId();
@@ -10,26 +11,21 @@ const HOLDERS = 27;
 
 afterAll(async () => {
   await mongo.db.roles.raw.deleteMany({ tenantId: tenant });
-  await oauthDb
-    .collection("oauthPartitionedClients")
-    .deleteMany({ partition: tenant.toHexString() });
+  await clientRows().deleteMany({ partition: tenant.toHexString() });
 });
 
 describe("the reader ports stop at their limit", () => {
   test("mongoScopeClients returns at most `limit` of 27 clients", async () => {
-    await oauthDb.collection("oauthPartitionedClients").insertMany(
-      Array.from({ length: HOLDERS }, (_, i) => ({
-        _id: `cap-client-${i}` as never,
-        name: `cap-client-${i}`,
-        redirectUris: ["https://app.example/cb"],
-        source: "registered",
-        createdAt: new Date(),
-        expiresAt: null,
-        partition: tenant.toHexString(),
-        ...(i % 2 === 0
-          ? { allowedScopes: ["capped"] }
-          : { defaultScopes: ["capped"] }),
-      })),
+    await clientRows().insertMany(
+      Array.from({ length: HOLDERS }, (_, i) =>
+        clientRow(
+          `cap-client-${i}`,
+          tenant.toHexString(),
+          i % 2 === 0
+            ? { allowedScopes: ["capped"] }
+            : { defaultScopes: ["capped"] },
+        ),
+      ),
     );
     const port = mongoScopeClients(oauthDb);
     expect(await port.listing(tenant, "capped", 26)).toHaveLength(26);

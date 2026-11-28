@@ -13,7 +13,8 @@ describe("fingerprintOf", () => {
     // The model stores `true` or nothing; a stray false must not rebuild the issuer.
     expect(
       fingerprintOf({
-        [URI]: { scopes, enforceRbac: false as unknown as true },
+        // @ts-expect-error a stored false from an old document: the model stores true or nothing
+        [URI]: { scopes, enforceRbac: false },
       }),
     ).toBe(absent);
   });

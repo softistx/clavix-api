@@ -11,6 +11,7 @@ import { PLATFORM_TENANT_SLUG } from "@/modules/tenants";
 import { at } from "~/body";
 import { type ConsoleResult, codeOf, consoleAs } from "~/console";
 import { defined } from "~/narrow";
+import { clientRow, clientRows } from "~/oauth-clients";
 
 const admin = consoleAs("sr-admin");
 
@@ -86,16 +87,9 @@ describe("updateScope name", () => {
 
   test("is refused with SCOPE_IN_USE and the client ids while a client lists it", async () => {
     const id = await scopeNamed("write");
-    await oauthDb.collection("oauthPartitionedClients").insertOne({
-      _id: "sr-client" as never,
-      name: "sr-client",
-      redirectUris: ["https://app.example/cb"],
-      source: "registered",
-      createdAt: new Date(),
-      expiresAt: null,
-      partition: tenant,
-      allowedScopes: ["write"],
-    });
+    await clientRows().insertOne(
+      clientRow("sr-client", tenant, { allowedScopes: ["write"] }),
+    );
     const refused = await admin(RENAME, { t: tenant, id, name: "edit" });
     expect(codeOf(refused)).toBe("SCOPE_IN_USE");
     expect(extensionsOf(refused)?.["clients"]).toEqual(["sr-client"]);
@@ -103,27 +97,17 @@ describe("updateScope name", () => {
 
   test("a client's defaultScopes block it too; another tenant's client does not", async () => {
     const id = await scopeNamed("dflt");
-    const client = (_id: string, partition: string, scopes: object) => ({
-      _id: _id as never,
-      name: _id,
-      redirectUris: ["https://app.example/cb"],
-      source: "registered",
-      createdAt: new Date(),
-      expiresAt: null,
-      partition,
-      ...scopes,
-    });
-    const clients = oauthDb.collection("oauthPartitionedClients");
+    const clients = clientRows();
     await clients.insertMany([
-      client("sr-default", tenant, { defaultScopes: ["dflt"] }),
-      client("sr-other", new ObjectId().toHexString(), {
+      clientRow("sr-default", tenant, { defaultScopes: ["dflt"] }),
+      clientRow("sr-other", new ObjectId().toHexString(), {
         allowedScopes: ["dflt"],
       }),
     ]);
     const refused = await admin(RENAME, { t: tenant, id, name: "grabbed" });
     expect(codeOf(refused)).toBe("SCOPE_IN_USE");
     expect(extensionsOf(refused)?.["clients"]).toEqual(["sr-default"]);
-    await clients.deleteOne({ _id: "sr-default" as never });
+    await clients.deleteOne({ _id: "sr-default" });
     const renamed = await admin(RENAME, { t: tenant, id, name: "grabbed" });
     expect(renamed.errors).toBeUndefined();
   });
