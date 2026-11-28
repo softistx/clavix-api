@@ -362,18 +362,11 @@ export class RolesService {
     return heldRoles(found, ids);
   }
 
-  /** The roles a user holds and the resource of the token's audience (`undefined` for none or an unknown URI), read once. */
-  private async heldFor(
-    tenantId: ObjectId,
-    userId: string,
-    audience: string | null,
-  ) {
-    const held = await this.rolesOfUser(tenantId, userId);
-    const resource =
-      audience === null
-        ? undefined
-        : await this.resourcesOf(tenantId).findFirst({ uri: audience });
-    return { held, resource };
+  /** The resource whose URI is a token's audience, shared by both claims: `undefined` for no audience or an unknown URI. */
+  private async resourceAt(tenantId: ObjectId, audience: string | null) {
+    return audience === null
+      ? undefined
+      : await this.resourcesOf(tenantId).findFirst({ uri: audience });
   }
 
   /**
@@ -386,7 +379,9 @@ export class RolesService {
     userId: string,
     audience: string | null,
   ): Promise<string[]> {
-    const { held, resource } = await this.heldFor(tenantId, userId, audience);
+    const held = await this.rolesOfUser(tenantId, userId);
+    if (held.length === 0) return [];
+    const resource = await this.resourceAt(tenantId, audience);
     return claimNames(held, resource?._id.toHexString() ?? null);
   }
 
@@ -404,7 +399,8 @@ export class RolesService {
     userId: string,
     audience: string | null,
   ): Promise<{ roles: string[]; permissions: string[] | null }> {
-    const { held, resource } = await this.heldFor(tenantId, userId, audience);
+    const held = await this.rolesOfUser(tenantId, userId);
+    const resource = await this.resourceAt(tenantId, audience);
     const roles = claimNames(held, resource?._id.toHexString() ?? null);
     if (resource === undefined || resource.enforceRbac !== true) {
       return { roles, permissions: null };
