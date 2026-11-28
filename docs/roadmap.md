@@ -13,6 +13,15 @@ nxgt-janus release says which.
   language, then the first stored translation. Breaking for the console UI
   ([#484](https://github.com/softistx/clavix-api/issues/484)).
 
+- **Authorization (RBAC)** — roles hold a Resource's permissions (its scopes, authored by the tenant,
+  [#549](https://github.com/softistx/clavix-api/issues/549),
+  [#29](https://github.com/softistx/clavix-api/issues/29)); a per-Resource RBAC flag puts a
+  `permissions` claim in its access tokens, and granted scopes are narrowed to what the roles allow
+  ([#550](https://github.com/softistx/clavix-api/issues/550),
+  [#30](https://github.com/softistx/clavix-api/issues/30)); a guide shows how to protect a resource
+  server with Clavix tokens and `@softistx/limix`
+  ([#37](https://github.com/softistx/clavix-api/issues/37)). With the flag off, tokens are unchanged.
+
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
   the `<name>.<role>.ts` shape with the console's resolvers inside their owning module; errors go
@@ -40,16 +49,6 @@ nxgt-janus release says which.
   the daily prune frees them ([#267](https://github.com/softistx/clavix-api/issues/267)); the
   resources, clients and app wiring are split into smaller modules, with no change in behaviour
   ([#266](https://github.com/softistx/clavix-api/issues/266)).
-
-- **Authorization (RBAC)** — a tenant authors the permission catalogue of each resource (its
-  scopes, [#29](https://github.com/softistx/clavix-api/issues/29)); roles group permissions, a
-  resource can enforce them, and tokens carry `permissions`, `roles` and `scope` (a permission
-  holds when it is in `scope` and, when present, in `permissions`,
-  [#30](https://github.com/softistx/clavix-api/issues/30)); and a guide shows how to protect a
-  resource server with Clavix tokens and `@softistx/limix`
-  ([#37](https://github.com/softistx/clavix-api/issues/37)); then the access token's `scope` is
-  narrowed to the permissions the user holds, so the token itself shows what the user may do
-  ([#30](https://github.com/softistx/clavix-api/issues/30)).
 
 ## Later
 
