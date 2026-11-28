@@ -1097,6 +1097,14 @@ scoped to a resource is only in the access tokens issued for that resource (its 
 so the `id_token` and userinfo, which have no audience, never carry it. A refreshed token carries the
 roles the user holds then. The `id_token` also carries the `email` and profile claims.
 
+**The `permissions` claim** (an array of scope names, sorted, no duplicates) is in the JWT access
+tokens only, for a resource that enforces role-based access (`enforceRbac`, set per resource in the
+console). It lists the scopes of that resource (the token's audience) that the roles the user holds
+grant, whether the role is tenant-wide or scoped to that resource; `[]` when the user holds none. A resource
+that does not enforce it gets no claim. It is never in the `id_token`, in `/userinfo` or in a
+`client_credentials` token; a token exchange carries the subject user's permissions on the target. A
+refreshed token carries the permissions the user holds then.
+
 **The attribute claims** (a tenant's own user attributes) are in the JWT access tokens, the `id_token` and
 `/userinfo`, and each emitted key is listed in the tenant's discovery `claims_supported` (the document is
 cached for a minute, so a new or archived attribute shows there within that time; the tokens follow at

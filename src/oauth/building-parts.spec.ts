@@ -19,6 +19,7 @@ describe("accessTokenClaims", () => {
         calls.push(args);
         return { nick: "bob", sub: "evil", aud: "evil", scope: "all" };
       },
+    () => async () => null,
   );
 
   test("an attribute claim never takes the place of a claim the server owns", async () => {

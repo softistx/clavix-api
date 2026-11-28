@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { RolesService } from "@/modules/roles";
-import type { RolesFor } from "@/oauth/ports";
+import type { PermissionsFor, RolesFor } from "@/oauth/ports";
 import { roleAttributesService } from "./attributes";
 import { mongo } from "./db";
 import { resourcesService } from "./resources";
@@ -20,3 +20,11 @@ export const rolesService = new RolesService({
 /** The real `RolesFor`: the `roles` claim of the tokens. */
 export const rolesFor: RolesFor = (tenant) => (userId, audience) =>
   rolesService.claimRoles(new ObjectId(tenant.tenantId), userId, audience);
+
+/** The real `PermissionsFor`: the `permissions` claim of the tokens of a resource that enforces RBAC. */
+export const permissionsFor: PermissionsFor = (tenant) => (userId, audience) =>
+  rolesService.claimPermissions(
+    new ObjectId(tenant.tenantId),
+    userId,
+    audience,
+  );

@@ -31,8 +31,15 @@ export type AuthFor = (tenant: ResolvedTenant) => OAuthAuth;
 export type ResourcesFor = (
   tenant: ResolvedTenant,
 ) =>
-  | Readonly<Record<string, OAuthResource>>
-  | Promise<Readonly<Record<string, OAuthResource>>>;
+  | Readonly<Record<string, KeyedResource>>
+  | Promise<Readonly<Record<string, KeyedResource>>>;
+
+/**
+ * A stored resource as `ResourcesFor` answers it: janus's, plus Clavix's own
+ * `enforceRbac` flag (set only when on). It is part of the issuer's
+ * fingerprint and never reaches janus (`building.ts` strips it).
+ */
+export type KeyedResource = OAuthResource & { enforceRbac?: true };
 
 /**
  * The claims of a tenant's users (slice 1.4): looks the subject up in that
@@ -56,6 +63,18 @@ export type ClaimsFor = (
 export type RolesFor = (
   tenant: ResolvedTenant,
 ) => (userId: string, audience: string | null) => Promise<string[]>;
+
+/**
+ * The `permissions` claim of a tenant's users (slice 5.2a): the sorted scope
+ * names of the resource whose URI is `audience`, granted by the roles the user
+ * holds (tenant-wide ones and those scoped to that resource). `null` means no
+ * claim: no audience, an unknown resource, or a resource that does not enforce
+ * RBAC (`Resource.enforceRbac` off). `[]` is a user who holds no permission on
+ * an enforcing resource. Required: no default, so an unbound port is a type error.
+ */
+export type PermissionsFor = (
+  tenant: ResolvedTenant,
+) => (userId: string, audience: string | null) => Promise<string[] | null>;
 
 /**
  * The attribute claims of a tenant's users (user-attributes slice A6): each

@@ -20,7 +20,9 @@ import {
   claimNames,
   countsByRole,
   heldRoles,
+  permissionIdsOf,
   sameIds,
+  scopeNamesOf,
   sortedByName,
 } from "./roles.utils";
 
@@ -377,5 +379,29 @@ export class RolesService {
       resourceId = resource?._id.toHexString() ?? null;
     }
     return claimNames(held, resourceId);
+  }
+
+  /**
+   * The `permissions` claim of a user (slice 5.2a): the sorted, de-duplicated
+   * names of the scopes of the resource whose URI is `audience`, granted by the
+   * roles they hold there (tenant-wide ones and those scoped to the resource).
+   * `null` (no claim) when there is no audience, no such resource, or it does
+   * not enforce RBAC; `[]` when the user holds no permission on it.
+   */
+  async claimPermissions(
+    tenantId: ObjectId,
+    userId: string,
+    audience: string | null,
+  ): Promise<string[] | null> {
+    if (audience === null) return null;
+    const resource = await this.resourcesOf(tenantId).findFirst({
+      uri: audience,
+    });
+    if (resource === undefined || resource.enforceRbac !== true) return null;
+    const held = await this.rolesOfUser(tenantId, userId);
+    const ids = permissionIdsOf(held, resource._id);
+    if (ids.length === 0) return [];
+    const scopes = await this.options.scopes.find(tenantId, ids);
+    return scopeNamesOf(scopes, resource._id);
   }
 }

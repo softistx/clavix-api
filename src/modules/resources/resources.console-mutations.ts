@@ -48,10 +48,12 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
         tenant,
         await resourcesService.findResource(tenant._id, id),
         input.allowClientCredentials,
+        input.enforceRbac,
       );
       return resourcesService.updateResource(tenant._id, id, {
         name: input.name ?? undefined,
         allowClientCredentials: input.allowClientCredentials ?? undefined,
+        enforceRbac: input.enforceRbac ?? undefined,
       });
     });
     await ctx.audit(

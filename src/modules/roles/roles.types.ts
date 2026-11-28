@@ -15,6 +15,8 @@ export interface RoleLinks {
 /** What a role needs to know of a scope (a document of the resources module). */
 export interface ScopeRef {
   _id: ObjectId;
+  /** The OAuth scope token. */
+  name: string;
   /** The resource it belongs to; `null` for a standard OpenID Connect scope. */
   resourceId: ObjectId | null;
 }

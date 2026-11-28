@@ -2077,6 +2077,14 @@ type Resource {
   createdAt: DateTime!
   """The authorization detail types (RFC 9396) it accepts, by name."""
   detailTypes: [DetailType!]!
+  """
+  Whether the resource enforces role-based access control. When on, the access
+  tokens issued for it carry a `permissions` claim: the sorted names of the
+  scopes of this resource that the roles the user holds grant (`[]` when the
+  user holds none). When off (the default) the claim is absent. Never in the
+  id_token, userinfo or a client credentials token.
+  """
+  enforceRbac: Boolean!
   id: ID!
   """
   Where the resource server serves its RFC 9728 protected resource metadata:
@@ -2554,6 +2562,10 @@ input UpdateResourceInput {
   Let clients with `CLIENT_CREDENTIALS` ask for tokens for this resource; turning it off refuses new token requests at once. Refused on the console's own resource.
   """
   allowClientCredentials: Boolean
+  """
+  Turn role-based access on or off: the resource's access tokens then carry (or no longer carry) a `permissions` claim, from the next token on. Refused on the console's own resource (BAD_USER_INPUT at `enforceRbac`).
+  """
+  enforceRbac: Boolean
   name: String
 }
 

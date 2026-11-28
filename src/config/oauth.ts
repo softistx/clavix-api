@@ -11,7 +11,7 @@ import { eventBus } from "./events";
 import { dpopNonceSecret, keyGenerations, keysService } from "./keys";
 import { oauthDb } from "./oauth-db";
 import { resourcesFor } from "./resources";
-import { rolesFor } from "./roles";
+import { permissionsFor, rolesFor } from "./roles";
 import { clockMs, janusClock } from "./runtime";
 import { tenantResolver } from "./tenancy";
 import { metadataThrottle, registerThrottle } from "./throttle";
@@ -37,6 +37,7 @@ export const createIssuers = (authFor: AuthFor, claimsFor: ClaimsFor) =>
           claimsFor,
           resourcesFor,
           rolesFor,
+          permissionsFor,
           attributesFor,
           attributeScopesFor,
           exchangeRulesFor,

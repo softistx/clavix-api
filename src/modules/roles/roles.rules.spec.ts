@@ -81,9 +81,9 @@ describe("permissionObjectIds", () => {
 describe("checkPermissions", () => {
   const resource = new ObjectId();
   const other = new ObjectId();
-  const own = { _id: new ObjectId(), resourceId: resource };
-  const foreign = { _id: new ObjectId(), resourceId: other };
-  const standard = { _id: new ObjectId(), resourceId: null };
+  const own = { _id: new ObjectId(), name: "own", resourceId: resource };
+  const foreign = { _id: new ObjectId(), name: "foreign", resourceId: other };
+  const standard = { _id: new ObjectId(), name: "openid", resourceId: null };
   const ids = (...scopes: { _id: ObjectId }[]) =>
     scopes.map((s) => s._id.toHexString());
   const all = [own, foreign, standard];

@@ -35,13 +35,27 @@ export function keepConsoleResource(
 /**
  * Refuses the client credentials grant on the console's own resource: the
  * console takes an operator's token only (a client-only token is no operator),
- * so no machine token is ever minted for it.
+ * so no machine token is ever minted for it. Role-based access is refused too
+ * (`enforceRbac`, BAD_USER_INPUT at that field).
  */
 export function refuseMachineConsole(
   tenant: { slug: string },
   resource: { uri: string } | undefined,
   allow: boolean | null | undefined,
+  enforceRbac?: boolean | null | undefined,
 ) {
+  if (
+    enforceRbac === true &&
+    onPlatform(tenant) &&
+    resource?.uri === consoleResource
+  ) {
+    // The console's own rules read the token's scopes, never `permissions`.
+    throw new CatalogError(
+      "BAD_USER_INPUT",
+      "The console's own resource is guarded by its own rules: it cannot enforce role-based access",
+      "enforceRbac",
+    );
+  }
   if (
     allow === true &&
     onPlatform(tenant) &&

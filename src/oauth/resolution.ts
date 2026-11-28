@@ -1,13 +1,13 @@
-import type { OAuthIssuerKey, OAuthResource } from "@softistx/janus-oauth";
+import type { OAuthIssuerKey } from "@softistx/janus-oauth";
 import { digestOf } from "@/modules/resources";
 import type { ResolvedTenant } from "@/tenancy/resolved-tenant";
 import type { TenantResolver } from "@/tenancy/resolver";
-import type { ResourcesFor } from "./ports";
+import type { KeyedResource, ResourcesFor } from "./ports";
 
 // What `resolve` answers: janus's key (the version as a string) and the tenant.
 export type Keyed = OAuthIssuerKey & {
   tenant: ResolvedTenant;
-  resources: Readonly<Record<string, OAuthResource>>;
+  resources: Readonly<Record<string, KeyedResource>>;
 };
 
 // A short stable digest of a tenant's resources: the issuer is rebuilt when
@@ -15,21 +15,27 @@ export type Keyed = OAuthIssuerKey & {
 // The detail types count by name and by the digest of their definition
 // (`digestOf`), so an edited type rebuilds the issuer.
 export const fingerprintOf = (
-  resources: Readonly<Record<string, OAuthResource>>,
+  resources: Readonly<Record<string, KeyedResource>>,
 ) =>
   Bun.hash(
     JSON.stringify(
       Object.entries(resources)
-        .map(([uri, { scopes, authorizationDetails, clientCredentials }]) => {
-          const types = Object.entries(authorizationDetails ?? {})
-            .map(([type, { schema }]) => [type, digestOf(schema) ?? ""])
-            .sort(([a], [b]) => String(a).localeCompare(String(b)));
-          const base = [uri, [...scopes].sort()];
-          // Added only when set, so a tenant that has none keeps its
-          // fingerprint (and its cached issuer) across the release.
-          if (clientCredentials === true) base.push("cc");
-          return types.length === 0 ? base : [...base, types];
-        })
+        .map(
+          ([
+            uri,
+            { scopes, authorizationDetails, clientCredentials, enforceRbac },
+          ]) => {
+            const types = Object.entries(authorizationDetails ?? {})
+              .map(([type, { schema }]) => [type, digestOf(schema) ?? ""])
+              .sort(([a], [b]) => String(a).localeCompare(String(b)));
+            const base = [uri, [...scopes].sort()];
+            // Added only when set, so a tenant that has none keeps its
+            // fingerprint (and its cached issuer) across the release.
+            if (clientCredentials === true) base.push("cc");
+            if (enforceRbac === true) base.push("rbac");
+            return types.length === 0 ? base : [...base, types];
+          },
+        )
         .sort(([a], [b]) => String(a).localeCompare(String(b))),
     ),
   ).toString(36);
@@ -38,8 +44,8 @@ export const fingerprintOf = (
 // the server is built) and the introspection list must not name one, so a
 // stored resource that has neither is left out here, once, for both.
 const withScopes = (
-  resources: Readonly<Record<string, OAuthResource>>,
-): Readonly<Record<string, OAuthResource>> =>
+  resources: Readonly<Record<string, KeyedResource>>,
+): Readonly<Record<string, KeyedResource>> =>
   Object.fromEntries(
     Object.entries(resources).filter(
       ([, { scopes, authorizationDetails }]) =>

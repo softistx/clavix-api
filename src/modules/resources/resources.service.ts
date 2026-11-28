@@ -129,6 +129,7 @@ export class ResourcesService {
     input: {
       name?: string | undefined;
       allowClientCredentials?: boolean | undefined;
+      enforceRbac?: boolean | undefined;
     },
   ): Promise<StoredResourceDoc> {
     const existing = await this.findResource(tenantId, resourceId);
@@ -140,6 +141,9 @@ export class ResourcesService {
       ...(input.allowClientCredentials === undefined
         ? {}
         : { allowClientCredentials: input.allowClientCredentials }),
+      ...(input.enforceRbac === undefined
+        ? {}
+        : { enforceRbac: input.enforceRbac }),
     });
   }
 
@@ -631,6 +635,9 @@ export class ResourcesService {
             scopes: byResource.get(key) ?? [],
             ...(resource.allowClientCredentials === true
               ? { clientCredentials: true as const }
+              : {}),
+            ...(resource.enforceRbac === true
+              ? { enforceRbac: true as const }
               : {}),
             ...(authorizationDetails === undefined
               ? {}
