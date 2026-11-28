@@ -25,6 +25,7 @@ Today it serves:
 | [docs/guide/mcp.md](docs/guide/mcp.md)                                                     | MCP clients and agents: `/register`, the tenant policy, the RFC 9728 document          |
 | [docs/guide/magic-link.md](docs/guide/magic-link.md)                                       | the operations the hosted sign-in link page calls                                      |
 | [docs/guide/sign-in-methods.md](docs/guide/sign-in-methods.md)                             | a tenant's sign-in methods and social providers                                        |
+| [docs/guide/resource-server.md](docs/guide/resource-server.md)                             | protect your own API with Clavix tokens: jose verification and limix rules             |
 | [docs/operations.md](docs/operations.md)                                                   | deploy, upgrade, backup, restore, TLS, health                                          |
 | [docs/troubleshooting.md](docs/troubleshooting.md)                                         | the errors you can meet, with causes and fixes                                         |
 | [docs/roadmap.md](docs/roadmap.md)                                                         | what is shipped and what comes next                                                    |
