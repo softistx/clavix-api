@@ -1499,6 +1499,15 @@ type Mutation {
   """
   setPrimaryDomain(id: ID!, tenantId: ID!): Domain!
   """
+  Replaces the whole set of scopes the role grants (tenant admin). Idempotent:
+  the same set changes nothing, and repeated ids count once. Errors:
+  NOT_FOUND for an unknown role, ROLE_MANAGED (403) for a managed role,
+  BAD_USER_INPUT with `extensions.field` `permissionIds.<i>` for an id that is
+  no scope of the tenant, a standard OpenID Connect scope, or (for a role
+  scoped to a resource) a scope of another resource. At most 500 ids.
+  """
+  setRolePermissions(permissionIds: [ID!]! @constraint(maxItems: 500), roleId: ID!, tenantId: ID!): TenantRole!
+  """
   Sets the tenant's own app for a social provider. Needs edit on the tenant.
   Idempotent. BAD_USER_INPUT (400) for a new provider without `clientId`,
   SOCIAL_SECRET_REQUIRED (400) for one without `clientSecret`,
@@ -2338,6 +2347,12 @@ type TenantRole {
   The claim value: 1 to 64 characters of letters, digits, `.`, `_`, `:` and `-`. Unique per tenant and resource; `updateRole` may rename it.
   """
   name: String!
+  """
+  The scopes the role grants, by name. A role scoped to a resource holds only
+  that resource's scopes; a tenant-wide role may hold the scopes of any
+  resource. Never a standard OpenID Connect scope. Empty by default.
+  """
+  permissions: [Scope!]! @listSize(assumedSize: 500, requireOneSlicingArgument: false)
   """
   The resource (API) the role is scoped to, or `null` for the whole tenant. Fixed at creation.
   """

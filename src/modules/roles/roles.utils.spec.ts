@@ -5,6 +5,8 @@ import {
   claimNames,
   countsByRole,
   heldRoles,
+  permissionsOf,
+  sameIds,
   shape,
   sortedByName,
   target,
@@ -20,6 +22,7 @@ const stored = (over: Partial<RoleDoc>): RoleDoc => {
     description: "",
     resourceId: null,
     managed: false,
+    permissionIds: [],
     createdAt: new Date(0),
     updatedAt: new Date(0),
     ...over,
@@ -93,6 +96,40 @@ describe("shape", () => {
     expect(shown.id).toBe(found._id.toHexString());
     expect(shown.resourceId).toBe(resourceId.toHexString());
     expect(shown.description).toBe("d");
+  });
+});
+
+describe("permissions", () => {
+  test("shape carries the tenant and the scope ids as hex", () => {
+    const scopeId = new ObjectId();
+    const found = stored({ permissionIds: [scopeId] });
+    const shown = shape(found, 0);
+    expect(shown.tenantId).toBe(found.tenantId.toHexString());
+    expect(shown.permissionIds).toEqual([scopeId.toHexString()]);
+  });
+
+  test("sameIds compares the lists as sets", () => {
+    const a = new ObjectId();
+    const b = new ObjectId();
+    expect(sameIds([a, b], [a, b])).toBe(true);
+    expect(sameIds([a, b], [b, a])).toBe(true);
+    expect(sameIds([a, a], [a, b])).toBe(false);
+    expect(sameIds([a], [a, b])).toBe(false);
+  });
+
+  test("permissionsOf drops the missing and sorts by name", () => {
+    expect(permissionsOf([{ name: "write" }, null, { name: "read" }])).toEqual([
+      { name: "read" },
+      { name: "write" },
+    ]);
+  });
+
+  test("permissionsOf sorts by code point, not by locale", () => {
+    expect(
+      permissionsOf([{ name: "b" }, { name: "B" }, { name: "a" }]).map(
+        (scope) => scope.name,
+      ),
+    ).toEqual(["B", "a", "b"]);
   });
 });
 

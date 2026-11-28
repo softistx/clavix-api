@@ -98,10 +98,22 @@ export async function removeResource(
       // The roles scoped to it go first: were the resource gone before them
       // a retry would find nothing to clean up.
       const roles = await rolesService.deleteForResource(tenant._id, found._id);
+      // Its scopes leave the tenant-wide roles that hold them.
+      const pulled = await rolesService.pullScopes(
+        tenant._id,
+        scopes.map((scope) => scope._id),
+      );
       // The exchange rules that target it go before it too, for the same reason.
       await clientPoliciesService.removeTarget(tenant._id, found.uri);
       // Recorded now: were the resource delete to fail, a retry finds no
       // role left and could not record them.
+      for (const role of pulled) {
+        await ctx.audit("role.setPermissions", {
+          type: "role",
+          id: role._id.toHexString(),
+          tenantId: tenant._id.toHexString(),
+        });
+      }
       for (const role of roles) {
         await ctx.audit("role.delete", {
           type: "role",

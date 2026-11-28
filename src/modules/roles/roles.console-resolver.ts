@@ -10,11 +10,15 @@ import {
   shapes,
   tenantOf,
 } from "./roles.console-support";
+import { permissionsOfRole } from "./roles.data-loader";
 import { target } from "./roles.utils";
 
 export { rolesAudits, rolesGuards } from "./roles.console-guards";
 
 export const roles: Resolvers = {
+  TenantRole: {
+    permissions: (role, _, ctx) => permissionsOfRole(ctx, role),
+  },
   Query: {
     roles: async (_, { tenantId, resourceId }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);
@@ -94,6 +98,19 @@ export const roles: Resolvers = {
       await ctx.audit("role.assign", target("role", roleId, tenant.hex));
       await ctx.audit("role.assign", target("user", userId, tenant.hex));
       return true;
+    },
+    setRolePermissions: async (_, { tenantId, roleId, permissionIds }, ctx) => {
+      const tenant = await tenantOf(ctx, tenantId);
+      idArg(roleId, "roleId");
+      const updated = await refusing(() =>
+        rolesService.setPermissions(tenant.id, roleId, permissionIds),
+      );
+      // Recorded on a repeat too (it may be the event the first run missed).
+      await ctx.audit(
+        "role.setPermissions",
+        target("role", roleId, tenant.hex),
+      );
+      return shapeOne(tenant.id, updated);
     },
     unassignRole: async (_, { tenantId, roleId, userId }, ctx) => {
       const tenant = await tenantOf(ctx, tenantId);

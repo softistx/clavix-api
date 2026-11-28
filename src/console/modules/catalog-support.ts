@@ -16,7 +16,10 @@ const STATUS = {
 
 /** A catalog or roles refusal as a GraphQL error carrying its code. */
 export const catalogError = (error: CatalogError | RolesError) =>
-  fail(error.code, error.message, { status: STATUS[error.code] });
+  fail(error.code, error.message, {
+    status: STATUS[error.code],
+    field: error instanceof RolesError ? error.field : undefined,
+  });
 
 /** Runs a catalog or roles call, turning its refusals into GraphQL errors. */
 export async function refusing<T>(call: () => Promise<T>): Promise<T> {

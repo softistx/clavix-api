@@ -11,14 +11,20 @@ export class RolesError extends Error {
   constructor(
     readonly code: RolesErrorCode,
     message: string,
+    /** The input path the refusal is about, e.g. `permissionIds.2`. */
+    readonly field?: string | undefined,
   ) {
     super(message);
     this.name = "RolesError";
   }
 }
 
-export function refuse(code: RolesErrorCode, message: string): never {
-  throw new RolesError(code, message);
+export function refuse(
+  code: RolesErrorCode,
+  message: string,
+  field?: string,
+): never {
+  throw new RolesError(code, message, field);
 }
 
 export const managedRefusal = (name: string) =>

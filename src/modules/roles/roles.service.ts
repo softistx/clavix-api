@@ -1,7 +1,13 @@
 import { ConflictError, scopeToTenant } from "@softistx/mongo";
 import { ObjectId } from "mongodb";
 import { conflict, managedRefusal, refuse } from "./roles.errors";
-import { checkUserId, cleanDescription, cleanName } from "./roles.rules";
+import {
+  checkPermissions,
+  checkUserId,
+  cleanDescription,
+  cleanName,
+  permissionObjectIds,
+} from "./roles.rules";
 import type {
   AssignmentDoc,
   CreateRoleInput,
@@ -14,6 +20,7 @@ import {
   claimNames,
   countsByRole,
   heldRoles,
+  sameIds,
   sortedByName,
 } from "./roles.utils";
 
@@ -182,6 +189,50 @@ export class RolesService {
     // The role's attribute links go too; the users' values stay, hidden.
     await this.options.roleLinks.removeForRole(tenantId, id);
     return removed;
+  }
+
+  /**
+   * Replaces the scopes the role holds (`permissionIds`, ids of the tenant's
+   * scopes). Idempotent: the same set writes nothing. `NOT_FOUND` for an
+   * unknown role, `ROLE_MANAGED` for a managed one, `BAD_USER_INPUT` at
+   * `permissionIds.<i>` for a scope the role may not hold (see `checkPermissions`).
+   */
+  async setPermissions(
+    tenantId: ObjectId,
+    roleId: string,
+    permissionIds: readonly string[],
+  ): Promise<RoleDoc> {
+    const found = await this.find(tenantId, roleId);
+    if (found === undefined) return refuse("NOT_FOUND", "No such role");
+    if (found.managed) throw managedRefusal(found.name);
+    const wanted = permissionObjectIds(permissionIds);
+    checkPermissions(
+      permissionIds,
+      found.resourceId,
+      await this.options.scopes.find(tenantId, wanted),
+    );
+    if (sameIds(found.permissionIds, wanted)) return found;
+    return this.rolesOf(tenantId).update(found._id, { permissionIds: wanted });
+  }
+
+  /**
+   * The cascade of a deleted resource: its scope ids leave the tenant-wide
+   * roles that hold them (a role scoped to the resource is deleted with it).
+   * Returns the roles changed.
+   */
+  async pullScopes(
+    tenantId: ObjectId,
+    scopeIds: readonly ObjectId[],
+  ): Promise<RoleDoc[]> {
+    if (scopeIds.length === 0) return [];
+    const held = { permissionIds: { $in: [...scopeIds] } };
+    const holders = await this.rolesOf(tenantId).findMany({ filter: held });
+    if (holders.length === 0) return [];
+    // One atomic $pull, so a concurrent setRolePermissions is never rewritten.
+    await this.rolesOf(tenantId).updateMany(held, {
+      $pull: { permissionIds: { $in: [...scopeIds] } },
+    });
+    return holders;
   }
 
   /** The roles scoped to a resource that is being deleted, removed with their assignments; the roles removed. */

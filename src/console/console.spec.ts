@@ -269,6 +269,7 @@ beforeAll(async () => {
     clients: mongoDetailTypeClients(oauthDb),
     userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
     findTenant,
+    scopesDropped: async () => {},
   }).registerResource({
     tenant: PLATFORM_TENANT_SLUG,
     uri: OTHER,

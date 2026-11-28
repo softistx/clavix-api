@@ -45,6 +45,7 @@ const build = (resources = mongo.db.resources) =>
     clients: mongoDetailTypeClients(oauthDb),
     userinfoOf: (slug) => userinfoOf(issuerOf(slug, config)),
     findTenant,
+    scopesDropped: async () => {},
   });
 const service = build();
 
