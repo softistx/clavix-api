@@ -4,8 +4,15 @@ import { mongo } from "@/config/db";
 import { CatalogError } from "./resources.errors";
 import { ResourcesService } from "./resources.service";
 
-let granting: string[] = [];
-let listing: string[] = [];
+/** What the roles' reader answers per call (the last answer repeats), by default the first `limit` of `holders`. */
+let holders: string[] = [];
+let grantingCalls: string[][] = [];
+/** The clients of every tenant that list a name. */
+let clientRows: { tenant: ObjectId; name: string; id: string }[] = [];
+let listingCalls: string[][] = [];
+const dropped: string[][] = [];
+const nextOf = (calls: string[][]) =>
+  calls.length > 1 ? calls.shift() : calls[0];
 const service = new ResourcesService({
   resources: mongo.db.resources,
   scopes: mongo.db.scopes,
@@ -13,16 +20,30 @@ const service = new ResourcesService({
   clients: { using: async () => [], drop: async () => 0 },
   userinfoOf: (slug) => `https://${slug}.clavix.test/userinfo`,
   findTenant: async () => undefined,
-  scopeClients: { listing: async () => listing },
-  rolesGranting: async () => granting,
-  scopesDropped: async () => {},
+  scopeClients: {
+    listing: async (tenantId, name, limit) =>
+      (
+        nextOf(listingCalls) ??
+        clientRows
+          .filter((row) => row.tenant.equals(tenantId) && row.name === name)
+          .map((row) => row.id)
+      ).slice(0, limit),
+  },
+  rolesGranting: async (_tenantId, _scopeId, limit) =>
+    (nextOf(grantingCalls) ?? holders).slice(0, limit),
+  scopesDropped: async (_tenantId, scopeIds) => {
+    dropped.push(scopeIds.map((id) => id.toHexString()));
+  },
 });
 const T = new ObjectId();
 const URI = "https://api.scope-rules.example/v1";
 
 afterEach(async () => {
-  granting = [];
-  listing = [];
+  holders = [];
+  grantingCalls = [];
+  clientRows = [];
+  listingCalls = [];
+  dropped.length = 0;
   await mongo.db.scopes.raw.deleteMany({ tenantId: T });
   await mongo.db.resources.raw.deleteMany({ tenantId: T });
 });
@@ -48,21 +69,55 @@ const seeded = async () => {
 describe("deleteScope and the roles that grant it", () => {
   test("is refused with PERMISSION_IN_USE and the role ids", async () => {
     const { id } = await seeded();
-    granting = ["r1", "r2"];
+    holders = ["r1", "r2"];
     const error = await caught(service.deleteScope(T, id));
     expect(error?.code).toBe("PERMISSION_IN_USE");
-    expect(error?.extra).toEqual({ roles: ["r1", "r2"] });
+    expect(error?.extra).toEqual({ roles: ["r1", "r2"], truncated: false });
     expect(await service.findScope(T, id)).toBeDefined();
-    granting = [];
+    holders = [];
     expect(await service.deleteScope(T, id)).toBe(true);
+  });
+
+  test("lists 25 ids at most and says it was cut", async () => {
+    const { id } = await seeded();
+    holders = Array.from({ length: 26 }, (_, i) => `r${i}`);
+    const error = await caught(service.deleteScope(T, id));
+    expect(error?.extra?.["roles"]).toHaveLength(25);
+    expect(error?.extra?.["truncated"]).toBe(true);
+  });
+
+  test("pulls a role granted between the check and the delete", async () => {
+    const { id } = await seeded();
+    // Free at the check, granted by the time of the second look.
+    grantingCalls = [[], ["late"]];
+    expect(await service.deleteScope(T, id)).toBe(true);
+    expect(await service.findScope(T, id)).toBeUndefined();
+    expect(dropped).toEqual([[id]]);
+  });
+
+  test("pulls nothing when no role was granted meanwhile", async () => {
+    const { id } = await seeded();
+    expect(await service.deleteScope(T, id)).toBe(true);
+    expect(dropped).toEqual([]);
   });
 });
 
 describe("updateScope name", () => {
   test("renames a resource's scope", async () => {
     const { id } = await seeded();
-    const renamed = await service.updateScope(T, id, { name: " write " });
-    expect(renamed.name).toBe("write");
+    const { scope, renamed } = await service.updateScope(T, id, {
+      name: " write ",
+    });
+    expect(scope.name).toBe("write");
+    expect(renamed).toBe(true);
+  });
+
+  test("an update without a new name is not a rename", async () => {
+    const { id } = await seeded();
+    clientRows = [{ tenant: T, name: "read", id: "c1" }];
+    const same = await service.updateScope(T, id, { name: "read" });
+    expect(same).toMatchObject({ renamed: false, scope: { name: "read" } });
+    expect((await service.updateScope(T, id, {})).renamed).toBe(false);
   });
 
   test("refuses a standard scope at name", async () => {
@@ -91,17 +146,39 @@ describe("updateScope name", () => {
 
   test("is refused with SCOPE_IN_USE and the client ids", async () => {
     const { id } = await seeded();
-    listing = ["c1"];
+    clientRows = [{ tenant: T, name: "read", id: "c1" }];
     const error = await caught(service.updateScope(T, id, { name: "write" }));
     expect(error?.code).toBe("SCOPE_IN_USE");
-    expect(error?.extra).toEqual({ clients: ["c1"] });
+    expect(error?.extra).toEqual({ clients: ["c1"], truncated: false });
     expect((await service.findScope(T, id))?.name).toBe("read");
   });
 
-  test("an unchanged name is not a rename", async () => {
+  test("another tenant's client does not block the rename", async () => {
     const { id } = await seeded();
-    listing = ["c1"];
-    const same = await service.updateScope(T, id, { name: "read" });
-    expect(same.name).toBe("read");
+    clientRows = [{ tenant: new ObjectId(), name: "read", id: "other" }];
+    const { scope } = await service.updateScope(T, id, { name: "write" });
+    expect(scope.name).toBe("write");
+  });
+
+  test("lists 25 client ids at most and says it was cut", async () => {
+    const { id } = await seeded();
+    clientRows = Array.from({ length: 26 }, (_, i) => ({
+      tenant: T,
+      name: "read",
+      id: `c${i}`,
+    }));
+    const error = await caught(service.updateScope(T, id, { name: "write" }));
+    expect(error?.extra?.["clients"]).toHaveLength(25);
+    expect(error?.extra?.["truncated"]).toBe(true);
+  });
+
+  test("puts the old name back when a client lists it right after the write", async () => {
+    const { id } = await seeded();
+    // Free at the check, listed by the time of the second look.
+    listingCalls = [[], ["late"]];
+    const error = await caught(service.updateScope(T, id, { name: "write" }));
+    expect(error?.code).toBe("SCOPE_IN_USE");
+    expect(error?.extra).toEqual({ clients: ["late"], truncated: false });
+    expect((await service.findScope(T, id))?.name).toBe("read");
   });
 });

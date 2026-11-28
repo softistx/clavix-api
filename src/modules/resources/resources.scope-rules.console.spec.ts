@@ -42,7 +42,7 @@ beforeAll(async () => {
   await registerStoredResource({
     tenant: "sr-a",
     uri: "https://api.sr-a.example/v1",
-    scopes: ["read", "write", "extra", "taken"],
+    scopes: ["read", "write", "extra", "taken", "dflt"],
   });
 });
 
@@ -99,6 +99,33 @@ describe("updateScope name", () => {
     const refused = await admin(RENAME, { t: tenant, id, name: "edit" });
     expect(codeOf(refused)).toBe("SCOPE_IN_USE");
     expect(extensionsOf(refused)?.["clients"]).toEqual(["sr-client"]);
+  });
+
+  test("a client's defaultScopes block it too; another tenant's client does not", async () => {
+    const id = await scopeNamed("dflt");
+    const client = (_id: string, partition: string, scopes: object) => ({
+      _id: _id as never,
+      name: _id,
+      redirectUris: ["https://app.example/cb"],
+      source: "registered",
+      createdAt: new Date(),
+      expiresAt: null,
+      partition,
+      ...scopes,
+    });
+    const clients = oauthDb.collection("oauthPartitionedClients");
+    await clients.insertMany([
+      client("sr-default", tenant, { defaultScopes: ["dflt"] }),
+      client("sr-other", new ObjectId().toHexString(), {
+        allowedScopes: ["dflt"],
+      }),
+    ]);
+    const refused = await admin(RENAME, { t: tenant, id, name: "grabbed" });
+    expect(codeOf(refused)).toBe("SCOPE_IN_USE");
+    expect(extensionsOf(refused)?.["clients"]).toEqual(["sr-default"]);
+    await clients.deleteOne({ _id: "sr-default" as never });
+    const renamed = await admin(RENAME, { t: tenant, id, name: "grabbed" });
+    expect(renamed.errors).toBeUndefined();
   });
 
   test("refuses a standard OpenID Connect scope at name", async () => {

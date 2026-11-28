@@ -82,7 +82,11 @@ export interface ResourcesServiceOptions {
    * refused with `PERMISSION_IN_USE` while there is one (the roles'
    * `rolesGranting`, bound in `config/resources.ts`).
    */
-  rolesGranting: (tenantId: ObjectId, scopeId: ObjectId) => Promise<string[]>;
+  rolesGranting: (
+    tenantId: ObjectId,
+    scopeId: ObjectId,
+    limit: number,
+  ) => Promise<string[]>;
   /** The tenant's userinfo URL, a built-in resource that cannot be registered. */
   userinfoOf: (tenantSlug: string) => string;
   /** A tenant by slug, for `registerResource` (the `resources:create` script). */

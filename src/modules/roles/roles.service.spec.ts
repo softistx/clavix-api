@@ -338,14 +338,14 @@ describe("permissions", () => {
     });
     const holder = await rolesService.create(tenant, { name: "grant-holder" });
     await rolesService.create(tenant, { name: "grant-other" });
-    expect(await rolesService.rolesGranting(tenant, scope._id)).toEqual([]);
+    expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([]);
     await rolesService.setPermissions(tenant, holder._id.toHexString(), [
       scope._id.toHexString(),
     ]);
-    expect(await rolesService.rolesGranting(tenant, scope._id)).toEqual([
+    expect(await rolesService.rolesGranting(tenant, scope._id, 26)).toEqual([
       holder._id.toHexString(),
     ]);
-    expect(await rolesService.rolesGranting(new ObjectId(), scope._id)).toEqual(
+    expect(await rolesService.rolesGranting(new ObjectId(), scope._id, 26)).toEqual(
       [],
     );
   });

@@ -16,8 +16,8 @@ export class CatalogError extends Error {
     message: string,
     /** The input path the refusal is about, e.g. `name`. */
     readonly field?: string | undefined,
-    /** What the refusal lists: `extensions.roles` or `extensions.clients` (ids). */
-    readonly extra?: Readonly<Record<string, readonly string[]>> | undefined,
+    /** What the refusal lists: `extensions.roles` or `extensions.clients` (ids) and `truncated`. */
+    readonly extra?: Readonly<Record<string, unknown>> | undefined,
   ) {
     super(message);
   }

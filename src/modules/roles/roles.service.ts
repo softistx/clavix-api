@@ -235,13 +235,16 @@ export class RolesService {
     return holders;
   }
 
-  /** The ids (hex) of the tenant's roles that grant the scope. */
+  /** At most `limit` ids (hex) of the tenant's roles that grant the scope. */
   async rolesGranting(
     tenantId: ObjectId,
     scopeId: ObjectId,
+    limit: number,
   ): Promise<string[]> {
     const holders = await this.rolesOf(tenantId).findMany({
       filter: { permissionIds: scopeId },
+      projection: { _id: 1 },
+      limit,
     });
     return holders.map((role) => role._id.toHexString());
   }

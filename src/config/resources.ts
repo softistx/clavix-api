@@ -33,8 +33,8 @@ export const resourcesService = new ResourcesService({
   detailTypes: mongo.db.detailTypes,
   clients: mongoDetailTypeClients(oauthDb),
   scopeClients: mongoScopeClients(oauthDb),
-  rolesGranting: (tenantId, scopeId) =>
-    rolesService.rolesGranting(tenantId, scopeId),
+  rolesGranting: (tenantId, scopeId, limit) =>
+    rolesService.rolesGranting(tenantId, scopeId, limit),
   userinfoOf: (slug) => userinfoOf(issuerOf(slug, origin)),
   findTenant: tenantBySlug,
   // The `resources:create` script's replace of the scopes: the roles let go of

@@ -14,8 +14,8 @@ interface ClientScopes {
  * its clients by the tenant's id, so a call sees one tenant's clients only.
  */
 export interface ScopeClients {
-  /** The ids of the tenant's clients that list `name` in `allowedScopes` or `defaultScopes`. */
-  listing(tenantId: ObjectId, name: string): Promise<string[]>;
+  /** At most `limit` ids of the tenant's clients that list `name` in `allowedScopes` or `defaultScopes`. */
+  listing(tenantId: ObjectId, name: string, limit: number): Promise<string[]>;
 }
 
 /** The real port, over the janus OAuth collections of `db` (`oauthDb`). */
@@ -24,7 +24,7 @@ export function mongoScopeClients(db: Db): ScopeClients {
     "oauthPartitionedClients",
   );
   return {
-    async listing(tenantId, name) {
+    async listing(tenantId, name, limit) {
       const found = await clients
         .find(
           {
@@ -33,6 +33,7 @@ export function mongoScopeClients(db: Db): ScopeClients {
           },
           { projection: { _id: 1 } },
         )
+        .limit(limit)
         .toArray();
       return found.map((client) => client._id);
     },
