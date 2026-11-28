@@ -52,7 +52,7 @@ export const onPlatform = (permission: Permission): Guard => ({
 export type Guards = Readonly<Record<string, Guard>>;
 
 /** The tenant a call names, or `undefined` (unknown, malformed or trashed id). */
-async function targetOf(ctx: ConsoleContext, tenantId: string) {
+export async function targetOf(ctx: ConsoleContext, tenantId: string) {
   if (!ObjectId.isValid(tenantId)) return undefined;
   const [found] = await ctx.directory.tenantsByIds([tenantId]);
   return found;

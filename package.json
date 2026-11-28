@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "nxgt-graphql-scalars typedefs --out && nxgt-graphql-validation typedefs --out && graphql-codegen --config codegen.ts && graphql-codegen --config codegen.console.ts",
+    "generate": "nxgt-graphql-scalars typedefs --out && nxgt-graphql-validation typedefs --out && graphql-codegen --config codegen.ts && graphql-codegen --config codegen.console.ts && limix-codegen generate --graphql schema.graphql --graphql console.schema.graphql",
     "dev": "NODE_ENV=development bun --watch src/server.ts",
     "build": "bun run generate && bun build src/server.ts --target=bun --outdir=dist --minify --sourcemap=linked",
     "start": "NODE_ENV=production bun dist/server.js",
     "test": "bun test --timeout=30000",
     "typecheck": "bun check",
+    "authz:check": "limix-codegen generate --graphql schema.graphql --graphql console.schema.graphql --check",
     "schema:print": "bun src/scripts/schema-print.ts",
     "db:sync": "bun src/scripts/db-sync.ts",
     "db:migrate": "bun src/scripts/db-migrate.ts",
@@ -23,7 +24,7 @@
     "format": "biome format --write",
     "fix": "biome check --write",
     "check:ci": "biome ci",
-    "verify": "bun run generate && bun run schema:print --check && bun run check:ci && bun run typecheck && bun run test"
+    "verify": "bun run generate && bun run schema:print --check && bun run authz:check && bun run check:ci && bun run typecheck && bun run test"
   },
   "dependencies": {
     "@graphql-tools/load-files": "^8.0.6",
@@ -50,6 +51,9 @@
     "@softistx/janus-telemetry": "^0.22.0",
     "@softistx/janus-webhooks": "^0.18.0",
     "@softistx/janus-webhooks-redis": "^0.15.0",
+    "@softistx/limix": "^0.8.0",
+    "@softistx/limix-alxia": "^0.3.4",
+    "@softistx/limix-graxia": "^0.3.3",
     "@softistx/mail": "^1.6.1",
     "@softistx/mail-smtp": "^1.1.1",
     "@softistx/material-core": "^0.96.1",
@@ -75,6 +79,7 @@
     "@graphql-codegen/typescript-resolvers": "6.1.1",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@softistx/graphql-codegen-zod": "^0.6.0",
+    "@softistx/limix-codegen": "^0.5.0",
     "@types/bun": "^1.4.5",
     "jose": "^6.2.17",
     "mongodb-memory-server-core": "^11.4.0",

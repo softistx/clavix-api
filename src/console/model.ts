@@ -9,7 +9,8 @@ export type Role = (typeof ROLES)[number];
 export const isRole = (value: string): value is Role => isOneOf(ROLES, value);
 
 /** What a guard asks for. */
-export type Permission = "manage" | "edit" | "view";
+export const PERMISSIONS = ["manage", "edit", "view"] as const;
+export type Permission = (typeof PERMISSIONS)[number];
 
 /**
  * Who may do what in the console (ReBAC, janus relations): one `platform`

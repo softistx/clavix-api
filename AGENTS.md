@@ -1052,9 +1052,33 @@ the idempotency key (janus has no lookup by name); a secret is minted with janus
 public client with `--confidential`, a confidential one without it, or `--rotate-secret` on a public
 one is refused (docs/troubleshooting.md).
 
+## Limix rules (`src/authz`, ADR-0043)
+
+Both GraphQL APIs and the REST routes answer to one local limix policy, in code, loaded at
+start-up (no remote rules). It is the front gate; the resolver guards (`src/console/guard.ts`, the
+hosted resolvers' own checks) stay and are the authority on data-dependent rules (a suspended tenant,
+Clavix's own tenant, the proved e-mail).
+
+- `console.rules.ts` (one entry per `/console/graphql` root field), `hosted.rules.ts` (`/graphql`),
+  `rest.rules.ts` (`restRulesFor`: every route is `public`, each authenticates itself),
+  `policy.ts` (`unmatched: "deny"`: a field with no rule is refused), `claims.ts`, `relations.ts`
+  (`ctx.can` as the relations port), `conditions.ts` (the platform checks), `refusal.ts` (limix
+  codes worded as Clavix's `ErrorCode`s), `options.ts` (the wiring in `app.ts` and the two mounts).
+- **Adding an operation**: add its rule in `console.rules.ts` or `hosted.rules.ts` (helpers in
+  `console.helpers.ts`), then `bun run generate`. A root field with no rule fails
+  `authz.coverage.spec.ts`; a console rule that disagrees with its `guards` entry fails
+  `authz.guards.spec.ts`.
+- **A REST route** gets its rule in `rest.rules.ts`; a rule for a route that is not mounted
+  makes the guard fail closed (503), so the rules follow the mounted features.
+- `bun run authz:check` (in `verify`) checks `src/generated/limix.ts` (gitignored, built by
+  `generate`) against `schema.graphql` and `console.schema.graphql`.
+- The console rules defer to the field guard for a caller whose e-mail is not proved (ADR-0041:
+  `EMAIL_UNVERIFIED` is answered there), so for that caller the guard is the only gate.
+- A `schema` passed to the console mount (a spec's extra fields) is served on its guards alone.
+
 ## Green bar
 
-`bun run verify` = `generate` (scalars and validation SDL, then both codegen configs), `schema:print --check`, `check:ci` (`biome ci`),
+`bun run verify` = `generate` (scalars and validation SDL, then both codegen configs), `schema:print --check`, `authz:check` (limix-codegen), `check:ci` (`biome ci`),
 `typecheck` (`bun check`), `test` (`bun test --timeout=30000`); run `bun run build` too before a PR (CI does: `generate`, then the bundle).
 CI (`.github/workflows/ci.yml`, on pull requests into `develop` only) runs `verify`, then `build`. `bunx biome ci .` on the head catches
 what a lint-only run misses (import order, format). The `@softistx/*` packages come from npmjs with a read token (`NPM_SOFTISTX_READ_TOKEN`, read by `bunfig.toml`; unset while they are public).

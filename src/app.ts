@@ -1,3 +1,4 @@
+import { limixGuard } from "@softistx/limix-alxia";
 import type { Telemetry } from "@softistx/telemetry";
 import { LOGO_PATH } from "@/modules/branding";
 import type {
@@ -7,6 +8,7 @@ import type {
 } from "@/modules/consent";
 import type { ReadyReport } from "@/modules/health";
 import { version } from "@/modules/health";
+import { restLimix } from "./authz/options";
 import { serveLogo } from "./config/branding";
 import {
   serveTlsAsk,
@@ -65,13 +67,23 @@ export interface AppOptions extends AppPorts {
 
 /** The base app: context, health and readiness probes, the logo, the TLS ask, the picture routes and the body limit. */
 function baseOf(options: AppOptions) {
+  const created = createBase(
+    tenantResolver,
+    throttlesOf(options),
+    options.telemetry ?? appTelemetry,
+    options.trustedProxies,
+  );
+  // First, before any route: limix judges every request that reaches one (src/authz).
+  created.use(
+    limixGuard(
+      restLimix(created, {
+        oauth: options.oauth !== undefined,
+        console: options.console !== undefined,
+      }),
+    ),
+  );
   return (
-    createBase(
-      tenantResolver,
-      throttlesOf(options),
-      options.telemetry ?? appTelemetry,
-      options.trustedProxies,
-    )
+    created
       .get("/healthz", ({ reply }) => reply(200, { status: "ok", version }))
       // Readiness: Mongo and Redis answer, 503 otherwise (the orchestrator stops routing here).
       .all("/readyz", ({ request }) =>
