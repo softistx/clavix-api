@@ -77,13 +77,21 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
   },
   updateScope: async (_, { tenantId, id, input }, ctx) => {
     const { _id } = await catalogTenant(ctx, tenantId);
+    const before = await resourcesService.findScope(_id, id);
     const updated = await refusing(() =>
       resourcesService.updateScope(_id, id, {
+        name: input.name ?? undefined,
         description: input.description ?? undefined,
         claims: input.claims ?? undefined,
       }),
     );
-    await ctx.audit("scope.update", target("scope", _id, updated._id));
+    // A rename is its own event; the audit keeps no values (ADR-0037), so the
+    // scope is the target and the old name is not recorded.
+    const renamed = before !== undefined && before.name !== updated.name;
+    await ctx.audit(
+      renamed ? "scope.rename" : "scope.update",
+      target("scope", _id, updated._id),
+    );
     return scopeShape(updated);
   },
   deleteScope: async (_, { tenantId, id }, ctx) => {

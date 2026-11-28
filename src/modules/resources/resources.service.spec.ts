@@ -8,6 +8,8 @@ import type { DetailTypeDraft } from "./resources.types";
 
 let listing: string[] = [];
 const dropped: string[][] = [];
+let granting: string[] = [];
+let scopeUsers: string[] = [];
 const scopesDropped: string[][] = [];
 const clients: DetailTypeClients = {
   using: async (_tenantId, types) =>
@@ -24,6 +26,8 @@ const service = new ResourcesService({
   clients,
   userinfoOf: (slug) => `https://${slug}.clavix.test/userinfo`,
   findTenant: async () => undefined,
+  scopeClients: { listing: async () => scopeUsers },
+  rolesGranting: async () => granting,
   scopesDropped: async (_tenantId, scopeIds) => {
     scopesDropped.push(scopeIds.map((scopeId) => scopeId.toHexString()));
   },
@@ -53,6 +57,8 @@ afterEach(async () => {
   listing = [];
   dropped.length = 0;
   scopesDropped.length = 0;
+  granting = [];
+  scopeUsers = [];
   for (const tenantId of [A, B]) {
     await mongo.db.detailTypes.raw.deleteMany({
       tenantId: new ObjectId(tenantId),

@@ -235,6 +235,17 @@ export class RolesService {
     return holders;
   }
 
+  /** The ids (hex) of the tenant's roles that grant the scope. */
+  async rolesGranting(
+    tenantId: ObjectId,
+    scopeId: ObjectId,
+  ): Promise<string[]> {
+    const holders = await this.rolesOf(tenantId).findMany({
+      filter: { permissionIds: scopeId },
+    });
+    return holders.map((role) => role._id.toHexString());
+  }
+
   /** The roles scoped to a resource that is being deleted, removed with their assignments; the roles removed. */
   async deleteForResource(
     tenantId: ObjectId,

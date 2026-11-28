@@ -1317,7 +1317,9 @@ type Mutation {
   Deletes a role and its assignments (tenant admin). True also when it was already gone. Errors: ROLE_MANAGED (403) for a managed role.
   """
   deleteRole(id: ID!, tenantId: ID!): Boolean!
-  """`false` when it was already gone."""
+  """
+  `false` when it was already gone. A scope a role still grants is PERMISSION_IN_USE (`extensions.roles` lists the role ids).
+  """
   deleteScope(id: ID!, tenantId: ID!): Boolean!
   """
   Puts a tenant in the trash for 30 days, then its data is purged for good and
@@ -2175,7 +2177,7 @@ type Scope {
   description: [Translation!]! @listSize(assumedSize: 3, requireOneSlicingArgument: false)
   id: ID!
   """
-  The OAuth scope token. Unique in its resource (or among the standard scopes); never changes.
+  The OAuth scope token. Unique in its resource (or among the standard scopes). Only a resource's scope can be renamed (`updateScope`), and not while a client lists it.
   """
   name: String!
   """
@@ -2564,12 +2566,16 @@ input UpdateRoleInput {
 
 """
 Fields left out stay as they are; `description` sets or replaces the locales it
-lists and keeps the others (a blank text removes a locale). The name and the
-resource never change.
+lists and keeps the others (a blank text removes a locale). The resource never
+changes. `name` renames a resource's scope (a standard OpenID Connect scope
+keeps its name: BAD_USER_INPUT at `name`); a name the resource already has is a
+CONFLICT, and a name a client still lists in its allowed or default scopes is
+SCOPE_IN_USE (`extensions.clients`).
 """
 input UpdateScopeInput {
   claims: [String!]
   description: [TranslationInput!]
+  name: String
 }
 
 """Fields left out stay as they are. The slug never changes."""

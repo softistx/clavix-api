@@ -18,7 +18,7 @@ import {
   detailTypeProblem,
 } from "./resources.compile-rules";
 import { canon, cleanDetailType } from "./resources.detail-rules";
-import { CatalogError } from "./resources.errors";
+import { CatalogError, refuse } from "./resources.errors";
 import type { detailTypes, resources, scopes } from "./resources.model";
 import {
   checkCanonicalRegistration,
@@ -259,11 +259,17 @@ export class ResourcesService {
     }
   }
 
-  /** The name and the resource of a scope never change: tokens and clients carry them. */
+  /**
+   * Changes a scope's texts, claims and, for a resource's scope, its name. A
+   * standard OpenID Connect scope keeps its name; a rename is refused
+   * (`SCOPE_IN_USE`) while a client lists the old name, since clients and
+   * tokens carry names. Roles hold scope ids, so they follow a rename.
+   */
   async updateScope(
     tenantId: ObjectId,
     scopeId: string,
     input: {
+      name?: string | undefined;
       description?: Texts | undefined;
       claims?: readonly string[] | undefined;
     },
@@ -272,24 +278,71 @@ export class ResourcesService {
     if (existing === undefined) {
       throw new CatalogError("NOT_FOUND", "No such scope");
     }
-    return this.scopesOf(tenantId).update(existing._id, {
-      description: mergeTranslations(
-        existing.description,
-        input.description,
-        MAX_DESCRIPTION,
-        "a description",
-      ),
-      claims:
-        input.claims === undefined
-          ? existing.claims
-          : cleanClaims(input.claims),
-    });
+    const name = await this.renamed(tenantId, existing, input.name);
+    try {
+      return await this.scopesOf(tenantId).update(existing._id, {
+        name,
+        description: mergeTranslations(
+          existing.description,
+          input.description,
+          MAX_DESCRIPTION,
+          "a description",
+        ),
+        claims:
+          input.claims === undefined
+            ? existing.claims
+            : cleanClaims(input.claims),
+      });
+    } catch (error) {
+      if (!(error instanceof ConflictError)) throw error;
+      throw new CatalogError(
+        "CONFLICT",
+        `The resource already has a scope named "${name}"`,
+        "name",
+      );
+    }
+  }
+
+  /** The name the scope ends with: a rename is checked here (see `updateScope`). */
+  private async renamed(
+    tenantId: ObjectId,
+    existing: StoredScopeDoc,
+    asked: string | undefined,
+  ): Promise<string> {
+    if (asked === undefined) return existing.name;
+    const name = checkScopeName(asked);
+    if (name === existing.name) return name;
+    if (existing.resourceId === null) {
+      refuse(`The standard scope "${existing.name}" cannot be renamed`, "name");
+    }
+    const clients = await this.options.scopeClients.listing(
+      tenantId,
+      existing.name,
+    );
+    if (clients.length > 0) {
+      throw new CatalogError(
+        "SCOPE_IN_USE",
+        `The scope "${existing.name}" is listed by ${clients.length} client(s): remove it from their lists first`,
+        undefined,
+        { clients },
+      );
+    }
+    return name;
   }
 
   /** `false` when it was not there. */
   async deleteScope(tenantId: ObjectId, scopeId: string): Promise<boolean> {
     const existing = await this.findScope(tenantId, scopeId);
     if (existing === undefined) return false;
+    const roles = await this.options.rolesGranting(tenantId, existing._id);
+    if (roles.length > 0) {
+      throw new CatalogError(
+        "PERMISSION_IN_USE",
+        `The scope "${existing.name}" is granted by ${roles.length} role(s): remove it from their permissions first`,
+        undefined,
+        { roles },
+      );
+    }
     await this.scopesOf(tenantId).hardDeleteMany({ _id: existing._id });
     return true;
   }
