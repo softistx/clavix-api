@@ -295,9 +295,7 @@ A resource server that verifies Clavix access tokens with `jose` (see the
 
 ### `403` with the permission in `scope` but not in `permissions`
 
-**Why:** the Resource has `enforceRbac` on, and the user's roles do not grant that permission. Your limix rule requires both the scope and the `permissions` claim.
-
-The refusal is your resource server's own limix rule, not a Clavix or jose message: Clavix issues the token, your server decides.
+**Why:** the Resource has `enforceRbac` on, and the user's roles do not grant that permission. Your limix rule requires both the scope and the `permissions` claim. The refusal is your resource server's own limix rule, not a Clavix or jose message: Clavix issues the token, your server decides.
 **Fix:** grant the permission to one of the user's roles in Clavix (`setRolePermissions`, then `assignRole`), and have the user sign in again for a new token.
 
 ## Resource registration refusals (`resources:create`)
