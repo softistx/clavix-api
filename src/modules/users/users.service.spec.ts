@@ -207,3 +207,66 @@ describe("update and setPhoneVerified", () => {
     });
   });
 });
+
+describe("removePicture", () => {
+  const overPool = (
+    user: ReturnType<typeof poolUser> | null,
+    avatar: { id: string; updatedAt: Date } | null,
+    removed: string[],
+    failure?: Error,
+  ) => {
+    const auth: TenantJanus = {
+      ...acmeJanus(),
+      findUser: async () => (user === null ? null : { ...user, avatar }),
+      avatar: {
+        ...acmeJanus().avatar,
+        remove: async (id) => {
+          if (failure !== undefined) throw failure;
+          removed.push(typeof id === "string" ? id : id.id);
+          return poolUser("1", "ada@x.test", "Ada");
+        },
+      },
+    };
+    return new UsersService({
+      janusOf: async () => auth,
+      grantsOf: async () => null,
+      invitationsOf: () => away,
+    });
+  };
+
+  test("true when it removed a picture, false when there was none, null for an unknown user", async () => {
+    const removed: string[] = [];
+    const ada = poolUser("1", "ada@x.test", "Ada");
+    const picture = { id: "k", updatedAt: new Date(0) };
+    expect(await overPool(ada, picture, removed).removePicture("t", "1")).toBe(
+      true,
+    );
+    expect(removed).toEqual(["1"]);
+    expect(await overPool(ada, null, removed).removePicture("t", "1")).toBe(
+      false,
+    );
+    expect(removed).toEqual(["1"]);
+    expect(
+      await overPool(null, null, removed).removePicture("t", "9"),
+    ).toBeNull();
+  });
+
+  test("maps a janus VERSION_CONFLICT to CONFLICT and NOT_FOUND to null", async () => {
+    const ada = poolUser("1", "ada@x.test", "Ada");
+    const picture = { id: "k", updatedAt: new Date(0) };
+    const code = (value: string) =>
+      Object.assign(new JanusError(value), { code: value });
+    await expect(
+      overPool(ada, picture, [], code("VERSION_CONFLICT")).removePicture(
+        "t",
+        "1",
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "CONFLICT" } });
+    expect(
+      await overPool(ada, picture, [], code("NOT_FOUND")).removePicture(
+        "t",
+        "1",
+      ),
+    ).toBeNull();
+  });
+});

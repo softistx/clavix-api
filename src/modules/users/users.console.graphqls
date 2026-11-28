@@ -220,6 +220,14 @@ extend type Mutation {
   `disableUser` apply.
   """
   deleteUser(tenantId: ID!, userId: ID!): Boolean!
+  """
+  Removes a user's profile picture (tenant admin): true when this call removed
+  one, false when there was none. The stored object is erased and the user's
+  `pictureKey` and `picture` claim are cleared. The tenant's PICTURE lock binds
+  the user's own edits, not this one. Errors: NOT_FOUND for an unknown user,
+  CONFLICT (409) when the user changed meanwhile.
+  """
+  removeUserPicture(tenantId: ID!, userId: ID!): Boolean!
   "Ends every session of the user (tenant admin); answers how many it ended. 0 on a repeat or an unknown user."
   revokeUserSessions(tenantId: ID!, userId: ID!): Int!
   """

@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { MediaRefusal } from "@softistx/alxia-media";
+import type { AvatarTarget } from "./media.types";
 import {
   adminQueryOf,
   avatarObjectKey,
   crossSite,
   pictureUrl,
+  removePicture,
   tenantFolder,
   tenantListPrefix,
 } from "./media.utils";
@@ -74,5 +76,53 @@ describe("crossSite", () => {
   test("another site or a sibling subdomain is", () => {
     expect(crossSite(withSite("cross-site"))).toBe(true);
     expect(crossSite(withSite("same-site"))).toBe(true);
+  });
+});
+
+describe("removePicture", () => {
+  const calls: unknown[] = [];
+  const over = (avatar: { updatedAt: Date } | null | "gone"): AvatarTarget => {
+    calls.length = 0;
+    return {
+      tenantId: "t",
+      userId: "u",
+      auth: {
+        findUser: async () =>
+          avatar === "gone" ? null : { id: "u", version: 7, avatar },
+        avatar: {
+          remove: async (_id: unknown, options?: unknown) => {
+            calls.push(options);
+          },
+        },
+      } as unknown as AvatarTarget["auth"],
+    };
+  };
+  const picture = { updatedAt: new Date(1000) };
+
+  test("with neither option it removes unconditionally", async () => {
+    expect(await removePicture(over(picture))).toBe(true);
+    expect(calls).toEqual([undefined]);
+  });
+
+  test("ifVersion makes the removal conditional on the version read", async () => {
+    expect(await removePicture(over(picture), { ifVersion: true })).toBe(true);
+    expect(calls).toEqual([{ ifVersion: 7 }]);
+  });
+
+  test("setUntil keeps a picture set after it, and removes an older one", async () => {
+    expect(
+      await removePicture(over(picture), { setUntil: new Date(500) }),
+    ).toBe(false);
+    expect(calls).toEqual([]);
+    expect(
+      await removePicture(over(picture), { setUntil: new Date(2000) }),
+    ).toBe(true);
+    expect(calls).toEqual([undefined]);
+  });
+
+  test("none is false and an unknown user is null", async () => {
+    expect(await removePicture(over(null))).toBe(false);
+    expect(await removePicture(over("gone"))).toBeNull();
+    expect(calls).toEqual([]);
   });
 });

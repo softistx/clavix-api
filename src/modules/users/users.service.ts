@@ -6,6 +6,7 @@ import type {
   UserSecondFactorView,
 } from "@/console/context";
 import { TenantUnavailableError, userScope } from "@/modules/invitations";
+import { removePicture } from "@/modules/media/media.utils";
 import {
   type ProfileChanges,
   patchOf,
@@ -176,6 +177,27 @@ export class UsersService implements ConsoleUsers {
         await auth.update(user, { phone }, { ifVersion: user.version }),
       );
     });
+  }
+
+  async removePicture(tenantId: string, id: string) {
+    const auth = await this.janus(tenantId);
+    try {
+      return await removePicture(
+        { tenantId, userId: id, auth },
+        { ifVersion: true },
+      );
+    } catch (error) {
+      if (error instanceof JanusError && error.code === "NOT_FOUND") {
+        return null;
+      }
+      if (error instanceof JanusError && error.code === "VERSION_CONFLICT") {
+        refuseCommon(
+          "CONFLICT",
+          "The user changed meanwhile; read it and try again",
+        );
+      }
+      throw error;
+    }
   }
 
   async delete(tenantId: string, id: string) {

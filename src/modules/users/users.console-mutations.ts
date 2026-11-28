@@ -128,6 +128,20 @@ export const userMutations: NonNullable<Resolvers["Mutation"]> = {
     await ctx.audit("user.delete", target("user", userId, tenantId));
     return true;
   },
+  removeUserPicture: async (_, { tenantId: given, userId }, ctx) => {
+    const tenantId = tenantIdOf(given);
+    idArg(userId, "userId");
+    await liveTenant(ctx.directory, tenantId);
+    // No PICTURE lock check: locks bind the user's own edits, not an admin's.
+    const removed = await ctx.exclusive(userKey(tenantId, userId), () =>
+      ctx.users.removePicture(tenantId, userId),
+    );
+    if (removed === null) {
+      throw fail("NOT_FOUND", "No such user", { status: 404 });
+    }
+    await ctx.audit("user.removePicture", target("user", userId, tenantId));
+    return removed;
+  },
   revokeUserSessions: async (_, { tenantId: given, userId }, ctx) => {
     const tenantId = tenantIdOf(given);
     idArg(userId, "userId");

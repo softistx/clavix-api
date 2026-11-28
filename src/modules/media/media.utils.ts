@@ -1,6 +1,7 @@
 import { MediaRefusal, mediaPlace } from "@softistx/alxia-media";
 import { ObjectId } from "mongodb";
 import { AVATAR_KIND } from "./media.rules";
+import type { AvatarTarget } from "./media.types";
 
 /** The `picture` claim: the tenant host's own `/media/avatar/<key>` (the issuer, a key is never a URL). */
 export const pictureUrl = (issuer: string, key: string): string =>
@@ -41,4 +42,31 @@ export function adminQueryOf(url: URL): AdminQuery | null {
 export function crossSite(request: Request): boolean {
   const site = request.headers.get("sec-fetch-site");
   return site !== null && site !== "same-origin" && site !== "none";
+}
+
+/**
+ * Removes the user's picture in janus: `true` when there was one, `false` when
+ * there was none, `null` when the user is gone. With `setUntil`, a picture set
+ * after it is kept (`false`). With `ifVersion`, the removal is conditional on
+ * the user not having changed since the read (janus VERSION_CONFLICT). The
+ * `user.avatarRemoved` listener removes the object.
+ */
+export async function removePicture(
+  target: AvatarTarget,
+  options: { setUntil?: Date | undefined; ifVersion?: boolean } = {},
+): Promise<boolean | null> {
+  const user = await target.auth.findUser(target.userId);
+  if (user === null) return null;
+  if (user.avatar === null) return false;
+  if (
+    options.setUntil !== undefined &&
+    user.avatar.updatedAt > options.setUntil
+  ) {
+    return false;
+  }
+  await target.auth.avatar.remove(
+    target.userId,
+    options.ifVersion === true ? { ifVersion: user.version } : undefined,
+  );
+  return true;
 }
