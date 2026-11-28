@@ -382,26 +382,31 @@ export class RolesService {
   }
 
   /**
-   * The `permissions` claim of a user (slice 5.2a): the sorted, de-duplicated
+   * The `roles` and `permissions` claims of a user for a resource that enforces
+   * RBAC, with the resource and the held roles read once (slice 5.2a).
+   * `roles` is as `claimRoles`. `permissions` holds the sorted, de-duplicated
    * names of the scopes of the resource whose URI is `audience`, granted by the
-   * roles they hold there (tenant-wide ones and those scoped to the resource).
-   * `null` (no claim) when there is no audience, no such resource, or it does
-   * not enforce RBAC; `[]` when the user holds no permission on it.
+   * roles held there (tenant-wide and scoped to it): `[]` when none, `null`
+   * (no claim) when there is no audience, no such resource, or it does not
+   * enforce RBAC.
    */
-  async claimPermissions(
+  async claimAccess(
     tenantId: ObjectId,
     userId: string,
     audience: string | null,
-  ): Promise<string[] | null> {
-    if (audience === null) return null;
-    const resource = await this.resourcesOf(tenantId).findFirst({
-      uri: audience,
-    });
-    if (resource === undefined || resource.enforceRbac !== true) return null;
+  ): Promise<{ roles: string[]; permissions: string[] | null }> {
     const held = await this.rolesOfUser(tenantId, userId);
+    const resource =
+      audience === null
+        ? undefined
+        : await this.resourcesOf(tenantId).findFirst({ uri: audience });
+    const roles = claimNames(held, resource?._id.toHexString() ?? null);
+    if (resource === undefined || resource.enforceRbac !== true) {
+      return { roles, permissions: null };
+    }
     const ids = permissionIdsOf(held, resource._id);
-    if (ids.length === 0) return [];
+    if (ids.length === 0) return { roles, permissions: [] };
     const scopes = await this.options.scopes.find(tenantId, ids);
-    return scopeNamesOf(scopes, resource._id);
+    return { roles, permissions: scopeNamesOf(scopes, resource._id) };
   }
 }

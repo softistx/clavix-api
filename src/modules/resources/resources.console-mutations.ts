@@ -47,8 +47,10 @@ export const resourceMutations: NonNullable<Resolvers["Mutation"]> = {
       refuseMachineConsole(
         tenant,
         await resourcesService.findResource(tenant._id, id),
-        input.allowClientCredentials,
-        input.enforceRbac,
+        {
+          allowClientCredentials: input.allowClientCredentials,
+          enforceRbac: input.enforceRbac,
+        },
       );
       return resourcesService.updateResource(tenant._id, id, {
         name: input.name ?? undefined,

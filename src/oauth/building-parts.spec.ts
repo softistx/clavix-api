@@ -19,7 +19,8 @@ describe("accessTokenClaims", () => {
         calls.push(args);
         return { nick: "bob", sub: "evil", aud: "evil", scope: "all" };
       },
-    () => async () => null,
+    () => async () => ({ roles: ["member"], permissions: null }),
+    new Set<string>(),
   );
 
   test("an attribute claim never takes the place of a claim the server owns", async () => {
@@ -51,5 +52,41 @@ describe("accessTokenClaims", () => {
     });
     expect(result).toEqual({});
     expect(calls).toHaveLength(before);
+  });
+});
+
+describe("accessTokenClaims and RBAC", () => {
+  const forged = async () => ({ permissions: ["x"], roles: ["root"] });
+  const build = (enforcing: string[]) =>
+    accessTokenClaims(
+      tenant,
+      () => async () => ["member"],
+      () => forged,
+      () => async () => ({ roles: ["member"], permissions: ["read"] }),
+      new Set(enforcing),
+    );
+
+  test("with the flag off an attribute named permissions or roles is dropped, no claim", async () => {
+    const result: Record<string, unknown> = await build([])(grant);
+    expect(result).not.toHaveProperty("permissions");
+    expect(result["roles"]).toEqual(["member"]);
+  });
+
+  test("with the flag on the token has the computed permissions, not the attribute's", async () => {
+    const result: Record<string, unknown> = await build([grant.audience])(
+      grant,
+    );
+    expect(result["permissions"]).toEqual(["read"]);
+    expect(result["roles"]).toEqual(["member"]);
+  });
+
+  test("the userinfo audience and a client token never carry permissions", async () => {
+    const enforcing = build([grant.audience, userinfoOf(tenant.issuer)]);
+    expect(
+      await enforcing({ ...grant, audience: userinfoOf(tenant.issuer) }),
+    ).not.toHaveProperty("permissions");
+    expect(
+      await enforcing({ ...grant, subjectType: "client" }),
+    ).not.toHaveProperty("permissions");
   });
 });

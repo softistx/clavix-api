@@ -34,7 +34,7 @@ import { exchangePolicy } from "./token-exchange";
 export { userinfoOf };
 
 // `enforceRbac` is Clavix's own: janus is given its resources as it knows them.
-const withoutRbacFlag = (
+export const withoutRbacFlag = (
   resources: Readonly<Record<string, KeyedResource>>,
 ): Record<string, OAuthResource> =>
   Object.fromEntries(
@@ -126,6 +126,11 @@ export const buildIssuer =
           rolesFor,
           attributesFor,
           permissionsFor,
+          new Set(
+            Object.entries(resources)
+              .filter(([, resource]) => resource.enforceRbac === true)
+              .map(([uri]) => uri),
+          ),
         ),
       },
       tokenResponse: oidc.tokenResponse({ issuer: tenant.issuer, keys }),

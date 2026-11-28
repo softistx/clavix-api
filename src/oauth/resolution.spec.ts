@@ -1,19 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import { fingerprintOf } from "./resolution";
 
-const base = { "https://a.test/api": { scopes: ["read"] } };
+const URI = "https://a.test/api";
+const scopes = ["read"];
 
 describe("fingerprintOf", () => {
-  test("turning enforceRbac on changes the fingerprint, so the issuer is rebuilt", () => {
-    const on = {
-      "https://a.test/api": { scopes: ["read"], enforceRbac: true as const },
-    };
-    expect(fingerprintOf(on)).not.toBe(fingerprintOf(base));
+  test("a resource without the flag keeps one fingerprint: absent, undefined or false", () => {
+    const absent = fingerprintOf({ [URI]: { scopes } });
+    expect(fingerprintOf({ [URI]: { scopes, enforceRbac: undefined } })).toBe(
+      absent,
+    );
+    // The model stores `true` or nothing; a stray false must not rebuild the issuer.
+    expect(
+      fingerprintOf({
+        [URI]: { scopes, enforceRbac: false as unknown as true },
+      }),
+    ).toBe(absent);
   });
 
-  test("a resource without the flag keeps its fingerprint", () => {
-    expect(fingerprintOf(base)).toBe(
-      fingerprintOf({ "https://a.test/api": { scopes: ["read"] } }),
+  test("turning enforceRbac on changes the fingerprint, so the issuer is rebuilt", () => {
+    expect(fingerprintOf({ [URI]: { scopes, enforceRbac: true } })).not.toBe(
+      fingerprintOf({ [URI]: { scopes } }),
     );
   });
 });

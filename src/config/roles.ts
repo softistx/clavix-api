@@ -21,10 +21,6 @@ export const rolesService = new RolesService({
 export const rolesFor: RolesFor = (tenant) => (userId, audience) =>
   rolesService.claimRoles(new ObjectId(tenant.tenantId), userId, audience);
 
-/** The real `PermissionsFor`: the `permissions` claim of the tokens of a resource that enforces RBAC. */
+/** The real `PermissionsFor`: the `roles` and `permissions` claims of the tokens of a resource that enforces RBAC. */
 export const permissionsFor: PermissionsFor = (tenant) => (userId, audience) =>
-  rolesService.claimPermissions(
-    new ObjectId(tenant.tenantId),
-    userId,
-    audience,
-  );
+  rolesService.claimAccess(new ObjectId(tenant.tenantId), userId, audience);

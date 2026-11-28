@@ -41,9 +41,12 @@ export function keepConsoleResource(
 export function refuseMachineConsole(
   tenant: { slug: string },
   resource: { uri: string } | undefined,
-  allow: boolean | null | undefined,
-  enforceRbac?: boolean | null | undefined,
+  options: {
+    allowClientCredentials?: boolean | null | undefined;
+    enforceRbac?: boolean | null | undefined;
+  },
 ) {
+  const { allowClientCredentials: allow, enforceRbac } = options;
   if (
     enforceRbac === true &&
     onPlatform(tenant) &&
