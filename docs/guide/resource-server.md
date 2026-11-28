@@ -458,4 +458,4 @@ example; use your janus store. More in the
 
 ## 7. What is coming
 
-Planned: the token's `scope` narrowed to the user's permissions, see [the roadmap](../roadmap.md#next).
+Still open: narrowing the token's `scope` to the user's permissions (until then `scope` is not narrowed and the `permissions` claim is what to check), see [the roadmap](../roadmap.md#now).
