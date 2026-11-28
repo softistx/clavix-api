@@ -7,34 +7,11 @@ nxgt-janus release says which.
 
 ## Now
 
-- **User attributes** — tenants get the standard OIDC profile on every user (given and family name,
-  nickname, phone with an admin-set verified flag, picture, locale, time zone, birthdate, address),
-  each released under its standard claim, and a catalogue of their own attributes. An attribute
-  applies to users or to a role, has a stable key that is its claim name, a type, translated texts and
-  options, and can be emitted as a claim under a scope, be editable by the user, or be unique. Role
-  attributes are assigned per role; removing the role hides their values instead of deleting them.
-  Users edit their own profile and change their e-mail from the hosted account, a tenant can lock
-  profile fields, the users list filters by role and attribute, and the user's data export and erasure
-  cover every value. Access tokens carry the emitted attributes first; the ID token and userinfo follow
-  once nxgt-janus ships per-issuer scope claims
-  ([#509](https://github.com/softistx/clavix-api/issues/509)).
-
 - **Translations as a list of locales** — scope descriptions and detail type texts are lists of
   `{ locale, text }` (any BCP 47 language, no fixed French and English), a write sets or replaces
   the locales it names, and the consent screen picks the viewer's `Accept-Language`, then its base
   language, then the first stored translation. Breaking for the console UI
   ([#484](https://github.com/softistx/clavix-api/issues/484)).
-
-- **User attributes** — a tenant defines the extra fields of its users (text, number, date, choice,
-  yes/no…) in a catalogue: key, label and description per language, unit, options, required,
-  user-editable, unique and the scope that emits the value as a claim; attributes are moved, archived,
-  restored and deleted for good. The catalogue and the stored values come first (an admin sets a user's
-  values, the data export and the erase on deletion are in; a role attribute is linked to a role, filled in
-  that role's section, and hidden, never erased, when the user loses the role); the standard profile fields
-  (name parts, phone with an admin-proved flag, locale, zone, birthdate, address) and the tenant's locks on
-  them are in, released as claims by the `profile`, `phone` and `address` scopes; the claims of the
-  attributes are in the access tokens, the ID token and userinfo, and in discovery's `claims_supported`; a user's profile picture is stored through the media routes (PNG, JPEG or WebP up to 1 MiB, an own upload or an admin's, the `picture` claim, erased with the user); a signed-in user edits their own profile (the tenant's locks bind it) and the attributes marked user-editable, and changes their e-mail address through a link mailed to the new one, on a recent sign-in
-  ([#507](https://github.com/softistx/clavix-api/issues/507)); ([#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **Align with the stack conventions** — the API's printed schemas are committed (`schema.graphql`,
   `console.schema.graphql`), so the console UI can generate typed documents from them; modules take
@@ -90,6 +67,19 @@ Resource servers enforce their own rules with limix, so Clavix does not host the
 - `clavixPolicy()` and `clavixRelations()` in `@alxia/clavix` ([#38](https://github.com/softistx/clavix-api/issues/38)).
 
 ## Shipped
+
+- **User attributes** — tenants get the standard OIDC profile on every user (given and family name,
+  nickname, phone with an admin-set verified flag, picture, locale, time zone, birthdate, address),
+  each released under its standard claim, and a catalogue of their own attributes. An attribute
+  applies to users or to a role, has a stable key that is its claim name, a type, translated texts and
+  options, and can be emitted as a claim under a scope, be editable by the user, or be unique. Role
+  attributes are assigned per role; removing the role hides their values instead of deleting them.
+  Users edit their own profile and change their e-mail from the hosted account, a tenant can lock
+  profile fields, an admin can remove a user's picture, the users list filters by role and attribute,
+  and the user's data export and erasure cover every value. The emitted claims are in access tokens,
+  the ID token, userinfo and discovery's `claims_supported`
+  ([#507](https://github.com/softistx/clavix-api/issues/507),
+  [#501](https://github.com/softistx/clavix-api/issues/501)).
 
 - **MFA policy, TOTP and recovery codes** — a tenant offers an authenticator app
   (`signIn.mfa.totp`, admin event `mfaPolicy.update`); a user who turned it on is asked for the code after
